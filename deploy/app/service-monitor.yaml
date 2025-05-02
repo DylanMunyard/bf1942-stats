@@ -2,6 +2,8 @@
 kind: ServiceMonitor
 metadata:
   name: bf42-stats-prometheus-discovery
+  labels:
+    release: kube-prometheus-stack
 spec:
   selector:
     matchLabels:
