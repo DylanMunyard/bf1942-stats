@@ -35,3 +35,4 @@ spec:
   ports:
     - port: 9091
       targetPort: 9091
+      name: metrics

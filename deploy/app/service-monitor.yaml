@@ -1,0 +1,12 @@
+﻿apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: bf42-stats-prometheus-discovery
+spec:
+  selector:
+    matchLabels:
+      app: bf42-stats
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 5s
