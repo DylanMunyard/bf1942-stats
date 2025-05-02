@@ -28,6 +28,8 @@ kind: Service
 metadata:
   name: bf42-stats-service
   namespace: bf42-stats
+  labels:
+    app: bf42-stats
 spec:
   selector: 
     app: bf42-stats
