@@ -22,7 +22,7 @@ public class BF1942MetricsCollector : BackgroundService
             "Number of players on each BF1942 server",
             new GaugeConfiguration
             {
-                LabelNames = new[] { "server_name", "map" }
+                LabelNames = ["server_name"]
             }
         );
         
@@ -73,18 +73,33 @@ public class BF1942MetricsCollector : BackgroundService
             PropertyNameCaseInsensitive = true
         });
 
+        // Track all current label sets
+        var currentLabelSets = new HashSet<string>();
+
         if (serversData != null)
         {
             foreach (var server in serversData)
             {
                 _serverPlayersGauge
-                    .WithLabels(
-                        server.Name,
-                        server.MapName
-                    )
+                    .WithLabels(server.Name)
                     .Set(server.NumPlayers);
+
+                currentLabelSets.Add(server.Name);
             }
             Console.WriteLine($"Updated servers metric - # servers: {serversData.Length}");
+        }
+
+        // Remove metrics for servers no longer online
+        // Get all label sets currently in the gauge
+        var allLabelSets = _serverPlayersGauge.GetAllLabelValues();
+
+        foreach (var labelSet in allLabelSets)
+        {
+            var key = labelSet[0];
+            if (!currentLabelSets.Contains(key))
+            {
+                _serverPlayersGauge.RemoveLabelled(labelSet);
+            }
         }
     }
 
@@ -99,5 +114,4 @@ public class ServerInfo
 {
     public string Name { get; set; } = "";
     public int NumPlayers { get; set; }
-    public string MapName { get; set; } = "";
 }
