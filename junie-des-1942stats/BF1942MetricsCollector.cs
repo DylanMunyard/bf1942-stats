@@ -6,9 +6,13 @@ public class BF1942MetricsCollector : BackgroundService
 {
     private readonly Gauge _totalPlayersGauge;
     private readonly Gauge _serverPlayersGauge;
+    private readonly Gauge _fh2TotalPlayersGauge;
+    private readonly Gauge _fh2ServerPlayersGauge;
     private readonly HttpClient _httpClient;
     private const string STATS_API_URL = "https://api.bflist.io/bf1942/v1/livestats";
     private const string SERVERS_API_URL = "https://api.bflist.io/bf1942/v1/servers/1?perPage=100";
+    private const string FH2_STATS_API_URL = "https://api.bflist.io/fh2/v1/livestats";
+    private const string FH2_SERVERS_API_URL = "https://api.bflist.io/fh2/v1/servers/1?perPage=100";
     
     public BF1942MetricsCollector()
     {
@@ -25,6 +29,20 @@ public class BF1942MetricsCollector : BackgroundService
                 LabelNames = ["server_name"]
             }
         );
+
+        _fh2TotalPlayersGauge = Metrics.CreateGauge(
+            "fh2_players_online", 
+            "Number of players currently online in FH2"
+        );
+        
+        _fh2ServerPlayersGauge = Metrics.CreateGauge(
+            "fh2_server_players",
+            "Number of players on each FH2 server",
+            new GaugeConfiguration
+            {
+                LabelNames = ["server_name"]
+            }
+        );
         
         _httpClient = new HttpClient();
     }
@@ -35,11 +53,13 @@ public class BF1942MetricsCollector : BackgroundService
         {
             try
             {
-                // Get total players stats
+                // Get BF1942 stats
                 await CollectTotalPlayersAsync(stoppingToken);
-                
-                // Get per-server stats
                 await CollectServerStatsAsync(stoppingToken);
+                
+                // Get FH2 stats
+                await CollectFh2TotalPlayersAsync(stoppingToken);
+                await CollectFh2ServerStatsAsync(stoppingToken);
             }
             catch (Exception ex)
             {
@@ -99,6 +119,58 @@ public class BF1942MetricsCollector : BackgroundService
             if (!currentLabelSets.Contains(key))
             {
                 _serverPlayersGauge.RemoveLabelled(labelSet);
+            }
+        }
+    }
+
+    private async Task CollectFh2TotalPlayersAsync(CancellationToken stoppingToken)
+    {
+        var response = await _httpClient.GetStringAsync(FH2_STATS_API_URL, stoppingToken);
+        var stats = JsonSerializer.Deserialize<BF1942Stats>(response, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
+        
+        if (stats != null)
+        {
+            _fh2TotalPlayersGauge.Set(stats.Players);
+            Console.WriteLine($"Updated FH2 total players metric - Players: {stats.Players}");
+        }
+    }
+
+    private async Task CollectFh2ServerStatsAsync(CancellationToken stoppingToken)
+    {
+        var response = await _httpClient.GetStringAsync(FH2_SERVERS_API_URL, stoppingToken);
+        var serversData = JsonSerializer.Deserialize<ServerInfo[]>(response, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
+
+        // Track all current label sets
+        var currentLabelSets = new HashSet<string>();
+
+        if (serversData != null)
+        {
+            foreach (var server in serversData)
+            {
+                _fh2ServerPlayersGauge
+                    .WithLabels(server.Name)
+                    .Set(server.NumPlayers);
+
+                currentLabelSets.Add(server.Name);
+            }
+            Console.WriteLine($"Updated FH2 servers metric - # servers: {serversData.Length}");
+        }
+
+        // Remove metrics for servers no longer online
+        var allLabelSets = _fh2ServerPlayersGauge.GetAllLabelValues();
+
+        foreach (var labelSet in allLabelSets)
+        {
+            var key = labelSet[0];
+            if (!currentLabelSets.Contains(key))
+            {
+                _fh2ServerPlayersGauge.RemoveLabelled(labelSet);
             }
         }
     }
