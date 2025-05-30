@@ -66,7 +66,10 @@ public class PlayerStatsService
             CurrentServer = isActive ? new ServerInfo
             {
                 ServerGuid = latestSession!.ServerGuid,
-                ServerName = latestSession.Server?.Name ?? "Unknown Server"
+                ServerName = latestSession.Server?.Name ?? "Unknown Server",
+                // Add current session kills and deaths
+                SessionKills = latestSession.TotalKills,
+                SessionDeaths = latestSession.TotalDeaths
             } : null,
             RecentServers = recentServers
         };
@@ -127,7 +130,9 @@ public class PlayerStatsService
             CurrentServer = isActive ? new ServerInfo
             {
                 ServerGuid = latestSession!.ServerGuid,
-                ServerName = latestSession.Server?.Name ?? "Unknown Server"
+                ServerName = latestSession.Server?.Name ?? "Unknown Server",
+                SessionKills = latestSession.TotalKills,
+                SessionDeaths = latestSession.TotalDeaths
             } : null,
                 
             TodayActivity = GetServerGroupingForPeriod(sessions, s => s.StartTime >= todayStart),

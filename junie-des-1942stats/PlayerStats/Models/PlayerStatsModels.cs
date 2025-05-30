@@ -9,12 +9,6 @@ public class PlayerBasicInfo
     public bool IsActive { get; set; }
 }
 
-public class ServerInfo
-{
-    public string ServerGuid { get; set; } = "";
-    public string ServerName { get; set; } = "";
-}
-
 public class ServerActivitySummary
 {
     public string PlayerName { get; set; } = "";
@@ -56,6 +50,14 @@ public class PlayerTimeStatistics
     public bool IsActive { get; set; }
     public ServerInfo? CurrentServer { get; set; }
     public List<RecentServerActivity> RecentServers { get; set; } = new();
+}
+
+public class ServerInfo
+{
+    public string ServerGuid { get; set; }
+    public string ServerName { get; set; }
+    public int SessionKills { get; set; }
+    public int SessionDeaths { get; set; }
 }
 
 public class RecentServerActivity
