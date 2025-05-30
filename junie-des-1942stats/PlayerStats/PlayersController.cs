@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace junie_des_1942stats.PlayerStats;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("stats/[controller]")]
 public class PlayersController : ControllerBase
 {
     private readonly PlayerStatsService _playerStatsService;
