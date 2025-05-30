@@ -1,6 +1,13 @@
 ﻿using Microsoft.Extensions.Hosting;
 using Prometheus;
+using System;
+using System.Collections.Generic;
+using System.Net.Http;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using junie_des_1942stats.Bflist;
+using junie_des_1942stats.PlayerTracking;
 
 public class BF1942MetricsCollector : BackgroundService
 {
@@ -9,12 +16,14 @@ public class BF1942MetricsCollector : BackgroundService
     private readonly Gauge _fh2TotalPlayersGauge;
     private readonly Gauge _fh2ServerPlayersGauge;
     private readonly HttpClient _httpClient;
+    private readonly PlayerTrackingService _playerTrackingService;
+    
     private const string STATS_API_URL = "https://api.bflist.io/bf1942/v1/livestats";
     private const string SERVERS_API_URL = "https://api.bflist.io/bf1942/v1/servers/1?perPage=100";
     private const string FH2_STATS_API_URL = "https://api.bflist.io/fh2/v1/livestats";
     private const string FH2_SERVERS_API_URL = "https://api.bflist.io/fh2/v1/servers/1?perPage=100";
     
-    public BF1942MetricsCollector()
+    public BF1942MetricsCollector(PlayerTrackingService playerTrackingService)
     {
         _totalPlayersGauge = Metrics.CreateGauge(
             "bf1942_players_online", 
@@ -45,6 +54,7 @@ public class BF1942MetricsCollector : BackgroundService
         );
         
         _httpClient = new HttpClient();
+        _playerTrackingService = playerTrackingService;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -88,13 +98,14 @@ public class BF1942MetricsCollector : BackgroundService
     private async Task CollectServerStatsAsync(CancellationToken stoppingToken)
     {
         var response = await _httpClient.GetStringAsync(SERVERS_API_URL, stoppingToken);
-        var serversData = JsonSerializer.Deserialize<ServerInfo[]>(response, new JsonSerializerOptions
+        var serversData = JsonSerializer.Deserialize<Bf1942ServerInfo[]>(response, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
         });
 
         // Track all current label sets
         var currentLabelSets = new HashSet<string>();
+        var timestamp = DateTime.UtcNow;
 
         if (serversData != null)
         {
@@ -105,6 +116,16 @@ public class BF1942MetricsCollector : BackgroundService
                     .Set(server.NumPlayers);
 
                 currentLabelSets.Add(server.Name);
+                
+                // Track players in the database
+                try
+                {
+                    await _playerTrackingService.TrackPlayersFromServerInfo(server, timestamp);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error tracking BF1942 players from server: {ex.Message}");
+                }
             }
             Console.WriteLine($"Updated servers metric - # servers: {serversData.Length}");
         }
@@ -141,13 +162,14 @@ public class BF1942MetricsCollector : BackgroundService
     private async Task CollectFh2ServerStatsAsync(CancellationToken stoppingToken)
     {
         var response = await _httpClient.GetStringAsync(FH2_SERVERS_API_URL, stoppingToken);
-        var serversData = JsonSerializer.Deserialize<ServerInfo[]>(response, new JsonSerializerOptions
+        var serversData = JsonSerializer.Deserialize<Fh2ServerInfo[]>(response, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
         });
 
         // Track all current label sets
         var currentLabelSets = new HashSet<string>();
+        var timestamp = DateTime.UtcNow;
 
         if (serversData != null)
         {
@@ -158,6 +180,16 @@ public class BF1942MetricsCollector : BackgroundService
                     .Set(server.NumPlayers);
 
                 currentLabelSets.Add(server.Name);
+                
+                // Track players in the database
+                try
+                {
+                    await _playerTrackingService.TrackPlayersFromServerInfo(server, timestamp);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error tracking FH2 players from server: {ex.Message}");
+                };
             }
             Console.WriteLine($"Updated FH2 servers metric - # servers: {serversData.Length}");
         }
@@ -182,8 +214,3 @@ public class BF1942MetricsCollector : BackgroundService
     }
 }
 
-public class ServerInfo
-{
-    public string Name { get; set; } = "";
-    public int NumPlayers { get; set; }
-}
