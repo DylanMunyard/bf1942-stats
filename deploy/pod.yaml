@@ -3,7 +3,7 @@ metadata:
     app: jenkins
 spec:
   nodeSelector:
-    beta.kubernetes.io/arch: arm64
+    beta.kubernetes.io/arch: amd64
   containers:
     - name: dind
       image: docker:dind
