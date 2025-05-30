@@ -15,16 +15,6 @@ public class ServerInfo
     public string ServerName { get; set; } = "";
 }
 
-public class RecentServerActivity
-{
-    public string ServerGuid { get; set; } = "";
-    public string ServerName { get; set; } = "";
-    public int TotalPlayTimeMinutes { get; set; }
-    public int TotalKills { get; set; }
-    public int TotalDeaths { get; set; }
-    public DateTime LastPlayed { get; set; }
-}
-
 public class ServerActivitySummary
 {
     public string PlayerName { get; set; } = "";
@@ -66,6 +56,16 @@ public class PlayerTimeStatistics
     public bool IsActive { get; set; }
     public ServerInfo? CurrentServer { get; set; }
     public List<RecentServerActivity> RecentServers { get; set; } = new();
+}
+
+public class RecentServerActivity
+{
+    public string ServerGuid { get; set; } = "";
+    public string ServerName { get; set; } = "";
+    public int TotalPlayTimeMinutes { get; set; }
+    public int TotalKills { get; set; }
+    public int TotalDeaths { get; set; }
+    public DateTime LastPlayed { get; set; }
 }
 
 public class ServerPlayTimeStats

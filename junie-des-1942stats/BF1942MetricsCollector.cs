@@ -8,23 +8,25 @@ using System.Threading;
 using System.Threading.Tasks;
 using junie_des_1942stats.Bflist;
 using junie_des_1942stats.PlayerTracking;
+using Microsoft.Extensions.DependencyInjection;
 
 public class BF1942MetricsCollector : BackgroundService
 {
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly Gauge _totalPlayersGauge;
     private readonly Gauge _serverPlayersGauge;
     private readonly Gauge _fh2TotalPlayersGauge;
     private readonly Gauge _fh2ServerPlayersGauge;
     private readonly HttpClient _httpClient;
-    private readonly PlayerTrackingService _playerTrackingService;
     
     private const string STATS_API_URL = "https://api.bflist.io/bf1942/v1/livestats";
     private const string SERVERS_API_URL = "https://api.bflist.io/bf1942/v1/servers/1?perPage=100";
     private const string FH2_STATS_API_URL = "https://api.bflist.io/fh2/v1/livestats";
     private const string FH2_SERVERS_API_URL = "https://api.bflist.io/fh2/v1/servers/1?perPage=100";
     
-    public BF1942MetricsCollector(PlayerTrackingService playerTrackingService)
+    public BF1942MetricsCollector(IServiceScopeFactory scopeFactory)
     {
+        _scopeFactory = scopeFactory;
         _totalPlayersGauge = Metrics.CreateGauge(
             "bf1942_players_online", 
             "Number of players currently online in BF1942"
@@ -54,7 +56,6 @@ public class BF1942MetricsCollector : BackgroundService
         );
         
         _httpClient = new HttpClient();
-        _playerTrackingService = playerTrackingService;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -63,13 +64,20 @@ public class BF1942MetricsCollector : BackgroundService
         {
             try
             {
-                // Get BF1942 stats
-                await CollectTotalPlayersAsync(stoppingToken);
-                await CollectServerStatsAsync(stoppingToken);
-                
-                // Get FH2 stats
-                await CollectFh2TotalPlayersAsync(stoppingToken);
-                await CollectFh2ServerStatsAsync(stoppingToken);
+                // Create a new scope for each operation
+                using (var scope = _scopeFactory.CreateScope())
+                {
+                    // Get the scoped service from the scope
+                    var playerTrackingService = scope.ServiceProvider.GetRequiredService<PlayerTrackingService>();
+
+                    // Get BF1942 stats
+                    await CollectTotalPlayersAsync(stoppingToken);
+                    await CollectServerStatsAsync(playerTrackingService, stoppingToken);
+
+                    // Get FH2 stats
+                    await CollectFh2TotalPlayersAsync(stoppingToken);
+                    await CollectFh2ServerStatsAsync(playerTrackingService, stoppingToken);
+                }
             }
             catch (Exception ex)
             {
@@ -95,7 +103,7 @@ public class BF1942MetricsCollector : BackgroundService
         }
     }
 
-    private async Task CollectServerStatsAsync(CancellationToken stoppingToken)
+    private async Task CollectServerStatsAsync(PlayerTrackingService playerTrackingService, CancellationToken stoppingToken)
     {
         var response = await _httpClient.GetStringAsync(SERVERS_API_URL, stoppingToken);
         var serversData = JsonSerializer.Deserialize<Bf1942ServerInfo[]>(response, new JsonSerializerOptions
@@ -120,7 +128,7 @@ public class BF1942MetricsCollector : BackgroundService
                 // Track players in the database
                 try
                 {
-                    await _playerTrackingService.TrackPlayersFromServerInfo(server, timestamp);
+                    await playerTrackingService.TrackPlayersFromServerInfo(server, timestamp);
                 }
                 catch (Exception ex)
                 {
@@ -159,7 +167,7 @@ public class BF1942MetricsCollector : BackgroundService
         }
     }
 
-    private async Task CollectFh2ServerStatsAsync(CancellationToken stoppingToken)
+    private async Task CollectFh2ServerStatsAsync(PlayerTrackingService playerTrackingService, CancellationToken stoppingToken)
     {
         var response = await _httpClient.GetStringAsync(FH2_SERVERS_API_URL, stoppingToken);
         var serversData = JsonSerializer.Deserialize<Fh2ServerInfo[]>(response, new JsonSerializerOptions
@@ -184,7 +192,7 @@ public class BF1942MetricsCollector : BackgroundService
                 // Track players in the database
                 try
                 {
-                    await _playerTrackingService.TrackPlayersFromServerInfo(server, timestamp);
+                    await playerTrackingService.TrackPlayersFromServerInfo(server, timestamp);
                 }
                 catch (Exception ex)
                 {
