@@ -6,6 +6,23 @@ public class PlayerBasicInfo
     public int TotalPlayTimeMinutes { get; set; }
     public DateTime LastSeen { get; set; }
     public int TotalSessions { get; set; }
+    public bool IsActive { get; set; }
+}
+
+public class ServerInfo
+{
+    public string ServerGuid { get; set; } = "";
+    public string ServerName { get; set; } = "";
+}
+
+public class RecentServerActivity
+{
+    public string ServerGuid { get; set; } = "";
+    public string ServerName { get; set; } = "";
+    public int TotalPlayTimeMinutes { get; set; }
+    public int TotalKills { get; set; }
+    public int TotalDeaths { get; set; }
+    public DateTime LastPlayed { get; set; }
 }
 
 public class ServerActivitySummary
@@ -13,6 +30,8 @@ public class ServerActivitySummary
     public string PlayerName { get; set; } = "";
     public int TotalPlayTimeMinutes { get; set; }
     public DateTime LastSeen { get; set; }
+    public bool IsActive { get; set; }
+    public ServerInfo? CurrentServer { get; set; }
         
     public List<ServerActivityDetail> TodayActivity { get; set; } = new();
     public List<ServerActivityDetail> ThisWeekActivity { get; set; } = new();
@@ -42,6 +61,11 @@ public class PlayerTimeStatistics
     public int HighestScore { get; set; }
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }
+    
+    // New properties
+    public bool IsActive { get; set; }
+    public ServerInfo? CurrentServer { get; set; }
+    public List<RecentServerActivity> RecentServers { get; set; } = new();
 }
 
 public class ServerPlayTimeStats

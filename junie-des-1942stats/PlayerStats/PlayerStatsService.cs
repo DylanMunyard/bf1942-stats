@@ -6,6 +6,8 @@ namespace junie_des_1942stats.PlayerStats;
 public class PlayerStatsService
 {
     private readonly PlayerTrackerDbContext _dbContext;
+    // Define a threshold for considering a player "active" (e.g., 5 minutes)
+    private readonly TimeSpan _activeThreshold = TimeSpan.FromMinutes(5);
 
     public PlayerStatsService(PlayerTrackerDbContext dbContext)
     {
@@ -18,10 +20,34 @@ public class PlayerStatsService
         // Get all sessions for this player
         var sessions = await _dbContext.PlayerSessions
             .Where(ps => ps.PlayerName == playerName)
+            .Include(ps => ps.Server)
             .ToListAsync();
             
-        if (!sessions.Any())
+        if (sessions.Count == 0)
             return new PlayerTimeStatistics();
+            
+        var latestSession = sessions.OrderByDescending(s => s.LastSeenTime).FirstOrDefault();
+        var now = DateTime.UtcNow;
+        
+        // Check if player is currently active (seen within the last 5 minutes)
+        bool isActive = latestSession != null && 
+                       (now - latestSession.LastSeenTime) <= _activeThreshold;
+        
+        // Get the list of servers the player was active on in the last 7 days
+        var recentServers = sessions
+            .Where(s => (now - s.LastSeenTime).TotalDays <= 7)
+            .GroupBy(s => new { ServerGuid = s.ServerGuid, ServerName = s.Server.Name })
+            .Select(g => new RecentServerActivity
+            {
+                ServerGuid = g.Key.ServerGuid,
+                ServerName = g.Key.ServerName,
+                TotalPlayTimeMinutes = g.Sum(s => (int)Math.Ceiling((s.LastSeenTime - s.StartTime).TotalMinutes)),
+                TotalKills = g.Sum(s => s.TotalKills),
+                TotalDeaths = g.Sum(s => s.TotalDeaths),
+                LastPlayed = g.Max(s => s.LastSeenTime)
+            })
+            .OrderByDescending(s => s.LastPlayed)
+            .ToList();
             
         var stats = new PlayerTimeStatistics
         {
@@ -33,7 +59,16 @@ public class PlayerStatsService
             LastPlayed = sessions.Max(s => s.LastSeenTime),
             HighestScore = sessions.Max(s => s.TotalScore),
             TotalKills = sessions.Sum(s => s.TotalKills),
-            TotalDeaths = sessions.Sum(s => s.TotalDeaths)
+            TotalDeaths = sessions.Sum(s => s.TotalDeaths),
+            
+            // New properties
+            IsActive = isActive,
+            CurrentServer = isActive ? new ServerInfo
+            {
+                ServerGuid = latestSession!.ServerGuid,
+                ServerName = latestSession.Server?.Name ?? "Unknown Server"
+            } : null,
+            RecentServers = recentServers
         };
             
         return stats;
@@ -77,11 +112,23 @@ public class PlayerStatsService
             .Include(ps => ps.Server)
             .ToListAsync();
 
+        var latestSession = sessions.OrderByDescending(s => s.LastSeenTime).FirstOrDefault();
+        
+        // Check if player is currently active (seen within the last 5 minutes)
+        bool isActive = latestSession != null && 
+                       (now - latestSession.LastSeenTime) <= _activeThreshold;
+
         var result = new ServerActivitySummary
         {
             PlayerName = playerName,
             TotalPlayTimeMinutes = sessions.Sum(s => (int)Math.Ceiling((s.LastSeenTime - s.StartTime).TotalMinutes)),
             LastSeen = sessions.Any() ? sessions.Max(s => s.LastSeenTime) : DateTime.MinValue,
+            IsActive = isActive,
+            CurrentServer = isActive ? new ServerInfo
+            {
+                ServerGuid = latestSession!.ServerGuid,
+                ServerName = latestSession.Server?.Name ?? "Unknown Server"
+            } : null,
                 
             TodayActivity = GetServerGroupingForPeriod(sessions, s => s.StartTime >= todayStart),
             ThisWeekActivity = GetServerGroupingForPeriod(sessions, s => s.StartTime >= weekStart),
@@ -172,6 +219,8 @@ public class PlayerStatsService
     // Get all players with at least one session
     public async Task<List<PlayerBasicInfo>> GetAllPlayersBasicInfo()
     {
+        var now = DateTime.UtcNow;
+        
         var players = await _dbContext.PlayerSessions
             .GroupBy(ps => ps.PlayerName)
             .Select(g => new PlayerBasicInfo
@@ -179,7 +228,8 @@ public class PlayerStatsService
                 PlayerName = g.Key,
                 TotalPlayTimeMinutes = g.Sum(s => (int)Math.Ceiling((s.LastSeenTime - s.StartTime).TotalMinutes)),
                 LastSeen = g.Max(s => s.LastSeenTime),
-                TotalSessions = g.Count()
+                TotalSessions = g.Count(),
+                IsActive = g.Any(s => s.IsActive || (now - s.LastSeenTime) <= TimeSpan.FromMinutes(5))
             })
             .OrderByDescending(p => p.LastSeen)
             .ToListAsync();
