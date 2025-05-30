@@ -34,10 +34,12 @@ spec:
           image: localhost:30500/bf42-stats:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 80
+            - containerPort: 8080
           env:
             - name: DB_PATH
               value: "/mnt/data/playertracker.db"
+            - name: ASPNETCORE_URLS
+              value: "http://+:8080"
           volumeMounts:
             - name: stats-data
               mountPath: /mnt/data
@@ -62,3 +64,6 @@ spec:
     - port: 9091
       targetPort: 9091
       name: metrics
+    - port: 8080
+      targetPort: 8080
+      name: api
