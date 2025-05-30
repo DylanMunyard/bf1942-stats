@@ -10,8 +10,24 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container
 builder.Services.AddControllers();
 
+// Configure SQLite database path - check for environment variable first
+string dbPath;
+var envDbPath = Environment.GetEnvironmentVariable("DB_PATH");
+
+if (!string.IsNullOrEmpty(envDbPath))
+{
+    // Use the environment variable path if it exists
+    dbPath = envDbPath;
+    Console.WriteLine($"Using database path from environment variable: {dbPath}");
+}
+else
+{
+    // Default to current directory
+    dbPath = Path.Combine(Directory.GetCurrentDirectory(), "playertracker.db");
+    Console.WriteLine($"Using default database path: {dbPath}");
+}
+
 // Configure SQLite
-var dbPath = Path.Combine(Directory.GetCurrentDirectory(), "playertracker.db");
 builder.Services.AddDbContext<PlayerTrackerDbContext>(options =>
     options.UseSqlite($"Data Source={dbPath}"));
 

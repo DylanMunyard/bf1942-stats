@@ -35,10 +35,12 @@ spec:
           imagePullPolicy: Always
           ports:
             - containerPort: 80
+          env:
+            - name: DB_PATH
+              value: "/mnt/data/playertracker.db"
           volumeMounts:
             - name: stats-data
-              mountPath: /app/playertracker.db
-              subPath: playertracker.db
+              mountPath: /mnt/data
       volumes:
         - name: stats-data
           persistentVolumeClaim:
