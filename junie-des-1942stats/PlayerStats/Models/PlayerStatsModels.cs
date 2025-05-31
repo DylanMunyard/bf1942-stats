@@ -60,6 +60,7 @@ public class PlayerTimeStatistics
     public ServerInfo? CurrentServer { get; set; }
     public List<RecentServerActivity> RecentServers { get; set; } = new();
     public Session? BestSession { get; set; }
+    public List<Session> RecentSessions { get; set; } = [];
 }
 
 public class RecentServerActivity
