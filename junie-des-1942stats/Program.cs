@@ -55,5 +55,16 @@ using (var scope = host.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
     dbContext.Database.EnsureCreated();
+    try
+    {
+        dbContext.Database.Migrate();
+        Console.WriteLine("Database migrations applied successfully.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"An error occurred while applying migrations: {ex.Message}");
+        // Consider logging the error properly using ILogger
+    }
+
 }
 await host.RunAsync();

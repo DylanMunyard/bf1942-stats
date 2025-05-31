@@ -63,7 +63,9 @@ public class Player
     public string Name { get; set; } = "";
     public DateTime FirstSeen { get; set; }
     public DateTime LastSeen { get; set; }
-
+    
+    public int TotalPlayTimeMinutes { get; set; }
+    
     // Navigation property
     public List<PlayerSession> Sessions { get; set; } = new();
 }
@@ -74,6 +76,7 @@ public class GameServer
     public string Name { get; set; } = "";
     public string Ip { get; set; } = "";
     public int Port { get; set; }
+    public string GameId { get; set; } = "";
 
     // Navigation property
     public List<PlayerSession> Sessions { get; set; } = new();
@@ -91,6 +94,8 @@ public class PlayerSession
     public int TotalScore { get; set; } // Can track highest score or final score
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }
+    public string MapName { get; set; } = "";
+    public string GameType { get; set; } = "";
     
     // Navigation properties
     public Player Player { get; set; } = null!;

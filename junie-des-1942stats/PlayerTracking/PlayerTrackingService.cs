@@ -48,21 +48,38 @@ public class PlayerTrackingService
         foreach (var playerInfo in server.Players)
         {
             // Get or create the player record
-            await GetOrCreatePlayerAsync(playerInfo.Name, timestamp);
+            var player = await GetOrCreatePlayerAsync(playerInfo.Name, timestamp);
 
             // Find if player has an active session on this server
             var activeSession = activeSessions
                 .FirstOrDefault(s => s.PlayerName == playerInfo.Name && s.ServerGuid == server.Guid);
 
-            if (activeSession == null)
+            // Check if we need to create a new session
+            bool createNewSession = activeSession == null;
+            
+            // Check if map has changed
+            if (activeSession != null && 
+                !string.IsNullOrEmpty(server.MapName) &&
+                activeSession.MapName != server.MapName)
+            {
+                // Close the current session if map has changed
+                activeSession.IsActive = false;
+                _dbContext.PlayerSessions.Update(activeSession);
+                await _dbContext.SaveChangesAsync();
+                
+                // Flag to create a new session
+                createNewSession = true;
+            }
+
+            if (createNewSession || activeSession is null)
             {
                 // Create a new session
-                await CreateNewSessionAsync(playerInfo, server.Guid, timestamp);
+                await CreateNewSessionAsync(playerInfo, server, timestamp);
             }
             else
             {
                 // Update the existing session
-                await UpdateExistingSessionAsync(activeSession, playerInfo, timestamp);
+                await UpdateExistingSessionAsync(player, activeSession, playerInfo, server, timestamp);
             }
         }
     }
@@ -79,14 +96,16 @@ public class PlayerTrackingService
                 Guid = serverInfo.Guid,
                 Name = serverInfo.Name,
                 Ip = serverInfo.Ip,
-                Port = serverInfo.Port
+                Port = serverInfo.Port,
+                GameId = serverInfo.GameId
             };
             _dbContext.Servers.Add(server);
             await _dbContext.SaveChangesAsync();
         }
-        else if (server.Name != serverInfo.Name)
+        else if (server.Name != serverInfo.Name || server.GameId != serverInfo.GameId)
         {
             server.Name = serverInfo.Name;
+            server.GameId = serverInfo.GameId;
             await _dbContext.SaveChangesAsync();
         }
 
@@ -134,19 +153,22 @@ public class PlayerTrackingService
             await _dbContext.SaveChangesAsync();
     }
 
-    private async Task CreateNewSessionAsync(PlayerInfo playerInfo, string serverGuid, DateTime timestamp)
+    private async Task CreateNewSessionAsync(PlayerInfo playerInfo, IGameServer server,
+        DateTime timestamp)
     {
         var session = new PlayerSession
         {
             PlayerName = playerInfo.Name,
-            ServerGuid = serverGuid,
+            ServerGuid = server.Guid,
             StartTime = timestamp,
             LastSeenTime = timestamp,
             IsActive = true,
             ObservationCount = 1,
             TotalScore = playerInfo.Score,
             TotalKills = playerInfo.Kills,
-            TotalDeaths = playerInfo.Deaths
+            TotalDeaths = playerInfo.Deaths,
+            MapName = server.MapName,
+            GameType = server.GameType
         };
 
         _dbContext.PlayerSessions.Add(session);
@@ -166,14 +188,29 @@ public class PlayerTrackingService
         await _dbContext.SaveChangesAsync();
     }
 
-    private async Task UpdateExistingSessionAsync(PlayerSession session, PlayerInfo playerInfo, DateTime timestamp)
+    private async Task UpdateExistingSessionAsync(Player player, PlayerSession session, PlayerInfo playerInfo,
+        IGameServer server, DateTime timestamp)
     {
+        // Calculate the additional play time for this update
+        int additionalMinutes = (int)(timestamp - session.LastSeenTime).TotalMinutes;
+        
         // Update the session
         session.LastSeenTime = timestamp;
         session.ObservationCount++;
         session.TotalScore = Math.Max(session.TotalScore, playerInfo.Score); // Store highest score
         session.TotalKills = Math.Max(session.TotalKills, playerInfo.Kills); // Store highest kills
         session.TotalDeaths = playerInfo.Deaths; // Store latest deaths
+        
+        // Update map and game type info if needed
+        if (!string.IsNullOrEmpty(server.MapName) && session.MapName != server.MapName)
+        {
+            session.MapName = server.MapName;
+        }
+        
+        if (!string.IsNullOrEmpty(server.GameType) && session.GameType != server.GameType)
+        {
+            session.GameType = server.GameType;
+        }
 
         _dbContext.PlayerSessions.Update(session);
 
@@ -187,8 +224,12 @@ public class PlayerTrackingService
             Deaths = playerInfo.Deaths,
             Ping = playerInfo.Ping
         };
-
         _dbContext.PlayerObservations.Add(observation);
+    
+        // Update player aggregate data
+        player.TotalPlayTimeMinutes += additionalMinutes > 0 ? additionalMinutes : 0;
+        
+        _dbContext.Players.Update(player);
 
         await _dbContext.SaveChangesAsync();
     }
