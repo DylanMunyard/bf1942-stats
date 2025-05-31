@@ -15,6 +15,7 @@ public class ServerInfo
     public string ServerName { get; set; }
     public int SessionKills { get; set; }
     public int SessionDeaths { get; set; }
+    public string MapName { get; set; }
 }
 
 public class ServerActivitySummary
@@ -58,6 +59,7 @@ public class PlayerTimeStatistics
     public bool IsActive { get; set; }
     public ServerInfo? CurrentServer { get; set; }
     public List<RecentServerActivity> RecentServers { get; set; } = new();
+    public Session? BestSession { get; set; }
 }
 
 public class RecentServerActivity
@@ -70,22 +72,15 @@ public class RecentServerActivity
     public DateTime LastPlayed { get; set; }
 }
 
-public class ServerPlayTimeStats
+public class Session
 {
-    public string ServerGuid { get; set; } = "";
-    public string ServerName { get; set; } = "";
-    public int TotalSessions { get; set; }
-    public int TotalPlayTimeMinutes { get; set; }
-    public DateTime LastPlayed { get; set; }
-}
-
-public class WeeklyPlayTimeStats
-{
-    public int Year { get; set; }
-    public int Week { get; set; }
-    public DateTime WeekStart { get; set; }
-    public int TotalSessions { get; set; }
-    public int TotalPlayTimeMinutes { get; set; }
+    public DateTime StartTime { get; set; }
+    public DateTime LastSeenTime { get; set; }
+    public bool IsActive { get; set; } // True if session is ongoing
+    public int TotalScore { get; set; } // Can track highest score or final score
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }
+    public string MapName { get; set; } = "";
+    public string GameType { get; set; } = "";
+    public string ServerName { get; set; } = "";
 }

@@ -31,7 +31,8 @@ public class PlayerStatsService
                             ServerGuid = s.ServerGuid,
                             ServerName = s.Server.Name,
                             SessionKills = s.TotalKills,
-                            SessionDeaths = s.TotalDeaths
+                            SessionDeaths = s.TotalDeaths,
+                            MapName = s.MapName
                         })
                         .FirstOrDefault() 
                     : null
@@ -45,10 +46,12 @@ public class PlayerStatsService
     // Get total play time for a player (in minutes)
     public async Task<PlayerTimeStatistics> GetPlayerStatistics(string playerName)
     {
-        // Get all sessions for this player
+        // Get recent sessions for the player
         var sessions = await _dbContext.PlayerSessions
             .Where(ps => ps.PlayerName == playerName)
             .Include(ps => ps.Server)
+            .OrderByDescending(ps => ps.LastSeenTime)
+            .Take(10)
             .ToListAsync();
             
         if (sessions.Count == 0)
@@ -76,29 +79,45 @@ public class PlayerStatsService
             })
             .OrderByDescending(s => s.LastPlayed)
             .ToList();
-            
+
+        var bestSession = sessions.MaxBy(x => x.TotalScore);
         var stats = new PlayerTimeStatistics
         {
             TotalSessions = sessions.Count,
-            TotalPlayTimeMinutes = sessions.Sum(s => 
+            TotalPlayTimeMinutes = sessions.Sum(s =>
                 (int)Math.Ceiling((s.LastSeenTime - s.StartTime).TotalMinutes)),
             TotalObservations = sessions.Sum(s => s.ObservationCount),
             FirstPlayed = sessions.Min(s => s.StartTime),
             LastPlayed = sessions.Max(s => s.LastSeenTime),
-            HighestScore = sessions.Max(s => s.TotalScore),
             TotalKills = sessions.Sum(s => s.TotalKills),
             TotalDeaths = sessions.Sum(s => s.TotalDeaths),
-            
+            BestSession = bestSession != null
+                ? new Session
+                {
+                    TotalScore = bestSession.TotalScore,
+                    GameType = bestSession.GameType,
+                    MapName = bestSession.MapName,
+                    IsActive = bestSession.IsActive,
+                    LastSeenTime = bestSession.LastSeenTime,
+                    StartTime = bestSession.StartTime,
+                    TotalDeaths = bestSession.TotalDeaths,
+                    TotalKills = bestSession.TotalKills,
+                    ServerName = bestSession.Server.Name,
+                }
+                : null,
+
             // New properties
             IsActive = isActive,
-            CurrentServer = isActive ? new ServerInfo
-            {
-                ServerGuid = latestSession!.ServerGuid,
-                ServerName = latestSession.Server?.Name ?? "Unknown Server",
-                // Add current session kills and deaths
-                SessionKills = latestSession.TotalKills,
-                SessionDeaths = latestSession.TotalDeaths
-            } : null,
+            CurrentServer = isActive
+                ? new ServerInfo
+                {
+                    ServerGuid = latestSession!.ServerGuid,
+                    ServerName = latestSession.Server.Name,
+                    SessionKills = latestSession.TotalKills,
+                    SessionDeaths = latestSession.TotalDeaths,
+                    MapName = latestSession.MapName,
+                }
+                : null,
             RecentServers = recentServers
         };
             
