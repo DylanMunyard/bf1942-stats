@@ -54,7 +54,6 @@ host.MapControllers();
 using (var scope = host.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
-    dbContext.Database.EnsureCreated();
     try
     {
         dbContext.Database.Migrate();

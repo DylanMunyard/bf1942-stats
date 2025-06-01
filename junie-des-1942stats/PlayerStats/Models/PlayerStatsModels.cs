@@ -38,6 +38,7 @@ public class ServerInfo
 
 public class Session
 {
+    public int SessionId { get; set; } // Auto-incremented
     public DateTime StartTime { get; set; }
     public DateTime LastSeenTime { get; set; }
     public bool IsActive { get; set; } // True if session is ongoing
@@ -47,4 +48,55 @@ public class Session
     public string MapName { get; set; } = "";
     public string GameType { get; set; } = "";
     public string ServerName { get; set; } = "";
+}
+public class SessionDetail
+{
+    public int SessionId { get; set; }
+    public string PlayerName { get; set; } = "";
+    public string ServerName { get; set; } = "";
+    public string MapName { get; set; } = "";
+    public string GameType { get; set; } = "";
+    public DateTime StartTime { get; set; }
+    public DateTime? EndTime { get; set; }
+    public int TotalPlayTimeMinutes { get; set; }
+    public int TotalKills { get; set; }
+    public int TotalDeaths { get; set; }
+    public int TotalScore { get; set; }
+    public bool IsActive { get; set; }
+    
+    // Related entity details
+    public PlayerDetailInfo PlayerDetails { get; set; } = new();
+    public ServerDetailInfo? ServerDetails { get; set; }
+    public List<ObservationInfo> Observations { get; set; } = new();
+}
+
+public class PlayerDetailInfo
+{
+    public string Name { get; set; } = "";
+    public int TotalPlayTimeMinutes { get; set; }
+    public DateTime FirstSeen { get; set; }
+    public DateTime LastSeen { get; set; }
+    public bool IsAiBot { get; set; }
+}
+
+public class ServerDetailInfo
+{
+    public string Guid { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Address { get; set; } = "";
+    public int Port { get; set; }
+    public string Country { get; set; } = "";
+    public string CountryCode { get; set; } = "";
+    public int MaxPlayers { get; set; }
+    public string GameId { get; set; } = "";
+}
+
+public class ObservationInfo
+{
+    public DateTime Timestamp { get; set; }
+    public int Score { get; set; }
+    public int Kills { get; set; }
+    public int Deaths { get; set; }
+    public int Ping { get; set; }
+    public string TeamLabel { get; set; } = "";
 }

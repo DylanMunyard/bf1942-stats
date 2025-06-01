@@ -37,4 +37,18 @@ public class PlayersController : ControllerBase
             
         return Ok(stats);
     }
+    
+    // Get session details
+    [HttpGet("{playerName}/sessions/{sessionId}")]
+    public async Task<ActionResult<SessionDetail>> GetPlayerStats(string playerName, int sessionId)
+    {
+        var stats = await _playerStatsService.GetSession(playerName, sessionId);
+
+        if (stats is null)
+        {
+            return NotFound($"Session '{sessionId}' not found");
+        }
+        
+        return Ok(stats);
+    }
 }

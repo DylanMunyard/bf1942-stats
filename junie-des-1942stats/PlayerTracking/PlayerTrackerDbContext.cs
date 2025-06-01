@@ -66,6 +66,8 @@ public class Player
     
     public int TotalPlayTimeMinutes { get; set; }
     
+    public bool AiBot { get; set; }
+    
     // Navigation property
     public List<PlayerSession> Sessions { get; set; } = new();
 }
@@ -112,6 +114,8 @@ public class PlayerObservation
     public int Kills { get; set; }
     public int Deaths { get; set; }
     public int Ping { get; set; }
+    
+    public string TeamLabel { get; set; } = "";
     
     // Navigation property
     public PlayerSession Session { get; set; } = null!;

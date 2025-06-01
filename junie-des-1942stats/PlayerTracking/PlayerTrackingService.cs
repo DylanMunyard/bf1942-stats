@@ -48,7 +48,7 @@ public class PlayerTrackingService
         foreach (var playerInfo in server.Players)
         {
             // Get or create the player record
-            var player = await GetOrCreatePlayerAsync(playerInfo.Name, timestamp);
+            var player = await GetOrCreatePlayerAsync(playerInfo, timestamp);
 
             // Find if player has an active session on this server
             var activeSession = activeSessions
@@ -112,24 +112,26 @@ public class PlayerTrackingService
         return server;
     }
 
-    private async Task<Player> GetOrCreatePlayerAsync(string playerName, DateTime timestamp)
+    private async Task<Player> GetOrCreatePlayerAsync(PlayerInfo playerInfo, DateTime timestamp)
     {
         var player = await _dbContext.Players
-            .FirstOrDefaultAsync(p => p.Name == playerName);
+            .FirstOrDefaultAsync(p => p.Name == playerInfo.Name);
 
         if (player == null)
         {
             player = new Player
             {
-                Name = playerName,
+                Name = playerInfo.Name,
                 FirstSeen = timestamp,
-                LastSeen = timestamp
+                LastSeen = timestamp,
+                AiBot = playerInfo.AiBot,
             };
             _dbContext.Players.Add(player);
             await _dbContext.SaveChangesAsync();
         }
         else
         {
+            player.AiBot = playerInfo.AiBot;
             player.LastSeen = timestamp;
             await _dbContext.SaveChangesAsync();
         }
@@ -181,7 +183,8 @@ public class PlayerTrackingService
             Score = playerInfo.Score,
             Kills = playerInfo.Kills,
             Deaths = playerInfo.Deaths,
-            Ping = playerInfo.Ping
+            Ping = playerInfo.Ping,
+            TeamLabel = playerInfo.TeamLabel,
         };
 
         _dbContext.PlayerObservations.Add(observation);
