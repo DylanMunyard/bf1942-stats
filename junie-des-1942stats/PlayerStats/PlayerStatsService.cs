@@ -34,7 +34,8 @@ public class PlayerStatsService
                             ServerName = s.Server.Name,
                             SessionKills = s.TotalKills,
                             SessionDeaths = s.TotalDeaths,
-                            MapName = s.MapName
+                            MapName = s.MapName,
+                            GameId = s.Server.GameId,
                         })
                         .FirstOrDefault()
                     : null
@@ -141,7 +142,9 @@ public class PlayerStatsService
                     ServerGuid = activeSession.ServerGuid,
                     ServerName = activeSession.Server.Name,
                     SessionKills = activeSession.TotalKills,
-                    SessionDeaths = activeSession.TotalDeaths
+                    SessionDeaths = activeSession.TotalDeaths,
+                    GameId = activeSession.Server.GameId,
+                    MapName = activeSession.MapName,
                 }
                 : null,
             RecentSessions = recentSessions,

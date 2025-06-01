@@ -33,6 +33,7 @@ public class ServerInfo
     public int SessionKills { get; set; }
     public int SessionDeaths { get; set; }
     public string MapName { get; set; }
+    public string GameId { get; set; }
 }
 
 
