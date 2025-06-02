@@ -59,7 +59,7 @@ builder.Services.AddHttpClient<PrometheusService>(client => { client.Timeout = T
 builder.Services.AddSingleton<PrometheusService>(sp =>
 {
     var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
-    var prometheusUrl = builder.Configuration["Prometheus:Url"] ?? "http://localhost:9090/api/v1";
+    var prometheusUrl = Environment.GetEnvironmentVariable("PROMETHEUS_URL") ?? "http://localhost:9090/api/v1";
     return new PrometheusService(httpClient, prometheusUrl);
 });
 
