@@ -18,12 +18,14 @@ public class PlayerTimeStatistics
     public int HighestScore { get; set; }
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }
-    
-    // New properties
+
+// New properties
     public bool IsActive { get; set; }
     public ServerInfo? CurrentServer { get; set; }
     public Session? BestSession { get; set; }
     public List<Session> RecentSessions { get; set; } = [];
+    
+    public PlayerInsights Insights { get; set; } = new();
 }
 
 public class ServerInfo
@@ -35,7 +37,6 @@ public class ServerInfo
     public string MapName { get; set; }
     public string GameId { get; set; }
 }
-
 
 public class Session
 {
@@ -50,6 +51,7 @@ public class Session
     public string GameType { get; set; } = "";
     public string ServerName { get; set; } = "";
 }
+
 public class SessionDetail
 {
     public int SessionId { get; set; }
@@ -64,8 +66,8 @@ public class SessionDetail
     public int TotalDeaths { get; set; }
     public int TotalScore { get; set; }
     public bool IsActive { get; set; }
-    
-    // Related entity details
+
+// Related entity details
     public PlayerDetailInfo PlayerDetails { get; set; } = new();
     public ServerDetailInfo? ServerDetails { get; set; }
     public List<ObservationInfo> Observations { get; set; } = new();
@@ -100,4 +102,51 @@ public class ObservationInfo
     public int Deaths { get; set; }
     public int Ping { get; set; }
     public string TeamLabel { get; set; } = "";
+}
+
+public class PlayerInsights
+{
+    public string PlayerName { get; set; } = string.Empty;
+    public DateTime StartPeriod { get; set; }
+    public DateTime EndPeriod { get; set; }
+
+    // Time spent on each server
+    public List<ServerPlayTime> ServerPlayTimes { get; set; } = new List<ServerPlayTime>();
+
+    // Favorite maps by time played
+    public List<MapPlayTime> FavoriteMaps { get; set; } = new List<MapPlayTime>();
+
+    // Best map based on kills
+    public MapKillStats? BestKillMap { get; set; }
+
+    // Hours when the player is typically online
+    public List<HourlyActivity> ActivityByHour { get; set; } = new List<HourlyActivity>();
+}
+
+public class ServerPlayTime
+{
+    public string ServerGuid { get; set; } = string.Empty;
+    public string ServerName { get; set; } = string.Empty;
+    public int MinutesPlayed { get; set; }
+}
+
+public class MapPlayTime
+{
+    public string MapName { get; set; } = string.Empty;
+    public int MinutesPlayed { get; set; }
+}
+
+public class MapKillStats
+{
+    public string MapName { get; set; } = string.Empty;
+    public int TotalKills { get; set; }
+    public int TotalDeaths { get; set; }
+    public double KdRatio => TotalDeaths > 0 ? Math.Round((double)TotalKills / TotalDeaths, 2) : TotalKills;
+}
+
+public class HourlyActivity
+{
+    public int Hour { get; set; }
+    public int MinutesActive { get; set; }
+    public string FormattedHour => $"{Hour:D2}:00 - {Hour:D2}:59";
 }

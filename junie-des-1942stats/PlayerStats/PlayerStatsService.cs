@@ -124,6 +124,8 @@ public class PlayerStatsService
         // Check if player is currently active (seen within the last 5 minutes)
         bool isActive = activeSession != null &&
                         (now - activeSession.LastSeenTime) <= _activeThreshold;
+        
+        var insights = await GetPlayerInsights(playerName);
 
         var stats = new PlayerTimeStatistics
         {
@@ -148,7 +150,8 @@ public class PlayerStatsService
                 }
                 : null,
             RecentSessions = recentSessions,
-            BestSession = bestSession
+            BestSession = bestSession,
+            Insights = insights
         };
 
         return stats;
@@ -217,5 +220,144 @@ public class PlayerStatsService
         };
 
         return sessionDetail;
+    }
+
+    public async Task<PlayerInsights> GetPlayerInsights(
+        string playerName, 
+        DateTime? startDate = null, 
+        DateTime? endDate = null, 
+        int? daysToAnalyze = null)
+    {
+        // Calculate the time period
+        var endPeriod = endDate ?? DateTime.UtcNow;
+        DateTime startPeriod;
+        
+        if (startDate.HasValue)
+        {
+            startPeriod = startDate.Value;
+        }
+        else if (daysToAnalyze.HasValue)
+        {
+            startPeriod = endPeriod.AddDays(-daysToAnalyze.Value);
+        }
+        else
+        {
+            // Default to 1 week
+            startPeriod = endPeriod.AddDays(-7);
+        }
+        
+        // Check if the player exists
+        var player = await _dbContext.Players
+            .FirstOrDefaultAsync(p => p.Name == playerName);
+
+        if (player == null)
+            return new PlayerInsights { PlayerName = playerName, StartPeriod = startPeriod, EndPeriod = endPeriod };
+
+        // Get player sessions within the time period
+        var sessions = await _dbContext.PlayerSessions
+            .Where(ps => ps.PlayerName == playerName && ps.StartTime >= startPeriod && ps.LastSeenTime <= endPeriod)
+            .Include(s => s.Server)
+            .ToListAsync();
+
+        var insights = new PlayerInsights
+        {
+            PlayerName = playerName,
+            StartPeriod = startPeriod,
+            EndPeriod = endPeriod
+        };
+
+        // 1. Calculate time spent on each server
+        var serverPlayTimes = sessions
+            .GroupBy(s => new { s.ServerGuid, ServerName = s.Server.Name })
+            .Select(g => new ServerPlayTime
+            {
+                ServerGuid = g.Key.ServerGuid,
+                ServerName = g.Key.ServerName,
+                MinutesPlayed = g.Sum(s => (int)Math.Ceiling((s.LastSeenTime - s.StartTime).TotalMinutes))
+            })
+            .OrderByDescending(s => s.MinutesPlayed)
+            .ToList();
+        
+        insights.ServerPlayTimes = serverPlayTimes;
+
+        // 2. Calculate favorite maps by time played
+        var mapPlayTimes = sessions
+            .GroupBy(s => s.MapName)
+            .Select(g => new MapPlayTime
+            {
+                MapName = g.Key,
+                MinutesPlayed = g.Sum(s => (int)Math.Ceiling((s.LastSeenTime - s.StartTime).TotalMinutes))
+            })
+            .OrderByDescending(m => m.MinutesPlayed)
+            .ToList();
+        
+        insights.FavoriteMaps = mapPlayTimes;
+
+        // 3. Find best map based on kills
+        var mapKillStats = sessions
+            .GroupBy(s => s.MapName)
+            .Select(g => new MapKillStats
+            {
+                MapName = g.Key,
+                TotalKills = g.Sum(s => s.TotalKills),
+                TotalDeaths = g.Sum(s => s.TotalDeaths)
+            })
+            .OrderByDescending(m => m.TotalKills)
+            .FirstOrDefault();
+        
+        insights.BestKillMap = mapKillStats;
+
+        // 4. Calculate activity by hour (when they're usually online)
+        // Initialize hourly activity tracker
+        var hourlyActivity = new Dictionary<int, int>();
+        for (int hour = 0; hour < 24; hour++)
+        {
+            hourlyActivity[hour] = 0;
+        }
+
+        // Process each session's time range and break into hourly chunks
+        foreach (var session in sessions)
+        {
+            var sessionStart = session.StartTime;
+            var sessionEnd = session.LastSeenTime;
+            
+            // Track activity by processing continuous blocks of time
+            var currentTime = sessionStart;
+            
+            while (currentTime < sessionEnd)
+            {
+                int hour = currentTime.Hour;
+                
+                // Calculate how much time was spent in this hour
+                // Either go to the end of the current hour or the end of the session, whichever comes first
+                var hourEnd = new DateTime(
+                    currentTime.Year, 
+                    currentTime.Month, 
+                    currentTime.Day, 
+                    hour, 
+                    59, 
+                    59, 
+                    999);
+            
+                if (hourEnd > sessionEnd)
+                {
+                    hourEnd = sessionEnd;
+                }
+            
+                // Add the minutes spent in this hour
+                int minutesInHour = (int)Math.Ceiling((hourEnd - currentTime).TotalMinutes);
+                hourlyActivity[hour] += minutesInHour;
+            
+                // Move to the next hour
+                currentTime = hourEnd.AddMilliseconds(1);
+            }
+        }
+
+        insights.ActivityByHour = hourlyActivity
+            .Select(kvp => new HourlyActivity { Hour = kvp.Key, MinutesActive = kvp.Value })
+            .OrderByDescending(ha => ha.MinutesActive)
+            .ToList();
+
+        return insights;
     }
 }
