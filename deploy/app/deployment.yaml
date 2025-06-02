@@ -40,6 +40,8 @@ spec:
               value: "/mnt/data/playertracker.db"
             - name: ASPNETCORE_URLS
               value: "http://+:8080"
+            - name: PROMETHEUS_URL
+              value: "http://kube-prometheus-stack-prometheus.monitoring:9090/api/v1"
           volumeMounts:
             - name: stats-data
               mountPath: /mnt/data

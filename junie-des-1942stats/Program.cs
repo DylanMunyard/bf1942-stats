@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using junie_des_1942stats.PlayerTracking;
+using junie_des_1942stats.Prometheus;
+using junie_des_1942stats.ServerStats;
 using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -35,6 +37,9 @@ builder.Services.AddDbContext<PlayerTrackerDbContext>(options =>
 builder.Services.AddScoped<PlayerTrackingService>();
 builder.Services.AddScoped<PlayerStatsService>();
 
+// Register the ServerStatsService
+builder.Services.AddScoped<ServerStatsService>();
+
 // Register the metrics collector as a hosted service
 builder.Services.AddHostedService<BF1942MetricsCollector>();
 
@@ -42,6 +47,20 @@ builder.Services.AddHostedService<BF1942MetricsCollector>();
 builder.Services.AddMetricServer(options =>
 {
     options.Port = 9091;
+});
+
+// Add Prometheus service
+builder.Services.AddHttpClient<PrometheusService>(client => { client.Timeout = TimeSpan.FromSeconds(30); })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+    });
+
+builder.Services.AddSingleton<PrometheusService>(sp =>
+{
+    var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
+    var prometheusUrl = builder.Configuration["Prometheus:Url"] ?? "http://localhost:9090/api/v1";
+    return new PrometheusService(httpClient, prometheusUrl);
 });
 
 var host = builder.Build();
