@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using junie_des_1942stats.PlayerTracking;
 
 #nullable disable
 
@@ -16,7 +17,7 @@ namespace junie_des_1942stats.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.5");
 
-            modelBuilder.Entity("GameServer", b =>
+            modelBuilder.Entity("junie_des_1942stats.PlayerTracking.GameServer", b =>
                 {
                     b.Property<string>("Guid")
                         .HasColumnType("TEXT");
@@ -41,7 +42,7 @@ namespace junie_des_1942stats.Migrations
                     b.ToTable("Servers");
                 });
 
-            modelBuilder.Entity("Player", b =>
+            modelBuilder.Entity("junie_des_1942stats.PlayerTracking.Player", b =>
                 {
                     b.Property<string>("Name")
                         .HasColumnType("TEXT");
@@ -63,7 +64,7 @@ namespace junie_des_1942stats.Migrations
                     b.ToTable("Players");
                 });
 
-            modelBuilder.Entity("PlayerObservation", b =>
+            modelBuilder.Entity("junie_des_1942stats.PlayerTracking.PlayerObservation", b =>
                 {
                     b.Property<int>("ObservationId")
                         .ValueGeneratedOnAdd()
@@ -98,7 +99,7 @@ namespace junie_des_1942stats.Migrations
                     b.ToTable("PlayerObservations");
                 });
 
-            modelBuilder.Entity("PlayerSession", b =>
+            modelBuilder.Entity("junie_des_1942stats.PlayerTracking.PlayerSession", b =>
                 {
                     b.Property<int>("SessionId")
                         .ValueGeneratedOnAdd()
@@ -150,9 +151,56 @@ namespace junie_des_1942stats.Migrations
                     b.ToTable("PlayerSessions");
                 });
 
-            modelBuilder.Entity("PlayerObservation", b =>
+            modelBuilder.Entity("junie_des_1942stats.PlayerTracking.ServerPlayerRanking", b =>
                 {
-                    b.HasOne("PlayerSession", "Session")
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("HighestScore")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("KDRatio")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime>("LastUpdated")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PlayerName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Rank")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ServerGuid")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TotalDeaths")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TotalKills")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TotalPlayTimeMinutes")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlayerName");
+
+                    b.HasIndex("ServerGuid", "PlayerName")
+                        .IsUnique();
+
+                    b.HasIndex("ServerGuid", "Rank");
+
+                    b.ToTable("ServerPlayerRankings");
+                });
+
+            modelBuilder.Entity("junie_des_1942stats.PlayerTracking.PlayerObservation", b =>
+                {
+                    b.HasOne("junie_des_1942stats.PlayerTracking.PlayerSession", "Session")
                         .WithMany("Observations")
                         .HasForeignKey("SessionId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -161,15 +209,15 @@ namespace junie_des_1942stats.Migrations
                     b.Navigation("Session");
                 });
 
-            modelBuilder.Entity("PlayerSession", b =>
+            modelBuilder.Entity("junie_des_1942stats.PlayerTracking.PlayerSession", b =>
                 {
-                    b.HasOne("Player", "Player")
+                    b.HasOne("junie_des_1942stats.PlayerTracking.Player", "Player")
                         .WithMany("Sessions")
                         .HasForeignKey("PlayerName")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("GameServer", "Server")
+                    b.HasOne("junie_des_1942stats.PlayerTracking.GameServer", "Server")
                         .WithMany("Sessions")
                         .HasForeignKey("ServerGuid")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -180,17 +228,32 @@ namespace junie_des_1942stats.Migrations
                     b.Navigation("Server");
                 });
 
-            modelBuilder.Entity("GameServer", b =>
+            modelBuilder.Entity("junie_des_1942stats.PlayerTracking.ServerPlayerRanking", b =>
+                {
+                    b.HasOne("junie_des_1942stats.PlayerTracking.Player", null)
+                        .WithMany()
+                        .HasForeignKey("PlayerName")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("junie_des_1942stats.PlayerTracking.GameServer", null)
+                        .WithMany()
+                        .HasForeignKey("ServerGuid")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("junie_des_1942stats.PlayerTracking.GameServer", b =>
                 {
                     b.Navigation("Sessions");
                 });
 
-            modelBuilder.Entity("Player", b =>
+            modelBuilder.Entity("junie_des_1942stats.PlayerTracking.Player", b =>
                 {
                     b.Navigation("Sessions");
                 });
 
-            modelBuilder.Entity("PlayerSession", b =>
+            modelBuilder.Entity("junie_des_1942stats.PlayerTracking.PlayerSession", b =>
                 {
                     b.Navigation("Observations");
                 });

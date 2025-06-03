@@ -1,13 +1,14 @@
 ﻿using Microsoft.EntityFrameworkCore;
 
+namespace junie_des_1942stats.PlayerTracking;
+
 public class PlayerTrackerDbContext : DbContext
 {
     public DbSet<Player> Players { get; set; }
     public DbSet<GameServer> Servers { get; set; }
     public DbSet<PlayerSession> PlayerSessions { get; set; }
-    
-    public DbSet<PlayerObservation> PlayerObservations { get; set; } 
-
+    public DbSet<PlayerObservation> PlayerObservations { get; set; }
+    public DbSet<ServerPlayerRanking> ServerPlayerRankings { get; set; }
 
     public PlayerTrackerDbContext(DbContextOptions<PlayerTrackerDbContext> options)
         : base(options)
@@ -38,6 +39,16 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<PlayerObservation>()
             .HasIndex(po => po.SessionId);
 
+        // Configure ServerPlayerRanking entity
+        modelBuilder.Entity<ServerPlayerRanking>()
+            .HasKey(r => r.Id);
+
+        modelBuilder.Entity<ServerPlayerRanking>()
+            .HasIndex(r => new { r.ServerGuid, r.PlayerName })
+            .IsUnique();
+
+        modelBuilder.Entity<ServerPlayerRanking>()
+            .HasIndex(r => new { r.ServerGuid, r.Rank });
             
         // Configure relationships
         modelBuilder.Entity<PlayerSession>()
@@ -55,6 +66,15 @@ public class PlayerTrackerDbContext : DbContext
             .WithMany(ps => ps.Observations)
             .HasForeignKey(po => po.SessionId);
 
+        modelBuilder.Entity<ServerPlayerRanking>()
+            .HasOne<Player>()
+            .WithMany()
+            .HasForeignKey(r => r.PlayerName);
+
+        modelBuilder.Entity<ServerPlayerRanking>()
+            .HasOne<GameServer>()
+            .WithMany()
+            .HasForeignKey(r => r.ServerGuid);
     }
 }
 
@@ -119,4 +139,18 @@ public class PlayerObservation
     
     // Navigation property
     public PlayerSession Session { get; set; } = null!;
+}
+
+public class ServerPlayerRanking
+{
+    public int Id { get; set; }
+    public string ServerGuid { get; set; } = "";
+    public string PlayerName { get; set; } = "";
+    public int Rank { get; set; }
+    public int HighestScore { get; set; }
+    public int TotalKills { get; set; }
+    public int TotalDeaths { get; set; }
+    public double KDRatio { get; set; }
+    public int TotalPlayTimeMinutes { get; set; }
+    public DateTime LastUpdated { get; set; }
 }

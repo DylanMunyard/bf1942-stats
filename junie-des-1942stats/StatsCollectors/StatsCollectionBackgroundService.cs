@@ -1,16 +1,14 @@
-﻿using Microsoft.Extensions.Hosting;
-using Prometheus;
-using System;
-using System.Collections.Generic;
-using System.Net.Http;
-using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
+﻿using System.Text.Json;
 using junie_des_1942stats.Bflist;
 using junie_des_1942stats.PlayerTracking;
+using junie_des_1942stats.StatsCollectors.Modals;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Prometheus;
 
-public class BF1942MetricsCollector : BackgroundService
+namespace junie_des_1942stats.StatsCollectors;
+
+public class StatsCollectionBackgroundService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly Gauge _totalPlayersGauge;
@@ -24,7 +22,7 @@ public class BF1942MetricsCollector : BackgroundService
     private const string FH2_STATS_API_URL = "https://api.bflist.io/fh2/v1/livestats";
     private const string FH2_SERVERS_API_URL = "https://api.bflist.io/fh2/v1/servers/1?perPage=100";
     
-    public BF1942MetricsCollector(IServiceScopeFactory scopeFactory)
+    public StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory)
     {
         _scopeFactory = scopeFactory;
         _totalPlayersGauge = Metrics.CreateGauge(
@@ -91,7 +89,7 @@ public class BF1942MetricsCollector : BackgroundService
     private async Task CollectTotalPlayersAsync(CancellationToken stoppingToken)
     {
         var response = await _httpClient.GetStringAsync(STATS_API_URL, stoppingToken);
-        var stats = JsonSerializer.Deserialize<BF1942Stats>(response, new JsonSerializerOptions
+        var stats = JsonSerializer.Deserialize<NumberPlayerStats>(response, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
         });
@@ -155,7 +153,7 @@ public class BF1942MetricsCollector : BackgroundService
     private async Task CollectFh2TotalPlayersAsync(CancellationToken stoppingToken)
     {
         var response = await _httpClient.GetStringAsync(FH2_STATS_API_URL, stoppingToken);
-        var stats = JsonSerializer.Deserialize<BF1942Stats>(response, new JsonSerializerOptions
+        var stats = JsonSerializer.Deserialize<NumberPlayerStats>(response, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
         });
@@ -221,4 +219,3 @@ public class BF1942MetricsCollector : BackgroundService
         await base.StopAsync(stoppingToken);
     }
 }
-

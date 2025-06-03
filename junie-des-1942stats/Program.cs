@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using junie_des_1942stats.PlayerTracking;
 using junie_des_1942stats.Prometheus;
 using junie_des_1942stats.ServerStats;
+using junie_des_1942stats.StatsCollectors;
 using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -40,8 +41,9 @@ builder.Services.AddScoped<PlayerStatsService>();
 // Register the ServerStatsService
 builder.Services.AddScoped<ServerStatsService>();
 
-// Register the metrics collector as a hosted service
-builder.Services.AddHostedService<BF1942MetricsCollector>();
+// Register the stat collector background services
+builder.Services.AddHostedService<StatsCollectionBackgroundService>();
+builder.Services.AddHostedService<RankingCalculationService>();
 
 // Add HTTP server for Prometheus to scrape
 builder.Services.AddMetricServer(options =>
