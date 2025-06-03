@@ -116,9 +116,6 @@ public class PlayerInsights
     // Favorite maps by time played
     public List<MapPlayTime> FavoriteMaps { get; set; } = new List<MapPlayTime>();
 
-    // Best map based on kills
-    public MapKillStats? BestKillMap { get; set; }
-
     // Hours when the player is typically online
     public List<HourlyActivity> ActivityByHour { get; set; } = new List<HourlyActivity>();
 }
@@ -134,6 +131,9 @@ public class MapPlayTime
 {
     public string MapName { get; set; } = string.Empty;
     public int MinutesPlayed { get; set; }
+    public double KDRatio { get; set; }
+    public int TotalDeaths { get; set; }
+    public int TotalKills { get; set; }
 }
 
 public class MapKillStats

@@ -62,26 +62,6 @@ public class ServerStatsService
 
         statistics.MostActivePlayersByTime = mostActivePlayers;
 
-        // 2. Get popular maps statistics
-        var popularMaps = sessions
-            .GroupBy(s => s.MapName)
-            .Select(g => new PopularMap
-            {
-                MapName = g.Key,
-                // Count distinct players who played on this map
-                PlayerCount = g.Select(s => s.PlayerName).Distinct().Count(),
-                // Calculate total time played on this map
-                TotalMinutesPlayed = g.Sum(s => (int)Math.Ceiling((s.LastSeenTime - s.StartTime).TotalMinutes)),
-                // Count the number of sessions on this map
-                TotalSessions = g.Count()
-            })
-            .OrderByDescending(m => m.PlayerCount) // Primary sort by player count
-            .ThenByDescending(m => m.TotalMinutesPlayed) // Secondary sort by time played
-            .Take(10)
-            .ToList();
-
-        statistics.PopularMaps = popularMaps;
-
         // 3. Get top 10 scores in the period
         var topScores = sessions
             .OrderByDescending(s => s.TotalScore)

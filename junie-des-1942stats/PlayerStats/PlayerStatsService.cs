@@ -384,34 +384,25 @@ public class PlayerStatsService
         
         insights.ServerPlayTimes = serverPlayTimes;
 
-        // 2. Calculate favorite maps by time played
+        // 2. Calculate favorite maps by time played with additional stats
         var mapPlayTimes = sessions
             .GroupBy(s => s.MapName)
             .Select(g => new MapPlayTime
             {
                 MapName = g.Key,
-                MinutesPlayed = g.Sum(s => (int)Math.Ceiling((s.LastSeenTime - s.StartTime).TotalMinutes))
+                MinutesPlayed = g.Sum(s => (int)Math.Ceiling((s.LastSeenTime - s.StartTime).TotalMinutes)),
+                TotalKills = g.Sum(s => s.TotalKills),
+                TotalDeaths = g.Sum(s => s.TotalDeaths),
+                KDRatio = g.Sum(s => s.TotalDeaths) > 0 
+                    ? Math.Round((double)g.Sum(s => s.TotalKills) / g.Sum(s => s.TotalDeaths), 2) 
+                    : g.Sum(s => s.TotalKills) // If no deaths, KDR equals total kills
             })
             .OrderByDescending(m => m.MinutesPlayed)
             .ToList();
         
         insights.FavoriteMaps = mapPlayTimes;
 
-        // 3. Find best map based on kills
-        var mapKillStats = sessions
-            .GroupBy(s => s.MapName)
-            .Select(g => new MapKillStats
-            {
-                MapName = g.Key,
-                TotalKills = g.Sum(s => s.TotalKills),
-                TotalDeaths = g.Sum(s => s.TotalDeaths)
-            })
-            .OrderByDescending(m => m.TotalKills)
-            .FirstOrDefault();
-        
-        insights.BestKillMap = mapKillStats;
-
-        // 4. Calculate activity by hour (when they're usually online)
+        // 3. Calculate activity by hour (when they're usually online)
         // Initialize hourly activity tracker
         var hourlyActivity = new Dictionary<int, int>();
         for (int hour = 0; hour < 24; hour++)

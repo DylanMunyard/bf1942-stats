@@ -13,9 +13,6 @@ public class ServerStatistics
     // Most active players by time played
     public List<PlayerActivity> MostActivePlayersByTime { get; set; } = new List<PlayerActivity>();
     
-    // Most popular maps
-    public List<PopularMap> PopularMaps { get; set; } = new List<PopularMap>();
-    
     // Top 10 best scores in the period
     public List<TopScore> TopScores { get; set; } = new List<TopScore>();
     
@@ -30,14 +27,6 @@ public class PlayerActivity
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }
     public double KdRatio => TotalDeaths > 0 ? Math.Round((double)TotalKills / TotalDeaths, 2) : TotalKills;
-}
-
-public class PopularMap
-{
-    public string MapName { get; set; } = "";
-    public int PlayerCount { get; set; }
-    public int TotalMinutesPlayed { get; set; }
-    public int TotalSessions { get; set; }
 }
 
 public class TopScore
