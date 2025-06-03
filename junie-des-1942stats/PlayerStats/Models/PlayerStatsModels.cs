@@ -150,3 +150,45 @@ public class HourlyActivity
     public int MinutesActive { get; set; }
     public string FormattedHour => $"{Hour:D2}:00 - {Hour:D2}:59";
 }
+
+public class PagedResult<T>
+{
+    public List<T> Items { get; set; } = new List<T>();
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+    public int TotalItems { get; set; }
+    public int TotalPages { get; set; }
+    
+    // Add player context information
+    public PlayerContextInfo? PlayerInfo { get; set; }
+}
+
+// New class to hold player context information
+public class PlayerContextInfo
+{
+    public string Name { get; set; } = "";
+    public int TotalPlayTimeMinutes { get; set; }
+    public DateTime FirstSeen { get; set; }
+    public DateTime LastSeen { get; set; }
+    public bool IsActive { get; set; }
+    public int TotalSessions { get; set; }
+    public int TotalKills { get; set; }
+    public int TotalDeaths { get; set; }
+    public ServerInfo? CurrentServer { get; set; }
+}
+
+public class SessionListItem
+{
+    public int SessionId { get; set; }
+    public string ServerName { get; set; }
+    public string MapName { get; set; }
+    public string GameType { get; set; }
+    public DateTime StartTime { get; set; }
+    public DateTime EndTime { get; set; }
+    public int DurationMinutes { get; set; }
+    public int Score { get; set; }
+    public int Kills { get; set; }
+    public int Deaths { get; set; }
+    public bool IsActive { get; set; }
+}
+

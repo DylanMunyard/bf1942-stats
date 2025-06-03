@@ -157,6 +157,110 @@ public class PlayerStatsService
         return stats;
     }
 
+    public async Task<PagedResult<SessionListItem>> GetPlayerSessions(
+        string playerName, 
+        int page = 1, 
+        int pageSize = 100)
+    {
+        // Get player information
+        var player = await _dbContext.Players
+            .FirstOrDefaultAsync(p => p.Name == playerName);
+        
+        if (player == null)
+        {
+            return new PagedResult<SessionListItem>
+            {
+                Items = new List<SessionListItem>(),
+                Page = page,
+                PageSize = pageSize,
+                TotalItems = 0,
+                TotalPages = 0
+            };
+        }
+    
+        // Get active session if any
+        var activeSession = await _dbContext.PlayerSessions
+            .Where(s => s.PlayerName == playerName && s.IsActive)
+            .Include(s => s.Server)
+            .FirstOrDefaultAsync();
+        
+        // Count total sessions for this player (for pagination metadata)
+        var totalCount = await _dbContext.PlayerSessions
+            .Where(s => s.PlayerName == playerName)
+            .CountAsync();
+    
+        // Get aggregate player stats
+        var aggregateStats = await _dbContext.PlayerSessions
+            .Where(ps => ps.PlayerName == playerName)
+            .GroupBy(ps => ps.PlayerName)
+            .Select(g => new
+            {
+                TotalSessions = g.Count(),
+                FirstPlayed = g.Min(s => s.StartTime),
+                TotalKills = g.Sum(s => s.TotalKills),
+                TotalDeaths = g.Sum(s => s.TotalDeaths)
+            })
+            .FirstOrDefaultAsync();
+    
+        // Get the specified page of sessions
+        var sessions = await _dbContext.PlayerSessions
+            .Where(s => s.PlayerName == playerName)
+            .OrderByDescending(s => s.StartTime)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(s => new SessionListItem
+            {
+                SessionId = s.SessionId,
+                ServerName = s.Server.Name,
+                MapName = s.MapName,
+                GameType = s.GameType,
+                StartTime = s.StartTime,
+                EndTime = s.LastSeenTime,
+                DurationMinutes = (int)Math.Ceiling((s.LastSeenTime - s.StartTime).TotalMinutes),
+                Score = s.TotalScore,
+                Kills = s.TotalKills,
+                Deaths = s.TotalDeaths,
+                IsActive = s.IsActive
+            })
+            .ToListAsync();
+
+        // Check if player is currently active (seen within the last 5 minutes)
+        bool isActive = activeSession != null && 
+                   (DateTime.UtcNow - activeSession.LastSeenTime) <= _activeThreshold;
+
+        // Return paged result with metadata and player context
+        return new PagedResult<SessionListItem>
+        {
+            Items = sessions,
+            Page = page,
+            PageSize = pageSize,
+            TotalItems = totalCount,
+            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize),
+            PlayerInfo = new PlayerContextInfo
+            {
+                Name = player.Name,
+                TotalPlayTimeMinutes = player.TotalPlayTimeMinutes,
+                FirstSeen = aggregateStats?.FirstPlayed ?? player.FirstSeen,
+                LastSeen = player.LastSeen,
+                IsActive = isActive,
+                TotalSessions = aggregateStats?.TotalSessions ?? 0,
+                TotalKills = aggregateStats?.TotalKills ?? 0,
+                TotalDeaths = aggregateStats?.TotalDeaths ?? 0,
+                CurrentServer = isActive && activeSession != null
+                ? new ServerInfo
+                {
+                    ServerGuid = activeSession.ServerGuid,
+                    ServerName = activeSession.Server.Name,
+                    SessionKills = activeSession.TotalKills,
+                    SessionDeaths = activeSession.TotalDeaths,
+                    MapName = activeSession.MapName,
+                    GameId = activeSession.Server.GameId
+                }
+                : null
+            }
+        };
+    }
+
     public async Task<SessionDetail?> GetSession(string playerName, int sessionId)
     {
         var session = await _dbContext.PlayerSessions

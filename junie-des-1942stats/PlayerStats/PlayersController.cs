@@ -37,6 +37,30 @@ public class PlayersController : ControllerBase
             
         return Ok(stats);
     }
+
+    // Get all sessions for a player with pagination support
+    [HttpGet("{playerName}/sessions")]
+    public async Task<ActionResult<PagedResult<SessionListItem>>> GetPlayerSessions(
+        string playerName,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 100)
+    {
+        if (string.IsNullOrWhiteSpace(playerName))
+            return BadRequest("Player name cannot be empty");
+        
+        if (page < 1)
+            return BadRequest("Page number must be at least 1");
+        
+        if (pageSize < 1 || pageSize > 100)
+            return BadRequest("Page size must be between 1 and 100");
+        
+        var result = await _playerStatsService.GetPlayerSessions(playerName, page, pageSize);
+        
+        if (result.TotalItems == 0)
+            return NotFound($"No sessions found for player '{playerName}'");
+        
+        return Ok(result);
+    }
     
     // Get session details
     [HttpGet("{playerName}/sessions/{sessionId}")]
