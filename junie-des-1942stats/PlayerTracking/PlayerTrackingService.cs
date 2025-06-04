@@ -36,49 +36,23 @@ public class PlayerTrackingService
         // Get or create the server record
         await GetOrCreateServerAsync(server);
 
-        // Get currently active sessions for all players
-        var activeSessions = await _dbContext.PlayerSessions
-            .Where(s => s.IsActive)
-            .ToListAsync();
-
-        // Mark active sessions that have timed out
-        await CloseTimedOutSessionsAsync(activeSessions, timestamp);
-
-        // Process each player
+        // Process each player (no session timeout logic here)
         foreach (var playerInfo in server.Players)
         {
-            // Get or create the player record
             var player = await GetOrCreatePlayerAsync(playerInfo, timestamp);
+            var activeSession = await _dbContext.PlayerSessions
+                .FirstOrDefaultAsync(s => s.IsActive && 
+                                        s.PlayerName == playerInfo.Name && 
+                                        s.ServerGuid == server.Guid);
 
-            // Find if player has an active session on this server
-            var activeSession = activeSessions
-                .FirstOrDefault(s => s.PlayerName == playerInfo.Name && s.ServerGuid == server.Guid);
-
-            // Check if we need to create a new session
-            bool createNewSession = activeSession == null;
-            
-            // Check if map has changed
-            if (activeSession != null && 
-                !string.IsNullOrEmpty(server.MapName) &&
-                activeSession.MapName != server.MapName)
+            // Handle session creation/updates (unchanged)
+            if (activeSession == null || 
+                (!string.IsNullOrEmpty(server.MapName) && activeSession.MapName != server.MapName))
             {
-                // Close the current session if map has changed
-                activeSession.IsActive = false;
-                _dbContext.PlayerSessions.Update(activeSession);
-                await _dbContext.SaveChangesAsync();
-                
-                // Flag to create a new session
-                createNewSession = true;
-            }
-
-            if (createNewSession || activeSession is null)
-            {
-                // Create a new session
                 await CreateNewSessionAsync(playerInfo, server, timestamp);
             }
             else
             {
-                // Update the existing session
                 await UpdateExistingSessionAsync(player, activeSession, playerInfo, server, timestamp);
             }
         }
@@ -137,22 +111,6 @@ public class PlayerTrackingService
         }
 
         return player;
-    }
-
-    private async Task CloseTimedOutSessionsAsync(List<PlayerSession> activeSessions, DateTime currentTime)
-    {
-        var timeoutSessions = activeSessions
-            .Where(s => currentTime - s.LastSeenTime > _sessionTimeout)
-            .ToList();
-
-        foreach (var session in timeoutSessions)
-        {
-            session.IsActive = false;
-            _dbContext.PlayerSessions.Update(session);
-        }
-
-        if (timeoutSessions.Any())
-            await _dbContext.SaveChangesAsync();
     }
 
     private async Task CreateNewSessionAsync(PlayerInfo playerInfo, IGameServer server,
@@ -235,5 +193,32 @@ public class PlayerTrackingService
         _dbContext.Players.Update(player);
 
         await _dbContext.SaveChangesAsync();
+    }
+
+    // Add this public method to handle global session timeouts
+    public async Task CloseAllTimedOutSessionsAsync(DateTime currentTime)
+    {
+        try
+        {
+            // Directly query and close all timed-out sessions in one batch
+            var timeoutThreshold = currentTime - _sessionTimeout;
+            var timedOutSessions = await _dbContext.PlayerSessions
+                .Where(s => s.IsActive && s.LastSeenTime < timeoutThreshold)
+                .ToListAsync();
+
+            foreach (var session in timedOutSessions)
+            {
+                session.IsActive = false;
+            }
+
+            if (timedOutSessions.Any())
+            {
+                await _dbContext.SaveChangesAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error closing timed-out sessions: {ex.Message}");
+        }
     }
 }

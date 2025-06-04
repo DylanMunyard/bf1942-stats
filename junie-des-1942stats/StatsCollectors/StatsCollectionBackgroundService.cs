@@ -63,12 +63,13 @@ public class StatsCollectionBackgroundService : BackgroundService
             await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
             try
             {
-                // Create a new scope for each operation
                 using (var scope = _scopeFactory.CreateScope())
                 {
-                    // Get the scoped service from the scope
                     var playerTrackingService = scope.ServiceProvider.GetRequiredService<PlayerTrackingService>();
-
+                    
+                    // Close all timed-out sessions once per cycle
+                    await playerTrackingService.CloseAllTimedOutSessionsAsync(DateTime.UtcNow);
+                    
                     // Get BF1942 stats
                     await CollectTotalPlayersAsync(stoppingToken);
                     await CollectServerStatsAsync(playerTrackingService, stoppingToken);
@@ -80,7 +81,7 @@ public class StatsCollectionBackgroundService : BackgroundService
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error collecting metrics: {ex.Message}");
+                Console.WriteLine($"Error in stats collection cycle: {ex.Message}");
             }
         }
     }
