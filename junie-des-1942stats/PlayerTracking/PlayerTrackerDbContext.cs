@@ -44,7 +44,7 @@ public class PlayerTrackerDbContext : DbContext
             .HasKey(r => r.Id);
 
         modelBuilder.Entity<ServerPlayerRanking>()
-            .HasIndex(r => new { r.ServerGuid, r.PlayerName })
+            .HasIndex(r => new { r.ServerGuid, r.PlayerName, r.Year, r.Month })
             .IsUnique();
 
         modelBuilder.Entity<ServerPlayerRanking>()
@@ -149,12 +149,13 @@ public class ServerPlayerRanking
     public string ServerGuid { get; set; } = "";
     public string PlayerName { get; set; } = "";
     public int Rank { get; set; }
-    public int HighestScore { get; set; }
+    public int Year { get; set; }
+    public int Month { get; set; }
+    public int TotalScore { get; set; }
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }
     public double KDRatio { get; set; }
     public int TotalPlayTimeMinutes { get; set; }
-    public DateTime LastUpdated { get; set; }
     
     // Navigation properties
     public GameServer Server { get; set; } = null!;

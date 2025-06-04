@@ -58,7 +58,6 @@ public class StatsCollectionBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await Task.Yield(); // Ensure the service yields control quickly after starting
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -82,7 +81,6 @@ public class StatsCollectionBackgroundService : BackgroundService
             {
                 Console.WriteLine($"Error collecting metrics: {ex.Message}");
             }
-
             await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
         }
     }

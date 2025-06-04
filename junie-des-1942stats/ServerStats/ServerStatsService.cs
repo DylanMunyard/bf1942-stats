@@ -86,7 +86,7 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
         return statistics;
     }
 
-    public async Task<PagedResult<ServerRanking>> GetServerRankings(string serverName, int page = 1, int pageSize = 100)
+    public async Task<PagedResult<ServerRanking>> GetServerRankings(string serverName, int? year = null, int? month = null, int page = 1, int pageSize = 100)
     {
         if (page < 1)
             throw new ArgumentException("Page number must be at least 1");
@@ -94,22 +94,23 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
         if (pageSize < 1 || pageSize > 100)
             throw new ArgumentException("Page size must be between 1 and 100");
 
-        // Get total statistics for the server
+        var queryYear = year ?? DateTime.UtcNow.Year;
+        var queryMonth = month ?? DateTime.UtcNow.Month;
+
+        // Get total statistics for the server for the given month and year
         var totalStats = await _dbContext.ServerPlayerRankings
-            .Where(sr => sr.Server.Name == serverName)
-            .GroupBy(sr => sr.ServerGuid)
+            .Where(sr => sr.Server.Name == serverName && sr.Year == queryYear && sr.Month == queryMonth)
+            .GroupBy(sr => sr.ServerGuid) // This grouping might need adjustment if ServerGuid is not unique for the month's context
             .Select(g => new
             {
                 ServerGuid = g.Key,
                 TotalMinutesPlayed = g.Sum(r => r.TotalPlayTimeMinutes),
-                TotalSessions = g.Count(),
-                TotalPlayers = g.Select(r => r.PlayerName).Distinct().Count(),
-                LastPlayed = g.Max(r => r.LastUpdated)
+                TotalPlayers = g.Select(r => r.PlayerName).Distinct().Count() // Total unique players in rankings for this month
             })
             .ToListAsync();
 
         var query = _dbContext.ServerPlayerRankings
-            .Where(sr => sr.Server.Name == serverName)
+            .Where(sr => sr.Server.Name == serverName && sr.Year == queryYear && sr.Month == queryMonth)
             .Include(sr => sr.Server)
             .OrderBy(sr => sr.Rank)
             .Select(sr => new ServerRanking
@@ -118,12 +119,11 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
                 ServerGuid = sr.ServerGuid,
                 ServerName = sr.Server.Name,
                 PlayerName = sr.PlayerName,
-                HighestScore = sr.HighestScore,
+                TotalScore = sr.TotalScore, // Changed from HighestScore
                 TotalKills = sr.TotalKills,
                 TotalDeaths = sr.TotalDeaths,
                 KDRatio = sr.KDRatio,
-                TotalPlayTimeMinutes = sr.TotalPlayTimeMinutes,
-                LastUpdated = sr.LastUpdated
+                TotalPlayTimeMinutes = sr.TotalPlayTimeMinutes
             });
 
         var totalItems = await query.CountAsync();
@@ -138,9 +138,7 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
             ServerGuid = items.FirstOrDefault()?.ServerGuid,
             ServerName = items.FirstOrDefault()?.ServerName,
             TotalMinutesPlayed = totalStats.Sum(s => s.TotalMinutesPlayed),
-            TotalSessions = totalStats.Sum(s => s.TotalSessions),
-            TotalPlayers = totalStats.Sum(s => s.TotalPlayers),
-            LastPlayed = totalStats.Max(s => s.LastPlayed)
+            TotalPlayers = totalStats.Sum(s => s.TotalPlayers)
         };
 
         return new PagedResult<ServerRanking>

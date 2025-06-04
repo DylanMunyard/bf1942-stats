@@ -378,7 +378,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
                                         ServerGuid = r.ServerGuid,
                                         ServerName = s.Name,
                                         Rank = r.Rank,
-                                        HighestScore = r.HighestScore,
+                                        TotalScore = r.TotalScore,
                                         TotalRankedPlayers = totalPlayers
                                     })
                                     .OrderBy(r => r.Rank)

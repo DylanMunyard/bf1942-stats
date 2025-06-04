@@ -109,10 +109,10 @@ public class ServerRanking
     public string ServerGuid { get; set; } = string.Empty;
     public string ServerName { get; set; } = string.Empty;
     public int Rank { get; set; }
-    public int HighestScore { get; set; }
+    public int TotalScore { get; set; }
     public int TotalRankedPlayers { get; set; }
     public string RankDisplay => $"{Rank} of {TotalRankedPlayers}";
-    public string ScoreDisplay => $"{HighestScore} points";
+    public string ScoreDisplay => $"{TotalScore} points";
 }
 
 public class PlayerInsights

@@ -66,12 +66,11 @@ public class ServerRanking
     public string ServerGuid { get; set; } = "";
     public string ServerName { get; set; } = "";
     public string PlayerName { get; set; } = "";
-    public int HighestScore { get; set; }
+    public int TotalScore { get; set; } // Changed from HighestScore
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }
     public double KDRatio { get; set; }
     public int TotalPlayTimeMinutes { get; set; }
-    public DateTime LastUpdated { get; set; }
 }
 
 public class ServerContextInfo
@@ -79,11 +78,7 @@ public class ServerContextInfo
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
     public int TotalMinutesPlayed { get; set; }
-    public int TotalSessions { get; set; }
     public int TotalPlayers { get; set; }
-    public double AveragePlayersPerSession => TotalSessions > 0 ? Math.Round((double)TotalPlayers / TotalSessions, 2) : 0;
-    public DateTime LastPlayed { get; set; }
-    public bool IsActive => LastPlayed > DateTime.UtcNow.AddDays(-7);
 }
 
 
