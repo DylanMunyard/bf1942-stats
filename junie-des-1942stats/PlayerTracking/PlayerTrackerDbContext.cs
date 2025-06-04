@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 
 namespace junie_des_1942stats.PlayerTracking;
 
@@ -153,4 +153,8 @@ public class ServerPlayerRanking
     public double KDRatio { get; set; }
     public int TotalPlayTimeMinutes { get; set; }
     public DateTime LastUpdated { get; set; }
+    
+    // Navigation properties
+    public GameServer Server { get; set; } = null!;
+    public Player Player { get; set; } = null!;
 }

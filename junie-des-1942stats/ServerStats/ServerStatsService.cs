@@ -1,20 +1,14 @@
-﻿using junie_des_1942stats.PlayerTracking;
+using junie_des_1942stats.PlayerTracking;
 using junie_des_1942stats.Prometheus;
 using junie_des_1942stats.ServerStats.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace junie_des_1942stats.ServerStats;
 
-public class ServerStatsService
+public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusService prometheusService)
 {
-    private readonly PlayerTrackerDbContext _dbContext;
-    private readonly PrometheusService _prometheusService;
-
-    public ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusService prometheusService)
-    {
-        _dbContext = dbContext;
-        _prometheusService = prometheusService;
-    }
+    private readonly PlayerTrackerDbContext _dbContext = dbContext;
+    private readonly PrometheusService _prometheusService = prometheusService;
 
     public async Task<ServerStatistics> GetServerStatistics(
         string serverName, 
@@ -90,6 +84,73 @@ public class ServerStatsService
         }
 
         return statistics;
+    }
+
+    public async Task<PagedResult<ServerRanking>> GetServerRankings(string serverName, int page = 1, int pageSize = 100)
+    {
+        if (page < 1)
+            throw new ArgumentException("Page number must be at least 1");
+        
+        if (pageSize < 1 || pageSize > 100)
+            throw new ArgumentException("Page size must be between 1 and 100");
+
+        // Get total statistics for the server
+        var totalStats = await _dbContext.ServerPlayerRankings
+            .Where(sr => sr.Server.Name == serverName)
+            .GroupBy(sr => sr.ServerGuid)
+            .Select(g => new
+            {
+                ServerGuid = g.Key,
+                TotalMinutesPlayed = g.Sum(r => r.TotalPlayTimeMinutes),
+                TotalSessions = g.Count(),
+                TotalPlayers = g.Select(r => r.PlayerName).Distinct().Count(),
+                LastPlayed = g.Max(r => r.LastUpdated)
+            })
+            .ToListAsync();
+
+        var query = _dbContext.ServerPlayerRankings
+            .Where(sr => sr.Server.Name == serverName)
+            .Include(sr => sr.Server)
+            .OrderBy(sr => sr.Rank)
+            .Select(sr => new ServerRanking
+            {
+                Rank = sr.Rank,
+                ServerGuid = sr.ServerGuid,
+                ServerName = sr.Server.Name,
+                PlayerName = sr.PlayerName,
+                HighestScore = sr.HighestScore,
+                TotalKills = sr.TotalKills,
+                TotalDeaths = sr.TotalDeaths,
+                KDRatio = sr.KDRatio,
+                TotalPlayTimeMinutes = sr.TotalPlayTimeMinutes,
+                LastUpdated = sr.LastUpdated
+            });
+
+        var totalItems = await query.CountAsync();
+        var items = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        // Create server context info
+        var serverContext = new ServerContextInfo
+        {
+            ServerGuid = items.FirstOrDefault()?.ServerGuid,
+            ServerName = items.FirstOrDefault()?.ServerName,
+            TotalMinutesPlayed = totalStats.Sum(s => s.TotalMinutesPlayed),
+            TotalSessions = totalStats.Sum(s => s.TotalSessions),
+            TotalPlayers = totalStats.Sum(s => s.TotalPlayers),
+            LastPlayed = totalStats.Max(s => s.LastPlayed)
+        };
+
+        return new PagedResult<ServerRanking>
+        {
+            CurrentPage = page,
+            TotalPages = (int)Math.Ceiling(totalItems / (double)pageSize),
+            Items = items,
+            TotalItems = totalItems,
+            ServerContext = serverContext
+        };
     }
 
     public async Task<MapStatistics> GetMapStatistics(string serverName, string mapName, int daysToAnalyze = 7)

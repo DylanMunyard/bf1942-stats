@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using junie_des_1942stats.Prometheus;
 
 namespace junie_des_1942stats.ServerStats.Models;
@@ -58,4 +58,42 @@ public class MapStatistics
     
     // Top scores on this map
     public List<TopScore> TopScores { get; set; } = new List<TopScore>();
+}
+
+public class ServerRanking
+{
+    public int Rank { get; set; }
+    public string ServerGuid { get; set; } = "";
+    public string ServerName { get; set; } = "";
+    public string PlayerName { get; set; } = "";
+    public int HighestScore { get; set; }
+    public int TotalKills { get; set; }
+    public int TotalDeaths { get; set; }
+    public double KDRatio { get; set; }
+    public int TotalPlayTimeMinutes { get; set; }
+    public DateTime LastUpdated { get; set; }
+}
+
+public class ServerContextInfo
+{
+    public string? ServerGuid { get; set; }
+    public string? ServerName { get; set; }
+    public string? GameId { get; set; }
+    public string? GameName { get; set; }
+    public int TotalMinutesPlayed { get; set; }
+    public int TotalSessions { get; set; }
+    public int TotalPlayers { get; set; }
+    public double AveragePlayersPerSession => TotalSessions > 0 ? Math.Round((double)TotalPlayers / TotalSessions, 2) : 0;
+    public DateTime LastPlayed { get; set; }
+    public bool IsActive => LastPlayed > DateTime.UtcNow.AddDays(-7);
+}
+
+
+public class PagedResult<T>
+{
+    public int CurrentPage { get; set; }
+    public int TotalPages { get; set; }
+    public int TotalItems { get; set; }
+    public IEnumerable<T> Items { get; set; }
+    public ServerContextInfo? ServerContext { get; set; }
 }

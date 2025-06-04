@@ -1,4 +1,4 @@
-﻿using junie_des_1942stats.ServerStats.Models;
+using junie_des_1942stats.ServerStats.Models;
 using Microsoft.AspNetCore.Mvc;
 
 namespace junie_des_1942stats.ServerStats;
@@ -33,6 +33,24 @@ public class ServersController : ControllerBase
             return NotFound($"Server '{serverName}' not found");
             
         return Ok(stats);
+    }
+
+    // Get server rankings with pagination
+    [HttpGet("{serverName}/rankings")]
+    public async Task<ActionResult<PagedResult<ServerRanking>>> GetServerRankings(
+        string serverName,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 100)
+    {
+        try
+        {
+            var result = await _serverStatsService.GetServerRankings(serverName, page, pageSize);
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     // Get statistics for a specific map on a server
