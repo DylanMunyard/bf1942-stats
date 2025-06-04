@@ -39,14 +39,13 @@ public class ServersController : ControllerBase
     [HttpGet("{serverName}/rankings")]
     public async Task<ActionResult<PagedResult<ServerRanking>>> GetServerRankings(
         string serverName,
-        [FromQuery] int? year,
-        [FromQuery] int? month,
+        [FromQuery] int? year = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 100)
     {
         try
         {
-            var result = await _serverStatsService.GetServerRankings(serverName, year, month, page, pageSize);
+            var result = await _serverStatsService.GetServerRankings(serverName, year, page, pageSize);
             return Ok(result);
         }
         catch (ArgumentException ex)

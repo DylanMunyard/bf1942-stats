@@ -86,7 +86,7 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
         return statistics;
     }
 
-    public async Task<PagedResult<ServerRanking>> GetServerRankings(string serverName, int? year = null, int? month = null, int page = 1, int pageSize = 100)
+    public async Task<PagedResult<ServerRanking>> GetServerRankings(string serverName, int? year = null, int page = 1, int pageSize = 100)
     {
         if (page < 1)
             throw new ArgumentException("Page number must be at least 1");
@@ -94,43 +94,68 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
         if (pageSize < 1 || pageSize > 100)
             throw new ArgumentException("Page size must be between 1 and 100");
 
-        var queryYear = year ?? DateTime.UtcNow.Year;
-        var queryMonth = month ?? DateTime.UtcNow.Month;
+        IQueryable<ServerPlayerRanking> baseQuery = _dbContext.ServerPlayerRankings
+            .Where(sr => sr.Server.Name == serverName);
 
-        // Get total statistics for the server for the given month and year
-        var totalStats = await _dbContext.ServerPlayerRankings
-            .Where(sr => sr.Server.Name == serverName && sr.Year == queryYear && sr.Month == queryMonth)
-            .GroupBy(sr => sr.ServerGuid) // This grouping might need adjustment if ServerGuid is not unique for the month's context
+        // If year is provided, filter by year and month (use all months for the year)
+        if (year.HasValue)
+        {
+            baseQuery = baseQuery.Where(sr => sr.Year == year.Value);
+        }
+
+        // Get total statistics for the server
+        var totalStatsQuery = baseQuery
+            .GroupBy(sr => sr.ServerGuid)
             .Select(g => new
             {
                 ServerGuid = g.Key,
                 TotalMinutesPlayed = g.Sum(r => r.TotalPlayTimeMinutes),
-                TotalPlayers = g.Select(r => r.PlayerName).Distinct().Count() // Total unique players in rankings for this month
-            })
-            .ToListAsync();
-
-        var query = _dbContext.ServerPlayerRankings
-            .Where(sr => sr.Server.Name == serverName && sr.Year == queryYear && sr.Month == queryMonth)
-            .Include(sr => sr.Server)
-            .OrderBy(sr => sr.Rank)
-            .Select(sr => new ServerRanking
-            {
-                Rank = sr.Rank,
-                ServerGuid = sr.ServerGuid,
-                ServerName = sr.Server.Name,
-                PlayerName = sr.PlayerName,
-                TotalScore = sr.TotalScore, // Changed from HighestScore
-                TotalKills = sr.TotalKills,
-                TotalDeaths = sr.TotalDeaths,
-                KDRatio = sr.KDRatio,
-                TotalPlayTimeMinutes = sr.TotalPlayTimeMinutes
+                TotalPlayers = g.Select(r => r.PlayerName).Distinct().Count()
             });
 
-        var totalItems = await query.CountAsync();
-        var items = await query
+        var totalStats = await totalStatsQuery.ToListAsync();
+
+        // First, get the total count of unique players
+        var totalItems = await baseQuery
+            .Select(sr => sr.PlayerName)
+            .Distinct()
+            .CountAsync();
+
+        // Get the aggregated and paged data from the database
+        var playerStatsQuery = baseQuery
+            .GroupBy(sr => new { sr.ServerGuid, sr.PlayerName, sr.Server.Name })
+            .Select(g => new
+            {
+                g.Key.ServerGuid,
+                g.Key.PlayerName,
+                g.Key.Name,
+                TotalScore = g.Sum(r => r.TotalScore),
+                TotalKills = g.Sum(r => r.TotalKills),
+                TotalDeaths = g.Sum(r => r.TotalDeaths),
+                TotalPlayTimeMinutes = g.Sum(r => r.TotalPlayTimeMinutes)
+            })
+            .OrderByDescending(x => x.TotalScore)
             .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
+            .Take(pageSize);
+
+        // Execute the query and materialize results
+        var playerStats = await playerStatsQuery.ToListAsync();
+
+        // Now rank just the paged results in memory
+        var items = playerStats
+            .Select((x, index) => new ServerRanking
+            {
+                Rank = ((page - 1) * pageSize) + index + 1, // Calculate global rank based on page position
+                ServerGuid = x.ServerGuid,
+                ServerName = x.Name,
+                PlayerName = x.PlayerName,
+                TotalScore = x.TotalScore,
+                TotalKills = x.TotalKills,
+                TotalDeaths = x.TotalDeaths,
+                KDRatio = x.TotalDeaths > 0 ? Math.Round((double)x.TotalKills / x.TotalDeaths, 2) : x.TotalKills,
+                TotalPlayTimeMinutes = x.TotalPlayTimeMinutes
+            })
+            .ToList();
 
         // Create server context info
         var serverContext = new ServerContextInfo

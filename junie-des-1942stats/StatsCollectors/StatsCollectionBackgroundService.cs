@@ -60,6 +60,7 @@ public class StatsCollectionBackgroundService : BackgroundService
     {
         while (!stoppingToken.IsCancellationRequested)
         {
+            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
             try
             {
                 // Create a new scope for each operation
@@ -81,7 +82,6 @@ public class StatsCollectionBackgroundService : BackgroundService
             {
                 Console.WriteLine($"Error collecting metrics: {ex.Message}");
             }
-            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
         }
     }
 
