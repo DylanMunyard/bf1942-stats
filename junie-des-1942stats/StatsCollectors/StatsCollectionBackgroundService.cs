@@ -5,6 +5,7 @@ using junie_des_1942stats.StatsCollectors.Modals;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Prometheus;
+using System.Diagnostics;
 
 namespace junie_des_1942stats.StatsCollectors;
 
@@ -60,29 +61,46 @@ public class StatsCollectionBackgroundService : BackgroundService
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+            var cycleStopwatch = Stopwatch.StartNew();
+            Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Starting stats collection cycle...");
+
             try
             {
                 using (var scope = _scopeFactory.CreateScope())
                 {
                     var playerTrackingService = scope.ServiceProvider.GetRequiredService<PlayerTrackingService>();
                     
-                    // Close all timed-out sessions once per cycle
+                    // 1. Timeout cleanup
+                    var timeoutStopwatch = Stopwatch.StartNew();
                     await playerTrackingService.CloseAllTimedOutSessionsAsync(DateTime.UtcNow);
-                    
-                    // Get BF1942 stats
+                    timeoutStopwatch.Stop();
+                    Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Timeout cleanup completed in {timeoutStopwatch.ElapsedMilliseconds}ms");
+
+                    // 2. BF1942 Stats
+                    var bf1942Stopwatch = Stopwatch.StartNew();
                     await CollectTotalPlayersAsync(stoppingToken);
                     await CollectServerStatsAsync(playerTrackingService, stoppingToken);
+                    bf1942Stopwatch.Stop();
+                    Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] BF1942 stats collected in {bf1942Stopwatch.ElapsedMilliseconds}ms");
 
-                    // Get FH2 stats
+                    // 3. FH2 Stats
+                    var fh2Stopwatch = Stopwatch.StartNew();
                     await CollectFh2TotalPlayersAsync(stoppingToken);
                     await CollectFh2ServerStatsAsync(playerTrackingService, stoppingToken);
+                    fh2Stopwatch.Stop();
+                    Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] FH2 stats collected in {fh2Stopwatch.ElapsedMilliseconds}ms");
                 }
+
+                cycleStopwatch.Stop();
+                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Stats collection cycle completed in {cycleStopwatch.ElapsedMilliseconds}ms");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error in stats collection cycle: {ex.Message}");
+                cycleStopwatch.Stop();
+                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Error in stats collection cycle after {cycleStopwatch.ElapsedMilliseconds}ms: {ex.Message}");
             }
+
+            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
         }
     }
 
