@@ -1,4 +1,4 @@
-﻿namespace junie_des_1942stats.PlayerStats.Models;
+namespace junie_des_1942stats.PlayerStats.Models;
 
 public class PlayerBasicInfo
 {
@@ -104,14 +104,25 @@ public class ObservationInfo
     public string TeamLabel { get; set; } = "";
 }
 
+public class ServerRanking
+{
+    public string ServerGuid { get; set; } = string.Empty;
+    public string ServerName { get; set; } = string.Empty;
+    public int Rank { get; set; }
+    public int HighestScore { get; set; }
+    public int TotalRankedPlayers { get; set; }
+    public string RankDisplay => $"{Rank} of {TotalRankedPlayers}";
+    public string ScoreDisplay => $"{HighestScore} points";
+}
+
 public class PlayerInsights
 {
     public string PlayerName { get; set; } = string.Empty;
     public DateTime StartPeriod { get; set; }
     public DateTime EndPeriod { get; set; }
 
-    // Time spent on each server
-    public List<ServerPlayTime> ServerPlayTimes { get; set; } = new List<ServerPlayTime>();
+    // Server rankings
+    public List<ServerRanking> ServerRankings { get; set; } = new List<ServerRanking>();
 
     // Favorite maps by time played
     public List<MapPlayTime> FavoriteMaps { get; set; } = new List<MapPlayTime>();

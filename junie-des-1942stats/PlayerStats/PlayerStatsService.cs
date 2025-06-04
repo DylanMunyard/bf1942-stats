@@ -1,20 +1,15 @@
-﻿using junie_des_1942stats.PlayerStats.Models;
+using junie_des_1942stats.PlayerStats.Models;
 using junie_des_1942stats.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
 
 namespace junie_des_1942stats.PlayerStats;
 
-public class PlayerStatsService
+public class PlayerStatsService(PlayerTrackerDbContext dbContext)
 {
-    private readonly PlayerTrackerDbContext _dbContext;
+    private readonly PlayerTrackerDbContext _dbContext = dbContext;
 
     // Define a threshold for considering a player "active" (e.g., 5 minutes)
     private readonly TimeSpan _activeThreshold = TimeSpan.FromMinutes(5);
-
-    public PlayerStatsService(PlayerTrackerDbContext dbContext)
-    {
-        _dbContext = dbContext;
-    }
 
     public async Task<List<PlayerBasicInfo>> GetAllPlayersBasicInfo()
     {
@@ -125,7 +120,7 @@ public class PlayerStatsService
         // Check if player is currently active (seen within the last 5 minutes)
         bool isActive = activeSession != null &&
                         (now - activeSession.LastSeenTime) <= _activeThreshold;
-        
+
         var insights = await GetPlayerInsights(playerName);
 
         var stats = new PlayerTimeStatistics
@@ -159,14 +154,14 @@ public class PlayerStatsService
     }
 
     public async Task<PagedResult<SessionListItem>> GetPlayerSessions(
-        string playerName, 
-        int page = 1, 
+        string playerName,
+        int page = 1,
         int pageSize = 100)
     {
         // Get player information
         var player = await _dbContext.Players
             .FirstOrDefaultAsync(p => p.Name == playerName);
-        
+
         if (player == null)
         {
             return new PagedResult<SessionListItem>
@@ -178,18 +173,18 @@ public class PlayerStatsService
                 TotalPages = 0
             };
         }
-    
+
         // Get active session if any
         var activeSession = await _dbContext.PlayerSessions
             .Where(s => s.PlayerName == playerName && s.IsActive)
             .Include(s => s.Server)
             .FirstOrDefaultAsync();
-        
+
         // Count total sessions for this player (for pagination metadata)
         var totalCount = await _dbContext.PlayerSessions
             .Where(s => s.PlayerName == playerName)
             .CountAsync();
-    
+
         // Get aggregate player stats
         var aggregateStats = await _dbContext.PlayerSessions
             .Where(ps => ps.PlayerName == playerName)
@@ -202,7 +197,7 @@ public class PlayerStatsService
                 TotalDeaths = g.Sum(s => s.TotalDeaths)
             })
             .FirstOrDefaultAsync();
-    
+
         // Get the specified page of sessions
         var sessions = await _dbContext.PlayerSessions
             .Where(s => s.PlayerName == playerName)
@@ -226,7 +221,7 @@ public class PlayerStatsService
             .ToListAsync();
 
         // Check if player is currently active (seen within the last 5 minutes)
-        bool isActive = activeSession != null && 
+        bool isActive = activeSession != null &&
                    (DateTime.UtcNow - activeSession.LastSeenTime) <= _activeThreshold;
 
         // Return paged result with metadata and player context
@@ -328,15 +323,15 @@ public class PlayerStatsService
     }
 
     public async Task<PlayerInsights> GetPlayerInsights(
-        string playerName, 
-        DateTime? startDate = null, 
-        DateTime? endDate = null, 
+        string playerName,
+        DateTime? startDate = null,
+        DateTime? endDate = null,
         int? daysToAnalyze = null)
     {
         // Calculate the time period
         var endPeriod = endDate ?? DateTime.UtcNow;
         DateTime startPeriod;
-        
+
         if (startDate.HasValue)
         {
             startPeriod = startDate.Value;
@@ -350,7 +345,7 @@ public class PlayerStatsService
             // Default to 1 week
             startPeriod = endPeriod.AddDays(-7);
         }
-        
+
         // Check if the player exists
         var player = await _dbContext.Players
             .FirstOrDefaultAsync(p => p.Name == playerName);
@@ -371,20 +366,25 @@ public class PlayerStatsService
             EndPeriod = endPeriod
         };
 
-        // 1. Calculate time spent on each server
-        var serverPlayTimes = sessions
-            .GroupBy(s => new { s.ServerGuid, ServerName = s.Server.Name })
-            .Select(g => new ServerPlayTime
-            {
-                ServerGuid = g.Key.ServerGuid,
-                ServerName = g.Key.ServerName,
-                MinutesPlayed = g.Sum(s => (int)Math.Ceiling((s.LastSeenTime - s.StartTime).TotalMinutes))
-            })
-            .OrderByDescending(s => s.MinutesPlayed)
-            .ToList();
-        
-        insights.ServerPlayTimes = serverPlayTimes;
+        // 1. Get server rankings with total players per server
+        var serverRankings = await (from r in _dbContext.ServerPlayerRankings
+                                    where r.PlayerName == playerName
+                                    join s in _dbContext.Servers on r.ServerGuid equals s.Guid
+                                    let totalPlayers = _dbContext.ServerPlayerRankings
+                                        .Where(x => x.ServerGuid == r.ServerGuid)
+                                        .Count()
+                                    select new ServerRanking
+                                    {
+                                        ServerGuid = r.ServerGuid,
+                                        ServerName = s.Name,
+                                        Rank = r.Rank,
+                                        HighestScore = r.HighestScore,
+                                        TotalRankedPlayers = totalPlayers
+                                    })
+                                    .OrderBy(r => r.Rank)
+                                    .ToListAsync();
 
+        insights.ServerRankings = serverRankings;
         // 2. Calculate favorite maps by time played with additional stats
         var mapPlayTimes = sessions
             .GroupBy(s => s.MapName)
@@ -394,13 +394,13 @@ public class PlayerStatsService
                 MinutesPlayed = g.Sum(s => (int)Math.Ceiling((s.LastSeenTime - s.StartTime).TotalMinutes)),
                 TotalKills = g.Sum(s => s.TotalKills),
                 TotalDeaths = g.Sum(s => s.TotalDeaths),
-                KDRatio = g.Sum(s => s.TotalDeaths) > 0 
-                    ? Math.Round((double)g.Sum(s => s.TotalKills) / g.Sum(s => s.TotalDeaths), 2) 
+                KDRatio = g.Sum(s => s.TotalDeaths) > 0
+                    ? Math.Round((double)g.Sum(s => s.TotalKills) / g.Sum(s => s.TotalDeaths), 2)
                     : g.Sum(s => s.TotalKills) // If no deaths, KDR equals total kills
             })
             .OrderByDescending(m => m.MinutesPlayed)
             .ToList();
-        
+
         insights.FavoriteMaps = mapPlayTimes;
 
         // 3. Calculate activity by hour (when they're usually online)
@@ -416,34 +416,34 @@ public class PlayerStatsService
         {
             var sessionStart = session.StartTime;
             var sessionEnd = session.LastSeenTime;
-            
+
             // Track activity by processing continuous blocks of time
             var currentTime = sessionStart;
-            
+
             while (currentTime < sessionEnd)
             {
                 int hour = currentTime.Hour;
-                
+
                 // Calculate how much time was spent in this hour
                 // Either go to the end of the current hour or the end of the session, whichever comes first
                 var hourEnd = new DateTime(
-                    currentTime.Year, 
-                    currentTime.Month, 
-                    currentTime.Day, 
-                    hour, 
-                    59, 
-                    59, 
+                    currentTime.Year,
+                    currentTime.Month,
+                    currentTime.Day,
+                    hour,
+                    59,
+                    59,
                     999);
-            
+
                 if (hourEnd > sessionEnd)
                 {
                     hourEnd = sessionEnd;
                 }
-            
+
                 // Add the minutes spent in this hour
                 int minutesInHour = (int)Math.Ceiling((hourEnd - currentTime).TotalMinutes);
                 hourlyActivity[hour] += minutesInHour;
-            
+
                 // Move to the next hour
                 currentTime = hourEnd.AddMilliseconds(1);
             }
