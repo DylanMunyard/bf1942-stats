@@ -1,106 +1,129 @@
-using System.Text.Json;
-using junie_des_1942stats.Bflist;
-using junie_des_1942stats.PlayerTracking;
-using junie_des_1942stats.StatsCollectors.Modals;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Prometheus;
+using System;
 using System.Diagnostics;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Prometheus;
+using System.Text.Json;
+using junie_des_1942stats.PlayerTracking;
+using junie_des_1942stats.Bflist;
+using junie_des_1942stats.StatsCollectors.Modals;
 
 namespace junie_des_1942stats.StatsCollectors;
 
-public class StatsCollectionBackgroundService : BackgroundService
+public class StatsCollectionBackgroundService : IHostedService, IDisposable
 {
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly TimeSpan _collectionInterval = TimeSpan.FromMinutes(1);
+    private Timer _timer;
+    private int _isRunning = 0;
+    
+    // Metrics
     private readonly Gauge _totalPlayersGauge;
     private readonly Gauge _serverPlayersGauge;
     private readonly Gauge _fh2TotalPlayersGauge;
     private readonly Gauge _fh2ServerPlayersGauge;
     private readonly HttpClient _httpClient;
-    
+
+    // API URLs
     private const string STATS_API_URL = "https://api.bflist.io/bf1942/v1/livestats";
     private const string SERVERS_API_URL = "https://api.bflist.io/bf1942/v1/servers/1?perPage=100";
     private const string FH2_STATS_API_URL = "https://api.bflist.io/fh2/v1/livestats";
     private const string FH2_SERVERS_API_URL = "https://api.bflist.io/fh2/v1/servers/1?perPage=100";
-    
+
     public StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory)
     {
         _scopeFactory = scopeFactory;
+        
+        // Initialize metrics
         _totalPlayersGauge = Metrics.CreateGauge(
             "bf1942_players_online", 
-            "Number of players currently online in BF1942"
-        );
+            "Number of players currently online in BF1942");
         
         _serverPlayersGauge = Metrics.CreateGauge(
             "bf1942_server_players",
             "Number of players on each BF1942 server",
-            new GaugeConfiguration
-            {
-                LabelNames = ["server_name"]
-            }
-        );
+            new GaugeConfiguration { LabelNames = new[] { "server_name" } });
 
         _fh2TotalPlayersGauge = Metrics.CreateGauge(
             "fh2_players_online", 
-            "Number of players currently online in FH2"
-        );
+            "Number of players currently online in FH2");
         
         _fh2ServerPlayersGauge = Metrics.CreateGauge(
             "fh2_server_players",
             "Number of players on each FH2 server",
-            new GaugeConfiguration
-            {
-                LabelNames = ["server_name"]
-            }
-        );
-        
+            new GaugeConfiguration { LabelNames = new[] { "server_name" } });
+
         _httpClient = new HttpClient();
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    public Task StartAsync(CancellationToken cancellationToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Stats collection service starting...");
+        
+        // Initialize timer but don't run immediately
+        _timer = new Timer(
+            callback: ExecuteCollectionCycle,
+            state: null,
+            dueTime: _collectionInterval,  // First run after interval
+            period: _collectionInterval);
+        
+        return Task.CompletedTask;
+    }
+
+    private async void ExecuteCollectionCycle(object state)
+    {
+        if (Interlocked.CompareExchange(ref _isRunning, 1, 0) != 0)
         {
-            var cycleStopwatch = Stopwatch.StartNew();
-            Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Starting stats collection cycle...");
+            Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Previous collection still running, skipping...");
+            return;
+        }
 
-            try
+        var cycleStopwatch = Stopwatch.StartNew();
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Starting stats collection cycle...");
+
+        try
+        {
+            using (var scope = _scopeFactory.CreateScope())
             {
-                using (var scope = _scopeFactory.CreateScope())
-                {
-                    var playerTrackingService = scope.ServiceProvider.GetRequiredService<PlayerTrackingService>();
-                    
-                    // 1. Timeout cleanup
-                    var timeoutStopwatch = Stopwatch.StartNew();
-                    await playerTrackingService.CloseAllTimedOutSessionsAsync(DateTime.UtcNow);
-                    timeoutStopwatch.Stop();
-                    Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Timeout cleanup completed in {timeoutStopwatch.ElapsedMilliseconds}ms");
+                var playerTrackingService = scope.ServiceProvider.GetRequiredService<PlayerTrackingService>();
+                
+                // 1. Global timeout cleanup
+                var timeoutStopwatch = Stopwatch.StartNew();
+                await playerTrackingService.CloseAllTimedOutSessionsAsync(DateTime.UtcNow);
+                timeoutStopwatch.Stop();
+                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Session cleanup: {timeoutStopwatch.ElapsedMilliseconds}ms");
 
-                    // 2. BF1942 Stats
-                    var bf1942Stopwatch = Stopwatch.StartNew();
-                    await CollectTotalPlayersAsync(stoppingToken);
-                    await CollectServerStatsAsync(playerTrackingService, stoppingToken);
-                    bf1942Stopwatch.Stop();
-                    Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] BF1942 stats collected in {bf1942Stopwatch.ElapsedMilliseconds}ms");
+                // 2. BF1942 stats
+                var bf1942Stopwatch = Stopwatch.StartNew();
+                await CollectTotalPlayersAsync(CancellationToken.None);
+                var bf1942ServersStopwatch = Stopwatch.StartNew();
+                await CollectServerStatsAsync(playerTrackingService, CancellationToken.None);
+                bf1942ServersStopwatch.Stop();
+                bf1942Stopwatch.Stop();
+                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] BF1942 stats: {bf1942Stopwatch.ElapsedMilliseconds}ms (Servers: {bf1942ServersStopwatch.ElapsedMilliseconds}ms)");
 
-                    // 3. FH2 Stats
-                    var fh2Stopwatch = Stopwatch.StartNew();
-                    await CollectFh2TotalPlayersAsync(stoppingToken);
-                    await CollectFh2ServerStatsAsync(playerTrackingService, stoppingToken);
-                    fh2Stopwatch.Stop();
-                    Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] FH2 stats collected in {fh2Stopwatch.ElapsedMilliseconds}ms");
-                }
-
-                cycleStopwatch.Stop();
-                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Stats collection cycle completed in {cycleStopwatch.ElapsedMilliseconds}ms");
+                // 3. FH2 stats
+                var fh2Stopwatch = Stopwatch.StartNew();
+                await CollectFh2TotalPlayersAsync(CancellationToken.None);
+                var fh2ServersStopwatch = Stopwatch.StartNew();
+                await CollectFh2ServerStatsAsync(playerTrackingService, CancellationToken.None);
+                fh2ServersStopwatch.Stop();
+                fh2Stopwatch.Stop();
+                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] FH2 stats: {fh2Stopwatch.ElapsedMilliseconds}ms (Servers: {fh2ServersStopwatch.ElapsedMilliseconds}ms)");
             }
-            catch (Exception ex)
-            {
-                cycleStopwatch.Stop();
-                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Error in stats collection cycle after {cycleStopwatch.ElapsedMilliseconds}ms: {ex.Message}");
-            }
-
-            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Error in collection cycle: {ex}");
+        }
+        finally
+        {
+            cycleStopwatch.Stop();
+            Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Cycle completed in {cycleStopwatch.ElapsedMilliseconds}ms");
+            Interlocked.Exchange(ref _isRunning, 0);
         }
     }
 
@@ -115,7 +138,6 @@ public class StatsCollectionBackgroundService : BackgroundService
         if (stats != null)
         {
             _totalPlayersGauge.Set(stats.Players);
-            Console.WriteLine($"Updated total players metric - Players: {stats.Players}");
         }
     }
 
@@ -127,41 +149,22 @@ public class StatsCollectionBackgroundService : BackgroundService
             PropertyNameCaseInsensitive = true
         });
 
-        // Track all current label sets
+        if (serversData == null) return;
+
         var currentLabelSets = new HashSet<string>();
         var timestamp = DateTime.UtcNow;
 
-        if (serversData != null)
+        foreach (var server in serversData)
         {
-            foreach (var server in serversData)
-            {
-                _serverPlayersGauge
-                    .WithLabels(server.Name)
-                    .Set(server.NumPlayers);
-
-                currentLabelSets.Add(server.Name);
-                
-                // Track players in the database
-                try
-                {
-                    await playerTrackingService.TrackPlayersFromServerInfo(server, timestamp);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error tracking BF1942 players from server: {ex.Message}");
-                }
-            }
-            Console.WriteLine($"Updated servers metric - # servers: {serversData.Length}");
+            _serverPlayersGauge.WithLabels(server.Name).Set(server.NumPlayers);
+            currentLabelSets.Add(server.Name);
+            await playerTrackingService.TrackPlayersFromServerInfo(server, timestamp);
         }
 
-        // Remove metrics for servers no longer online
-        // Get all label sets currently in the gauge
-        var allLabelSets = _serverPlayersGauge.GetAllLabelValues();
-
-        foreach (var labelSet in allLabelSets)
+        // Clean up old server metrics
+        foreach (var labelSet in _serverPlayersGauge.GetAllLabelValues())
         {
-            var key = labelSet[0];
-            if (!currentLabelSets.Contains(key))
+            if (!currentLabelSets.Contains(labelSet[0]))
             {
                 _serverPlayersGauge.RemoveLabelled(labelSet);
             }
@@ -179,7 +182,6 @@ public class StatsCollectionBackgroundService : BackgroundService
         if (stats != null)
         {
             _fh2TotalPlayersGauge.Set(stats.Players);
-            Console.WriteLine($"Updated FH2 total players metric - Players: {stats.Players}");
         }
     }
 
@@ -191,49 +193,38 @@ public class StatsCollectionBackgroundService : BackgroundService
             PropertyNameCaseInsensitive = true
         });
 
-        // Track all current label sets
+        if (serversData == null) return;
+
         var currentLabelSets = new HashSet<string>();
         var timestamp = DateTime.UtcNow;
 
-        if (serversData != null)
+        foreach (var server in serversData)
         {
-            foreach (var server in serversData)
-            {
-                _fh2ServerPlayersGauge
-                    .WithLabels(server.Name)
-                    .Set(server.NumPlayers);
-
-                currentLabelSets.Add(server.Name);
-                
-                // Track players in the database
-                try
-                {
-                    await playerTrackingService.TrackPlayersFromServerInfo(server, timestamp);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error tracking FH2 players from server: {ex.Message}");
-                };
-            }
-            Console.WriteLine($"Updated FH2 servers metric - # servers: {serversData.Length}");
+            _fh2ServerPlayersGauge.WithLabels(server.Name).Set(server.NumPlayers);
+            currentLabelSets.Add(server.Name);
+            await playerTrackingService.TrackPlayersFromServerInfo(server, timestamp);
         }
 
-        // Remove metrics for servers no longer online
-        var allLabelSets = _fh2ServerPlayersGauge.GetAllLabelValues();
-
-        foreach (var labelSet in allLabelSets)
+        // Clean up old server metrics
+        foreach (var labelSet in _fh2ServerPlayersGauge.GetAllLabelValues())
         {
-            var key = labelSet[0];
-            if (!currentLabelSets.Contains(key))
+            if (!currentLabelSets.Contains(labelSet[0]))
             {
                 _fh2ServerPlayersGauge.RemoveLabelled(labelSet);
             }
         }
     }
 
-    public override async Task StopAsync(CancellationToken stoppingToken)
+    public Task StopAsync(CancellationToken cancellationToken)
     {
-        _httpClient.Dispose();
-        await base.StopAsync(stoppingToken);
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Stats collection service stopping...");
+        _timer?.Change(Timeout.Infinite, 0);
+        return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+        _httpClient?.Dispose();
     }
 }

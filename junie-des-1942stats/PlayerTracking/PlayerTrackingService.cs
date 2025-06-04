@@ -1,5 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using junie_des_1942stats.Bflist;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace junie_des_1942stats.PlayerTracking;
 
@@ -33,25 +37,29 @@ public class PlayerTrackingService
         if (!server.Players.Any())
             return;
 
-        // Get or create the server record
         await GetOrCreateServerAsync(server);
-
         var playerNames = server.Players.Select(p => p.Name).ToList();
         
-        // Batch fetch all players and active sessions
-        var existingPlayers = await GetPlayersByNameAsync(playerNames);
-        var existingSessions = await GetActiveSessionsAsync(playerNames, server.Guid);
+        // Get players from database and attach to context
+        var existingPlayers = await _dbContext.Players
+            .Where(p => playerNames.Contains(p.Name))
+            .ToListAsync();
+
+        var activeSessions = await GetActiveSessionsAsync(playerNames, server.Guid);
+
+        var playerMap = existingPlayers.ToDictionary(p => p.Name);
+        var sessionsByPlayer = activeSessions
+            .GroupBy(s => s.PlayerName)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         var newPlayers = new List<Player>();
-        var newSessions = new List<PlayerSession>();
-        var updatedSessions = new List<PlayerSession>();
-        var updatedPlayers = new List<Player>();
-        var pendingObservations = new List<(PlayerInfo, PlayerSession)>();
+        var sessionsToUpdate = new List<PlayerSession>();
+        var sessionsToCreate = new List<PlayerSession>();
+        var pendingObservations = new List<(PlayerInfo Info, PlayerSession Session)>();
 
         foreach (var playerInfo in server.Players)
         {
-            // Get or create player
-            if (!existingPlayers.TryGetValue(playerInfo.Name, out var player))
+            if (!playerMap.TryGetValue(playerInfo.Name, out var player))
             {
                 player = new Player
                 {
@@ -61,115 +69,108 @@ public class PlayerTrackingService
                     AiBot = playerInfo.AiBot,
                 };
                 newPlayers.Add(player);
-                existingPlayers[player.Name] = player;
+                playerMap.Add(player.Name, player);
             }
             else
             {
+                // Update existing player
                 player.AiBot = playerInfo.AiBot;
                 player.LastSeen = timestamp;
-                updatedPlayers.Add(player);
+                _dbContext.Players.Update(player);
             }
 
-            // Handle session
-            var sessionKey = (playerInfo.Name, server.Guid);
-            if (!existingSessions.TryGetValue(sessionKey, out var session) || 
-                (!string.IsNullOrEmpty(server.MapName) && session.MapName != server.MapName))
+            // Handle sessions
+            if (sessionsByPlayer.TryGetValue(playerInfo.Name, out var playerSessions))
             {
-                // Create new session
-                session = new PlayerSession
+                var matchingSession = playerSessions.FirstOrDefault(s => 
+                    !string.IsNullOrEmpty(server.MapName) && 
+                    s.MapName == server.MapName);
+
+                if (matchingSession != null)
                 {
-                    PlayerName = playerInfo.Name,
-                    ServerGuid = server.Guid,
-                    StartTime = timestamp,
-                    LastSeenTime = timestamp,
-                    IsActive = true,
-                    ObservationCount = 1,
-                    TotalScore = playerInfo.Score,
-                    TotalKills = playerInfo.Kills,
-                    TotalDeaths = playerInfo.Deaths,
-                    MapName = server.MapName,
-                    GameType = server.GameType
-                };
-                newSessions.Add(session);
-                pendingObservations.Add((playerInfo, session));
+                    // Update existing session for current map
+                    UpdateSessionData(matchingSession, playerInfo, server, timestamp);
+                    sessionsToUpdate.Add(matchingSession);
+                    pendingObservations.Add((playerInfo, matchingSession));
+                    
+                    // Update player playtime
+                    player.TotalPlayTimeMinutes += CalculatePlayTime(matchingSession, timestamp);
+                }
+                else
+                {
+                    // Close all existing sessions (map changed)
+                    foreach (var session in playerSessions)
+                    {
+                        session.IsActive = false;
+                        sessionsToUpdate.Add(session);
+                    }
+                    
+                    // Create new session for new map
+                    var newSession = CreateNewSession(playerInfo, server, timestamp);
+                    sessionsToCreate.Add(newSession);
+                    pendingObservations.Add((playerInfo, newSession));
+                }
             }
             else
             {
-                // Update existing session
-                int additionalMinutes = (int)(timestamp - session.LastSeenTime).TotalMinutes;
-                session.LastSeenTime = timestamp;
-                session.ObservationCount++;
-                session.TotalScore = Math.Max(session.TotalScore, playerInfo.Score);
-                session.TotalKills = Math.Max(session.TotalKills, playerInfo.Kills);
-                session.TotalDeaths = playerInfo.Deaths;
-                
-                if (!string.IsNullOrEmpty(server.MapName) && session.MapName != server.MapName)
-                    session.MapName = server.MapName;
-                
-                if (!string.IsNullOrEmpty(server.GameType) && session.GameType != server.GameType)
-                    session.GameType = server.GameType;
-
-                updatedSessions.Add(session);
-                
-                // Add observation
-                _dbContext.PlayerObservations.Add(new PlayerObservation
-                {
-                    SessionId = session.SessionId,
-                    Timestamp = timestamp,
-                    Score = playerInfo.Score,
-                    Kills = playerInfo.Kills,
-                    Deaths = playerInfo.Deaths,
-                    Ping = playerInfo.Ping
-                });
-
-                // Update player playtime
-                player.TotalPlayTimeMinutes += additionalMinutes > 0 ? additionalMinutes : 0;
+                // No existing sessions - create new one
+                var newSession = CreateNewSession(playerInfo, server, timestamp);
+                sessionsToCreate.Add(newSession);
+                pendingObservations.Add((playerInfo, newSession));
             }
         }
 
-        // Execute all database operations in a single transaction
+        // Execute all database operations
         using (var transaction = await _dbContext.Database.BeginTransactionAsync())
         {
             try
             {
-                // Save new players first
+                // 1. Save new players first
                 if (newPlayers.Any())
-                    await _dbContext.Players.AddRangeAsync(newPlayers);
-                
-                // Save updated players
-                if (updatedPlayers.Any())
-                    _dbContext.Players.UpdateRange(updatedPlayers);
-                
-                // Save all changes to get player IDs
-                await _dbContext.SaveChangesAsync();
-
-                // Save new sessions
-                if (newSessions.Any())
-                    await _dbContext.PlayerSessions.AddRangeAsync(newSessions);
-                
-                // Save updated sessions
-                if (updatedSessions.Any())
-                    _dbContext.PlayerSessions.UpdateRange(updatedSessions);
-                
-                // Save all changes to get session IDs
-                await _dbContext.SaveChangesAsync();
-
-                // Now create observations for new sessions
-                var observations = pendingObservations.Select(x => new PlayerObservation
                 {
-                    SessionId = x.Item2.SessionId,
-                    Timestamp = timestamp,
-                    Score = x.Item1.Score,
-                    Kills = x.Item1.Kills,
-                    Deaths = x.Item1.Deaths,
-                    Ping = x.Item1.Ping,
-                    TeamLabel = x.Item1.TeamLabel,
-                });
+                    await _dbContext.Players.AddRangeAsync(newPlayers);
+                    await _dbContext.SaveChangesAsync();
+                }
 
-                await _dbContext.PlayerObservations.AddRangeAsync(observations);
-                
-                await _dbContext.SaveChangesAsync();
+                // 2. Save sessions
+                if (sessionsToCreate.Any())
+                {
+                    await _dbContext.PlayerSessions.AddRangeAsync(sessionsToCreate);
+                    await _dbContext.SaveChangesAsync();
+                }
+
+                if (sessionsToUpdate.Any())
+                {
+                    _dbContext.PlayerSessions.UpdateRange(sessionsToUpdate);
+                    await _dbContext.SaveChangesAsync();
+                }
+
+                // 3. Save observations
+                var observations = pendingObservations.Select(x => 
+                {
+                    if (x.Session.SessionId == 0)
+                        throw new InvalidOperationException("Session not saved before creating observation");
+
+                    return new PlayerObservation
+                    {
+                        SessionId = x.Session.SessionId,
+                        Timestamp = timestamp,
+                        Score = x.Info.Score,
+                        Kills = x.Info.Kills,
+                        Deaths = x.Info.Deaths,
+                        Ping = x.Info.Ping,
+                        TeamLabel = x.Info.TeamLabel
+                    };
+                }).ToList();
+
+                if (observations.Any())
+                {
+                    await _dbContext.PlayerObservations.AddRangeAsync(observations);
+                    await _dbContext.SaveChangesAsync();
+                }
+
                 await transaction.CommitAsync();
+                Console.WriteLine($"Successfully tracked {server.Players.Count()} players with {observations.Count} observations");
             }
             catch (Exception ex)
             {
@@ -208,21 +209,15 @@ public class PlayerTrackingService
         return server;
     }
 
-    private async Task<Dictionary<string, Player>> GetPlayersByNameAsync(IEnumerable<string> playerNames)
-    {
-        return await _dbContext.Players
-            .Where(p => playerNames.Contains(p.Name))
-            .ToDictionaryAsync(p => p.Name);
-    }
-
-    private async Task<Dictionary<(string, string), PlayerSession>> GetActiveSessionsAsync(
+    private async Task<List<PlayerSession>> GetActiveSessionsAsync(
         IEnumerable<string> playerNames, string serverGuid)
     {
         return await _dbContext.PlayerSessions
             .Where(s => s.IsActive && 
                        playerNames.Contains(s.PlayerName) && 
                        s.ServerGuid == serverGuid)
-            .ToDictionaryAsync(s => (s.PlayerName, s.ServerGuid));
+            .OrderByDescending(s => s.LastSeenTime) // Most recent first
+            .ToListAsync();
     }
 
     // Add this public method to handle global session timeouts
@@ -244,11 +239,52 @@ public class PlayerTrackingService
             if (timedOutSessions.Any())
             {
                 await _dbContext.SaveChangesAsync();
+                Console.WriteLine($"Closed {timedOutSessions.Count} timed-out sessions");
             }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error closing timed-out sessions: {ex.Message}");
         }
+    }
+
+    // Helper methods
+    private PlayerSession CreateNewSession(PlayerInfo playerInfo, IGameServer server, DateTime timestamp)
+    {
+        return new PlayerSession
+        {
+            PlayerName = playerInfo.Name,
+            ServerGuid = server.Guid,
+            StartTime = timestamp,
+            LastSeenTime = timestamp,
+            IsActive = true,
+            ObservationCount = 1,
+            TotalScore = playerInfo.Score,
+            TotalKills = playerInfo.Kills,
+            TotalDeaths = playerInfo.Deaths,
+            MapName = server.MapName,
+            GameType = server.GameType
+        };
+    }
+
+    private void UpdateSessionData(PlayerSession session, PlayerInfo playerInfo, IGameServer server, DateTime timestamp)
+    {
+        int additionalMinutes = (int)(timestamp - session.LastSeenTime).TotalMinutes;
+        session.LastSeenTime = timestamp;
+        session.ObservationCount++;
+        session.TotalScore = Math.Max(session.TotalScore, playerInfo.Score);
+        session.TotalKills = Math.Max(session.TotalKills, playerInfo.Kills);
+        session.TotalDeaths = playerInfo.Deaths;
+        
+        if (!string.IsNullOrEmpty(server.MapName))
+            session.MapName = server.MapName;
+        
+        if (!string.IsNullOrEmpty(server.GameType))
+            session.GameType = server.GameType;
+    }
+
+    private int CalculatePlayTime(PlayerSession session, DateTime timestamp)
+    {
+        return Math.Max(0, (int)(timestamp - session.LastSeenTime).TotalMinutes);
     }
 }
