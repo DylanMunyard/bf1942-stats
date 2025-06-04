@@ -1,4 +1,4 @@
-﻿using junie_des_1942stats.PlayerStats;
+using junie_des_1942stats.PlayerStats;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,16 +51,20 @@ builder.Services.AddMetricServer(options =>
     options.Port = 9091;
 });
 
-// Add Prometheus service
-builder.Services.AddHttpClient<PrometheusService>(client => { client.Timeout = TimeSpan.FromSeconds(30); })
-    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-    {
-        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-    });
+// Add Prometheus service with 5 second timeout
+builder.Services.AddHttpClient<PrometheusService>(client => 
+{
+    client.Timeout = TimeSpan.FromSeconds(5);
+})
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+});
 
 builder.Services.AddSingleton<PrometheusService>(sp =>
 {
     var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
+    httpClient.Timeout = TimeSpan.FromSeconds(5);
     var prometheusUrl = Environment.GetEnvironmentVariable("PROMETHEUS_URL") ?? "http://localhost:9090/api/v1";
     return new PrometheusService(httpClient, prometheusUrl);
 });

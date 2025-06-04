@@ -2,13 +2,15 @@ using junie_des_1942stats.PlayerTracking;
 using junie_des_1942stats.Prometheus;
 using junie_des_1942stats.ServerStats.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace junie_des_1942stats.ServerStats;
 
-public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusService prometheusService)
+public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusService prometheusService, ILogger<ServerStatsService> logger)
 {
     private readonly PlayerTrackerDbContext _dbContext = dbContext;
     private readonly PrometheusService _prometheusService = prometheusService;
+    private readonly ILogger<ServerStatsService> _logger = logger;
 
     public async Task<ServerStatistics> GetServerStatistics(
         string serverName, 
@@ -75,12 +77,21 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
 
         statistics.TopScores = topScores;
         
-        var playerHistory = await _prometheusService.GetServerPlayersHistory(serverName, game, daysToAnalyze);
-        if (playerHistory != null &&
-            playerHistory.Status.Equals("success", StringComparison.OrdinalIgnoreCase) &&
-            playerHistory.Data.Result.Count > 0)
+        try
         {
-            statistics.PlayerCountMetrics = playerHistory.Data.Result[0].Values;
+            var playerHistory = await _prometheusService.GetServerPlayersHistory(serverName, game, daysToAnalyze);
+            if (playerHistory != null &&
+                playerHistory.Status.Equals("success", StringComparison.OrdinalIgnoreCase) &&
+                playerHistory.Data.Result.Count > 0)
+            {
+                statistics.PlayerCountMetrics = playerHistory.Data.Result[0].Values;
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log the error but continue with empty metrics
+            _logger.LogError(ex, "Error fetching player history metrics from Prometheus");
+            statistics.PlayerCountMetrics = [];
         }
 
         return statistics;
@@ -103,19 +114,7 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
             baseQuery = baseQuery.Where(sr => sr.Year == year.Value);
         }
 
-        // Get total statistics for the server
-        var totalStatsQuery = baseQuery
-            .GroupBy(sr => sr.ServerGuid)
-            .Select(g => new
-            {
-                ServerGuid = g.Key,
-                TotalMinutesPlayed = g.Sum(r => r.TotalPlayTimeMinutes),
-                TotalPlayers = g.Select(r => r.PlayerName).Distinct().Count()
-            });
-
-        var totalStats = await totalStatsQuery.ToListAsync();
-
-        // First, get the total count of unique players
+        // Get the total count of unique players for pagination
         var totalItems = await baseQuery
             .Select(sr => sr.PlayerName)
             .Distinct()
@@ -123,12 +122,10 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
 
         // Get the aggregated and paged data from the database
         var playerStatsQuery = baseQuery
-            .GroupBy(sr => new { sr.ServerGuid, sr.PlayerName, sr.Server.Name })
+            .GroupBy(sr => sr.PlayerName)
             .Select(g => new
             {
-                g.Key.ServerGuid,
-                g.Key.PlayerName,
-                g.Key.Name,
+                PlayerName = g.Key,
                 TotalScore = g.Sum(r => r.TotalScore),
                 TotalKills = g.Sum(r => r.TotalKills),
                 TotalDeaths = g.Sum(r => r.TotalDeaths),
@@ -146,8 +143,8 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
             .Select((x, index) => new ServerRanking
             {
                 Rank = ((page - 1) * pageSize) + index + 1, // Calculate global rank based on page position
-                ServerGuid = x.ServerGuid,
-                ServerName = x.Name,
+                ServerGuid = baseQuery.First().ServerGuid, // All records are for the same server
+                ServerName = serverName, // Use the provided server name
                 PlayerName = x.PlayerName,
                 TotalScore = x.TotalScore,
                 TotalKills = x.TotalKills,
@@ -157,13 +154,11 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
             })
             .ToList();
 
-        // Create server context info
+        // Create minimal server context info
         var serverContext = new ServerContextInfo
         {
             ServerGuid = items.FirstOrDefault()?.ServerGuid,
-            ServerName = items.FirstOrDefault()?.ServerName,
-            TotalMinutesPlayed = totalStats.Sum(s => s.TotalMinutesPlayed),
-            TotalPlayers = totalStats.Sum(s => s.TotalPlayers)
+            ServerName = serverName
         };
 
         return new PagedResult<ServerRanking>

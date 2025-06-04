@@ -13,7 +13,6 @@ public class RankingCalculationService(IServiceProvider services) : BackgroundSe
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            await Task.Delay(TimeSpan.FromHours(1), stoppingToken);
             try
             {
                 using var scope = _services.CreateScope();
@@ -25,6 +24,7 @@ public class RankingCalculationService(IServiceProvider services) : BackgroundSe
             {
                 Console.WriteLine($"Error collecting metrics: {ex.Message}");
             }
+            await Task.Delay(TimeSpan.FromHours(1), stoppingToken);
         }
     }
 

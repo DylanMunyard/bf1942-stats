@@ -366,23 +366,41 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
             EndPeriod = endPeriod
         };
 
-        // 1. Get server rankings with total players per server
-        var serverRankings = await (from r in _dbContext.ServerPlayerRankings
-                                    where r.PlayerName == playerName
-                                    join s in _dbContext.Servers on r.ServerGuid equals s.Guid
-                                    let totalPlayers = _dbContext.ServerPlayerRankings
-                                        .Where(x => x.ServerGuid == r.ServerGuid)
+        // 1. Get server rankings with total players per server (aggregated across all months)
+        var serverStats = await (from r in _dbContext.ServerPlayerRankings
+                                where r.PlayerName == playerName
+                                group r by new { r.ServerGuid, r.Server.Name } into g
+                                select new 
+                                {
+                                    g.Key.ServerGuid,
+                                    g.Key.Name,
+                                    TotalScore = g.Sum(x => x.TotalScore)
+                                } into serverScores
+                                orderby serverScores.TotalScore descending
+                                select new 
+                                {
+                                    serverScores.ServerGuid,
+                                    serverScores.Name,
+                                    serverScores.TotalScore,
+                                    TotalRankedPlayers = _dbContext.ServerPlayerRankings
+                                        .Where(x => x.ServerGuid == serverScores.ServerGuid)
+                                        .Select(x => x.PlayerName)
+                                        .Distinct()
                                         .Count()
-                                    select new ServerRanking
-                                    {
-                                        ServerGuid = r.ServerGuid,
-                                        ServerName = s.Name,
-                                        Rank = r.Rank,
-                                        TotalScore = r.TotalScore,
-                                        TotalRankedPlayers = totalPlayers
-                                    })
-                                    .OrderBy(r => r.Rank)
-                                    .ToListAsync();
+                                })
+                                .ToListAsync();
+
+        // Now calculate ranks based on the ordered results
+        var serverRankings = serverStats
+            .Select((x, index) => new ServerRanking
+            {
+                ServerGuid = x.ServerGuid,
+                ServerName = x.Name,
+                Rank = index + 1,
+                TotalScore = x.TotalScore,
+                TotalRankedPlayers = x.TotalRankedPlayers
+            })
+            .ToList();
 
         insights.ServerRankings = serverRankings;
         // 2. Calculate favorite maps by time played with additional stats
