@@ -78,8 +78,6 @@ public class ServerContextInfo
 {
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
-    public string? GameId { get; set; }
-    public string? GameName { get; set; }
     public int TotalMinutesPlayed { get; set; }
     public int TotalSessions { get; set; }
     public int TotalPlayers { get; set; }

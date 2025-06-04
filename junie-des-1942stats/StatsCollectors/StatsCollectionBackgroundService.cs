@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using junie_des_1942stats.Bflist;
 using junie_des_1942stats.PlayerTracking;
 using junie_des_1942stats.StatsCollectors.Modals;
@@ -58,6 +58,7 @@ public class StatsCollectionBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        await Task.Yield(); // Ensure the service yields control quickly after starting
         while (!stoppingToken.IsCancellationRequested)
         {
             try

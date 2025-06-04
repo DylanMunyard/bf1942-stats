@@ -1,4 +1,4 @@
-﻿using junie_des_1942stats.PlayerTracking;
+using junie_des_1942stats.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -16,6 +16,7 @@ public class RankingCalculationService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        await Task.Yield(); // Ensure the service yields control quickly after starting
         while (!stoppingToken.IsCancellationRequested)
         {
             try

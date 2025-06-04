@@ -67,14 +67,14 @@ public class PlayerTrackerDbContext : DbContext
             .HasForeignKey(po => po.SessionId);
 
         modelBuilder.Entity<ServerPlayerRanking>()
-            .HasOne<Player>()
-            .WithMany()
-            .HasForeignKey(r => r.PlayerName);
+            .HasOne(sr => sr.Player)
+            .WithMany(p => p.PlayerRankings)
+            .HasForeignKey(sr => sr.PlayerName);
 
         modelBuilder.Entity<ServerPlayerRanking>()
-            .HasOne<GameServer>()
-            .WithMany()
-            .HasForeignKey(r => r.ServerGuid);
+            .HasOne(sr => sr.Server)
+            .WithMany(s => s.PlayerRankings)
+            .HasForeignKey(sr => sr.ServerGuid);
     }
 }
 
@@ -89,7 +89,8 @@ public class Player
     public bool AiBot { get; set; }
     
     // Navigation property
-    public List<PlayerSession> Sessions { get; set; } = new();
+    public List<PlayerSession> Sessions { get; set; } = [];
+    public List<ServerPlayerRanking> PlayerRankings { get; set; } = [];
 }
 
 public class GameServer
@@ -101,7 +102,8 @@ public class GameServer
     public string GameId { get; set; } = "";
 
     // Navigation property
-    public List<PlayerSession> Sessions { get; set; } = new();
+    public List<PlayerSession> Sessions { get; set; } = [];
+    public List<ServerPlayerRanking> PlayerRankings { get; set; } = [];
 }
 
 public class PlayerSession
