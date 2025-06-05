@@ -608,22 +608,25 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
         if (targetSession == null)
             return null;
 
-        // Find all sessions in the same round (same server, same map, overlapping time)
+        // First find all sessions in the same round using the 30min buffer
+        var roundStartTime = targetSession.StartTime.AddMinutes(-30); // Allow 30min buffer before
+        var roundEndTime = targetSession.LastSeenTime.AddMinutes(30);  // Allow 30min buffer after
+
         var roundSessions = await _dbContext.PlayerSessions
             .Include(s => s.Server)
             .Where(s => s.ServerGuid == targetSession.ServerGuid &&
                        s.MapName == targetSession.MapName &&
-                       s.StartTime <= targetSession.LastSeenTime &&
-                       s.LastSeenTime >= targetSession.StartTime)
+                       s.StartTime <= roundEndTime &&
+                       s.LastSeenTime >= roundStartTime)
             .OrderBy(s => s.StartTime)
             .ToListAsync();
 
         if (!roundSessions.Any())
             return null;
 
-        // Define the round time window - sessions that overlap with the target session
-        var roundStartTime = roundSessions.Min(s => s.StartTime); // Use the earliest session start time
-        var roundEndTime = roundSessions.Where(s => !s.IsActive).Any() 
+        // Calculate actual round boundaries from the sessions
+        var actualRoundStart = roundSessions.Min(s => s.StartTime);
+        var actualRoundEnd = roundSessions.Where(s => !s.IsActive).Any() 
             ? roundSessions.Where(s => !s.IsActive).Max(s => s.LastSeenTime)
             : roundSessions.Max(s => s.LastSeenTime);
 
@@ -644,13 +647,13 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
             })
             .ToListAsync();
 
-        // Create leaderboard snapshots at 1-minute intervals
+        // Create leaderboard snapshots starting from actual round start
         var leaderboardSnapshots = new List<LeaderboardSnapshot>();
-        var currentTime = roundStartTime;
+        var currentTime = actualRoundStart; // Start from earliest session time
         
-        while (currentTime <= roundEndTime)
+        while (currentTime <= actualRoundEnd)
         {
-            // Get the latest score for each player at this time
+                        // Get the latest score for each player at this time
             var playerScores = roundObservations
                 .Where(o => o.Timestamp <= currentTime)
                 .GroupBy(o => o.PlayerName)
@@ -663,9 +666,11 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
                         Kills = obs.Kills,
                         Deaths = obs.Deaths,
                         Ping = obs.Ping,
-                        TeamLabel = obs.TeamLabel
+                        TeamLabel = obs.TeamLabel,
+                        LastSeen = obs.Timestamp
                     };
                 })
+                .Where(x => x.LastSeen >= currentTime.AddMinutes(-1)) // Only include players seen in last minute
                 .OrderByDescending(x => x.Score)
                 .Select((x, i) => new LeaderboardEntry
                 {
@@ -687,12 +692,6 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
             
             currentTime = currentTime.AddMinutes(1);
         }
-
-        // Calculate round boundaries from actual session data
-        var actualRoundStart = roundSessions.Min(s => s.StartTime);
-        var actualRoundEnd = roundSessions.Where(s => !s.IsActive).Any() 
-            ? roundSessions.Where(s => !s.IsActive).Max(s => s.LastSeenTime)
-            : roundSessions.Max(s => s.LastSeenTime);
 
         // Create participants list
         var participants = roundSessions.Select(s => new RoundParticipant
