@@ -140,4 +140,26 @@ public class PlayersController : ControllerBase
         
         return Ok(stats);
     }
+
+    // Get session round report with leaderboard
+    [HttpGet("sessions/{sessionId}/round-report")]
+    public async Task<ActionResult<SessionRoundReport>> GetSessionRoundReport(int sessionId)
+    {
+        if (sessionId <= 0)
+            return BadRequest("Session ID must be positive");
+
+        try
+        {
+            var roundReport = await _playerStatsService.GetSessionRoundReport(sessionId);
+            
+            if (roundReport == null)
+                return NotFound($"Session {sessionId} not found");
+
+            return Ok(roundReport);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error retrieving session round report: {ex.Message}");
+        }
+    }
 }

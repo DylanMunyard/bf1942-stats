@@ -597,4 +597,76 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
 
         return insights;
     }
+
+    public async Task<SessionRoundReport?> GetSessionRoundReport(int sessionId)
+    {
+        // Get the target session
+        var targetSession = await _dbContext.PlayerSessions
+            .Include(s => s.Server)
+            .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+
+        if (targetSession == null)
+            return null;
+
+        // Define the round time window - sessions that overlap with the target session
+        var roundStartTime = targetSession.StartTime.AddMinutes(-30); // Allow 30min buffer before
+        var roundEndTime = targetSession.LastSeenTime.AddMinutes(30);  // Allow 30min buffer after
+
+        // Find all sessions in the same round (same server, same map, overlapping time)
+        var roundSessions = await _dbContext.PlayerSessions
+            .Include(s => s.Server)
+            .Where(s => s.ServerGuid == targetSession.ServerGuid &&
+                       s.MapName == targetSession.MapName &&
+                       s.StartTime <= roundEndTime &&
+                       s.LastSeenTime >= roundStartTime)
+            .OrderBy(s => s.StartTime)
+            .ToListAsync();
+
+        if (!roundSessions.Any())
+            return null;
+
+        // Calculate round boundaries from actual session data
+        var actualRoundStart = roundSessions.Min(s => s.StartTime);
+        var actualRoundEnd = roundSessions.Where(s => !s.IsActive).Any() 
+            ? roundSessions.Where(s => !s.IsActive).Max(s => s.LastSeenTime)
+            : roundSessions.Max(s => s.LastSeenTime);
+
+        // Create participants list
+        var participants = roundSessions.Select(s => new RoundParticipant
+        {
+            PlayerName = s.PlayerName,
+            JoinTime = s.StartTime,
+            LeaveTime = s.IsActive ? DateTime.UtcNow : s.LastSeenTime,
+            DurationMinutes = s.IsActive 
+                ? (int)(DateTime.UtcNow - s.StartTime).TotalMinutes
+                : (int)(s.LastSeenTime - s.StartTime).TotalMinutes,
+            Score = s.TotalScore,
+            Kills = s.TotalKills,
+            Deaths = s.TotalDeaths,
+            KillDeathRatio = s.TotalDeaths == 0 ? s.TotalKills : (double)s.TotalKills / s.TotalDeaths,
+            IsActive = s.IsActive
+        }).ToList();
+
+        return new SessionRoundReport
+        {
+            Session = new SessionInfo
+            {
+                SessionId = targetSession.SessionId,
+                PlayerName = targetSession.PlayerName,
+                ServerName = targetSession.Server.Name,
+                ServerGuid = targetSession.ServerGuid,
+                GameId = targetSession.Server.GameId
+            },
+            Round = new RoundInfo
+            {
+                MapName = targetSession.MapName,
+                GameType = targetSession.GameType ?? "",
+                StartTime = actualRoundStart,
+                EndTime = actualRoundEnd,
+                TotalParticipants = participants.Count,
+                IsActive = roundSessions.Any(s => s.IsActive)
+            },
+            Participants = participants,
+        };
+    }
 }

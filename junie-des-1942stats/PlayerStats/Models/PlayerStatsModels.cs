@@ -216,3 +216,42 @@ public class SessionListItem
     public bool IsActive { get; set; }
 }
 
+public class SessionRoundReport
+{
+    public SessionInfo Session { get; set; } = new();
+    public RoundInfo Round { get; set; } = new();
+    public List<RoundParticipant> Participants { get; set; } = new();
+}
+
+public class SessionInfo
+{
+    public int SessionId { get; set; }
+    public string PlayerName { get; set; } = "";
+    public string ServerName { get; set; } = "";
+    public string ServerGuid { get; set; } = "";
+    public string GameId { get; set; } = "";
+}
+
+public class RoundInfo
+{
+    public string MapName { get; set; } = "";
+    public string GameType { get; set; } = "";
+    public DateTime StartTime { get; set; }
+    public DateTime EndTime { get; set; }
+    public TimeSpan Duration => EndTime - StartTime;
+    public int TotalParticipants { get; set; }
+    public bool IsActive { get; set; }
+}
+
+public class RoundParticipant
+{
+    public string PlayerName { get; set; } = "";
+    public DateTime JoinTime { get; set; }
+    public DateTime LeaveTime { get; set; }
+    public int DurationMinutes { get; set; }
+    public int Score { get; set; }
+    public int Kills { get; set; }
+    public int Deaths { get; set; }
+    public double KillDeathRatio { get; set; }
+    public bool IsActive { get; set; }
+}
