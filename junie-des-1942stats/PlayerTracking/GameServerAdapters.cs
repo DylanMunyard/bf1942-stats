@@ -12,6 +12,7 @@ namespace junie_des_1942stats.PlayerTracking
         string MapName { get; }
         string GameType { get; }
         IEnumerable<PlayerInfo> Players { get; }
+        IEnumerable<TeamInfo> Teams { get; }
     }
 
     public class Bf1942ServerAdapter(Bf1942ServerInfo serverInfo) : IGameServer
@@ -25,6 +26,7 @@ namespace junie_des_1942stats.PlayerTracking
         public string GameType => serverInfo.GameType;
         
         public IEnumerable<PlayerInfo> Players => serverInfo.Players;
+        public IEnumerable<TeamInfo> Teams => serverInfo.Teams;
     }
 
     public class Fh2ServerAdapter(Fh2ServerInfo serverInfo) : IGameServer
@@ -37,5 +39,6 @@ namespace junie_des_1942stats.PlayerTracking
         public string MapName => serverInfo.MapName;
         public string GameType => serverInfo.GameType;
         public IEnumerable<PlayerInfo> Players => serverInfo.Players;
+        public IEnumerable<TeamInfo> Teams => serverInfo.Teams;
     }
 }

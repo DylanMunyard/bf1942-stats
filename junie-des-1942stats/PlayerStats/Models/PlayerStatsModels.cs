@@ -114,6 +114,7 @@ public class ObservationInfo
     public int Kills { get; set; }
     public int Deaths { get; set; }
     public int Ping { get; set; }
+    public int Team { get; set; }
     public string TeamLabel { get; set; } = "";
 }
 
@@ -231,6 +232,7 @@ public class LeaderboardEntry
     public int Kills { get; set; }
     public int Deaths { get; set; }
     public int Ping { get; set; }
+    public int Team { get; set; }
     public string TeamLabel { get; set; }
 }
 

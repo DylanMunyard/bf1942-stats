@@ -417,6 +417,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
                 Kills = o.Kills,
                 Deaths = o.Deaths,
                 Ping = o.Ping,
+                Team = o.Team,
                 TeamLabel = o.TeamLabel
             }).ToList(),
 
@@ -640,6 +641,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
                 o.Kills,
                 o.Deaths,
                 o.Ping,
+                o.Team,
                 o.TeamLabel,
                 PlayerName = o.Session.PlayerName
             })
@@ -664,6 +666,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
                         Kills = obs.Kills,
                         Deaths = obs.Deaths,
                         Ping = obs.Ping,
+                        Team = obs.Team,
                         TeamLabel = obs.TeamLabel,
                         LastSeen = obs.Timestamp
                     };
@@ -678,6 +681,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
                     Kills = x.Kills,
                     Deaths = x.Deaths,
                     Ping = x.Ping,
+                    Team = x.Team,
                     TeamLabel = x.TeamLabel
                 })
                 .ToList();

@@ -151,6 +151,14 @@ public class PlayerTrackingService
                     if (x.Session.SessionId == 0)
                         throw new InvalidOperationException("Session not saved before creating observation");
 
+                    // Get team label from Teams array if TeamLabel is empty
+                    var teamLabel = x.Info.TeamLabel;
+                    if (string.IsNullOrEmpty(teamLabel) && server.Teams?.Any() == true)
+                    {
+                        var team = server.Teams.FirstOrDefault(t => t.Index == x.Info.Team);
+                        teamLabel = team?.Label ?? "";
+                    }
+
                     return new PlayerObservation
                     {
                         SessionId = x.Session.SessionId,
@@ -159,7 +167,8 @@ public class PlayerTrackingService
                         Kills = x.Info.Kills,
                         Deaths = x.Info.Deaths,
                         Ping = x.Info.Ping,
-                        TeamLabel = x.Info.TeamLabel
+                        Team = x.Info.Team,
+                        TeamLabel = teamLabel
                     };
                 }).ToList();
 
