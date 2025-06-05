@@ -625,7 +625,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
         if (!roundSessions.Any())
             return null;
 
-        // Get all observations for the round
+        // Get all observations for the round with player names
         var roundObservations = await _dbContext.PlayerObservations
             .Include(o => o.Session)
             .Where(o => roundSessions.Select(s => s.SessionId).Contains(o.SessionId))
@@ -634,41 +634,42 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
             {
                 o.Timestamp,
                 o.Score,
-                o.Kills,
-                o.Deaths,
-                o.Ping,
-                o.TeamLabel,
                 PlayerName = o.Session.PlayerName
             })
             .ToListAsync();
 
-        // Group observations into 1-minute buckets and include player names
-        var observationBuckets = roundObservations
-            .GroupBy(o => new
-            {
-                BucketTime = new DateTime(
-                    o.Timestamp.Year,
-                    o.Timestamp.Month,
-                    o.Timestamp.Day,
-                    o.Timestamp.Hour,
-                    o.Timestamp.Minute,
-                    0),
-                o.PlayerName
-            })
-            .Select(g => new ObservationBucket
-            {
-                Timestamp = g.Key.BucketTime,
-                PlayerName = g.Key.PlayerName,
-                Observations = g.Select(o => new ObservationInfo
+        // Create leaderboard snapshots at 1-minute intervals
+        var leaderboardSnapshots = new List<LeaderboardSnapshot>();
+        var currentTime = roundStartTime;
+        
+        while (currentTime <= roundEndTime)
+        {
+            // Get the latest score for each player at this time
+            var playerScores = roundObservations
+                .Where(o => o.Timestamp <= currentTime)
+                .GroupBy(o => o.PlayerName)
+                .Select(g => new 
                 {
-                    Timestamp = o.Timestamp,
-                    Score = o.Score,
-                    Kills = o.Kills,
-                    Deaths = o.Deaths,
-                    Ping = o.Ping,
-                    TeamLabel = o.TeamLabel
-                }).ToList()
-            }).ToList();
+                    PlayerName = g.Key,
+                    Score = g.OrderByDescending(x => x.Timestamp).First().Score
+                })
+                .OrderByDescending(x => x.Score)
+                .Select((x, i) => new LeaderboardEntry
+                {
+                    Rank = i + 1,
+                    PlayerName = x.PlayerName,
+                    Score = x.Score
+                })
+                .ToList();
+                
+            leaderboardSnapshots.Add(new LeaderboardSnapshot
+            {
+                Timestamp = currentTime,
+                Entries = playerScores
+            });
+            
+            currentTime = currentTime.AddMinutes(1);
+        }
 
         // Calculate round boundaries from actual session data
         var actualRoundStart = roundSessions.Min(s => s.StartTime);
@@ -712,7 +713,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
                 IsActive = roundSessions.Any(s => s.IsActive)
             },
             Participants = participants,
-            ObservationBuckets = observationBuckets
+            LeaderboardSnapshots = leaderboardSnapshots
         };
     }
 }

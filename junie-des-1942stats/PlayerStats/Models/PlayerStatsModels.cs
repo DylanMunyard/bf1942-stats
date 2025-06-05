@@ -223,12 +223,25 @@ public class SessionListItem
     public bool IsActive { get; set; }
 }
 
+public class LeaderboardEntry
+{
+    public int Rank { get; set; }
+    public string PlayerName { get; set; } = "";
+    public int Score { get; set; }
+}
+
+public class LeaderboardSnapshot
+{
+    public DateTime Timestamp { get; set; }
+    public List<LeaderboardEntry> Entries { get; set; } = new();
+}
+
 public class SessionRoundReport
 {
     public SessionInfo Session { get; set; } = new();
     public RoundInfo Round { get; set; } = new();
     public List<RoundParticipant> Participants { get; set; } = new();
-    public List<ObservationBucket> ObservationBuckets { get; set; } = new();
+    public List<LeaderboardSnapshot> LeaderboardSnapshots { get; set; } = new();
 }
 
 public class SessionInfo
