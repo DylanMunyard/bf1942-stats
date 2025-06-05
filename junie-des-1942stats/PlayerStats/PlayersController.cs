@@ -15,12 +15,77 @@ public class PlayersController : ControllerBase
         _playerStatsService = playerStatsService;
     }
     
-    // Get all players with basic info
+    // Get all players with basic info - enhanced with paging and sorting
     [HttpGet]
-    public async Task<ActionResult<List<PlayerBasicInfo>>> GetAllPlayers()
+    public async Task<ActionResult<PagedResult<PlayerBasicInfo>>> GetAllPlayers(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] string sortBy = "IsActive",
+        [FromQuery] string sortOrder = "desc",
+        [FromQuery] string? playerName = null,
+        [FromQuery] int? minPlayTime = null,
+        [FromQuery] int? maxPlayTime = null,
+        [FromQuery] DateTime? lastSeenFrom = null,
+        [FromQuery] DateTime? lastSeenTo = null,
+        [FromQuery] bool? isActive = null,
+        [FromQuery] string? serverName = null,
+        [FromQuery] string? gameId = null,
+        [FromQuery] string? mapName = null)
     {
-        var players = await _playerStatsService.GetAllPlayersBasicInfo();
-        return Ok(players);
+        // Validate parameters
+        if (page < 1)
+            return BadRequest("Page number must be at least 1");
+        
+        if (pageSize < 1 || pageSize > 500)
+            return BadRequest("Page size must be between 1 and 500");
+
+        // Valid sort fields
+        var validSortFields = new[]
+        {
+            "PlayerName", "TotalPlayTimeMinutes", "LastSeen", "IsActive"
+        };
+
+        if (!validSortFields.Contains(sortBy, StringComparer.OrdinalIgnoreCase))
+            return BadRequest($"Invalid sortBy field. Valid options: {string.Join(", ", validSortFields)}");
+
+        if (!new[] { "asc", "desc" }.Contains(sortOrder.ToLower()))
+            return BadRequest("Sort order must be 'asc' or 'desc'");
+
+        // Validate filter parameters
+        if (minPlayTime.HasValue && minPlayTime < 0)
+            return BadRequest("Minimum play time cannot be negative");
+        
+        if (maxPlayTime.HasValue && maxPlayTime < 0)
+            return BadRequest("Maximum play time cannot be negative");
+        
+        if (minPlayTime.HasValue && maxPlayTime.HasValue && minPlayTime > maxPlayTime)
+            return BadRequest("Minimum play time cannot be greater than maximum play time");
+        
+        if (lastSeenFrom.HasValue && lastSeenTo.HasValue && lastSeenFrom > lastSeenTo)
+            return BadRequest("LastSeenFrom cannot be greater than LastSeenTo");
+
+        try
+        {
+            var filters = new PlayerFilters
+            {
+                PlayerName = playerName,
+                MinPlayTime = minPlayTime,
+                MaxPlayTime = maxPlayTime,
+                LastSeenFrom = lastSeenFrom,
+                LastSeenTo = lastSeenTo,
+                IsActive = isActive,
+                ServerName = serverName,
+                GameId = gameId,
+                MapName = mapName
+            };
+
+            var result = await _playerStatsService.GetAllPlayersWithPaging(page, pageSize, sortBy, sortOrder, filters);
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
     
     // Get detailed player statistics

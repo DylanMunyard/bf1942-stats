@@ -11,35 +11,140 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
     // Define a threshold for considering a player "active" (e.g., 5 minutes)
     private readonly TimeSpan _activeThreshold = TimeSpan.FromMinutes(5);
 
-    public async Task<List<PlayerBasicInfo>> GetAllPlayersBasicInfo()
+
+
+    public async Task<PagedResult<PlayerBasicInfo>> GetAllPlayersWithPaging(
+        int page, 
+        int pageSize, 
+        string sortBy, 
+        string sortOrder,
+        PlayerFilters? filters = null)
     {
-        var players = await _dbContext.Players
-            .Where(p => !p.AiBot)
-            .Select(p => new PlayerBasicInfo
+        var baseQuery = _dbContext.Players.Where(p => !p.AiBot);
+
+        // Apply filters at the database level first
+        if (filters != null)
+        {
+            if (!string.IsNullOrEmpty(filters.PlayerName))
             {
-                PlayerName = p.Name,
-                TotalPlayTimeMinutes = p.TotalPlayTimeMinutes,
-                LastSeen = p.LastSeen,
-                IsActive = p.Sessions.Any(s => s.IsActive),
-                // Include the server info for active players
-                CurrentServer = p.Sessions.Any(s => s.IsActive)
-                    ? p.Sessions.Where(s => s.IsActive)
-                        .Select(s => new ServerInfo
-                        {
-                            ServerGuid = s.ServerGuid,
-                            ServerName = s.Server.Name,
-                            SessionKills = s.TotalKills,
-                            SessionDeaths = s.TotalDeaths,
-                            MapName = s.MapName,
-                            GameId = s.Server.GameId,
-                        })
-                        .FirstOrDefault()
-                    : null
-            })
-            .OrderByDescending(p => p.LastSeen)
+                baseQuery = baseQuery.Where(p => p.Name.Contains(filters.PlayerName));
+            }
+
+            if (filters.MinPlayTime.HasValue)
+            {
+                baseQuery = baseQuery.Where(p => p.TotalPlayTimeMinutes >= filters.MinPlayTime.Value);
+            }
+
+            if (filters.MaxPlayTime.HasValue)
+            {
+                baseQuery = baseQuery.Where(p => p.TotalPlayTimeMinutes <= filters.MaxPlayTime.Value);
+            }
+
+            if (filters.LastSeenFrom.HasValue)
+            {
+                baseQuery = baseQuery.Where(p => p.LastSeen >= filters.LastSeenFrom.Value);
+            }
+
+            if (filters.LastSeenTo.HasValue)
+            {
+                baseQuery = baseQuery.Where(p => p.LastSeen <= filters.LastSeenTo.Value);
+            }
+
+            if (filters.IsActive.HasValue)
+            {
+                if (filters.IsActive.Value)
+                {
+                    // Only players with active sessions
+                    baseQuery = baseQuery.Where(p => p.Sessions.Any(s => s.IsActive));
+                }
+                else
+                {
+                    // Only players without active sessions
+                    baseQuery = baseQuery.Where(p => !p.Sessions.Any(s => s.IsActive));
+                }
+            }
+
+            // Server-related filters - filter by players who have active sessions matching criteria
+            if (!string.IsNullOrEmpty(filters.ServerName))
+            {
+                baseQuery = baseQuery.Where(p => p.Sessions.Any(s => s.IsActive && 
+                    s.Server.Name.Contains(filters.ServerName)));
+            }
+
+            if (!string.IsNullOrEmpty(filters.GameId))
+            {
+                baseQuery = baseQuery.Where(p => p.Sessions.Any(s => s.IsActive && 
+                    s.Server.GameId == filters.GameId));
+            }
+
+            if (!string.IsNullOrEmpty(filters.MapName))
+            {
+                baseQuery = baseQuery.Where(p => p.Sessions.Any(s => s.IsActive && 
+                    s.MapName.Contains(filters.MapName)));
+            }
+        }
+
+        // Now project to PlayerBasicInfo
+        var query = baseQuery.Select(p => new PlayerBasicInfo
+        {
+            PlayerName = p.Name,
+            TotalPlayTimeMinutes = p.TotalPlayTimeMinutes,
+            LastSeen = p.LastSeen,
+            IsActive = p.Sessions.Any(s => s.IsActive),
+            CurrentServer = p.Sessions.Any(s => s.IsActive)
+                ? p.Sessions.Where(s => s.IsActive)
+                    .Select(s => new ServerInfo
+                    {
+                        ServerGuid = s.ServerGuid,
+                        ServerName = s.Server.Name,
+                        SessionKills = s.TotalKills,
+                        SessionDeaths = s.TotalDeaths,
+                        MapName = s.MapName,
+                        GameId = s.Server.GameId,
+                    })
+                    .FirstOrDefault()
+                : null
+        });
+
+        // Apply sorting
+        var isDescending = sortOrder.ToLower() == "desc";
+        
+        query = sortBy.ToLower() switch
+        {
+            "playername" => isDescending 
+                ? query.OrderByDescending(p => p.PlayerName)
+                : query.OrderBy(p => p.PlayerName),
+            "totalplaytimeminutes" => isDescending 
+                ? query.OrderByDescending(p => p.TotalPlayTimeMinutes)
+                : query.OrderBy(p => p.TotalPlayTimeMinutes),
+            "lastseen" => isDescending 
+                ? query.OrderByDescending(p => p.LastSeen)
+                : query.OrderBy(p => p.LastSeen),
+            "isactive" => isDescending 
+                ? query.OrderByDescending(p => p.IsActive).ThenByDescending(p => p.LastSeen)
+                : query.OrderBy(p => p.IsActive).ThenByDescending(p => p.LastSeen),
+            _ => query.OrderByDescending(p => p.IsActive).ThenByDescending(p => p.LastSeen)
+        };
+
+        // Get total count for pagination (after filters are applied)
+        var totalCount = await query.CountAsync();
+
+        // Apply pagination
+        var players = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync();
 
-        return players;
+        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+        return new PagedResult<PlayerBasicInfo>
+        {
+            Items = players,
+            Page = page,
+            PageSize = pageSize,
+            TotalItems = totalCount,
+            TotalPages = totalPages
+        };
     }
 
     public async Task<PlayerTimeStatistics> GetPlayerStatistics(string playerName)

@@ -9,6 +9,19 @@ public class PlayerBasicInfo
     public ServerInfo? CurrentServer { get; set; }
 }
 
+public class PlayerFilters
+{
+    public string? PlayerName { get; set; }
+    public int? MinPlayTime { get; set; }
+    public int? MaxPlayTime { get; set; }
+    public DateTime? LastSeenFrom { get; set; }
+    public DateTime? LastSeenTo { get; set; }
+    public bool? IsActive { get; set; }
+    public string? ServerName { get; set; }
+    public string? GameId { get; set; }
+    public string? MapName { get; set; }
+}
+
 public class PlayerTimeStatistics
 {
     public int TotalSessions { get; set; }

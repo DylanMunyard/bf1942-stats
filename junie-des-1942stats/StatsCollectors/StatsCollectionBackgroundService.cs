@@ -63,11 +63,11 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     {
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Stats collection service starting...");
         
-        // Initialize timer but don't run immediately
+        // Initialize timer to run immediately (dueTime: 0) and then every minute
         _timer = new Timer(
             callback: ExecuteCollectionCycle,
             state: null,
-            dueTime: _collectionInterval,  // First run after interval
+            dueTime: TimeSpan.Zero,  // Run immediately
             period: _collectionInterval);
         
         return Task.CompletedTask;
