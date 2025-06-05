@@ -689,7 +689,12 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
             });
             
             currentTime = currentTime.AddMinutes(1);
-        }
+        }        
+        
+        // Filter out empty snapshots
+        leaderboardSnapshots = leaderboardSnapshots
+            .Where(snapshot => snapshot.Entries.Any())
+            .ToList();
 
         return new SessionRoundReport
         {
