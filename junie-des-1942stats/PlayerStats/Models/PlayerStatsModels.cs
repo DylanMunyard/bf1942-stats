@@ -117,6 +117,13 @@ public class ObservationInfo
     public string TeamLabel { get; set; } = "";
 }
 
+public class ObservationBucket
+{
+    public DateTime Timestamp { get; set; }
+    public string PlayerName { get; set; } = "";
+    public List<ObservationInfo> Observations { get; set; } = new();
+}
+
 public class ServerRanking
 {
     public string ServerGuid { get; set; } = string.Empty;
@@ -221,6 +228,7 @@ public class SessionRoundReport
     public SessionInfo Session { get; set; } = new();
     public RoundInfo Round { get; set; } = new();
     public List<RoundParticipant> Participants { get; set; } = new();
+    public List<ObservationBucket> ObservationBuckets { get; set; } = new();
 }
 
 public class SessionInfo

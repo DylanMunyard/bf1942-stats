@@ -625,6 +625,51 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
         if (!roundSessions.Any())
             return null;
 
+        // Get all observations for the round
+        var roundObservations = await _dbContext.PlayerObservations
+            .Include(o => o.Session)
+            .Where(o => roundSessions.Select(s => s.SessionId).Contains(o.SessionId))
+            .OrderBy(o => o.Timestamp)
+            .Select(o => new 
+            {
+                o.Timestamp,
+                o.Score,
+                o.Kills,
+                o.Deaths,
+                o.Ping,
+                o.TeamLabel,
+                PlayerName = o.Session.PlayerName
+            })
+            .ToListAsync();
+
+        // Group observations into 1-minute buckets and include player names
+        var observationBuckets = roundObservations
+            .GroupBy(o => new
+            {
+                BucketTime = new DateTime(
+                    o.Timestamp.Year,
+                    o.Timestamp.Month,
+                    o.Timestamp.Day,
+                    o.Timestamp.Hour,
+                    o.Timestamp.Minute,
+                    0),
+                o.PlayerName
+            })
+            .Select(g => new ObservationBucket
+            {
+                Timestamp = g.Key.BucketTime,
+                PlayerName = g.Key.PlayerName,
+                Observations = g.Select(o => new ObservationInfo
+                {
+                    Timestamp = o.Timestamp,
+                    Score = o.Score,
+                    Kills = o.Kills,
+                    Deaths = o.Deaths,
+                    Ping = o.Ping,
+                    TeamLabel = o.TeamLabel
+                }).ToList()
+            }).ToList();
+
         // Calculate round boundaries from actual session data
         var actualRoundStart = roundSessions.Min(s => s.StartTime);
         var actualRoundEnd = roundSessions.Where(s => !s.IsActive).Any() 
@@ -667,6 +712,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
                 IsActive = roundSessions.Any(s => s.IsActive)
             },
             Participants = participants,
+            ObservationBuckets = observationBuckets
         };
     }
 }
