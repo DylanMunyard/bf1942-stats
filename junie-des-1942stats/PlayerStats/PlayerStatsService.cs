@@ -11,8 +11,6 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
     // Define a threshold for considering a player "active" (e.g., 5 minutes)
     private readonly TimeSpan _activeThreshold = TimeSpan.FromMinutes(5);
 
-
-
     public async Task<PagedResult<PlayerBasicInfo>> GetAllPlayersWithPaging(
         int page, 
         int pageSize, 
@@ -693,22 +691,6 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
             currentTime = currentTime.AddMinutes(1);
         }
 
-        // Create participants list
-        var participants = roundSessions.Select(s => new RoundParticipant
-        {
-            PlayerName = s.PlayerName,
-            JoinTime = s.StartTime,
-            LeaveTime = s.IsActive ? DateTime.UtcNow : s.LastSeenTime,
-            DurationMinutes = s.IsActive 
-                ? (int)(DateTime.UtcNow - s.StartTime).TotalMinutes
-                : (int)(s.LastSeenTime - s.StartTime).TotalMinutes,
-            Score = s.TotalScore,
-            Kills = s.TotalKills,
-            Deaths = s.TotalDeaths,
-            KillDeathRatio = s.TotalDeaths == 0 ? s.TotalKills : (double)s.TotalKills / s.TotalDeaths,
-            IsActive = s.IsActive
-        }).ToList();
-
         return new SessionRoundReport
         {
             Session = new SessionInfo
@@ -717,7 +699,10 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
                 PlayerName = targetSession.PlayerName,
                 ServerName = targetSession.Server.Name,
                 ServerGuid = targetSession.ServerGuid,
-                GameId = targetSession.Server.GameId
+                GameId = targetSession.Server.GameId,
+                Kills = targetSession.TotalKills,
+                Deaths = targetSession.TotalDeaths,
+                Score = targetSession.TotalScore
             },
             Round = new RoundInfo
             {
@@ -725,10 +710,9 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
                 GameType = targetSession.GameType ?? "",
                 StartTime = actualRoundStart,
                 EndTime = actualRoundEnd,
-                TotalParticipants = participants.Count,
+                TotalParticipants = roundSessions.Count,
                 IsActive = roundSessions.Any(s => s.IsActive)
             },
-            Participants = participants,
             LeaderboardSnapshots = leaderboardSnapshots
         };
     }
