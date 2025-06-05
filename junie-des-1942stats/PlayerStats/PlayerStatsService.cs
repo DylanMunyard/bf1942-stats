@@ -608,22 +608,24 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
         if (targetSession == null)
             return null;
 
-        // Define the round time window - sessions that overlap with the target session
-        var roundStartTime = targetSession.StartTime.AddMinutes(-30); // Allow 30min buffer before
-        var roundEndTime = targetSession.LastSeenTime.AddMinutes(30);  // Allow 30min buffer after
-
         // Find all sessions in the same round (same server, same map, overlapping time)
         var roundSessions = await _dbContext.PlayerSessions
             .Include(s => s.Server)
             .Where(s => s.ServerGuid == targetSession.ServerGuid &&
                        s.MapName == targetSession.MapName &&
-                       s.StartTime <= roundEndTime &&
-                       s.LastSeenTime >= roundStartTime)
+                       s.StartTime <= targetSession.LastSeenTime &&
+                       s.LastSeenTime >= targetSession.StartTime)
             .OrderBy(s => s.StartTime)
             .ToListAsync();
 
         if (!roundSessions.Any())
             return null;
+
+        // Define the round time window - sessions that overlap with the target session
+        var roundStartTime = roundSessions.Min(s => s.StartTime); // Use the earliest session start time
+        var roundEndTime = roundSessions.Where(s => !s.IsActive).Any() 
+            ? roundSessions.Where(s => !s.IsActive).Max(s => s.LastSeenTime)
+            : roundSessions.Max(s => s.LastSeenTime);
 
         // Get all observations for the round with player names
         var roundObservations = await _dbContext.PlayerObservations
@@ -634,6 +636,10 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
             {
                 o.Timestamp,
                 o.Score,
+                o.Kills,
+                o.Deaths,
+                o.Ping,
+                o.TeamLabel,
                 PlayerName = o.Session.PlayerName
             })
             .ToListAsync();
@@ -648,17 +654,28 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
             var playerScores = roundObservations
                 .Where(o => o.Timestamp <= currentTime)
                 .GroupBy(o => o.PlayerName)
-                .Select(g => new 
-                {
-                    PlayerName = g.Key,
-                    Score = g.OrderByDescending(x => x.Timestamp).First().Score
+                .Select(g => {
+                    var obs = g.OrderByDescending(x => x.Timestamp).First();
+                    return new 
+                    {
+                        PlayerName = g.Key,
+                        Score = obs.Score,
+                        Kills = obs.Kills,
+                        Deaths = obs.Deaths,
+                        Ping = obs.Ping,
+                        TeamLabel = obs.TeamLabel
+                    };
                 })
                 .OrderByDescending(x => x.Score)
                 .Select((x, i) => new LeaderboardEntry
                 {
                     Rank = i + 1,
                     PlayerName = x.PlayerName,
-                    Score = x.Score
+                    Score = x.Score,
+                    Kills = x.Kills,
+                    Deaths = x.Deaths,
+                    Ping = x.Ping,
+                    TeamLabel = x.TeamLabel
                 })
                 .ToList();
                 

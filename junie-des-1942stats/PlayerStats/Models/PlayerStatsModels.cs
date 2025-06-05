@@ -228,6 +228,10 @@ public class LeaderboardEntry
     public int Rank { get; set; }
     public string PlayerName { get; set; } = "";
     public int Score { get; set; }
+    public int Kills { get; set; }
+    public int Deaths { get; set; }
+    public int Ping { get; set; }
+    public string TeamLabel { get; set; }
 }
 
 public class LeaderboardSnapshot
