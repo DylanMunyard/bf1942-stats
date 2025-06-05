@@ -54,7 +54,7 @@ builder.Services.AddMetricServer(options =>
 // Add Prometheus service with 5 second timeout
 builder.Services.AddHttpClient<PrometheusService>(client => 
 {
-    client.Timeout = TimeSpan.FromSeconds(5);
+    client.Timeout = TimeSpan.FromSeconds(2);
 })
 .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
 {
