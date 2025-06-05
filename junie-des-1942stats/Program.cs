@@ -11,7 +11,7 @@ using Prometheus;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container
-builder.Services.AddControllers();
+builder.Services.AddControllers()
 
 // Configure SQLite database path - check for environment variable first
 string dbPath;
