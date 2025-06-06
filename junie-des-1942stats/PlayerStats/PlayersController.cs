@@ -108,7 +108,27 @@ public class PlayersController : ControllerBase
     public async Task<ActionResult<PagedResult<SessionListItem>>> GetPlayerSessions(
         string playerName,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 100)
+        [FromQuery] int pageSize = 100,
+        [FromQuery] string sortBy = "StartTime",
+        [FromQuery] string sortOrder = "desc",
+        [FromQuery] string? serverName = null,
+        [FromQuery] string? serverGuid = null,
+        [FromQuery] string? mapName = null,
+        [FromQuery] string? gameType = null,
+        [FromQuery] DateTime? startTimeFrom = null,
+        [FromQuery] DateTime? startTimeTo = null,
+        [FromQuery] DateTime? lastSeenFrom = null,
+        [FromQuery] DateTime? lastSeenTo = null,
+        [FromQuery] int? minPlayTime = null,
+        [FromQuery] int? maxPlayTime = null,
+        [FromQuery] int? minScore = null,
+        [FromQuery] int? maxScore = null,
+        [FromQuery] int? minKills = null,
+        [FromQuery] int? maxKills = null,
+        [FromQuery] int? minDeaths = null,
+        [FromQuery] int? maxDeaths = null,
+        [FromQuery] bool? isActive = null,
+        [FromQuery] string? gameId = null)
     {
         if (string.IsNullOrWhiteSpace(playerName))
             return BadRequest("Player name cannot be empty");
@@ -118,13 +138,98 @@ public class PlayersController : ControllerBase
         
         if (pageSize < 1 || pageSize > 100)
             return BadRequest("Page size must be between 1 and 100");
+
+        // Valid sort fields for sessions
+        var validSortFields = new[]
+        {
+            "SessionId", "ServerName", "MapName", "GameType", "StartTime", "EndTime", 
+            "DurationMinutes", "Score", "Kills", "Deaths", "IsActive"
+        };
+
+        if (!validSortFields.Contains(sortBy, StringComparer.OrdinalIgnoreCase))
+            return BadRequest($"Invalid sortBy field. Valid options: {string.Join(", ", validSortFields)}");
+
+        if (!new[] { "asc", "desc" }.Contains(sortOrder.ToLower()))
+            return BadRequest("Sort order must be 'asc' or 'desc'");
+
+        // Validate filter parameters
+        if (minPlayTime.HasValue && minPlayTime < 0)
+            return BadRequest("Minimum play time cannot be negative");
         
-        var result = await _playerStatsService.GetPlayerSessions(playerName, page, pageSize);
+        if (maxPlayTime.HasValue && maxPlayTime < 0)
+            return BadRequest("Maximum play time cannot be negative");
         
-        if (result.TotalItems == 0)
-            return NotFound($"No sessions found for player '{playerName}'");
+        if (minPlayTime.HasValue && maxPlayTime.HasValue && minPlayTime > maxPlayTime)
+            return BadRequest("Minimum play time cannot be greater than maximum play time");
+
+        if (minScore.HasValue && minScore < 0)
+            return BadRequest("Minimum score cannot be negative");
         
-        return Ok(result);
+        if (maxScore.HasValue && maxScore < 0)
+            return BadRequest("Maximum score cannot be negative");
+        
+        if (minScore.HasValue && maxScore.HasValue && minScore > maxScore)
+            return BadRequest("Minimum score cannot be greater than maximum score");
+
+        if (minKills.HasValue && minKills < 0)
+            return BadRequest("Minimum kills cannot be negative");
+        
+        if (maxKills.HasValue && maxKills < 0)
+            return BadRequest("Maximum kills cannot be negative");
+        
+        if (minKills.HasValue && maxKills.HasValue && minKills > maxKills)
+            return BadRequest("Minimum kills cannot be greater than maximum kills");
+
+        if (minDeaths.HasValue && minDeaths < 0)
+            return BadRequest("Minimum deaths cannot be negative");
+        
+        if (maxDeaths.HasValue && maxDeaths < 0)
+            return BadRequest("Maximum deaths cannot be negative");
+        
+        if (minDeaths.HasValue && maxDeaths.HasValue && minDeaths > maxDeaths)
+            return BadRequest("Minimum deaths cannot be greater than maximum deaths");
+        
+        if (startTimeFrom.HasValue && startTimeTo.HasValue && startTimeFrom > startTimeTo)
+            return BadRequest("StartTimeFrom cannot be greater than StartTimeTo");
+        
+        if (lastSeenFrom.HasValue && lastSeenTo.HasValue && lastSeenFrom > lastSeenTo)
+            return BadRequest("LastSeenFrom cannot be greater than LastSeenTo");
+
+        try
+        {
+            var filters = new PlayerFilters
+            {
+                ServerName = serverName,
+                ServerGuid = serverGuid,
+                MapName = mapName,
+                GameType = gameType,
+                StartTimeFrom = startTimeFrom,
+                StartTimeTo = startTimeTo,
+                LastSeenFrom = lastSeenFrom,
+                LastSeenTo = lastSeenTo,
+                MinPlayTime = minPlayTime,
+                MaxPlayTime = maxPlayTime,
+                MinScore = minScore,
+                MaxScore = maxScore,
+                MinKills = minKills,
+                MaxKills = maxKills,
+                MinDeaths = minDeaths,
+                MaxDeaths = maxDeaths,
+                IsActive = isActive,
+                GameId = gameId
+            };
+
+            var result = await _playerStatsService.GetPlayerSessions(playerName, page, pageSize, sortBy, sortOrder, filters);
+            
+            if (result.TotalItems == 0)
+                return NotFound($"No sessions found for player '{playerName}' with the specified filters");
+            
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
     
     // Get session details

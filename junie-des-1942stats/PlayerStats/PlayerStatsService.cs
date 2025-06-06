@@ -261,7 +261,10 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
     public async Task<PagedResult<SessionListItem>> GetPlayerSessions(
         string playerName,
         int page = 1,
-        int pageSize = 100)
+        int pageSize = 100,
+        string sortBy = "StartTime",
+        string sortOrder = "desc",
+        PlayerFilters? filters = null)
     {
         // Get player information
         var player = await _dbContext.Players
@@ -285,14 +288,117 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
             .Include(s => s.Server)
             .FirstOrDefaultAsync();
 
-        // Count total sessions for this player (for pagination metadata)
-        var totalCount = await _dbContext.PlayerSessions
-            .Where(s => s.PlayerName == playerName)
-            .CountAsync();
+        // Build base query for sessions
+        var baseSessionQuery = _dbContext.PlayerSessions
+            .Where(s => s.PlayerName == playerName);
 
-        // Get aggregate player stats
-        var aggregateStats = await _dbContext.PlayerSessions
-            .Where(ps => ps.PlayerName == playerName)
+        // Apply filters if provided
+        if (filters != null)
+        {
+            if (filters.LastSeenFrom.HasValue)
+            {
+                baseSessionQuery = baseSessionQuery.Where(s => s.LastSeenTime >= filters.LastSeenFrom.Value);
+            }
+
+            if (filters.LastSeenTo.HasValue)
+            {
+                baseSessionQuery = baseSessionQuery.Where(s => s.LastSeenTime <= filters.LastSeenTo.Value);
+            }
+
+            if (filters.StartTimeFrom.HasValue)
+            {
+                baseSessionQuery = baseSessionQuery.Where(s => s.StartTime >= filters.StartTimeFrom.Value);
+            }
+
+            if (filters.StartTimeTo.HasValue)
+            {
+                baseSessionQuery = baseSessionQuery.Where(s => s.StartTime <= filters.StartTimeTo.Value);
+            }
+
+            if (filters.IsActive.HasValue)
+            {
+                baseSessionQuery = baseSessionQuery.Where(s => s.IsActive == filters.IsActive.Value);
+            }
+
+            // Server-related filters
+            if (!string.IsNullOrEmpty(filters.ServerName))
+            {
+                baseSessionQuery = baseSessionQuery.Where(s => s.Server.Name.Contains(filters.ServerName));
+            }
+
+            if (!string.IsNullOrEmpty(filters.ServerGuid))
+            {
+                baseSessionQuery = baseSessionQuery.Where(s => s.ServerGuid == filters.ServerGuid);
+            }
+
+            if (!string.IsNullOrEmpty(filters.GameId))
+            {
+                baseSessionQuery = baseSessionQuery.Where(s => s.Server.GameId == filters.GameId);
+            }
+
+            // Map and game type filters
+            if (!string.IsNullOrEmpty(filters.MapName))
+            {
+                baseSessionQuery = baseSessionQuery.Where(s => s.MapName.Contains(filters.MapName));
+            }
+
+            if (!string.IsNullOrEmpty(filters.GameType))
+            {
+                baseSessionQuery = baseSessionQuery.Where(s => s.GameType != null && s.GameType.Contains(filters.GameType));
+            }
+
+            // Duration filters
+            if (filters.MinPlayTime.HasValue)
+            {
+                baseSessionQuery = baseSessionQuery.Where(s => 
+                    (s.LastSeenTime - s.StartTime).TotalMinutes >= filters.MinPlayTime.Value);
+            }
+
+            if (filters.MaxPlayTime.HasValue)
+            {
+                baseSessionQuery = baseSessionQuery.Where(s => 
+                    (s.LastSeenTime - s.StartTime).TotalMinutes <= filters.MaxPlayTime.Value);
+            }
+
+            // Score filters
+            if (filters.MinScore.HasValue)
+            {
+                baseSessionQuery = baseSessionQuery.Where(s => s.TotalScore >= filters.MinScore.Value);
+            }
+
+            if (filters.MaxScore.HasValue)
+            {
+                baseSessionQuery = baseSessionQuery.Where(s => s.TotalScore <= filters.MaxScore.Value);
+            }
+
+            // Kills filters
+            if (filters.MinKills.HasValue)
+            {
+                baseSessionQuery = baseSessionQuery.Where(s => s.TotalKills >= filters.MinKills.Value);
+            }
+
+            if (filters.MaxKills.HasValue)
+            {
+                baseSessionQuery = baseSessionQuery.Where(s => s.TotalKills <= filters.MaxKills.Value);
+            }
+
+            // Deaths filters
+            if (filters.MinDeaths.HasValue)
+            {
+                baseSessionQuery = baseSessionQuery.Where(s => s.TotalDeaths >= filters.MinDeaths.Value);
+            }
+
+            if (filters.MaxDeaths.HasValue)
+            {
+                baseSessionQuery = baseSessionQuery.Where(s => s.TotalDeaths <= filters.MaxDeaths.Value);
+            }
+        }
+
+        // Count total sessions for this player (for pagination metadata, after filters applied)
+        var totalCount = await baseSessionQuery.CountAsync();
+
+        // Get aggregate player stats (from filtered sessions)
+        var aggregateStats = await baseSessionQuery
             .GroupBy(ps => ps.PlayerName)
             .Select(g => new
             {
@@ -303,10 +409,49 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
             })
             .FirstOrDefaultAsync();
 
-        // Get the specified page of sessions
-        var sessions = await _dbContext.PlayerSessions
-            .Where(s => s.PlayerName == playerName)
-            .OrderByDescending(s => s.StartTime)
+        // Apply sorting
+        var isDescending = sortOrder.ToLower() == "desc";
+        
+        var sortedQuery = sortBy.ToLower() switch
+        {
+            "sessionid" => isDescending 
+                ? baseSessionQuery.OrderByDescending(s => s.SessionId)
+                : baseSessionQuery.OrderBy(s => s.SessionId),
+            "servername" => isDescending 
+                ? baseSessionQuery.OrderByDescending(s => s.Server.Name)
+                : baseSessionQuery.OrderBy(s => s.Server.Name),
+            "mapname" => isDescending 
+                ? baseSessionQuery.OrderByDescending(s => s.MapName)
+                : baseSessionQuery.OrderBy(s => s.MapName),
+            "gametype" => isDescending 
+                ? baseSessionQuery.OrderByDescending(s => s.GameType)
+                : baseSessionQuery.OrderBy(s => s.GameType),
+            "starttime" => isDescending 
+                ? baseSessionQuery.OrderByDescending(s => s.StartTime)
+                : baseSessionQuery.OrderBy(s => s.StartTime),
+            "endtime" => isDescending 
+                ? baseSessionQuery.OrderByDescending(s => s.LastSeenTime)
+                : baseSessionQuery.OrderBy(s => s.LastSeenTime),
+            "durationminutes" => isDescending 
+                ? baseSessionQuery.OrderByDescending(s => (s.LastSeenTime - s.StartTime).TotalMinutes)
+                : baseSessionQuery.OrderBy(s => (s.LastSeenTime - s.StartTime).TotalMinutes),
+            "score" => isDescending 
+                ? baseSessionQuery.OrderByDescending(s => s.TotalScore)
+                : baseSessionQuery.OrderBy(s => s.TotalScore),
+            "kills" => isDescending 
+                ? baseSessionQuery.OrderByDescending(s => s.TotalKills)
+                : baseSessionQuery.OrderBy(s => s.TotalKills),
+            "deaths" => isDescending 
+                ? baseSessionQuery.OrderByDescending(s => s.TotalDeaths)
+                : baseSessionQuery.OrderBy(s => s.TotalDeaths),
+            "isactive" => isDescending 
+                ? baseSessionQuery.OrderByDescending(s => s.IsActive).ThenByDescending(s => s.StartTime)
+                : baseSessionQuery.OrderBy(s => s.IsActive).ThenByDescending(s => s.StartTime),
+            _ => baseSessionQuery.OrderByDescending(s => s.StartTime) // Default sorting
+        };
+
+        // Get the specified page of sessions (with filters and sorting applied)
+        var sessions = await sortedQuery
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(s => new SessionListItem

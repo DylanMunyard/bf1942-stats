@@ -7,88 +7,114 @@ using junie_des_1942stats.Prometheus;
 using junie_des_1942stats.ServerStats;
 using junie_des_1942stats.StatsCollectors;
 using Prometheus;
+using Serilog;
+using Microsoft.Extensions.Logging;
 
-var builder = WebApplication.CreateBuilder(args);
+// Configure Serilog
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console(
+        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+    .CreateLogger();
 
-// Add services to the container
-builder.Services.AddControllers();
-
-// Configure SQLite database path - check for environment variable first
-string dbPath;
-var envDbPath = Environment.GetEnvironmentVariable("DB_PATH");
-
-if (!string.IsNullOrEmpty(envDbPath))
+try
 {
-    // Use the environment variable path if it exists
-    dbPath = envDbPath;
-    Console.WriteLine($"Using database path from environment variable: {dbPath}");
-}
-else
-{
-    // Default to current directory
-    dbPath = Path.Combine(Directory.GetCurrentDirectory(), "playertracker.db");
-    Console.WriteLine($"Using default database path: {dbPath}");
-}
+    Log.Information("Starting up junie-des-1942stats application");
 
-// Configure SQLite
-builder.Services.AddDbContext<PlayerTrackerDbContext>(options =>
-    options.UseSqlite($"Data Source={dbPath}"));
+    var builder = WebApplication.CreateBuilder(args);
 
-// Register the player tracking service
-builder.Services.AddScoped<PlayerTrackingService>();
-builder.Services.AddScoped<PlayerStatsService>();
+    // Add Serilog to the application
+    builder.Host.UseSerilog();
 
-// Register the ServerStatsService
-builder.Services.AddScoped<ServerStatsService>();
+    // Add services to the container
+    builder.Services.AddControllers();
 
-// Register the stat collector background services
-builder.Services.AddHostedService<StatsCollectionBackgroundService>();
-builder.Services.AddHostedService<RankingCalculationService>();
+    // Configure SQLite database path - check for environment variable first
+    string dbPath;
+    var envDbPath = Environment.GetEnvironmentVariable("DB_PATH");
 
-// Add HTTP server for Prometheus to scrape
-builder.Services.AddMetricServer(options =>
-{
-    options.Port = 9091;
-});
-
-// Add Prometheus service with 5 second timeout
-builder.Services.AddHttpClient<PrometheusService>(client => 
-{
-    client.Timeout = TimeSpan.FromSeconds(2);
-})
-.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-{
-    ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-});
-
-builder.Services.AddSingleton<PrometheusService>(sp =>
-{
-    var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
-    httpClient.Timeout = TimeSpan.FromSeconds(5);
-    var prometheusUrl = Environment.GetEnvironmentVariable("PROMETHEUS_URL") ?? "http://localhost:9090/api/v1";
-    return new PrometheusService(httpClient, prometheusUrl);
-});
-
-var host = builder.Build();
-
-// Enable routing and controllers
-host.UseRouting();
-host.MapControllers();
-
-// Ensure database is created
-using (var scope = host.Services.CreateScope())
-{
-    var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
-    try
+    if (!string.IsNullOrEmpty(envDbPath))
     {
-        dbContext.Database.Migrate();
-        Console.WriteLine("Database migrations applied successfully.");
+        // Use the environment variable path if it exists
+        dbPath = envDbPath;
+        Log.Information("Using database path from environment variable: {DbPath}", dbPath);
     }
-    catch (Exception ex)
+    else
     {
-        Console.WriteLine($"An error occurred while applying migrations: {ex.Message}");
-        // Consider logging the error properly using ILogger
+        // Default to current directory
+        dbPath = Path.Combine(Directory.GetCurrentDirectory(), "playertracker.db");
+        Log.Information("Using default database path: {DbPath}", dbPath);
     }
 
+    // Configure SQLite
+    builder.Services.AddDbContext<PlayerTrackerDbContext>(options =>
+        options.UseSqlite($"Data Source={dbPath}"));
+
+    // Register the player tracking service
+    builder.Services.AddScoped<PlayerTrackingService>();
+    builder.Services.AddScoped<PlayerStatsService>();
+
+    // Register the ServerStatsService
+    builder.Services.AddScoped<ServerStatsService>();
+
+    // Register the stat collector background services
+    builder.Services.AddHostedService<StatsCollectionBackgroundService>();
+    builder.Services.AddHostedService<RankingCalculationService>();
+
+    // Add HTTP server for Prometheus to scrape
+    builder.Services.AddMetricServer(options =>
+    {
+        options.Port = 9091;
+    });
+
+    // Add Prometheus service with 5 second timeout
+    builder.Services.AddHttpClient<PrometheusService>(client => 
+    {
+        client.Timeout = TimeSpan.FromSeconds(2);
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+    });
+
+    builder.Services.AddSingleton<PrometheusService>(sp =>
+    {
+        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
+        httpClient.Timeout = TimeSpan.FromSeconds(5);
+        var prometheusUrl = Environment.GetEnvironmentVariable("PROMETHEUS_URL") ?? "http://localhost:9090/api/v1";
+        return new PrometheusService(httpClient, prometheusUrl);
+    });
+
+    var host = builder.Build();
+
+    // Enable routing and controllers
+    host.UseRouting();
+    host.MapControllers();
+
+    // Ensure database is created
+    using (var scope = host.Services.CreateScope())
+    {
+        var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        
+        try
+        {
+            dbContext.Database.Migrate();
+            logger.LogInformation("Database migrations applied successfully");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "An error occurred while applying migrations");
+        }
+    }
+
+    Log.Information("Application started successfully");
+    await host.RunAsync();
 }
-await host.RunAsync();
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Application terminated unexpectedly");
+}
+finally
+{
+    Log.CloseAndFlush();
+}
