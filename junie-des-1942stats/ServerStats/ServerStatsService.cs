@@ -88,7 +88,8 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
             {
                 MapName = g.Key,
                 StartTime = g.Max(ps => ps.StartTime),
-                EndTime = g.Max(ps => ps.LastSeenTime)
+                EndTime = g.Max(ps => ps.LastSeenTime),
+                IsActive = g.Any(ps => ps.IsActive)
             })
             .OrderByDescending(r => r.StartTime)
             .Take(5)
@@ -418,7 +419,9 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
                 GameId = representativeSession.Server.GameId,
                 Kills = representativeSession.TotalKills,
                 Deaths = representativeSession.TotalDeaths,
-                Score = representativeSession.TotalScore
+                Score = representativeSession.TotalScore,
+                ServerIp = representativeSession.Server.Ip,
+                ServerPort = representativeSession.Server.Port
             },
             Round = new RoundReportInfo
             {

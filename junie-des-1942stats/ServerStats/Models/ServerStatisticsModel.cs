@@ -123,13 +123,15 @@ public class SessionRoundReport
 public class SessionInfo
 {
     public int SessionId { get; set; }
-    public string PlayerName { get; set; } = "";
-    public string ServerName { get; set; } = "";
-    public string ServerGuid { get; set; } = "";
-    public string GameId { get; set; } = "";
+    public string PlayerName { get; set; } = null!;
+    public string ServerName { get; set; } = null!;
+    public string ServerGuid { get; set; } = null!;
+    public string GameId { get; set; } = null!;
     public int Kills { get; set; }
     public int Deaths { get; set; }
     public int Score { get; set; }
+    public string? ServerIp { get; set; }
+    public int? ServerPort { get; set; }
 }
 
 public class RoundReportInfo
