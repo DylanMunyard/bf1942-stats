@@ -53,16 +53,17 @@ public class ServerInfo
 
 public class Session
 {
-    public int SessionId { get; set; } // Auto-incremented
+    public int SessionId { get; set; }
+    public string ServerName { get; set; } = string.Empty;
+    public string ServerGuid { get; set; } = string.Empty;
+    public string MapName { get; set; } = string.Empty;
+    public string? GameType { get; set; }
     public DateTime StartTime { get; set; }
     public DateTime LastSeenTime { get; set; }
     public bool IsActive { get; set; } // True if session is ongoing
     public int TotalScore { get; set; } // Can track highest score or final score
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }
-    public string MapName { get; set; } = "";
-    public string GameType { get; set; } = "";
-    public string ServerName { get; set; } = "";
 }
 
 public class SessionDetail
@@ -212,9 +213,10 @@ public class PlayerContextInfo
 public class SessionListItem
 {
     public int SessionId { get; set; }
-    public string ServerName { get; set; }
-    public string MapName { get; set; }
-    public string GameType { get; set; }
+    public string ServerName { get; set; } = string.Empty;
+    public string ServerGuid { get; set; } = string.Empty;
+    public string MapName { get; set; } = string.Empty;
+    public string? GameType { get; set; }
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
     public int DurationMinutes { get; set; }

@@ -184,6 +184,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
             {
                 SessionId = s.SessionId,
                 ServerName = s.Server.Name,
+                ServerGuid = s.ServerGuid,
                 MapName = s.MapName,
                 GameType = s.GameType,
                 StartTime = s.StartTime,
@@ -203,6 +204,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
             {
                 SessionId = s.SessionId,
                 ServerName = s.Server.Name,
+                ServerGuid = s.ServerGuid,
                 MapName = s.MapName,
                 GameType = s.GameType,
                 StartTime = s.StartTime,
@@ -311,6 +313,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
             {
                 SessionId = s.SessionId,
                 ServerName = s.Server.Name,
+                ServerGuid = s.ServerGuid,
                 MapName = s.MapName,
                 GameType = s.GameType,
                 StartTime = s.StartTime,
