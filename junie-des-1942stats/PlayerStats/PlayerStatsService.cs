@@ -607,35 +607,57 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
         if (targetSession == null)
             return null;
 
+        return await GetRoundReportInternal(targetSession.ServerGuid, targetSession.MapName, targetSession.StartTime, targetSession);
+    }
+
+    public async Task<SessionRoundReport?> GetRoundReport(string serverGuid, string mapName, DateTime startTime)
+    {
+        // Find a representative session for this round
+        var representativeSession = await _dbContext.PlayerSessions
+            .Include(s => s.Server)
+            .Where(s => s.ServerGuid == serverGuid && 
+                       s.MapName == mapName && 
+                       s.StartTime <= startTime &&
+                       s.LastSeenTime >= startTime)
+            .FirstOrDefaultAsync();
+
+        if (representativeSession == null)
+            return null;
+
+        return await GetRoundReportInternal(serverGuid, mapName, startTime, representativeSession);
+    }
+
+    private async Task<SessionRoundReport?> GetRoundReportInternal(string serverGuid, string mapName, DateTime referenceTime, PlayerSession representativeSession)
+    {
         // Find the previous session on the same server with a different map (to determine the actual round start)
         var previousMapSession = await _dbContext.PlayerSessions
-            .Where(s => s.ServerGuid == targetSession.ServerGuid &&
-                        s.MapName != targetSession.MapName &&
-                        s.StartTime < targetSession.StartTime)
+            .Where(s => s.ServerGuid == serverGuid &&
+                        s.MapName != mapName &&
+                        s.StartTime < referenceTime)
             .OrderByDescending(s => s.StartTime)
             .FirstOrDefaultAsync();
 
         var actualRoundStart = previousMapSession != null
             ? previousMapSession.LastSeenTime // Round starts when the previous map's session ended
-            : targetSession.StartTime.AddMinutes(-30); // Fallback to 30min buffer
+            : referenceTime.AddMinutes(-30); // Fallback to 30min buffer
 
         // Find the next session on the same server with a different map (to determine the actual round end)
         var nextMapSession = await _dbContext.PlayerSessions
-            .Where(s => s.ServerGuid == targetSession.ServerGuid &&
-                        s.MapName != targetSession.MapName &&
-                        s.StartTime > targetSession.LastSeenTime)
+            .Where(s => s.ServerGuid == serverGuid &&
+                        s.MapName != mapName &&
+                        s.StartTime > referenceTime)
             .OrderBy(s => s.StartTime)
             .FirstOrDefaultAsync();
 
         var actualRoundEnd = nextMapSession != null
             ? nextMapSession.StartTime // Round ends when the next map's session starts
-            : targetSession.LastSeenTime.AddMinutes(30); // Fallback to 30min buffer
+            : referenceTime.AddMinutes(30); // Fallback to 30min buffer
 
         // Get all sessions in the round (same server and map, within the calculated round boundaries)
         var roundSessions = await _dbContext.PlayerSessions
             .Include(s => s.Server)
-            .Where(s => s.ServerGuid == targetSession.ServerGuid &&
-                       s.MapName == targetSession.MapName &&
+            .Where(s => s.ServerGuid == serverGuid &&
+                       s.MapName == mapName &&
                        s.StartTime <= actualRoundEnd &&
                        s.LastSeenTime >= actualRoundStart)
             .OrderBy(s => s.StartTime)
@@ -719,19 +741,19 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
         {
             Session = new SessionInfo
             {
-                SessionId = targetSession.SessionId,
-                PlayerName = targetSession.PlayerName,
-                ServerName = targetSession.Server.Name,
-                ServerGuid = targetSession.ServerGuid,
-                GameId = targetSession.Server.GameId,
-                Kills = targetSession.TotalKills,
-                Deaths = targetSession.TotalDeaths,
-                Score = targetSession.TotalScore
+                SessionId = representativeSession.SessionId,
+                PlayerName = representativeSession.PlayerName,
+                ServerName = representativeSession.Server.Name,
+                ServerGuid = representativeSession.ServerGuid,
+                GameId = representativeSession.Server.GameId,
+                Kills = representativeSession.TotalKills,
+                Deaths = representativeSession.TotalDeaths,
+                Score = representativeSession.TotalScore
             },
             Round = new RoundInfo
             {
-                MapName = targetSession.MapName,
-                GameType = targetSession.GameType ?? "",
+                MapName = mapName,
+                GameType = representativeSession.GameType ?? "",
                 StartTime = actualRoundStart,
                 EndTime = actualRoundEnd,
                 TotalParticipants = roundSessions.Count,

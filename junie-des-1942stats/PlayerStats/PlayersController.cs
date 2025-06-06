@@ -162,4 +162,32 @@ public class PlayersController : ControllerBase
             return StatusCode(500, $"Error retrieving session round report: {ex.Message}");
         }
     }
+
+    // Get round report by server, map, and date
+    [HttpGet("round-report")]
+    public async Task<ActionResult<SessionRoundReport>> GetRoundReport(
+        [FromQuery] string serverGuid,
+        [FromQuery] string mapName,
+        [FromQuery] DateTime startTime)
+    {
+        if (string.IsNullOrWhiteSpace(serverGuid))
+            return BadRequest("Server GUID is required");
+        
+        if (string.IsNullOrWhiteSpace(mapName))
+            return BadRequest("Map name is required");
+
+        try
+        {
+            var roundReport = await _playerStatsService.GetRoundReport(serverGuid, mapName, startTime);
+            
+            if (roundReport == null)
+                return NotFound($"Round not found for server {serverGuid}, map {mapName} at {startTime}");
+
+            return Ok(roundReport);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Error retrieving round report: {ex.Message}");
+        }
+    }
 }

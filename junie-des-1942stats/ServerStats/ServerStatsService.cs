@@ -43,24 +43,27 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
             .Include(s => s.Player)
             .ToListAsync();
 
-        // 1. Get most active players by time played
-        var mostActivePlayers = sessions
-            .GroupBy(s => s.PlayerName)
-            .Select(g => new PlayerActivity
-            {
-                PlayerName = g.Key,
-                MinutesPlayed = g.Sum(s => (int)Math.Ceiling((s.LastSeenTime - s.StartTime).TotalMinutes)),
-                TotalKills = g.Sum(s => s.TotalKills),
-                TotalDeaths = g.Sum(s => s.TotalDeaths)
-            })
-            .OrderByDescending(p => p.MinutesPlayed)
-            .Take(10)
-            .ToList();
+        // Get most active players by time played using raw SQL
+        var mostActivePlayers = await _dbContext.Database.SqlQueryRaw<PlayerActivity>(@"
+            SELECT 
+                ps.PlayerName AS PlayerName,
+                CAST(SUM((julianday(ps.LastSeenTime) - julianday(ps.StartTime)) * 1440) AS INTEGER) AS MinutesPlayed,
+                SUM(ps.TotalKills) AS TotalKills,
+                SUM(ps.TotalDeaths) AS TotalDeaths
+            FROM PlayerSessions ps
+            WHERE ps.ServerGuid = {0}
+              AND ps.StartTime >= {1}
+              AND ps.LastSeenTime <= {2}
+            GROUP BY ps.PlayerName
+            ORDER BY MinutesPlayed DESC
+            LIMIT 10",
+            server.Guid, startPeriod, endPeriod).ToListAsync();
 
         statistics.MostActivePlayersByTime = mostActivePlayers;
 
-        // 3. Get top 10 scores in the period
-        var topScores = sessions
+        // Get top 10 scores in the period using LINQ to SQL
+        var topScores = await _dbContext.PlayerSessions
+            .Where(s => s.ServerGuid == server.Guid && s.StartTime >= startPeriod && s.LastSeenTime <= endPeriod)
             .OrderByDescending(s => s.TotalScore)
             .Take(10)
             .Select(s => new TopScore
@@ -73,23 +76,23 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
                 Timestamp = s.LastSeenTime,
                 SessionId = s.SessionId
             })
-            .ToList();
+            .ToListAsync();
 
         statistics.TopScores = topScores;
 
-        // 4. Get the last 5 rounds (unique maps) with a link to any session in the round
-        var lastRounds = sessions
-            .GroupBy(s => s.MapName)
-            .OrderByDescending(g => g.Max(s => s.StartTime))
-            .Take(5)
+        // Get the last 5 rounds (unique maps) showing when each map was last played
+        var lastRounds = await _dbContext.PlayerSessions
+            .Where(ps => ps.ServerGuid == server.Guid && ps.StartTime >= startPeriod && ps.LastSeenTime <= endPeriod)
+            .GroupBy(ps => ps.MapName)
             .Select(g => new RoundInfo
             {
                 MapName = g.Key,
-                StartTime = g.Min(s => s.StartTime),
-                EndTime = g.Max(s => s.LastSeenTime),
-                SessionId = g.First().SessionId.ToString() // Use the first session's ID for the link
+                StartTime = g.Max(ps => ps.StartTime),
+                EndTime = g.Max(ps => ps.LastSeenTime)
             })
-            .ToList();
+            .OrderByDescending(r => r.StartTime)
+            .Take(5)
+            .ToListAsync();
 
         statistics.LastRounds = lastRounds;
 
@@ -237,24 +240,27 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
             sessions.Sum(s => (int)Math.Ceiling((s.LastSeenTime - s.StartTime).TotalMinutes));
         statistics.TotalSessions = sessions.Count;
 
-        // Get most active players by time played on this map
-        var mostActivePlayers = sessions
-            .GroupBy(s => s.PlayerName)
-            .Select(g => new PlayerActivity
-            {
-                PlayerName = g.Key,
-                MinutesPlayed = g.Sum(s => (int)Math.Ceiling((s.LastSeenTime - s.StartTime).TotalMinutes)),
-                TotalKills = g.Sum(s => s.TotalKills),
-                TotalDeaths = g.Sum(s => s.TotalDeaths)
-            })
-            .OrderByDescending(p => p.MinutesPlayed)
-            .Take(10)
-            .ToList();
+        // Get most active players by time played using raw SQL
+        var mostActivePlayers = await _dbContext.Database.SqlQueryRaw<PlayerActivity>(@"
+            SELECT 
+                ps.PlayerName AS PlayerName,
+                CAST(SUM((julianday(ps.LastSeenTime) - julianday(ps.StartTime)) * 1440) AS INTEGER) AS MinutesPlayed,
+                SUM(ps.TotalKills) AS TotalKills,
+                SUM(ps.TotalDeaths) AS TotalDeaths
+            FROM PlayerSessions ps
+            WHERE ps.ServerGuid = {0}
+              AND ps.StartTime >= {1}
+              AND ps.LastSeenTime <= {2}
+            GROUP BY ps.PlayerName
+            ORDER BY MinutesPlayed DESC
+            LIMIT 10",
+            server.Guid, startPeriod, endPeriod).ToListAsync();
 
         statistics.MostActivePlayersByTime = mostActivePlayers;
 
-        // Get top 10 scores on this map in the period
-        var topScores = sessions
+        // Get top 10 scores in the period using LINQ to SQL
+        var topScores = await _dbContext.PlayerSessions
+            .Where(s => s.ServerGuid == server.Guid && s.StartTime >= startPeriod && s.LastSeenTime <= endPeriod)
             .OrderByDescending(s => s.TotalScore)
             .Take(10)
             .Select(s => new TopScore
@@ -267,7 +273,7 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
                 Timestamp = s.LastSeenTime,
                 SessionId = s.SessionId
             })
-            .ToList();
+            .ToListAsync();
 
         statistics.TopScores = topScores;
 
