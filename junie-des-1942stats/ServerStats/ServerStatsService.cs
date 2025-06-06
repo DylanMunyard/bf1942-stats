@@ -76,7 +76,23 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
             .ToList();
 
         statistics.TopScores = topScores;
-        
+
+        // 4. Get the last 5 rounds (unique maps) with a link to any session in the round
+        var lastRounds = sessions
+            .GroupBy(s => s.MapName)
+            .OrderByDescending(g => g.Max(s => s.StartTime))
+            .Take(5)
+            .Select(g => new RoundInfo
+            {
+                MapName = g.Key,
+                StartTime = g.Min(s => s.StartTime),
+                EndTime = g.Max(s => s.LastSeenTime),
+                SessionId = g.First().SessionId.ToString() // Use the first session's ID for the link
+            })
+            .ToList();
+
+        statistics.LastRounds = lastRounds;
+
         try
         {
             var playerHistory = await _prometheusService.GetServerPlayersHistory(serverName, game, daysToAnalyze);

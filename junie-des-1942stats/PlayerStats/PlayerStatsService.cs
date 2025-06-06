@@ -607,27 +607,42 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
         if (targetSession == null)
             return null;
 
-        // First find all sessions in the same round using the 30min buffer
-        var roundStartTime = targetSession.StartTime.AddMinutes(-30); // Allow 30min buffer before
-        var roundEndTime = targetSession.LastSeenTime.AddMinutes(30);  // Allow 30min buffer after
+        // Find the previous session on the same server with a different map (to determine the actual round start)
+        var previousMapSession = await _dbContext.PlayerSessions
+            .Where(s => s.ServerGuid == targetSession.ServerGuid &&
+                        s.MapName != targetSession.MapName &&
+                        s.StartTime < targetSession.StartTime)
+            .OrderByDescending(s => s.StartTime)
+            .FirstOrDefaultAsync();
 
+        var actualRoundStart = previousMapSession != null
+            ? previousMapSession.LastSeenTime // Round starts when the previous map's session ended
+            : targetSession.StartTime.AddMinutes(-30); // Fallback to 30min buffer
+
+        // Find the next session on the same server with a different map (to determine the actual round end)
+        var nextMapSession = await _dbContext.PlayerSessions
+            .Where(s => s.ServerGuid == targetSession.ServerGuid &&
+                        s.MapName != targetSession.MapName &&
+                        s.StartTime > targetSession.LastSeenTime)
+            .OrderBy(s => s.StartTime)
+            .FirstOrDefaultAsync();
+
+        var actualRoundEnd = nextMapSession != null
+            ? nextMapSession.StartTime // Round ends when the next map's session starts
+            : targetSession.LastSeenTime.AddMinutes(30); // Fallback to 30min buffer
+
+        // Get all sessions in the round (same server and map, within the calculated round boundaries)
         var roundSessions = await _dbContext.PlayerSessions
             .Include(s => s.Server)
             .Where(s => s.ServerGuid == targetSession.ServerGuid &&
                        s.MapName == targetSession.MapName &&
-                       s.StartTime <= roundEndTime &&
-                       s.LastSeenTime >= roundStartTime)
+                       s.StartTime <= actualRoundEnd &&
+                       s.LastSeenTime >= actualRoundStart)
             .OrderBy(s => s.StartTime)
             .ToListAsync();
 
         if (!roundSessions.Any())
             return null;
-
-        // Calculate actual round boundaries from the sessions
-        var actualRoundStart = roundSessions.Min(s => s.StartTime);
-        var actualRoundEnd = roundSessions.Where(s => !s.IsActive).Any() 
-            ? roundSessions.Where(s => !s.IsActive).Max(s => s.LastSeenTime)
-            : roundSessions.Max(s => s.LastSeenTime);
 
         // Get all observations for the round with player names
         var roundObservations = await _dbContext.PlayerObservations
@@ -653,7 +668,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
         
         while (currentTime <= actualRoundEnd)
         {
-                        // Get the latest score for each player at this time
+            // Get the latest score for each player at this time
             var playerScores = roundObservations
                 .Where(o => o.Timestamp <= currentTime)
                 .GroupBy(o => o.PlayerName)

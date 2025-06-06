@@ -18,6 +18,9 @@ public class ServerStatistics
     
     // Player count metrics
     public List<PrometheusService.TimeSeriesPoint> PlayerCountMetrics { get; set; } = [];
+    
+    // Last 5 rounds with session links
+    public List<RoundInfo> LastRounds { get; set; } = new List<RoundInfo>();
 }
 
 public class PlayerActivity
