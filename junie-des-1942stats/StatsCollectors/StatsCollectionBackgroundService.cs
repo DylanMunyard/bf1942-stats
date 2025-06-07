@@ -28,10 +28,10 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     private readonly HttpClient _httpClient;
 
     // API URLs
-    private const string STATS_API_URL = "https://api.bflist.io/bf1942/v1/livestats";
-    private const string SERVERS_API_URL = "https://api.bflist.io/bf1942/v1/servers/1?perPage=100";
-    private const string FH2_STATS_API_URL = "https://api.bflist.io/fh2/v1/livestats";
-    private const string FH2_SERVERS_API_URL = "https://api.bflist.io/fh2/v1/servers/1?perPage=100";
+    private const string STATS_API_URL = "https://api.bflist.io/bf1942/v2/livestats";
+    private const string SERVERS_API_URL = "https://api.bflist.io/bf1942/v2/servers/1?perPage=100";
+    private const string FH2_STATS_API_URL = "https://api.bflist.io/fh2/v2/livestats";
+    private const string FH2_SERVERS_API_URL = "https://api.bflist.io/fh2/v2/servers/1?perPage=100";
 
     public StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory)
     {
@@ -144,17 +144,17 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     private async Task CollectServerStatsAsync(PlayerTrackingService playerTrackingService, CancellationToken stoppingToken)
     {
         var response = await _httpClient.GetStringAsync(SERVERS_API_URL, stoppingToken);
-        var serversData = JsonSerializer.Deserialize<Bf1942ServerInfo[]>(response, new JsonSerializerOptions
+        var serversResponse = JsonSerializer.Deserialize<Bf1942ServersResponse>(response, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
         });
 
-        if (serversData == null) return;
+        if (serversResponse?.Servers == null) return;
 
         var currentLabelSets = new HashSet<string>();
         var timestamp = DateTime.UtcNow;
 
-        foreach (var server in serversData)
+        foreach (var server in serversResponse.Servers)
         {
             _serverPlayersGauge.WithLabels(server.Name).Set(server.NumPlayers);
             currentLabelSets.Add(server.Name);
@@ -188,17 +188,17 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     private async Task CollectFh2ServerStatsAsync(PlayerTrackingService playerTrackingService, CancellationToken stoppingToken)
     {
         var response = await _httpClient.GetStringAsync(FH2_SERVERS_API_URL, stoppingToken);
-        var serversData = JsonSerializer.Deserialize<Fh2ServerInfo[]>(response, new JsonSerializerOptions
+        var serversResponse = JsonSerializer.Deserialize<Fh2ServersResponse>(response, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
         });
 
-        if (serversData == null) return;
+        if (serversResponse?.Servers == null) return;
 
         var currentLabelSets = new HashSet<string>();
         var timestamp = DateTime.UtcNow;
 
-        foreach (var server in serversData)
+        foreach (var server in serversResponse.Servers)
         {
             _fh2ServerPlayersGauge.WithLabels(server.Name).Set(server.NumPlayers);
             currentLabelSets.Add(server.Name);

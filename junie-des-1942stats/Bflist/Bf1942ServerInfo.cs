@@ -32,3 +32,10 @@ public class Bf1942ServerInfo
     public TeamInfo[] Teams { get; set; } = [];
     public PlayerInfo[] Players { get; set; } = [];
 }
+
+public class Bf1942ServersResponse
+{
+    public Bf1942ServerInfo[] Servers { get; set; } = [];
+    public string Cursor { get; set; } = "";
+    public bool HasMore { get; set; }
+}

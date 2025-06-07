@@ -52,3 +52,10 @@ public class Fh2ServerInfo
     public List<TeamInfo> Teams { get; set; } = [];
     public List<PlayerInfo> Players { get; set; } = [];
 }
+
+public class Fh2ServersResponse
+{
+    public Fh2ServerInfo[] Servers { get; set; } = [];
+    public string Cursor { get; set; } = "";
+    public bool HasMore { get; set; }
+}
