@@ -651,6 +651,15 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
                 .Distinct()
                 .CountAsync();
                 
+            // Calculate average ping from the most recent observations
+            var averagePing = await _dbContext.PlayerObservations
+                .Include(o => o.Session)
+                .ThenInclude(s => s.Player)
+                .Where(o => o.Session.Player.Name == playerName && o.Session.ServerGuid == serverStat.ServerGuid)
+                .OrderByDescending(o => o.Timestamp)
+                .Take(50) // Sample size of 50 observations
+                .AverageAsync(o => o.Ping);
+                
             // The player's rank is the number of players with higher scores + 1
             var playerRank = higherScoringPlayers + 1;
             
@@ -660,7 +669,8 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
                 ServerName = serverStat.Name,
                 Rank = playerRank,
                 TotalScore = serverStat.TotalScore,
-                TotalRankedPlayers = totalPlayers
+                TotalRankedPlayers = totalPlayers,
+                AveragePing = averagePing
             };
         });
         

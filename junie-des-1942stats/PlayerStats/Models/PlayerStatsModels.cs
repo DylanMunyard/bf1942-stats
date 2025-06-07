@@ -147,6 +147,8 @@ public class ServerRanking
     public int TotalRankedPlayers { get; set; }
     public string RankDisplay => $"{Rank} of {TotalRankedPlayers}";
     public string ScoreDisplay => $"{TotalScore} points";
+
+    public double AveragePing { get; set; }
 }
 
 public class PlayerInsights

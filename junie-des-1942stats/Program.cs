@@ -80,7 +80,7 @@ try
     {
         var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
         httpClient.Timeout = TimeSpan.FromSeconds(5);
-        var prometheusUrl = Environment.GetEnvironmentVariable("PROMETHEUS_URL") ?? "http://localhost:9090/api/v1";
+        var prometheusUrl = Environment.GetEnvironmentVariable("PROMETHEUS_URL") ?? "http://prometheus.home.net/api/v1";
         return new PrometheusService(httpClient, prometheusUrl);
     });
 

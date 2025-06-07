@@ -13,8 +13,7 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
     private readonly ILogger<ServerStatsService> _logger = logger;
 
     public async Task<ServerStatistics> GetServerStatistics(
-        string serverName, 
-        string game,
+        string serverName,
         int daysToAnalyze = 7)
     {
         // Calculate the time period
@@ -99,7 +98,7 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
 
         try
         {
-            var playerHistory = await _prometheusService.GetServerPlayersHistory(serverName, game, daysToAnalyze);
+            var playerHistory = await _prometheusService.GetServerPlayersHistory(serverName, server.GameId, daysToAnalyze);
             if (playerHistory != null &&
                 playerHistory.Status.Equals("success", StringComparison.OrdinalIgnoreCase) &&
                 playerHistory.Data.Result.Count > 0)

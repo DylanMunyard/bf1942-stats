@@ -17,16 +17,14 @@ public class ServersController : ControllerBase
     // Get detailed server statistics with optional days parameter
     [HttpGet("{serverName}")]
     public async Task<ActionResult<ServerStatistics>> GetServerStats(
-        string serverName, 
-        [FromQuery] string game, 
+        string serverName,
         [FromQuery] int? days)
     {
         if (string.IsNullOrWhiteSpace(serverName))
             return BadRequest("Server name cannot be empty");
             
         var stats = await _serverStatsService.GetServerStatistics(
-            serverName, 
-            game,
+            serverName,
             days ?? 7); // Default to 7 days if not specified
         
         if (string.IsNullOrEmpty(stats.ServerGuid))
