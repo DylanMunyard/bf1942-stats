@@ -28,10 +28,8 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     private readonly HttpClient _httpClient;
 
     // API URLs
-    private const string STATS_API_URL = "https://api.bflist.io/bf1942/v2/livestats";
-    private const string SERVERS_API_URL = "https://api.bflist.io/bf1942/v2/servers/1?perPage=100";
-    private const string FH2_STATS_API_URL = "https://api.bflist.io/fh2/v2/livestats";
-    private const string FH2_SERVERS_API_URL = "https://api.bflist.io/fh2/v2/servers/1?perPage=100";
+    private const string BF1942_BASE_URL = "https://api.bflist.io/v2/bf1942/";
+    private const string FH2_BASE_URL = "https://api.bflist.io/v2/fh2/";
 
     public StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory)
     {
@@ -129,7 +127,8 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
 
     private async Task CollectTotalPlayersAsync(CancellationToken stoppingToken)
     {
-        var response = await _httpClient.GetStringAsync(STATS_API_URL, stoppingToken);
+        var url = $"{BF1942_BASE_URL}livestats";
+        var response = await _httpClient.GetStringAsync(url, stoppingToken);
         var stats = JsonSerializer.Deserialize<NumberPlayerStats>(response, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
@@ -197,7 +196,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     private async Task CollectServerStatsAsync(PlayerTrackingService playerTrackingService, CancellationToken stoppingToken)
     {
         var allServers = await FetchAllServersAsync<Bf1942ServerInfo, Bf1942ServersResponse>(
-            SERVERS_API_URL,
+            $"{BF1942_BASE_URL}servers?perPage=100",
             "BF1942",
             response => response.Servers,
             response => response.Cursor,
@@ -228,7 +227,8 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
 
     private async Task CollectFh2TotalPlayersAsync(CancellationToken stoppingToken)
     {
-        var response = await _httpClient.GetStringAsync(FH2_STATS_API_URL, stoppingToken);
+        var url = $"{FH2_BASE_URL}livestats";
+        var response = await _httpClient.GetStringAsync(url, stoppingToken);
         var stats = JsonSerializer.Deserialize<NumberPlayerStats>(response, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
@@ -243,7 +243,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     private async Task CollectFh2ServerStatsAsync(PlayerTrackingService playerTrackingService, CancellationToken stoppingToken)
     {
         var allServers = await FetchAllServersAsync<Fh2ServerInfo, Fh2ServersResponse>(
-            FH2_SERVERS_API_URL,
+            $"{FH2_BASE_URL}servers?perPage=100",
             "FH2",
             response => response.Servers,
             response => response.Cursor,
