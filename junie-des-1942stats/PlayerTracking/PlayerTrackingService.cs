@@ -34,10 +34,11 @@ public class PlayerTrackingService
     // Core method that works with the common interface
     private async Task TrackPlayersFromServer(IGameServer server, DateTime timestamp)
     {
+        await GetOrCreateServerAsync(server);
+        
         if (!server.Players.Any())
             return;
 
-        await GetOrCreateServerAsync(server);
         var playerNames = server.Players.Select(p => p.Name).ToList();
         
         // Get players from database and attach to context
