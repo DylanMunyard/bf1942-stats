@@ -141,20 +141,75 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         }
     }
 
+    private async Task<List<TServer>> FetchAllServersAsync<TServer, TResponse>(
+        string baseUrl, 
+        string serverType,
+        Func<TResponse, TServer[]> getServers,
+        Func<TResponse, string> getCursor,
+        Func<TResponse, bool> getHasMore,
+        Func<TServer, string> getServerIp,
+        Func<TServer, int> getServerPort,
+        CancellationToken stoppingToken)
+    {
+        var allServers = new List<TServer>();
+        var url = baseUrl;
+        var pageCount = 0;
+        const int maxPages = 5;
+        
+        // Fetch all pages with circuit breaker
+        do
+        {
+            pageCount++;
+            if (pageCount > maxPages)
+            {
+                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] {serverType} servers: Circuit breaker triggered - reached max pages ({maxPages})");
+                break;
+            }
+
+            var response = await _httpClient.GetStringAsync(url, stoppingToken);
+            var serversResponse = JsonSerializer.Deserialize<TResponse>(response, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            if (serversResponse == null) break;
+            
+            var servers = getServers(serversResponse);
+            if (servers == null || servers.Length == 0) break;
+            
+            allServers.AddRange(servers);
+            
+            if (!getHasMore(serversResponse)) break;
+            
+            // Build next page URL
+            var lastServer = servers.Last();
+            var cursor = getCursor(serversResponse);
+            var serverIp = getServerIp(lastServer);
+            var serverPort = getServerPort(lastServer);
+            url = $"{baseUrl}&cursor={cursor}&after={serverIp}:{serverPort}";
+            
+        } while (true);
+
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] {serverType} servers: Fetched {allServers.Count} servers across {pageCount} pages");
+        return allServers;
+    }
+
     private async Task CollectServerStatsAsync(PlayerTrackingService playerTrackingService, CancellationToken stoppingToken)
     {
-        var response = await _httpClient.GetStringAsync(SERVERS_API_URL, stoppingToken);
-        var serversResponse = JsonSerializer.Deserialize<Bf1942ServersResponse>(response, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        });
-
-        if (serversResponse?.Servers == null) return;
+        var allServers = await FetchAllServersAsync<Bf1942ServerInfo, Bf1942ServersResponse>(
+            SERVERS_API_URL,
+            "BF1942",
+            response => response.Servers,
+            response => response.Cursor,
+            response => response.HasMore,
+            server => server.Ip,
+            server => server.Port,
+            stoppingToken);
 
         var currentLabelSets = new HashSet<string>();
         var timestamp = DateTime.UtcNow;
 
-        foreach (var server in serversResponse.Servers)
+        foreach (var server in allServers)
         {
             _serverPlayersGauge.WithLabels(server.Name).Set(server.NumPlayers);
             currentLabelSets.Add(server.Name);
@@ -187,18 +242,20 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
 
     private async Task CollectFh2ServerStatsAsync(PlayerTrackingService playerTrackingService, CancellationToken stoppingToken)
     {
-        var response = await _httpClient.GetStringAsync(FH2_SERVERS_API_URL, stoppingToken);
-        var serversResponse = JsonSerializer.Deserialize<Fh2ServersResponse>(response, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        });
-
-        if (serversResponse?.Servers == null) return;
+        var allServers = await FetchAllServersAsync<Fh2ServerInfo, Fh2ServersResponse>(
+            FH2_SERVERS_API_URL,
+            "FH2",
+            response => response.Servers,
+            response => response.Cursor,
+            response => response.HasMore,
+            server => server.Ip,
+            server => server.Port,
+            stoppingToken);
 
         var currentLabelSets = new HashSet<string>();
         var timestamp = DateTime.UtcNow;
 
-        foreach (var server in serversResponse.Servers)
+        foreach (var server in allServers)
         {
             _fh2ServerPlayersGauge.WithLabels(server.Name).Set(server.NumPlayers);
             currentLabelSets.Add(server.Name);
