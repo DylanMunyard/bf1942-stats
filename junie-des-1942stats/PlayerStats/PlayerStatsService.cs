@@ -670,7 +670,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
                 Rank = playerRank,
                 TotalScore = serverStat.TotalScore,
                 TotalRankedPlayers = totalPlayers,
-                AveragePing = averagePing
+                AveragePing = Math.Round(averagePing)
             };
         });
         
