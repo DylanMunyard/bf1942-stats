@@ -140,6 +140,17 @@ avg_over_time({metric}{{server_name=""{serverName}""}}[{timeRange}d] offset {tim
         {
             public override TimeSeriesPoint Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
             {
+                return ReadSinglePoint(ref reader);
+            }
+
+            public override void Write(Utf8JsonWriter writer, TimeSeriesPoint value, JsonSerializerOptions options)
+            {
+                WriteSinglePoint(writer, value);
+            }
+
+            // Static helper methods for reuse
+            public static TimeSeriesPoint ReadSinglePoint(ref Utf8JsonReader reader)
+            {
                 if (reader.TokenType != JsonTokenType.StartArray)
                 {
                     throw new JsonException("Expected start of an array for time series point");
@@ -178,11 +189,11 @@ avg_over_time({metric}{{server_name=""{serverName}""}}[{timeRange}d] offset {tim
                 };
             }
 
-            public override void Write(Utf8JsonWriter writer, TimeSeriesPoint value, JsonSerializerOptions options)
+            public static void WriteSinglePoint(Utf8JsonWriter writer, TimeSeriesPoint point)
             {
                 writer.WriteStartArray();
-                writer.WriteNumberValue(value.Timestamp);
-                writer.WriteStringValue(value.Value.ToString());
+                writer.WriteNumberValue(point.Timestamp);
+                writer.WriteStringValue(point.Value.ToString());
                 writer.WriteEndArray();
             }
         }
@@ -202,42 +213,9 @@ avg_over_time({metric}{{server_name=""{serverName}""}}[{timeRange}d] offset {tim
                 
                 while (reader.TokenType != JsonTokenType.EndArray)
                 {
-                    if (reader.TokenType != JsonTokenType.StartArray)
-                    {
-                        throw new JsonException("Expected start of a point array");
-                    }
-                    
-                    reader.Read(); // Move to first element in point array (timestamp)
-                    
-                    double timestamp = 0;
-                    double value = 0;
-                    
-                    if (reader.TokenType == JsonTokenType.Number)
-                    {
-                        timestamp = reader.GetDouble();
-                    }
-                    
-                    reader.Read(); // Move to second element (value)
-                    
-                    if (reader.TokenType == JsonTokenType.String)
-                    {
-                        if (double.TryParse(reader.GetString(), out double parsedValue))
-                        {
-                            value = parsedValue;
-                        }
-                    }
-                    
-                    reader.Read(); // Move to end of point array
-                    if (reader.TokenType != JsonTokenType.EndArray)
-                    {
-                        throw new JsonException("Expected end of point array");
-                    }
-                    
-                    points.Add(new TimeSeriesPoint
-                    {
-                        Timestamp = timestamp,
-                        Value = value
-                    });
+                    // Reuse the single point reading logic
+                    var point = TimeSeriesPointConverter.ReadSinglePoint(ref reader);
+                    points.Add(point);
                     
                     reader.Read(); // Move to next point array or end of points array
                 }
@@ -251,10 +229,8 @@ avg_over_time({metric}{{server_name=""{serverName}""}}[{timeRange}d] offset {tim
                 
                 foreach (var point in value)
                 {
-                    writer.WriteStartArray();
-                    writer.WriteNumberValue(point.Timestamp);
-                    writer.WriteStringValue(point.Value.ToString());
-                    writer.WriteEndArray();
+                    // Reuse the single point writing logic
+                    TimeSeriesPointConverter.WriteSinglePoint(writer, point);
                 }
                 
                 writer.WriteEndArray();
