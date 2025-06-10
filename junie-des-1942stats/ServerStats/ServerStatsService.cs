@@ -457,7 +457,7 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
         };
     }
 
-    public async Task<ServerInsights> GetServerInsights(string serverName, int daysToAnalyze = 7)
+    public async Task<ServerInsights> GetServerInsights(string serverName, int daysToAnalyze = 14)
     {
         if (daysToAnalyze > 31)
         {
@@ -528,33 +528,103 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
             Data = hourlyPings
         };
 
-        // Calculate negative score insights
-        var negativeScoreObservations = await _dbContext.PlayerObservations
+        // Calculate score volatility insights (total negative deltas)
+        var sessionObservations = await _dbContext.PlayerObservations
             .AsNoTracking()
             .Include(po => po.Session)
             .Where(po => po.Session.ServerGuid == server.Guid && 
                         po.Timestamp >= startPeriod && 
-                        po.Timestamp <= endPeriod && 
-                        po.Score < 0)
-            .Select(po => new { po.Session.PlayerName, po.Score })
+                        po.Timestamp <= endPeriod)
+            .Select(po => new { 
+                po.SessionId, 
+                po.Session.PlayerName, 
+                po.Score, 
+                po.Timestamp 
+            })
+            .OrderBy(po => po.SessionId)
+            .ThenBy(po => po.Timestamp)
             .ToListAsync();
 
-        var negativeScorePlayers = negativeScoreObservations
-            .GroupBy(o => o.PlayerName)
-            .Select(g => new NegativeScorePlayer
+        var volatilityData = sessionObservations
+            .GroupBy(o => new { o.SessionId, o.PlayerName })
+            .Select(sessionGroup =>
             {
-                PlayerName = g.Key,
-                TotalNegativeScore = g.Sum(x => x.Score),
-                NegativeObservationCount = g.Count(),
-                AverageNegativeScore = Math.Round(g.Average(x => x.Score), 2)
+                var observations = sessionGroup.OrderBy(o => o.Timestamp).ToList();
+                var negativeDeltas = 0;
+                var largestDrop = 0;
+                
+                for (int i = 1; i < observations.Count; i++)
+                {
+                    var delta = observations[i].Score - observations[i - 1].Score;
+                    if (delta < 0)
+                    {
+                        negativeDeltas += Math.Abs(delta);
+                        largestDrop = Math.Max(largestDrop, Math.Abs(delta));
+                    }
+                }
+                
+                return new
+                {
+                    PlayerName = sessionGroup.Key.PlayerName,
+                    SessionId = sessionGroup.Key.SessionId,
+                    NegativeDeltas = negativeDeltas,
+                    LargestDrop = largestDrop,
+                    TotalObservations = observations.Count,
+                    DecreasingObservations = observations.Skip(1).Select((obs, i) => obs.Score - observations[i].Score < 0 ? 1 : 0).Sum()
+                };
             })
-            .OrderBy(p => p.TotalNegativeScore) // Most negative first (lowest total)
+            .GroupBy(s => s.PlayerName)
+            .Select(playerGroup => new
+            {
+                PlayerName = playerGroup.Key,
+                TotalNegativeDeltas = playerGroup.Sum(s => s.NegativeDeltas),
+                SessionsAnalyzed = playerGroup.Count(),
+                LargestSingleDrop = playerGroup.Max(s => s.LargestDrop),
+                TotalObservations = playerGroup.Sum(s => s.TotalObservations),
+                TotalDecreasingObservations = playerGroup.Sum(s => s.DecreasingObservations)
+            })
+            .Where(p => p.SessionsAnalyzed > 0)
+            .ToList();
+
+        var volatilePlayers = volatilityData
+            .Where(p => p.TotalNegativeDeltas > 0 && p.SessionsAnalyzed >= 5)
+            .Select(p => new VolatilePlayer
+            {
+                PlayerName = p.PlayerName,
+                TotalNegativeDeltas = p.TotalNegativeDeltas,
+                SessionsAnalyzed = p.SessionsAnalyzed,
+                AverageNegativeDeltasPerSession = Math.Round((double)p.TotalNegativeDeltas / p.SessionsAnalyzed, 2),
+                LargestSingleDrop = p.LargestSingleDrop
+            })
+            .OrderByDescending(p => p.TotalNegativeDeltas)
             .Take(10)
             .ToList();
 
-        insights.MostNegativeScorePlayers = new NegativeScoreInsight
+        insights.MostVolatilePlayers = new ScoreVolatilityInsight
         {
-            Players = negativeScorePlayers
+            Players = volatilePlayers
+        };
+
+        // Calculate score consistency insights (percentage of decreasing observations)
+        var inconsistentPlayers = volatilityData
+            .Where(p => p.SessionsAnalyzed >= 5) // Only consider players with at least 5 sessions
+            .Select(p => new InconsistentPlayer
+            {
+                PlayerName = p.PlayerName,
+                PercentageDecreasingObservations = p.TotalObservations > 1 
+                    ? Math.Round((double)p.TotalDecreasingObservations / (p.TotalObservations - p.SessionsAnalyzed) * 100, 2)
+                    : 0,
+                TotalObservations = p.TotalObservations,
+                DecreasingObservations = p.TotalDecreasingObservations,
+                SessionsAnalyzed = p.SessionsAnalyzed
+            })
+            .OrderByDescending(p => p.PercentageDecreasingObservations)
+            .Take(10)
+            .ToList();
+
+        insights.LeastConsistentPlayers = new ScoreConsistencyInsight
+        {
+            Players = inconsistentPlayers
         };
 
         return insights;
