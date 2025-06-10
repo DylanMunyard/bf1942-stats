@@ -57,7 +57,7 @@ namespace junie_des_1942stats.Prometheus
             return result;
         }
 
-        public async Task<PrometheusTimeseriesResult?> GetAveragePlayerCountChange(string serverName, string game, int days = 7)
+        public async Task<PrometheusVectorResult?> GetAveragePlayerCountChange(string serverName, string game, int days = 7)
         {
             // Build the query with the proper format
             var metric = game == "bf1942" ? "bf1942_server_players" : "fh2_server_players";
@@ -86,7 +86,7 @@ avg_over_time({metric}{{server_name=""{serverName}""}}[{timeRange}d] offset {tim
                 PropertyNameCaseInsensitive = true
             };
             
-            var result = JsonSerializer.Deserialize<PrometheusTimeseriesResult>(content, options);
+            var result = JsonSerializer.Deserialize<PrometheusVectorResult>(content, options);
             
             return result;
         }
@@ -108,10 +108,83 @@ avg_over_time({metric}{{server_name=""{serverName}""}}[{timeRange}d] offset {tim
             public List<TimeSeriesPoint> Values { get; set; }
         }
 
+        // New classes for vector responses
+        public class PrometheusVectorResult
+        {
+            public string Status { get; set; }
+            public PrometheusVectorData Data { get; set; }
+        }
+
+        public class PrometheusVectorData
+        {
+            public string ResultType { get; set; }
+            public List<PrometheusVectorResultItem> Result { get; set; }
+        }
+
+        public class PrometheusVectorResultItem
+        {
+            public Dictionary<string, string> Metric { get; set; }
+            
+            [JsonConverter(typeof(TimeSeriesPointConverter))]
+            public TimeSeriesPoint Value { get; set; }
+        }
+
         public class TimeSeriesPoint
         {
             public double Timestamp { get; set; }
             public double Value { get; set; }
+        }
+
+        // Converter for single time series points
+        public class TimeSeriesPointConverter : JsonConverter<TimeSeriesPoint>
+        {
+            public override TimeSeriesPoint Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+                if (reader.TokenType != JsonTokenType.StartArray)
+                {
+                    throw new JsonException("Expected start of an array for time series point");
+                }
+                
+                reader.Read(); // Move to first element (timestamp)
+                
+                double timestamp = 0;
+                double value = 0;
+                
+                if (reader.TokenType == JsonTokenType.Number)
+                {
+                    timestamp = reader.GetDouble();
+                }
+                
+                reader.Read(); // Move to second element (value)
+                
+                if (reader.TokenType == JsonTokenType.String)
+                {
+                    if (double.TryParse(reader.GetString(), out double parsedValue))
+                    {
+                        value = parsedValue;
+                    }
+                }
+                
+                reader.Read(); // Move to end of array
+                if (reader.TokenType != JsonTokenType.EndArray)
+                {
+                    throw new JsonException("Expected end of point array");
+                }
+                
+                return new TimeSeriesPoint
+                {
+                    Timestamp = timestamp,
+                    Value = value
+                };
+            }
+
+            public override void Write(Utf8JsonWriter writer, TimeSeriesPoint value, JsonSerializerOptions options)
+            {
+                writer.WriteStartArray();
+                writer.WriteNumberValue(value.Timestamp);
+                writer.WriteStringValue(value.Value.ToString());
+                writer.WriteEndArray();
+            }
         }
 
         public class TimeSeriesPointsConverter : JsonConverter<List<TimeSeriesPoint>>

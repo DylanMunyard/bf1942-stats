@@ -10,6 +10,7 @@ namespace junie_des_1942stats.ServerStats.Models
         public DateTime StartPeriod { get; set; }
         public DateTime EndPeriod { get; set; }
         public PingByHourInsight? PingByHour { get; set; }
+        public NegativeScoreInsight? MostNegativeScorePlayers { get; set; }
     }
 
     public class PingByHourInsight
@@ -23,5 +24,18 @@ namespace junie_des_1942stats.ServerStats.Models
         public double AveragePing { get; set; }
         public double MedianPing { get; set; }
         public double P95Ping { get; set; }
+    }
+
+    public class NegativeScoreInsight
+    {
+        public List<NegativeScorePlayer> Players { get; set; } = [];
+    }
+
+    public class NegativeScorePlayer
+    {
+        public string PlayerName { get; set; } = "";
+        public int TotalNegativeScore { get; set; }
+        public int NegativeObservationCount { get; set; }
+        public double AverageNegativeScore { get; set; }
     }
 } 

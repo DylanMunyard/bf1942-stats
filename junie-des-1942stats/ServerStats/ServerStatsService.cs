@@ -528,6 +528,35 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
             Data = hourlyPings
         };
 
+        // Calculate negative score insights
+        var negativeScoreObservations = await _dbContext.PlayerObservations
+            .AsNoTracking()
+            .Include(po => po.Session)
+            .Where(po => po.Session.ServerGuid == server.Guid && 
+                        po.Timestamp >= startPeriod && 
+                        po.Timestamp <= endPeriod && 
+                        po.Score < 0)
+            .Select(po => new { po.Session.PlayerName, po.Score })
+            .ToListAsync();
+
+        var negativeScorePlayers = negativeScoreObservations
+            .GroupBy(o => o.PlayerName)
+            .Select(g => new NegativeScorePlayer
+            {
+                PlayerName = g.Key,
+                TotalNegativeScore = g.Sum(x => x.Score),
+                NegativeObservationCount = g.Count(),
+                AverageNegativeScore = Math.Round(g.Average(x => x.Score), 2)
+            })
+            .OrderBy(p => p.TotalNegativeScore) // Most negative first (lowest total)
+            .Take(10)
+            .ToList();
+
+        insights.MostNegativeScorePlayers = new NegativeScoreInsight
+        {
+            Players = negativeScorePlayers
+        };
+
         return insights;
     }
 }
