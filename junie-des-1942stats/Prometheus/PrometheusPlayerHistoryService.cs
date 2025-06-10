@@ -57,7 +57,7 @@ namespace junie_des_1942stats.Prometheus
             return result;
         }
 
-        public async Task<PrometheusVectorResult?> GetAveragePlayerCountChange(string serverName, string game, int days = 7)
+        public async Task<PrometheusTimeseriesResult?> GetAveragePlayerCountChange(string serverName, string game, int days = 7)
         {
             // Build the query with the proper format
             var metric = game == "bf1942" ? "bf1942_server_players" : "fh2_server_players";
@@ -65,10 +65,10 @@ namespace junie_des_1942stats.Prometheus
             
             /* Compare the average player count over the last x days (7 by default), with the average player count over the x days before that */
             var query = $@"(
-  avg_over_time({metric}{{server_name=""{serverName}""}}[30m]) - 
-  avg_over_time({metric}{{server_name=""{serverName}""}}[30m] offset 30m)
+  avg_over_time({metric}{{server_name=""{serverName}""}}[{timeRange}d]) - 
+  avg_over_time({metric}{{server_name=""{serverName}""}}[{timeRange}d] offset {timeRange}d)
 ) / 
-avg_over_time({metric}{{server_name=""{serverName}""}}[30m] offset 30m) * 100";
+avg_over_time({metric}{{server_name=""{serverName}""}}[{timeRange}d] offset {timeRange}d) * 100";
 
             // Create query parameters using NameValueCollection
             var queryParams = HttpUtility.ParseQueryString(string.Empty);
@@ -86,7 +86,7 @@ avg_over_time({metric}{{server_name=""{serverName}""}}[30m] offset 30m) * 100";
                 PropertyNameCaseInsensitive = true
             };
             
-            var result = JsonSerializer.Deserialize<PrometheusVectorResult>(content, options);
+            var result = JsonSerializer.Deserialize<PrometheusTimeseriesResult>(content, options);
             
             return result;
         }
@@ -97,35 +97,15 @@ avg_over_time({metric}{{server_name=""{serverName}""}}[30m] offset 30m) * 100";
             public PrometheusData Data { get; set; }
         }
 
-        public class PrometheusVectorResult
-        {
-            public string Status { get; set; }
-            public PrometheusVectorData Data { get; set; }
-        }
-
         public class PrometheusData
         {
             public List<PrometheusResult> Result { get; set; }
-        }
-
-        public class PrometheusVectorData
-        {
-            public string ResultType { get; set; }
-            public List<PrometheusVectorResultItem> Result { get; set; }
         }
 
         public class PrometheusResult
         {
             [JsonConverter(typeof(TimeSeriesPointsConverter))]
             public List<TimeSeriesPoint> Values { get; set; }
-        }
-
-        public class PrometheusVectorResultItem
-        {
-            public Dictionary<string, string> Metric { get; set; }
-            
-            [JsonConverter(typeof(SingleTimeSeriesPointConverter))]
-            public TimeSeriesPoint Value { get; set; }
         }
 
         public class TimeSeriesPoint
@@ -204,57 +184,6 @@ avg_over_time({metric}{{server_name=""{serverName}""}}[30m] offset 30m) * 100";
                     writer.WriteEndArray();
                 }
                 
-                writer.WriteEndArray();
-            }
-        }
-
-        public class SingleTimeSeriesPointConverter : JsonConverter<TimeSeriesPoint>
-        {
-            public override TimeSeriesPoint Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-            {
-                if (reader.TokenType != JsonTokenType.StartArray)
-                {
-                    throw new JsonException("Expected start of an array for time series point");
-                }
-                
-                reader.Read(); // Move to first element (timestamp)
-                
-                double timestamp = 0;
-                double value = 0;
-                
-                if (reader.TokenType == JsonTokenType.Number)
-                {
-                    timestamp = reader.GetDouble();
-                }
-                
-                reader.Read(); // Move to second element (value)
-                
-                if (reader.TokenType == JsonTokenType.String)
-                {
-                    if (double.TryParse(reader.GetString(), out double parsedValue))
-                    {
-                        value = parsedValue;
-                    }
-                }
-                
-                reader.Read(); // Move to end of array
-                if (reader.TokenType != JsonTokenType.EndArray)
-                {
-                    throw new JsonException("Expected end of point array");
-                }
-                
-                return new TimeSeriesPoint
-                {
-                    Timestamp = timestamp,
-                    Value = value
-                };
-            }
-
-            public override void Write(Utf8JsonWriter writer, TimeSeriesPoint value, JsonSerializerOptions options)
-            {
-                writer.WriteStartArray();
-                writer.WriteNumberValue(value.Timestamp);
-                writer.WriteStringValue(value.Value.ToString());
                 writer.WriteEndArray();
             }
         }

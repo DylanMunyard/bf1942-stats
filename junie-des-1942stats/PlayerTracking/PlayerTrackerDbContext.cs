@@ -39,6 +39,9 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<PlayerObservation>()
             .HasIndex(po => po.SessionId);
 
+        modelBuilder.Entity<PlayerObservation>()
+            .HasIndex(po => po.Timestamp);
+
         // Configure ServerPlayerRanking entity
         modelBuilder.Entity<ServerPlayerRanking>()
             .HasKey(r => r.Id);

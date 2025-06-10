@@ -103,4 +103,29 @@ public class ServersController : ControllerBase
             return StatusCode(500, $"Error retrieving round report: {ex.Message}");
         }
     }
+
+    [HttpGet("{serverName}/insights")]
+    public async Task<ActionResult<ServerInsights>> GetServerInsights(
+        string serverName,
+        [FromQuery] int? days)
+    {
+        if (string.IsNullOrWhiteSpace(serverName))
+            return BadRequest("Server name cannot be empty");
+
+        try
+        {
+            var insights = await _serverStatsService.GetServerInsights(
+                serverName,
+                days ?? 7); // Default to 7 days if not specified
+
+            if (string.IsNullOrEmpty(insights.ServerGuid))
+                return NotFound($"Server '{serverName}' not found");
+
+            return Ok(insights);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
 }

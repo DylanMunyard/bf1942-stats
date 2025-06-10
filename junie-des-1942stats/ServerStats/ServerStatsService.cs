@@ -456,4 +456,78 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
             LeaderboardSnapshots = leaderboardSnapshots
         };
     }
+
+    public async Task<ServerInsights> GetServerInsights(string serverName, int daysToAnalyze = 7)
+    {
+        if (daysToAnalyze > 31)
+        {
+            throw new ArgumentException("The analysis period cannot exceed 31 days for this insight.");
+        }
+        
+        // Calculate the time period
+        var endPeriod = DateTime.UtcNow;
+        var startPeriod = endPeriod.AddDays(-daysToAnalyze);
+
+        // Get the server by name
+        var server = await _dbContext.Servers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Name == serverName);
+
+        if (server == null)
+            return new ServerInsights { ServerName = serverName, StartPeriod = startPeriod, EndPeriod = endPeriod };
+
+        // Create the insights object
+        var insights = new ServerInsights
+        {
+            ServerGuid = server.Guid,
+            ServerName = server.Name,
+            StartPeriod = startPeriod,
+            EndPeriod = endPeriod
+        };
+
+        // Fetch observations for the period into memory to calculate percentiles
+        var observations = await _dbContext.PlayerObservations
+            .AsNoTracking()
+            .Where(po => po.Session.ServerGuid == server.Guid && po.Timestamp >= startPeriod && po.Timestamp <= endPeriod)
+            .Select(po => new { po.Timestamp, po.Ping })
+            .ToListAsync();
+
+        var hourlyPings = observations
+            .GroupBy(o => o.Timestamp.Hour)
+            .Select(g =>
+            {
+                var orderedPings = g.Select(x => x.Ping).OrderBy(p => p).ToList();
+                var count = orderedPings.Count;
+                if (count == 0) return null;
+
+                var avg = orderedPings.Average();
+                
+                var median = (count % 2 == 0)
+                    ? (orderedPings[count / 2 - 1] + orderedPings[count / 2]) / 2.0
+                    : orderedPings[count / 2];
+
+                var p95Index = (int)Math.Ceiling(0.95 * count) - 1;
+                var p95 = orderedPings[p95Index < 0 ? 0 : p95Index];
+
+                return new PingDataPoint
+                {
+                    Hour = g.Key,
+                    AveragePing = Math.Round(avg, 2),
+                    MedianPing = Math.Round(median, 2),
+                    P95Ping = p95
+                };
+            })
+            .Where(x => x != null)
+            .Select(x => x!)
+            .OrderBy(x => x.Hour)
+            .ToList();
+
+
+        insights.PingByHour = new PingByHourInsight
+        {
+            Data = hourlyPings
+        };
+
+        return insights;
+    }
 }
