@@ -457,7 +457,7 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
         };
     }
 
-    public async Task<ServerInsights> GetServerInsights(string serverName, int daysToAnalyze = 14)
+    public async Task<ServerInsights> GetServerInsights(string serverName, int daysToAnalyze = 7)
     {
         if (daysToAnalyze > 31)
         {
