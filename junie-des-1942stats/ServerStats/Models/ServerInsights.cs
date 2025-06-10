@@ -39,6 +39,7 @@ namespace junie_des_1942stats.ServerStats.Models
         public int SessionsAnalyzed { get; set; }
         public double AverageNegativeDeltasPerSession { get; set; }
         public int LargestSingleDrop { get; set; }
+        public int LargestDropSessionId { get; set; }
     }
 
     public class ScoreConsistencyInsight

@@ -574,14 +574,19 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
                 };
             })
             .GroupBy(s => s.PlayerName)
-            .Select(playerGroup => new
+            .Select(playerGroup => 
             {
-                PlayerName = playerGroup.Key,
-                TotalNegativeDeltas = playerGroup.Sum(s => s.NegativeDeltas),
-                SessionsAnalyzed = playerGroup.Count(),
-                LargestSingleDrop = playerGroup.Max(s => s.LargestDrop),
-                TotalObservations = playerGroup.Sum(s => s.TotalObservations),
-                TotalDecreasingObservations = playerGroup.Sum(s => s.DecreasingObservations)
+                var sessionWithLargestDrop = playerGroup.OrderByDescending(s => s.LargestDrop).First();
+                return new
+                {
+                    PlayerName = playerGroup.Key,
+                    TotalNegativeDeltas = playerGroup.Sum(s => s.NegativeDeltas),
+                    SessionsAnalyzed = playerGroup.Count(),
+                    LargestSingleDrop = sessionWithLargestDrop.LargestDrop,
+                    LargestDropSessionId = sessionWithLargestDrop.SessionId,
+                    TotalObservations = playerGroup.Sum(s => s.TotalObservations),
+                    TotalDecreasingObservations = playerGroup.Sum(s => s.DecreasingObservations)
+                };
             })
             .Where(p => p.SessionsAnalyzed > 0)
             .ToList();
@@ -594,7 +599,8 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
                 TotalNegativeDeltas = p.TotalNegativeDeltas,
                 SessionsAnalyzed = p.SessionsAnalyzed,
                 AverageNegativeDeltasPerSession = Math.Round((double)p.TotalNegativeDeltas / p.SessionsAnalyzed, 2),
-                LargestSingleDrop = p.LargestSingleDrop
+                LargestSingleDrop = p.LargestSingleDrop,
+                LargestDropSessionId = p.LargestDropSessionId
             })
             .OrderByDescending(p => p.TotalNegativeDeltas)
             .Take(10)
