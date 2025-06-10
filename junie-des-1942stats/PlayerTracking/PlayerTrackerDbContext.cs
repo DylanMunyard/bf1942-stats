@@ -104,6 +104,16 @@ public class GameServer
     public int Port { get; set; }
     public string GameId { get; set; } = "";
 
+    // GeoLocation fields (populated via ipinfo.io lookup when IP changes or no geolocation is stored)
+    public string? Country { get; set; }
+    public string? Region { get; set; }
+    public string? City { get; set; }
+    public string? Loc { get; set; } // latitude,longitude
+    public string? Timezone { get; set; }
+    public string? Org { get; set; } // ASN/Org info
+    public string? Postal { get; set; }
+    public DateTime? GeoLookupDate { get; set; } // When this lookup was performed
+
     // Navigation property
     public List<PlayerSession> Sessions { get; set; } = [];
     public List<ServerPlayerRanking> PlayerRankings { get; set; } = [];

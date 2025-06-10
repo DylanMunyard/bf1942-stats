@@ -4,6 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Net.Http;
+using System.Text.Json;
+using System.Threading;
 
 namespace junie_des_1942stats.PlayerTracking;
 
@@ -11,6 +14,9 @@ public class PlayerTrackingService
 {
     private readonly PlayerTrackerDbContext _dbContext;
     private readonly TimeSpan _sessionTimeout = TimeSpan.FromMinutes(5);
+    private static readonly SemaphoreSlim IpInfoSemaphore = new SemaphoreSlim(10); // max 10 concurrent
+    private static DateTime _lastIpInfoRequest = DateTime.MinValue;
+    private static readonly object IpInfoLock = new object();
 
     public PlayerTrackingService(PlayerTrackerDbContext dbContext)
     {
@@ -196,6 +202,7 @@ public class PlayerTrackingService
         var server = await _dbContext.Servers
             .FirstOrDefaultAsync(s => s.Guid == serverInfo.Guid);
 
+        bool ipChanged = false;
         if (server == null)
         {
             server = new GameServer
@@ -207,15 +214,40 @@ public class PlayerTrackingService
                 GameId = serverInfo.GameId
             };
             _dbContext.Servers.Add(server);
-            await _dbContext.SaveChangesAsync();
+            ipChanged = true;
         }
-        else if (server.Name != serverInfo.Name || server.GameId != serverInfo.GameId)
+        else
         {
-            server.Name = serverInfo.Name;
-            server.GameId = serverInfo.GameId;
-            await _dbContext.SaveChangesAsync();
+            if (server.Ip != serverInfo.Ip)
+            {
+                server.Ip = serverInfo.Ip;
+                ipChanged = true;
+            }
+            if (server.Name != serverInfo.Name || server.GameId != serverInfo.GameId)
+            {
+                server.Name = serverInfo.Name;
+                server.GameId = serverInfo.GameId;
+            }
         }
 
+        // Geo lookup if IP changed or no geolocation stored
+        if (ipChanged || server.GeoLookupDate == null)
+        {
+            var geo = await LookupGeoLocationAsync(server.Ip);
+            if (geo != null)
+            {
+                server.Country = geo.Country;
+                server.Region = geo.Region;
+                server.City = geo.City;
+                server.Loc = geo.Loc;
+                server.Timezone = geo.Timezone;
+                server.Org = geo.Org;
+                server.Postal = geo.Postal;
+                server.GeoLookupDate = DateTime.UtcNow;
+            }
+        }
+
+        await _dbContext.SaveChangesAsync();
         return server;
     }
 
@@ -296,5 +328,59 @@ public class PlayerTrackingService
     private int CalculatePlayTime(PlayerSession session, DateTime timestamp)
     {
         return Math.Max(0, (int)(timestamp - session.LastSeenTime).TotalMinutes);
+    }
+
+    private class IpInfoGeoResult
+    {
+        public string? Country { get; set; }
+        public string? Region { get; set; }
+        public string? City { get; set; }
+        public string? Loc { get; set; }
+        public string? Timezone { get; set; }
+        public string? Org { get; set; }
+        public string? Postal { get; set; }
+    }
+
+    private static async Task<IpInfoGeoResult?> LookupGeoLocationAsync(string ip)
+    {
+        if (string.IsNullOrWhiteSpace(ip)) return null;
+        await IpInfoSemaphore.WaitAsync();
+        try
+        {
+            // Ensure at least 200ms between requests
+            lock (IpInfoLock)
+            {
+                var now = DateTime.UtcNow;
+                var sinceLast = (now - _lastIpInfoRequest).TotalMilliseconds;
+                if (sinceLast < 200)
+                {
+                    Thread.Sleep(200 - (int)sinceLast);
+                }
+                _lastIpInfoRequest = DateTime.UtcNow;
+            }
+            using var httpClient = new HttpClient();
+            var url = $"https://ipinfo.io/{ip}/json";
+            var response = await httpClient.GetStringAsync(url);
+            using var doc = JsonDocument.Parse(response);
+            var root = doc.RootElement;
+            return new IpInfoGeoResult
+            {
+                Country = root.TryGetProperty("country", out var c) ? c.GetString() : null,
+                Region = root.TryGetProperty("region", out var r) ? r.GetString() : null,
+                City = root.TryGetProperty("city", out var ci) ? ci.GetString() : null,
+                Loc = root.TryGetProperty("loc", out var l) ? l.GetString() : null,
+                Timezone = root.TryGetProperty("timezone", out var t) ? t.GetString() : null,
+                Org = root.TryGetProperty("org", out var o) ? o.GetString() : null,
+                Postal = root.TryGetProperty("postal", out var p) ? p.GetString() : null
+            };
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            IpInfoSemaphore.Release();
+        }
     }
 }
