@@ -19,6 +19,9 @@ public class ServerStatistics
     // Player count metrics
     public List<PrometheusService.TimeSeriesPoint> PlayerCountMetrics { get; set; } = [];
     
+    // Average player count change percentage (rounded to nearest whole number)
+    public int? AveragePlayerCountChangePercent { get; set; }
+    
     // Last 5 rounds with session links
     public List<RoundInfo> LastRounds { get; set; } = new List<RoundInfo>();
 }
