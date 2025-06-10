@@ -7,6 +7,9 @@ public class ServerStatistics
 {
     public string ServerGuid { get; set; } = "";
     public string ServerName { get; set; } = "";
+    public string Region { get; set; } = "";
+    public string Country { get; set; } = "";
+    public string Timezone { get; set; } = "";
     public DateTime StartPeriod { get; set; }
     public DateTime EndPeriod { get; set; }
     
