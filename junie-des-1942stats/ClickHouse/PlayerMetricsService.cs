@@ -46,11 +46,11 @@ CREATE TABLE IF NOT EXISTS player_metrics (
     server_guid String,
     server_name String,
     player_name String,
-    score UInt32,
+    score Int32,
     kills UInt16,
     deaths UInt16,
     ping UInt16,
-    team UInt8,
+    team String,
     map_name String,
     game_type String
 ) ENGINE = MergeTree()
