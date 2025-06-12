@@ -42,6 +42,8 @@ spec:
               value: "http://+:8080"
             - name: PROMETHEUS_URL
               value: "http://kube-prometheus-stack-prometheus.monitoring:9090/api/v1"
+            - name: CLICKHOUSE_URL
+              value: "http://clickhouse-service.clickhouse:8123"              
           volumeMounts:
             - name: stats-data
               mountPath: /mnt/data
