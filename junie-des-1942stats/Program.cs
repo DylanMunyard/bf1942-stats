@@ -90,8 +90,7 @@ try
     {
         client.Timeout = TimeSpan.FromSeconds(2);
         // Add ClickHouse authentication header
-        client.DefaultRequestHeaders.Add("X-ClickHouse-User", "clickhouse");
-        client.DefaultRequestHeaders.Add("X-ClickHouse-Key", "");
+        client.DefaultRequestHeaders.Add("X-ClickHouse-User", "default");
     })
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
     {
@@ -112,20 +111,33 @@ try
     host.UseRouting();
     host.MapControllers();
 
-    // Ensure database is created
+    // Ensure databases are created and migrated
     using (var scope = host.Services.CreateScope())
     {
         var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
+        var playerMetricsService = scope.ServiceProvider.GetRequiredService<PlayerMetricsService>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
         
         try
         {
+            // Apply EF Core migrations for SQLite
             dbContext.Database.Migrate();
-            logger.LogInformation("Database migrations applied successfully");
+            logger.LogInformation("SQLite database migrations applied successfully");
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "An error occurred while applying migrations");
+            logger.LogError(ex, "An error occurred while applying SQLite migrations");
+        }
+
+        try
+        {
+            // Ensure ClickHouse schema is created
+            await playerMetricsService.EnsureSchemaAsync();
+            logger.LogInformation("ClickHouse schema created successfully");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "An error occurred while creating ClickHouse schema");
         }
     }
 

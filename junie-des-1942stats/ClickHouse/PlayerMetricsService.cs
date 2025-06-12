@@ -1,6 +1,9 @@
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Globalization;
+using CsvHelper;
+using CsvHelper.Configuration;
 using junie_des_1942stats.Bflist;
 using junie_des_1942stats.PlayerTracking;
 
@@ -152,34 +155,37 @@ GROUP BY server_guid, server_name, date, player_name";
 
         try
         {
-            // Build the VALUES part of the INSERT statement
-            var values = new StringBuilder();
+            // Use CsvHelper to generate properly formatted CSV data
+            using var stringWriter = new StringWriter();
             
-            for (int i = 0; i < metrics.Count; i++)
+            // Configure CsvHelper to not write headers
+            var config = new CsvConfiguration(CultureInfo.InvariantCulture)
             {
-                var metric = metrics[i];
-                
-                if (i > 0)
-                    values.Append(',');
-                
-                values.Append('(');
-                values.Append($"'{metric.Timestamp:yyyy-MM-dd HH:mm:ss}',");
-                values.Append($"'{EscapeString(metric.ServerGuid)}',");
-                values.Append($"'{EscapeString(metric.ServerName)}',");
-                values.Append($"'{EscapeString(metric.PlayerName)}',");
-                values.Append($"{metric.Score},");
-                values.Append($"{metric.Kills},");
-                values.Append($"{metric.Deaths},");
-                values.Append($"{metric.Ping},");
-                values.Append($"{metric.Team},");
-                values.Append($"'{EscapeString(metric.MapName)}',");
-                values.Append($"'{EscapeString(metric.GameType)}'");
-                values.Append(')');
-            }
-
-            var query = $"INSERT INTO player_metrics (timestamp, server_guid, server_name, player_name, score, kills, deaths, ping, team, map_name, game_type) VALUES {values}";
+                HasHeaderRecord = false
+            };
+            using var csvWriter = new CsvWriter(stringWriter, config);
             
-            var content = new StringContent(query, Encoding.UTF8, "text/plain");
+            // Write CSV records without header
+            csvWriter.WriteRecords(metrics.Select(m => new
+            {
+                Timestamp = m.Timestamp.ToString("yyyy-MM-dd HH:mm:ss"),
+                ServerGuid = m.ServerGuid,
+                ServerName = m.ServerName,
+                PlayerName = m.PlayerName,
+                Score = m.Score,
+                Kills = m.Kills,
+                Deaths = m.Deaths,
+                Ping = m.Ping,
+                Team = m.Team,
+                MapName = m.MapName,
+                GameType = m.GameType
+            }));
+
+            var csvData = stringWriter.ToString();
+            var query = $"INSERT INTO player_metrics (timestamp, server_guid, server_name, player_name, score, kills, deaths, ping, team, map_name, game_type) FORMAT CSV";
+            var fullRequest = query + "\n" + csvData;
+            
+            var content = new StringContent(fullRequest, Encoding.UTF8, "text/plain");
             var response = await _httpClient.PostAsync($"{_clickHouseUrl}/", content);
             
             if (!response.IsSuccessStatusCode)
@@ -198,13 +204,7 @@ GROUP BY server_guid, server_name, date, player_name";
         }
     }
 
-    private static string EscapeString(string input)
-    {
-        if (string.IsNullOrEmpty(input))
-            return "";
-        
-        return input.Replace("'", "\\'").Replace("\\", "\\\\");
-    }
+
 }
 
 public class PlayerMetric
