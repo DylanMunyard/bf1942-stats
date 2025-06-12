@@ -6,6 +6,7 @@ using junie_des_1942stats.PlayerTracking;
 using junie_des_1942stats.Prometheus;
 using junie_des_1942stats.ServerStats;
 using junie_des_1942stats.StatsCollectors;
+using junie_des_1942stats.ClickHouse;
 using Prometheus;
 using Serilog;
 using Microsoft.Extensions.Logging;
@@ -82,6 +83,27 @@ try
         httpClient.Timeout = TimeSpan.FromSeconds(5);
         var prometheusUrl = Environment.GetEnvironmentVariable("PROMETHEUS_URL") ?? "http://prometheus.home.net/api/v1";
         return new PrometheusService(httpClient, prometheusUrl);
+    });
+
+    // Add ClickHouse service with 2 second timeout
+    builder.Services.AddHttpClient<PlayerMetricsService>(client => 
+    {
+        client.Timeout = TimeSpan.FromSeconds(2);
+        // Add ClickHouse authentication header
+        client.DefaultRequestHeaders.Add("X-ClickHouse-User", "clickhouse");
+        client.DefaultRequestHeaders.Add("X-ClickHouse-Key", "");
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+    });
+
+    builder.Services.AddSingleton<PlayerMetricsService>(sp =>
+    {
+        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
+        httpClient.Timeout = TimeSpan.FromSeconds(2);
+        var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        return new PlayerMetricsService(httpClient, clickHouseUrl);
     });
 
     var host = builder.Build();
