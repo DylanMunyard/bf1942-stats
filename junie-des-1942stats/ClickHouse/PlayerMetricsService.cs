@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS player_metrics (
     kills UInt16,
     deaths UInt16,
     ping UInt16,
-    team String,
+    team_name String,
     map_name String,
     game_type String
 ) ENGINE = MergeTree()
@@ -84,35 +84,12 @@ GROUP BY server_guid, server_name, date, player_name";
     {
         var content = new StringContent(query, Encoding.UTF8, "text/plain");
         var response = await _httpClient.PostAsync($"{_clickHouseUrl}/", content);
-        
+
         if (!response.IsSuccessStatusCode)
         {
             var errorContent = await response.Content.ReadAsStringAsync();
             throw new Exception($"ClickHouse query failed: {response.StatusCode} - {errorContent}");
         }
-    }
-
-    public async Task StorePlayerMetricsAsync(IGameServer server, DateTime timestamp)
-    {
-        if (!server.Players.Any())
-            return;
-
-        var metrics = server.Players.Select(player => new PlayerMetric
-        {
-            Timestamp = timestamp,
-            ServerGuid = server.Guid,
-            ServerName = server.Name,
-            PlayerName = player.Name,
-            Score = (uint)Math.Max(0, player.Score),
-            Kills = (ushort)Math.Max(0, player.Kills),
-            Deaths = (ushort)Math.Max(0, player.Deaths),
-            Ping = (ushort)Math.Max(0, player.Ping),
-            Team = (byte)Math.Max(0, player.Team),
-            MapName = server.MapName,
-            GameType = server.GameType
-        }).ToList();
-
-        await InsertPlayerMetricsAsync(metrics);
     }
 
     public async Task StoreBatchedPlayerMetricsAsync(IEnumerable<IGameServer> servers, DateTime timestamp)
@@ -124,19 +101,31 @@ GROUP BY server_guid, server_name, date, player_name";
             if (!server.Players.Any())
                 continue;
 
-            var serverMetrics = server.Players.Select(player => new PlayerMetric
+            var serverMetrics = server.Players.Select(player =>
             {
-                Timestamp = timestamp,
-                ServerGuid = server.Guid,
-                ServerName = server.Name,
-                PlayerName = player.Name,
-                Score = (uint)Math.Max(0, player.Score),
-                Kills = (ushort)Math.Max(0, player.Kills),
-                Deaths = (ushort)Math.Max(0, player.Deaths),
-                Ping = (ushort)Math.Max(0, player.Ping),
-                Team = (byte)Math.Max(0, player.Team),
-                MapName = server.MapName,
-                GameType = server.GameType
+                // Get team label from Teams array if TeamLabel is empty
+                var teamLabel = player.TeamLabel;
+                if (string.IsNullOrEmpty(teamLabel) && server.Teams?.Any() == true)
+                {
+                    var team = server.Teams.FirstOrDefault(t => t.Index == player.Team);
+                    teamLabel = team?.Label ?? "";
+                }
+
+                var metric = new PlayerMetric
+                {
+                    Timestamp = timestamp,
+                    ServerGuid = server.Guid,
+                    ServerName = server.Name,
+                    PlayerName = player.Name,
+                    Score = player.Score,
+                    Kills = (ushort)Math.Max(0, player.Kills),
+                    Deaths = (ushort)Math.Max(0, player.Deaths),
+                    Ping = (ushort)Math.Max(0, player.Ping),
+                    TeamName = teamLabel,
+                    MapName = server.MapName,
+                    GameType = server.GameType
+                };
+                return metric;
             });
 
             allMetrics.AddRange(serverMetrics);
@@ -157,14 +146,14 @@ GROUP BY server_guid, server_name, date, player_name";
         {
             // Use CsvHelper to generate properly formatted CSV data
             using var stringWriter = new StringWriter();
-            
+
             // Configure CsvHelper to not write headers
             var config = new CsvConfiguration(CultureInfo.InvariantCulture)
             {
                 HasHeaderRecord = false
             };
             using var csvWriter = new CsvWriter(stringWriter, config);
-            
+
             // Write CSV records without header
             csvWriter.WriteRecords(metrics.Select(m => new
             {
@@ -176,18 +165,18 @@ GROUP BY server_guid, server_name, date, player_name";
                 Kills = m.Kills,
                 Deaths = m.Deaths,
                 Ping = m.Ping,
-                Team = m.Team,
+                TeamName = m.TeamName,
                 MapName = m.MapName,
                 GameType = m.GameType
             }));
 
             var csvData = stringWriter.ToString();
-            var query = $"INSERT INTO player_metrics (timestamp, server_guid, server_name, player_name, score, kills, deaths, ping, team, map_name, game_type) FORMAT CSV";
+            var query = $"INSERT INTO player_metrics (timestamp, server_guid, server_name, player_name, score, kills, deaths, ping, team_name, map_name, game_type) FORMAT CSV";
             var fullRequest = query + "\n" + csvData;
-            
+
             var content = new StringContent(fullRequest, Encoding.UTF8, "text/plain");
             var response = await _httpClient.PostAsync($"{_clickHouseUrl}/", content);
-            
+
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = await response.Content.ReadAsStringAsync();
@@ -213,11 +202,11 @@ public class PlayerMetric
     public string ServerGuid { get; set; } = "";
     public string ServerName { get; set; } = "";
     public string PlayerName { get; set; } = "";
-    public uint Score { get; set; }
+    public int Score { get; set; }
     public ushort Kills { get; set; }
     public ushort Deaths { get; set; }
     public ushort Ping { get; set; }
-    public byte Team { get; set; }
+    public string TeamName { get; set; } = "";
     public string MapName { get; set; } = "";
     public string GameType { get; set; } = "";
-} 
+}
