@@ -105,6 +105,9 @@ try
         return new PlayerMetricsService(httpClient, clickHouseUrl);
     });
 
+    // Register RealTimeAnalyticsService
+    builder.Services.AddSingleton<RealTimeAnalyticsService>();
+
     var host = builder.Build();
 
     // Enable routing and controllers

@@ -1,0 +1,175 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using ClickHouse.Client;
+using ClickHouse.Client.ADO;
+using junie_des_1942stats.ClickHouse.Models;
+using Microsoft.Extensions.Configuration;
+using System.Data.Common;
+using Microsoft.Extensions.Logging;
+
+namespace junie_des_1942stats.ClickHouse;
+
+public class RealTimeAnalyticsService : IDisposable
+{
+    private readonly ClickHouseConnection _connection;
+    private readonly ILogger<RealTimeAnalyticsService> _logger;
+    private bool _disposed;
+
+    public RealTimeAnalyticsService(IConfiguration configuration, ILogger<RealTimeAnalyticsService> logger)
+    {
+        _logger = logger;
+        var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        
+        try
+        {
+            var uri = new Uri(clickHouseUrl);
+            var connectionString = $"Host={uri.Host};Port={uri.Port};Database=default;User=default;Password=;Protocol={uri.Scheme}";
+            _connection = new ClickHouseConnection(connectionString);
+            _logger.LogInformation("ClickHouse connection initialized with URL: {Url}", clickHouseUrl);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to initialize ClickHouse connection with URL: {Url}", clickHouseUrl);
+            throw;
+        }
+    }
+
+    public async Task<List<TeamKillerMetrics>> MonitorTeamkillers()
+    {
+        try
+        {
+            if (_connection.State != System.Data.ConnectionState.Open)
+            {
+                await _connection.OpenAsync();
+            }
+
+            const string query = @"
+SELECT 
+    server_guid,
+    server_name,
+    player_name,
+    team_name,
+    map_name,
+    current_score,
+    current_kills,
+    current_deaths,
+    unexplained_drops_last_10min,
+    total_penalties_last_10min,
+    round(team_killer_likelihood, 3) as tk_probability,
+    last_activity
+FROM (
+    SELECT 
+        server_name,
+        server_guid,
+        player_name,
+        team_name,
+        map_name,
+        argMax(score, timestamp) as current_score,
+        argMax(kills, timestamp) as current_kills,
+        argMax(deaths, timestamp) as current_deaths,
+        max(timestamp) as last_activity,
+        -- Count unexplained score drops in last 10 minutes
+        sum(if(
+            timestamp >= now() - INTERVAL 10 MINUTE AND
+            score_delta < 0 AND 
+            kills_delta = 0 AND 
+            deaths_delta = 0, 1, 0
+        )) as unexplained_drops_last_10min,
+        -- Total penalties in last 10 minutes
+        sum(if(
+            timestamp >= now() - INTERVAL 10 MINUTE AND
+            score_delta < 0, 
+            abs(score_delta), 0
+        )) as total_penalties_last_10min,
+        -- Team killer likelihood calculation
+        case 
+            when sum(if(
+                timestamp >= now() - INTERVAL 10 MINUTE AND
+                score_delta < 0 AND deaths_delta = 0, 1, 0
+            )) >= 3 then 0.95
+            when sum(if(
+                timestamp >= now() - INTERVAL 10 MINUTE AND
+                score_delta < 0 AND deaths_delta = 0, 1, 0
+            )) >= 2 then 0.75
+            when sum(if(
+                timestamp >= now() - INTERVAL 10 MINUTE AND
+                score_delta < -10 AND deaths_delta = 0, 1, 0
+            )) >= 1 then 0.65
+            else 0.0
+        end as team_killer_likelihood
+    FROM (
+        SELECT 
+            timestamp,
+            server_name,
+            server_guid,
+            player_name,
+            team_name,
+            map_name,
+            score,
+            kills,
+            deaths,
+            score - lagInFrame(score, 1, 0) OVER w AS score_delta,
+            kills - lagInFrame(kills, 1, 0) OVER w AS kills_delta,
+            deaths - lagInFrame(deaths, 1, 0) OVER w AS deaths_delta
+        FROM player_metrics
+        WHERE timestamp >= now() - INTERVAL 30 MINUTE
+        WINDOW w AS (PARTITION BY server_guid, player_name, map_name ORDER BY timestamp)
+    )
+    GROUP BY server_name, server_guid, player_name, team_name, map_name
+)
+WHERE team_killer_likelihood > 0.6 OR unexplained_drops_last_10min > 0
+ORDER BY total_penalties_last_10min DESC, unexplained_drops_last_10min DESC";
+
+            var results = new List<TeamKillerMetrics>();
+            
+            await using var command = _connection.CreateCommand();
+            command.CommandText = query;
+            
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                results.Add(new TeamKillerMetrics
+                {
+                    ServerGuid = reader.GetString(0),
+                    ServerName = reader.GetString(1),
+                    PlayerName = reader.GetString(2),
+                    TeamName = reader.GetString(3),
+                    MapName = reader.GetString(4),
+                    CurrentScore = Convert.ToInt32(reader.GetValue(5)),
+                    CurrentKills = Convert.ToUInt16(reader.GetValue(6)),
+                    CurrentDeaths = Convert.ToUInt16(reader.GetValue(7)),
+                    UnexplainedDropsLast10Min = Convert.ToInt32(reader.GetValue(8)),
+                    TotalPenaltiesLast10Min = Convert.ToInt32(reader.GetValue(9)),
+                    TkProbability = Convert.ToDouble(reader.GetValue(10)),
+                    LastActivity = reader.GetDateTime(11)
+                });
+            }
+
+            return results;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving teamkiller data");
+            throw;
+        }
+    }
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing)
+            {
+                _connection?.Dispose();
+            }
+            _disposed = true;
+        }
+    }
+} 
