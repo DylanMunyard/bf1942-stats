@@ -10,11 +10,22 @@ using junie_des_1942stats.ClickHouse;
 using Prometheus;
 using Serilog;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Logs;
+using Serilog.Sinks.Loki;
 
 // Configure Serilog
+var lokiUrl = Environment.GetEnvironmentVariable("LOKI_URL") ?? "http://192.168.1.230:3100";
+var tempoUrl = Environment.GetEnvironmentVariable("TEMPO_URL") ?? "http://192.168.1.230:4317";
+
 Log.Logger = new LoggerConfiguration()
+    .Enrich.WithProperty("app", "junie-des-1942stats")
+    .Enrich.WithProperty("environment", Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development")
     .WriteTo.Console(
         outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+    .WriteTo.LokiHttp(() => new LokiSinkConfiguration { LokiUrl = lokiUrl })
     .CreateLogger();
 
 try
@@ -25,6 +36,36 @@ try
 
     // Add Serilog to the application
     builder.Host.UseSerilog();
+
+    // Add OpenTelemetry tracing
+    builder.Services.AddOpenTelemetry()
+        .WithTracing(tracerProviderBuilder =>
+            tracerProviderBuilder
+                .AddSource("junie-des-1942stats")
+                .SetResourceBuilder(ResourceBuilder.CreateDefault()
+                    .AddService("junie-des-1942stats", serviceVersion: "1.0.0")
+                    .AddAttributes(new Dictionary<string, object>
+                    {
+                        ["deployment.environment"] = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development"
+                    }))
+                .AddOtlpExporter(opts => 
+                {
+                    opts.Endpoint = new Uri(tempoUrl);
+                    opts.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.Grpc;
+                })
+                .AddAspNetCoreInstrumentation()
+                .AddHttpClientInstrumentation()
+                .AddSqlClientInstrumentation());
+
+    // Add OpenTelemetry logging
+    builder.Logging.AddOpenTelemetry(options =>
+    {
+        options.AddOtlpExporter(opts => 
+        {
+            opts.Endpoint = new Uri(tempoUrl);
+            opts.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.Grpc;
+        });
+    });
 
     // Add services to the container
     builder.Services.AddControllers();
