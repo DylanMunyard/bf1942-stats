@@ -15,17 +15,32 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using OpenTelemetry.Logs;
 using Serilog.Sinks.Loki;
+using System.Diagnostics;
 
 // Configure Serilog
 var lokiUrl = Environment.GetEnvironmentVariable("LOKI_URL") ?? "http://192.168.1.230:3100";
 var tempoUrl = Environment.GetEnvironmentVariable("TEMPO_URL") ?? "http://192.168.1.230:4317";
+var serviceName = "junie-des-1942stats";
+var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development";
 
 Log.Logger = new LoggerConfiguration()
-    .Enrich.WithProperty("app", "junie-des-1942stats")
-    .Enrich.WithProperty("environment", Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development")
+    .Enrich.WithProperty("service.name", serviceName)
+    .Enrich.WithProperty("service.version", "1.0.0")
+    .Enrich.WithProperty("deployment.environment", environment)
+    .Enrich.WithProperty("host.name", Environment.MachineName)
+    .Enrich.FromLogContext()
+    .Enrich.WithMachineName()
+    .Enrich.WithEnvironmentUserName()
+    .Enrich.With(new OpenTelemetryEnricher())
     .WriteTo.Console(
-        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-    .WriteTo.LokiHttp(() => new LokiSinkConfiguration { LokiUrl = lokiUrl })
+        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext}] [{TraceId}:{SpanId}] {Message:lj} {Properties:j}{NewLine}{Exception}")
+    .WriteTo.LokiHttp(() => new LokiSinkConfiguration 
+    { 
+        LokiUrl = lokiUrl,
+        LokiUsername = Environment.GetEnvironmentVariable("LOKI_USERNAME"),
+        LokiPassword = Environment.GetEnvironmentVariable("LOKI_PASSWORD"),
+        OutputTemplate = "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} {Level:u3}] [{SourceContext}] [{TraceId}:{SpanId}] {Message:lj} {Properties:j}{NewLine}{Exception}"
+    })
     .CreateLogger();
 
 try
@@ -46,16 +61,49 @@ try
                     .AddService("junie-des-1942stats", serviceVersion: "1.0.0")
                     .AddAttributes(new Dictionary<string, object>
                     {
-                        ["deployment.environment"] = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development"
+                        ["deployment.environment"] = environment,
+                        ["host.name"] = Environment.MachineName
                     }))
                 .AddOtlpExporter(opts => 
                 {
                     opts.Endpoint = new Uri(tempoUrl);
                     opts.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.Grpc;
                 })
-                .AddAspNetCoreInstrumentation()
-                .AddHttpClientInstrumentation()
-                .AddSqlClientInstrumentation());
+                .AddAspNetCoreInstrumentation(options =>
+                {
+                    options.RecordException = true;
+                    options.EnrichWithHttpRequest = (activity, request) =>
+                    {
+                        activity.SetTag("http.request.method", request.Method);
+                        activity.SetTag("http.request.scheme", request.Scheme);
+                        activity.SetTag("http.request.host", request.Host.ToString());
+                        activity.SetTag("http.request.path", request.Path);
+                        activity.SetTag("http.request.query", request.QueryString.ToString());
+                    };
+                    options.EnrichWithHttpResponse = (activity, response) =>
+                    {
+                        activity.SetTag("http.response.status_code", response.StatusCode);
+                    };
+                })
+                .AddHttpClientInstrumentation(options =>
+                {
+                    options.RecordException = true;
+                    options.EnrichWithHttpRequestMessage = (activity, request) =>
+                    {
+                        activity.SetTag("http.client.method", request.Method?.Method);
+                        activity.SetTag("http.client.url", request.RequestUri?.ToString());
+                    };
+                    options.EnrichWithHttpResponseMessage = (activity, response) =>
+                    {
+                        activity.SetTag("http.client.status_code", (int)response.StatusCode);
+                    };
+                })
+                .AddSqlClientInstrumentation(options =>
+                {
+                    options.RecordException = true;
+                    options.SetDbStatementForText = true;
+                    options.SetDbStatementForStoredProcedure = true;
+                }));
 
     // Add OpenTelemetry logging
     builder.Logging.AddOpenTelemetry(options =>
@@ -195,4 +243,35 @@ catch (Exception ex)
 finally
 {
     Log.CloseAndFlush();
+}
+
+// Custom enricher to add OpenTelemetry trace context
+public class OpenTelemetryEnricher : Serilog.Core.ILogEventEnricher
+{
+    public void Enrich(Serilog.Events.LogEvent logEvent, Serilog.Core.ILogEventPropertyFactory propertyFactory)
+    {
+        var activity = Activity.Current;
+        if (activity != null)
+        {
+            logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty("TraceId", activity.TraceId.ToString()));
+            logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty("SpanId", activity.SpanId.ToString()));
+            
+            if (activity.ParentSpanId != default)
+            {
+                logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty("ParentSpanId", activity.ParentSpanId.ToString()));
+            }
+            
+            // Add activity tags as properties with otel prefix
+            foreach (var tag in activity.Tags)
+            {
+                logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty($"otel.{tag.Key}", tag.Value));
+            }
+            
+            // Add baggage items as properties
+            foreach (var baggage in activity.Baggage)
+            {
+                logEvent.AddPropertyIfAbsent(propertyFactory.CreateProperty($"baggage.{baggage.Key}", baggage.Value));
+            }
+        }
+    }
 }
