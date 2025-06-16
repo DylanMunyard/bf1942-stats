@@ -34,12 +34,9 @@ Log.Logger = new LoggerConfiguration()
     .Enrich.With(new OpenTelemetryEnricher())
     .WriteTo.Console(
         outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext}] [{TraceId}:{SpanId}] {Message:lj} {Properties:j}{NewLine}{Exception}")
-    .WriteTo.LokiHttp(() => new LokiSinkConfiguration 
-    { 
+    .WriteTo.LokiHttp(() => new LokiSinkConfiguration { 
         LokiUrl = lokiUrl,
-        LokiUsername = Environment.GetEnvironmentVariable("LOKI_USERNAME"),
-        LokiPassword = Environment.GetEnvironmentVariable("LOKI_PASSWORD"),
-        OutputTemplate = "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} {Level:u3}] [{SourceContext}] [{TraceId}:{SpanId}] {Message:lj} {Properties:j}{NewLine}{Exception}"
+        OutputTemplate = "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} {Level:u3}] [{SourceContext}] [{TraceId}:{SpanId}] {Message:lj} {Properties:j}{NewLine}{Exception}" 
     })
     .CreateLogger();
 
