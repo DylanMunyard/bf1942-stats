@@ -24,6 +24,14 @@ var serviceName = "junie-des-1942stats";
 var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development";
 
 Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    // Set Entity Framework to Warning level to suppress verbose SQL logs
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", Serilog.Events.LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Infrastructure", Serilog.Events.LogEventLevel.Warning)
+    // Keep controller logs at Information level
+    .MinimumLevel.Override("junie_des_1942stats.PlayerStats.PlayersController", Serilog.Events.LogEventLevel.Information)
+    .MinimumLevel.Override("junie_des_1942stats.ServerStats.ServersController", Serilog.Events.LogEventLevel.Information)
+    .MinimumLevel.Override("junie_des_1942stats.RealTimeAnalyticsController", Serilog.Events.LogEventLevel.Information)
     .Enrich.WithProperty("service.name", serviceName)
     .Enrich.WithProperty("service.version", "1.0.0")
     .Enrich.WithProperty("deployment.environment", environment)
@@ -134,7 +142,9 @@ try
 
     // Configure SQLite
     builder.Services.AddDbContext<PlayerTrackerDbContext>(options =>
-        options.UseSqlite($"Data Source={dbPath}"));
+        options.UseSqlite($"Data Source={dbPath}")
+               .EnableSensitiveDataLogging(false)  // Disable sensitive data logging
+               .LogTo(message => { }, LogLevel.Warning)); // Only log warnings and errors
 
     // Register the player tracking service
     builder.Services.AddScoped<PlayerTrackingService>();

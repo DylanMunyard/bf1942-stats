@@ -32,6 +32,13 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<PlayerSession>()
             .HasIndex(ps => new { ps.PlayerName, ps.ServerGuid, ps.IsActive });
             
+        // Add composite index for efficient lastRounds query performance
+        modelBuilder.Entity<PlayerSession>()
+            .HasIndex(ps => new { ps.ServerGuid, ps.StartTime, ps.MapName });
+            
+        modelBuilder.Entity<PlayerSession>()
+            .HasIndex(ps => new { ps.ServerGuid, ps.LastSeenTime });
+            
         // Configure PlayerObservation entity
         modelBuilder.Entity<PlayerObservation>()
             .HasKey(po => po.ObservationId);

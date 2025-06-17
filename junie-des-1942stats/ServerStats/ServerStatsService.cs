@@ -84,19 +84,21 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
         statistics.TopScores = topScores;
 
         // Get the last 5 rounds (unique maps) showing when each map was last played
-        var lastRounds = await _dbContext.PlayerSessions
-            .Where(ps => ps.ServerGuid == server.Guid && ps.StartTime >= startPeriod && ps.LastSeenTime <= endPeriod)
-            .GroupBy(ps => ps.MapName)
-            .Select(g => new RoundInfo
-            {
-                MapName = g.Key,
-                StartTime = g.Max(ps => ps.StartTime),
-                EndTime = g.Max(ps => ps.LastSeenTime),
-                IsActive = g.Any(ps => ps.IsActive)
-            })
-            .OrderByDescending(r => r.StartTime)
-            .Take(5)
-            .ToListAsync();
+        // Use a fixed 5-hour window for recent map rotations (much faster than analyzing days of data)
+        var recentRoundsStart = DateTime.UtcNow.AddHours(-5);
+        var lastRounds = await _dbContext.Database.SqlQueryRaw<RoundInfo>(@"
+            SELECT 
+                ps.MapName,
+                MAX(ps.StartTime) as StartTime,
+                MAX(ps.LastSeenTime) as EndTime,
+                CASE WHEN SUM(CASE WHEN ps.IsActive = 1 THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END as IsActive
+            FROM PlayerSessions ps
+            WHERE ps.ServerGuid = {0} 
+              AND ps.StartTime >= {1}
+            GROUP BY ps.MapName
+            ORDER BY MAX(ps.StartTime) DESC
+            LIMIT 5",
+            server.Guid, recentRoundsStart).ToListAsync();
 
         statistics.LastRounds = lastRounds;
 
