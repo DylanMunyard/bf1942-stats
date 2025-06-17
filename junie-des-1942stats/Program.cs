@@ -25,9 +25,20 @@ var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
-    // Set Entity Framework to Warning level to suppress verbose SQL logs
-    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", Serilog.Events.LogEventLevel.Warning)
-    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Infrastructure", Serilog.Events.LogEventLevel.Warning)
+    // Filter to suppress EF Core SQL logs only during bulk operations
+    .Filter.ByExcluding(logEvent => 
+    {
+        // Suppress EF Core SQL logs when they're part of bulk operations
+        if (logEvent.Properties.ContainsKey("bulk_operation") && 
+            logEvent.Properties["bulk_operation"].ToString() == "True" &&
+            logEvent.Properties.ContainsKey("SourceContext") &&
+            (logEvent.Properties["SourceContext"].ToString().Contains("Microsoft.EntityFrameworkCore.Database.Command") ||
+             logEvent.Properties["SourceContext"].ToString().Contains("Microsoft.EntityFrameworkCore.Infrastructure")))
+        {
+            return true; // Exclude this log
+        }
+        return false; // Include this log
+    })
     // Keep controller logs at Information level
     .MinimumLevel.Override("junie_des_1942stats.PlayerStats.PlayersController", Serilog.Events.LogEventLevel.Information)
     .MinimumLevel.Override("junie_des_1942stats.ServerStats.ServersController", Serilog.Events.LogEventLevel.Information)

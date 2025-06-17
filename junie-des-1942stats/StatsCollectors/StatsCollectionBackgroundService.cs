@@ -11,6 +11,7 @@ using junie_des_1942stats.PlayerTracking;
 using junie_des_1942stats.Bflist;
 using junie_des_1942stats.StatsCollectors.Modals;
 using junie_des_1942stats.ClickHouse;
+using Serilog.Context;
 
 namespace junie_des_1942stats.StatsCollectors;
 
@@ -89,6 +90,10 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
 
         try
         {
+            // Add context properties to mark all logs in this scope as coming from stats collection
+            using (LogContext.PushProperty("operation_type", "stats_collection"))
+            using (LogContext.PushProperty("bulk_operation", true))
+            using (LogContext.PushProperty("cycle_number", currentCycle))
             using (var scope = _scopeFactory.CreateScope())
             {
                 var playerTrackingService = scope.ServiceProvider.GetRequiredService<PlayerTrackingService>();

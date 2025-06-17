@@ -65,10 +65,10 @@ namespace junie_des_1942stats.Prometheus
             
             /* Compare the average player count over the last x days (7 by default), with the average player count over the x days before that */
             var query = $@"(
-  avg_over_time({metric}{{server_name=""{serverName}""}}[{timeRange}d]) - 
-  avg_over_time({metric}{{server_name=""{serverName}""}}[{timeRange}d] offset {timeRange}d)
+  avg_over_time({metric}{{server_name=""{serverName}""}}[{timeRange}]) - 
+  avg_over_time({metric}{{server_name=""{serverName}""}}[{timeRange}] offset {timeRange})
 ) / 
-avg_over_time({metric}{{server_name=""{serverName}""}}[{timeRange}d] offset {timeRange}d) * 100";
+avg_over_time({metric}{{server_name=""{serverName}""}}[{timeRange}] offset {timeRange}) * 100";
 
             // Create query parameters using NameValueCollection
             var queryParams = HttpUtility.ParseQueryString(string.Empty);
