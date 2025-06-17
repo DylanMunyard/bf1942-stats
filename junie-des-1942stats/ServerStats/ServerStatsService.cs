@@ -7,6 +7,13 @@ using Microsoft.Extensions.Logging;
 
 namespace junie_des_1942stats.ServerStats;
 
+// Helper class for raw SQL query results
+public class PingTimestampData
+{
+    public DateTime Timestamp { get; set; }
+    public int Ping { get; set; }
+}
+
 public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusService prometheusService, ILogger<ServerStatsService> logger)
 {
     private readonly PlayerTrackerDbContext _dbContext = dbContext;
@@ -490,12 +497,21 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
             EndPeriod = endPeriod
         };
 
-        // Fetch observations for the period into memory to calculate percentiles
-        var observations = await _dbContext.PlayerObservations
-            .AsNoTracking()
-            .Where(po => po.Session.ServerGuid == server.Guid && po.Timestamp >= startPeriod && po.Timestamp <= endPeriod)
-            .Select(po => new { po.Timestamp, po.Ping })
-            .ToListAsync();
+        // Use a more efficient raw SQL query that avoids the expensive JOIN
+        // Instead, use a subquery to get session IDs first, then filter observations
+        var observations = await _dbContext.Database.SqlQueryRaw<PingTimestampData>(@"
+            SELECT po.Timestamp, po.Ping
+            FROM PlayerObservations po
+            WHERE po.SessionId IN (
+                SELECT ps.SessionId 
+                FROM PlayerSessions ps 
+                WHERE ps.ServerGuid = {0}
+                AND ps.StartTime <= {2}
+                AND ps.LastSeenTime >= {1}
+            )
+            AND po.Timestamp >= {1} 
+            AND po.Timestamp <= {2}",
+            server.Guid, startPeriod, endPeriod).ToListAsync();
 
         var hourlyPings = observations
             .GroupBy(o => o.Timestamp.Hour)

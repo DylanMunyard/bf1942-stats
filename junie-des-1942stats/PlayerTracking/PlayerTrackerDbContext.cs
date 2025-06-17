@@ -48,6 +48,10 @@ public class PlayerTrackerDbContext : DbContext
 
         modelBuilder.Entity<PlayerObservation>()
             .HasIndex(po => po.Timestamp);
+            
+        // Composite index to optimize queries that filter by SessionId and Timestamp
+        modelBuilder.Entity<PlayerObservation>()
+            .HasIndex(po => new { po.SessionId, po.Timestamp });
 
         // Configure ServerPlayerRanking entity
         modelBuilder.Entity<ServerPlayerRanking>()
