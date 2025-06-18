@@ -25,7 +25,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
         {
             if (!string.IsNullOrEmpty(filters.PlayerName))
             {
-                baseQuery = baseQuery.Where(p => p.Name.Contains(filters.PlayerName));
+                baseQuery = baseQuery.Where(p => EF.Functions.Like(p.Name, $"%{filters.PlayerName}%"));
             }
 
             if (filters.MinPlayTime.HasValue)

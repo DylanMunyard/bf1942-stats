@@ -68,7 +68,7 @@ public class PlayersController : ControllerBase
         {
             var filters = new PlayerFilters
             {
-                PlayerName = playerName,
+                PlayerName = playerName?.Trim(),
                 MinPlayTime = minPlayTime,
                 MaxPlayTime = maxPlayTime,
                 LastSeenFrom = lastSeenFrom,
