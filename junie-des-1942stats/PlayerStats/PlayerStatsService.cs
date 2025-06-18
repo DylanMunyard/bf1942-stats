@@ -683,23 +683,6 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
         insights.ServerRankings = serverRankings
             .OrderBy(r => r.Rank) // Order by rank (best rank first)
             .ToList();
-        // 2. Calculate favorite maps by time played with additional stats
-        var mapPlayTimes = sessions
-            .GroupBy(s => s.MapName)
-            .Select(g => new MapPlayTime
-            {
-                MapName = g.Key,
-                MinutesPlayed = g.Sum(s => (int)Math.Ceiling((s.LastSeenTime - s.StartTime).TotalMinutes)),
-                TotalKills = g.Sum(s => s.TotalKills),
-                TotalDeaths = g.Sum(s => s.TotalDeaths),
-                KDRatio = g.Sum(s => s.TotalDeaths) > 0
-                    ? Math.Round((double)g.Sum(s => s.TotalKills) / g.Sum(s => s.TotalDeaths), 2)
-                    : g.Sum(s => s.TotalKills) // If no deaths, KDR equals total kills
-            })
-            .OrderByDescending(m => m.MinutesPlayed)
-            .ToList();
-
-        insights.FavoriteMaps = mapPlayTimes;
 
         // 3. Calculate activity by hour (when they're usually online)
         // Initialize hourly activity tracker

@@ -160,9 +160,6 @@ public class PlayerInsights
     // Server rankings
     public List<ServerRanking> ServerRankings { get; set; } = new List<ServerRanking>();
 
-    // Favorite maps by time played
-    public List<MapPlayTime> FavoriteMaps { get; set; } = new List<MapPlayTime>();
-
     // Hours when the player is typically online
     public List<HourlyActivity> ActivityByHour { get; set; } = new List<HourlyActivity>();
 }
