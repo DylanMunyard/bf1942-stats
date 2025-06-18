@@ -41,8 +41,8 @@ public class ServerStatisticsService : IDisposable
             TimePeriod.ThisYear => "AND timestamp >= toDate(concat(toString(toYear(now())), '-01-01'))",
             TimePeriod.LastYear => @"AND timestamp >= toDate(concat(toString(toYear(now()) - 1), '-01-01'))
                                    AND timestamp < toDate(concat(toString(toYear(now())), '-01-01'))",
-            TimePeriod.LastMonth => @"AND timestamp >= toStartOfMonth(now() - INTERVAL 1 MONTH)
-                                    AND timestamp < toStartOfMonth(now())",
+            TimePeriod.Last30Days => @"AND timestamp >= now() - INTERVAL 30 DAY
+                                    AND timestamp < now()",
             _ => throw new ArgumentException("Invalid time period", nameof(period))
         };
     }
