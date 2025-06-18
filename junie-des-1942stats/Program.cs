@@ -141,6 +141,9 @@ try
     // Register RealTimeAnalyticsService
     builder.Services.AddSingleton<RealTimeAnalyticsService>();
 
+    // Register ServerStatisticsService
+    builder.Services.AddSingleton<ServerStatisticsService>();
+
     var host = builder.Build();
 
     // Enable routing and controllers

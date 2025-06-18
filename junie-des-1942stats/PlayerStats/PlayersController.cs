@@ -1,6 +1,8 @@
 ﻿using junie_des_1942stats.PlayerStats.Models;
 using junie_des_1942stats.PlayerTracking;
 using Microsoft.AspNetCore.Mvc;
+using junie_des_1942stats.ClickHouse;
+using junie_des_1942stats.ClickHouse.Models;
 
 namespace junie_des_1942stats.PlayerStats;
 
@@ -9,10 +11,12 @@ namespace junie_des_1942stats.PlayerStats;
 public class PlayersController : ControllerBase
 {
     private readonly PlayerStatsService _playerStatsService;
+    private readonly ServerStatisticsService _serverStatisticsService;
 
-    public PlayersController(PlayerStatsService playerStatsService)
+    public PlayersController(PlayerStatsService playerStatsService, ServerStatisticsService serverStatisticsService)
     {
         _playerStatsService = playerStatsService;
+        _serverStatisticsService = serverStatisticsService;
     }
     
     // Get all players with basic info - enhanced with paging and sorting
@@ -244,5 +248,36 @@ public class PlayersController : ControllerBase
         }
         
         return Ok(stats);
+    }
+
+    // Get server-specific map statistics for a player
+    [HttpGet("{playerName}/server/{serverGuid}/mapstats")]
+    public async Task<ActionResult<List<ServerStatistics>>> GetPlayerServerMapStats(
+        string playerName,
+        string serverGuid,
+        [FromQuery] string range = "ThisYear")
+    {
+        if (string.IsNullOrWhiteSpace(playerName))
+            return BadRequest("Player name cannot be empty");
+
+        if (string.IsNullOrWhiteSpace(serverGuid))
+            return BadRequest("Server GUID cannot be empty");
+
+        if (!Enum.TryParse<TimePeriod>(range, true, out var period))
+            return BadRequest($"Invalid range. Valid options: {string.Join(", ", Enum.GetNames<TimePeriod>())}");
+
+        try
+        {
+            var stats = await _serverStatisticsService.GetServerStats(playerName, period, serverGuid);
+            
+            if (!stats.Any())
+                return NotFound($"No statistics found for player '{playerName}' on server '{serverGuid}' for the specified period");
+                
+            return Ok(stats);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"An error occurred while retrieving server statistics: {ex.Message}");
+        }
     }
 }
