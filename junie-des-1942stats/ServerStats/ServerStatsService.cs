@@ -43,6 +43,8 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
             Region = server.Region ?? string.Empty,
             Country = server.Country ?? string.Empty,
             Timezone = server.Timezone ?? string.Empty,
+            ServerIp = server.Ip,
+            ServerPort = server.Port,
             StartPeriod = startPeriod,
             EndPeriod = endPeriod
         };

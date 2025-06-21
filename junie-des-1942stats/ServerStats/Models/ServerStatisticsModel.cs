@@ -12,6 +12,8 @@ public class ServerStatistics
     public string Timezone { get; set; } = "";
     public DateTime StartPeriod { get; set; }
     public DateTime EndPeriod { get; set; }
+    public string ServerIp { get; set; } = "";
+    public int ServerPort { get; set; }
     
     // Most active players by time played
     public List<PlayerActivity> MostActivePlayersByTime { get; set; } = new List<PlayerActivity>();
