@@ -104,9 +104,36 @@ GROUP BY player_name";
         foreach (var (label, condition) in buckets)
         {
             var query = $@"
-SELECT player_name, sum(score), sum(kills), sum(deaths)
-FROM player_metrics
-WHERE player_name IN ({Quote(player1)}, {Quote(player2)}) AND {condition}
+WITH round_sessions AS (
+    SELECT *,
+        (kills < lagInFrame(kills, 1, 0) OVER w OR 
+         deaths < lagInFrame(deaths, 1, 0) OVER w OR
+         map_name != lagInFrame(map_name, 1, map_name) OVER w OR
+         dateDiff('minute', lagInFrame(timestamp, 1, timestamp) OVER w, timestamp) >= 15 OR
+         ROW_NUMBER() OVER w = 1) AS is_round_start
+    FROM player_metrics
+    WHERE player_name IN ({Quote(player1)}, {Quote(player2)}) AND {condition}
+    WINDOW w AS (PARTITION BY player_name ORDER BY map_name, timestamp)
+),
+round_numbers AS (
+    SELECT *,
+        SUM(CASE WHEN is_round_start THEN 1 ELSE 0 END) OVER 
+        (PARTITION BY player_name ORDER BY timestamp ROWS UNBOUNDED PRECEDING) AS round_id
+    FROM round_sessions
+),
+round_totals AS (
+    SELECT player_name, round_id, server_guid, map_name,
+        MAX(score) AS final_score,
+        MAX(kills) AS final_kills, 
+        MAX(deaths) AS final_deaths
+    FROM round_numbers
+    GROUP BY player_name, round_id, server_guid, map_name
+)
+SELECT player_name, 
+    SUM(final_score) AS total_score,
+    SUM(final_kills) AS total_kills,
+    SUM(final_deaths) AS total_deaths
+FROM round_totals
 GROUP BY player_name";
             await using var cmd = _connection.CreateCommand();
             cmd.CommandText = query;
@@ -154,9 +181,36 @@ GROUP BY player_name";
     private async Task<List<MapPerformanceComparison>> GetMapPerformance(string player1, string player2)
     {
         var query = $@"
-SELECT map_name, player_name, sum(score), sum(kills), sum(deaths)
-FROM player_metrics
-WHERE player_name IN ({Quote(player1)}, {Quote(player2)})
+WITH round_sessions AS (
+    SELECT *,
+        (kills < lagInFrame(kills, 1, 0) OVER w OR 
+         deaths < lagInFrame(deaths, 1, 0) OVER w OR
+         map_name != lagInFrame(map_name, 1, map_name) OVER w OR
+         dateDiff('minute', lagInFrame(timestamp, 1, timestamp) OVER w, timestamp) >= 15 OR
+         ROW_NUMBER() OVER w = 1) AS is_round_start
+    FROM player_metrics
+    WHERE player_name IN ({Quote(player1)}, {Quote(player2)})
+    WINDOW w AS (PARTITION BY player_name ORDER BY map_name, timestamp)
+),
+round_numbers AS (
+    SELECT *,
+        SUM(CASE WHEN is_round_start THEN 1 ELSE 0 END) OVER 
+        (PARTITION BY player_name ORDER BY timestamp ROWS UNBOUNDED PRECEDING) AS round_id
+    FROM round_sessions
+),
+round_totals AS (
+    SELECT player_name, round_id, server_guid, map_name,
+        MAX(score) AS final_score,
+        MAX(kills) AS final_kills, 
+        MAX(deaths) AS final_deaths
+    FROM round_numbers
+    GROUP BY player_name, round_id, server_guid, map_name
+)
+SELECT map_name, player_name, 
+    SUM(final_score) AS total_score,
+    SUM(final_kills) AS total_kills,
+    SUM(final_deaths) AS total_deaths
+FROM round_totals
 GROUP BY map_name, player_name";
         var mapStats = new Dictionary<string, MapPerformanceComparison>();
         await using var cmd = _connection.CreateCommand();
@@ -181,24 +235,71 @@ GROUP BY map_name, player_name";
 
     private async Task<List<HeadToHeadSession>> GetHeadToHead(string player1, string player2)
     {
-        // Find overlapping sessions (same server, same time window)
+        // Find overlapping rounds using round detection
         var query = $@"
-WITH p1 AS (
-    SELECT timestamp, server_guid, map_name, score, kills, deaths
+WITH p1_rounds AS (
+    SELECT *,
+        (kills < lagInFrame(kills, 1, 0) OVER w OR 
+         deaths < lagInFrame(deaths, 1, 0) OVER w OR
+         map_name != lagInFrame(map_name, 1, map_name) OVER w OR
+         dateDiff('minute', lagInFrame(timestamp, 1, timestamp) OVER w, timestamp) >= 15 OR
+         ROW_NUMBER() OVER w = 1) AS is_round_start
     FROM player_metrics
     WHERE player_name = {Quote(player1)}
+    WINDOW w AS (ORDER BY map_name, timestamp)
 ),
- p2 AS (
-    SELECT timestamp, server_guid, map_name, score, kills, deaths
+p1_numbered AS (
+    SELECT *,
+        SUM(CASE WHEN is_round_start THEN 1 ELSE 0 END) OVER 
+        (ORDER BY timestamp ROWS UNBOUNDED PRECEDING) AS round_id
+    FROM p1_rounds
+),
+p1_final AS (
+    SELECT round_id, server_guid, map_name, 
+        MIN(timestamp) AS round_start,
+        MAX(timestamp) AS round_end,
+        MAX(score) AS final_score,
+        MAX(kills) AS final_kills,
+        MAX(deaths) AS final_deaths
+    FROM p1_numbered
+    GROUP BY round_id, server_guid, map_name
+),
+p2_rounds AS (
+    SELECT *,
+        (kills < lagInFrame(kills, 1, 0) OVER w OR 
+         deaths < lagInFrame(deaths, 1, 0) OVER w OR
+         map_name != lagInFrame(map_name, 1, map_name) OVER w OR
+         dateDiff('minute', lagInFrame(timestamp, 1, timestamp) OVER w, timestamp) >= 15 OR
+         ROW_NUMBER() OVER w = 1) AS is_round_start
     FROM player_metrics
     WHERE player_name = {Quote(player2)}
+    WINDOW w AS (ORDER BY map_name, timestamp)
+),
+p2_numbered AS (
+    SELECT *,
+        SUM(CASE WHEN is_round_start THEN 1 ELSE 0 END) OVER 
+        (ORDER BY timestamp ROWS UNBOUNDED PRECEDING) AS round_id
+    FROM p2_rounds
+),
+p2_final AS (
+    SELECT round_id, server_guid, map_name, 
+        MIN(timestamp) AS round_start,
+        MAX(timestamp) AS round_end,
+        MAX(score) AS final_score,
+        MAX(kills) AS final_kills,
+        MAX(deaths) AS final_deaths
+    FROM p2_numbered
+    GROUP BY round_id, server_guid, map_name
 )
-SELECT p1.timestamp, p1.server_guid, p1.map_name,
-       p1.score, p1.kills, p1.deaths,
-       p2.score, p2.kills, p2.deaths
-FROM p1
-JOIN p2 ON p1.timestamp = p2.timestamp AND p1.server_guid = p2.server_guid AND p1.map_name = p2.map_name
-ORDER BY p1.timestamp";
+SELECT p1.round_start, p1.round_end, p1.server_guid, p1.map_name,
+       p1.final_score, p1.final_kills, p1.final_deaths,
+       p2.final_score, p2.final_kills, p2.final_deaths
+FROM p1_final p1
+JOIN p2_final p2 ON p1.server_guid = p2.server_guid 
+    AND p1.map_name = p2.map_name
+    AND p1.round_start <= p2.round_end 
+    AND p2.round_start <= p1.round_end
+ORDER BY p1.round_start";
         var sessions = new List<HeadToHeadSession>();
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
@@ -208,14 +309,14 @@ ORDER BY p1.timestamp";
             sessions.Add(new HeadToHeadSession
             {
                 Timestamp = reader.GetDateTime(0),
-                ServerGuid = reader.GetString(1),
-                MapName = reader.GetString(2),
-                Player1Score = reader.IsDBNull(3) ? 0 : Convert.ToInt32(reader.GetValue(3)),
-                Player1Kills = reader.IsDBNull(4) ? 0 : Convert.ToInt32(reader.GetValue(4)),
-                Player1Deaths = reader.IsDBNull(5) ? 0 : Convert.ToInt32(reader.GetValue(5)),
-                Player2Score = reader.IsDBNull(6) ? 0 : Convert.ToInt32(reader.GetValue(6)),
-                Player2Kills = reader.IsDBNull(7) ? 0 : Convert.ToInt32(reader.GetValue(7)),
-                Player2Deaths = reader.IsDBNull(8) ? 0 : Convert.ToInt32(reader.GetValue(8))
+                ServerGuid = reader.GetString(2),
+                MapName = reader.GetString(3),
+                Player1Score = reader.IsDBNull(4) ? 0 : Convert.ToInt32(reader.GetValue(4)),
+                Player1Kills = reader.IsDBNull(5) ? 0 : Convert.ToInt32(reader.GetValue(5)),
+                Player1Deaths = reader.IsDBNull(6) ? 0 : Convert.ToInt32(reader.GetValue(6)),
+                Player2Score = reader.IsDBNull(7) ? 0 : Convert.ToInt32(reader.GetValue(7)),
+                Player2Kills = reader.IsDBNull(8) ? 0 : Convert.ToInt32(reader.GetValue(8)),
+                Player2Deaths = reader.IsDBNull(9) ? 0 : Convert.ToInt32(reader.GetValue(9))
             });
         }
         return sessions;
