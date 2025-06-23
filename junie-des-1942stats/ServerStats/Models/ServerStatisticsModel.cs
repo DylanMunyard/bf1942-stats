@@ -1,8 +1,10 @@
 using System.Text.Json;
 using junie_des_1942stats.Prometheus;
+using System.Runtime.Serialization;
 
 namespace junie_des_1942stats.ServerStats.Models;
 
+[DataContract(Name = "ServerStatsServerStatistics")]
 public class ServerStatistics
 {
     public string ServerGuid { get; set; } = "";

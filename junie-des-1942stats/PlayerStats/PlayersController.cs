@@ -286,6 +286,39 @@ public class PlayersController : ControllerBase
         }
     }
 
+    [HttpGet("search")]
+    public async Task<ActionResult<PagedResult<PlayerBasicInfo>>> SearchPlayers(
+        [FromQuery] string query,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return BadRequest("Search query cannot be empty");
+
+        if (page < 1)
+            return BadRequest("Page number must be at least 1");
+        
+        if (pageSize < 1 || pageSize > 100)
+            return BadRequest("Page size must be between 1 and 100");
+
+        try
+        {
+            var filters = new PlayerFilters
+            {
+                PlayerName = query.Trim()
+            };
+
+            var result = await _playerStatsService.GetAllPlayersWithPaging(
+                page, pageSize, "PlayerName", "asc", filters);
+            
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
     [HttpGet("compare")]
     public async Task<IActionResult> ComparePlayers([FromQuery] string player1, [FromQuery] string player2)
     {

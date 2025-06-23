@@ -2,6 +2,7 @@ using junie_des_1942stats.PlayerStats;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using junie_des_1942stats.PlayerTracking;
 using junie_des_1942stats.Prometheus;
 using junie_des_1942stats.ServerStats;
@@ -59,6 +60,69 @@ try
 
     // Add services to the container
     builder.Services.AddControllers();
+    
+    // Add Swagger/OpenAPI
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddSwaggerGen(c =>
+    {
+        c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo 
+        { 
+            Title = "BF1942 Stats API", 
+            Version = "v1",
+            Description = "API for Battlefield 1942 player and server statistics"
+        });
+        
+        // Custom schema ID resolver to handle conflicting class names and generic types
+        c.CustomSchemaIds(type => 
+        {
+            // Generate unique schema IDs using full namespace and type information
+            if (type.IsGenericType)
+            {
+                // Handle generic types like PagedResult<T>
+                var genericTypeName = type.Name.Split('`')[0];
+                var genericArguments = type.GetGenericArguments()
+                    .Select(arg => GetUniqueTypeName(arg))
+                    .ToArray();
+                var namespacePart = GetNamespacePart(type.Namespace);
+                return $"{namespacePart}{genericTypeName}Of{string.Join("And", genericArguments)}";
+            }
+            
+            // Handle regular types with potential namespace conflicts
+            return GetUniqueTypeName(type);
+        });
+        
+        // Helper function to get unique type name including namespace
+        static string GetUniqueTypeName(Type type)
+        {
+            var namespacePart = GetNamespacePart(type.Namespace);
+            return $"{namespacePart}{type.Name}";
+        }
+        
+        // Helper function to get a short namespace identifier
+        static string GetNamespacePart(string? typeNamespace)
+        {
+            if (string.IsNullOrEmpty(typeNamespace))
+                return "";
+                
+            // Create short namespace identifiers
+            if (typeNamespace.Contains("PlayerStats"))
+                return "PlayerStats";
+            if (typeNamespace.Contains("ServerStats"))
+                return "ServerStats";
+            if (typeNamespace.Contains("ClickHouse"))
+                return "ClickHouse";
+            if (typeNamespace.Contains("PlayerTracking"))
+                return "PlayerTracking";
+            if (typeNamespace.Contains("Prometheus"))
+                return "Prometheus";
+            if (typeNamespace.Contains("StatsCollectors"))
+                return "StatsCollectors";
+                
+            // For other namespaces, use the last part
+            var parts = typeNamespace.Split('.');
+            return parts.Length > 0 ? parts[^1] : "";
+        }
+    });
 
     // Configure SQLite database path - check for environment variable first
     string dbPath;
@@ -156,6 +220,17 @@ try
     });
 
     var host = builder.Build();
+
+    // Configure the HTTP request pipeline
+    if (host.Environment.IsDevelopment())
+    {
+        host.UseSwagger();
+        host.UseSwaggerUI(c =>
+        {
+            c.SwaggerEndpoint("/swagger/v1/swagger.json", "BF1942 Stats API v1");
+            c.RoutePrefix = "swagger";
+        });
+    }
 
     // Enable routing and controllers
     host.UseRouting();

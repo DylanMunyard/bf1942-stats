@@ -1,5 +1,8 @@
+using System.Runtime.Serialization;
+
 namespace junie_des_1942stats.ClickHouse.Models;
 
+[DataContract(Name = "ClickHouseServerStatistics")]
 public class ServerStatistics
 {
     public string ServerName { get; set; }
