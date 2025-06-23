@@ -3,6 +3,7 @@ using junie_des_1942stats.PlayerTracking;
 using Microsoft.AspNetCore.Mvc;
 using junie_des_1942stats.ClickHouse;
 using junie_des_1942stats.ClickHouse.Models;
+using Microsoft.Extensions.Logging;
 
 namespace junie_des_1942stats.PlayerStats;
 
@@ -12,11 +13,15 @@ public class PlayersController : ControllerBase
 {
     private readonly PlayerStatsService _playerStatsService;
     private readonly ServerStatisticsService _serverStatisticsService;
+    private readonly PlayerComparisonService _playerComparisonService;
+    private readonly ILogger<PlayersController> _logger;
 
-    public PlayersController(PlayerStatsService playerStatsService, ServerStatisticsService serverStatisticsService)
+    public PlayersController(PlayerStatsService playerStatsService, ServerStatisticsService serverStatisticsService, PlayerComparisonService playerComparisonService, ILogger<PlayersController> logger)
     {
         _playerStatsService = playerStatsService;
         _serverStatisticsService = serverStatisticsService;
+        _playerComparisonService = playerComparisonService;
+        _logger = logger;
     }
     
     // Get all players with basic info - enhanced with paging and sorting
@@ -278,6 +283,26 @@ public class PlayersController : ControllerBase
         catch (Exception ex)
         {
             return StatusCode(500, $"An error occurred while retrieving server statistics: {ex.Message}");
+        }
+    }
+
+    [HttpGet("compare")]
+    public async Task<IActionResult> ComparePlayers([FromQuery] string player1, [FromQuery] string player2)
+    {
+        if (string.IsNullOrWhiteSpace(player1) || string.IsNullOrWhiteSpace(player2))
+            return BadRequest("Both player1 and player2 must be provided.");
+
+        try
+        {
+            var result = await _playerComparisonService.ComparePlayersAsync(player1, player2);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            // Log the exception
+            _logger.LogError(ex, "Error comparing players {Player1} and {Player2}", player1, player2);
+            // Return a generic 500 error
+            return StatusCode(500, "An internal server error occurred while comparing players.");
         }
     }
 }

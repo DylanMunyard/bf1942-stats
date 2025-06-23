@@ -144,6 +144,17 @@ try
     // Register ServerStatisticsService
     builder.Services.AddSingleton<ServerStatisticsService>();
 
+    // Register PlayerComparisonService
+    builder.Services.AddSingleton<PlayerComparisonService>(sp =>
+    {
+        var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        var uri = new Uri(clickHouseUrl);
+        var connectionString = $"Host={uri.Host};Port={uri.Port};Database=default;User=default;Password=;Protocol={uri.Scheme}";
+        var connection = new ClickHouse.Client.ADO.ClickHouseConnection(connectionString);
+        var logger = sp.GetRequiredService<ILogger<PlayerComparisonService>>();
+        return new PlayerComparisonService(connection, logger);
+    });
+
     var host = builder.Build();
 
     // Enable routing and controllers
