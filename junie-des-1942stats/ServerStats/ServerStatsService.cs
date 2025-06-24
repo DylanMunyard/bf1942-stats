@@ -152,13 +152,30 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
         return statistics;
     }
 
-    public async Task<PagedResult<ServerRanking>> GetServerRankings(string serverName, int? year = null, int page = 1, int pageSize = 100)
+    public async Task<PagedResult<ServerRanking>> GetServerRankings(string serverName, int? year = null, int page = 1, int pageSize = 100,
+        string? playerName = null, int? minScore = null, int? minKills = null, int? minDeaths = null, 
+        double? minKdRatio = null, int? minPlayTimeMinutes = null, string? orderBy = "TotalScore", string? orderDirection = "desc")
     {
         if (page < 1)
             throw new ArgumentException("Page number must be at least 1");
         
         if (pageSize < 1 || pageSize > 100)
             throw new ArgumentException("Page size must be between 1 and 100");
+
+        // Validate orderBy parameter
+        var validOrderByColumns = new[] { "TotalScore", "TotalKills", "TotalDeaths", "KDRatio", "TotalPlayTimeMinutes" };
+        if (!string.IsNullOrEmpty(orderBy) && !validOrderByColumns.Contains(orderBy, StringComparer.OrdinalIgnoreCase))
+            throw new ArgumentException($"Invalid orderBy column. Valid columns are: {string.Join(", ", validOrderByColumns)}");
+
+        // Validate orderDirection parameter
+        var validDirections = new[] { "asc", "desc" };
+        if (!string.IsNullOrEmpty(orderDirection) && !validDirections.Contains(orderDirection, StringComparer.OrdinalIgnoreCase))
+            throw new ArgumentException("Order direction must be 'asc' or 'desc'");
+
+        // Set defaults and normalize case
+        orderBy = orderBy ?? "TotalScore";
+        orderDirection = orderDirection ?? "desc";
+        var isDescending = orderDirection.Equals("desc", StringComparison.OrdinalIgnoreCase);
 
         IQueryable<ServerPlayerRanking> baseQuery = _dbContext.ServerPlayerRankings
             .Where(sr => sr.Server.Name == serverName);
@@ -169,13 +186,13 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
             baseQuery = baseQuery.Where(sr => sr.Year == year.Value);
         }
 
-        // Get the total count of unique players for pagination
-        var totalItems = await baseQuery
-            .Select(sr => sr.PlayerName)
-            .Distinct()
-            .CountAsync();
+        // Apply player name filter (case insensitive)
+        if (!string.IsNullOrWhiteSpace(playerName))
+        {
+            baseQuery = baseQuery.Where(sr => sr.PlayerName.ToLower().Contains(playerName.ToLower()));
+        }
 
-        // Get the aggregated and paged data from the database
+        // Get the aggregated data first, then apply numeric filters
         var playerStatsQuery = baseQuery
             .GroupBy(sr => sr.PlayerName)
             .Select(g => new
@@ -185,13 +202,57 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
                 TotalKills = g.Sum(r => r.TotalKills),
                 TotalDeaths = g.Sum(r => r.TotalDeaths),
                 TotalPlayTimeMinutes = g.Sum(r => r.TotalPlayTimeMinutes)
-            })
-            .OrderByDescending(x => x.TotalScore)
+            });
+
+        // Apply numeric filters
+        if (minScore.HasValue)
+        {
+            playerStatsQuery = playerStatsQuery.Where(x => x.TotalScore >= minScore.Value);
+        }
+
+        if (minKills.HasValue)
+        {
+            playerStatsQuery = playerStatsQuery.Where(x => x.TotalKills >= minKills.Value);
+        }
+
+        if (minDeaths.HasValue)
+        {
+            playerStatsQuery = playerStatsQuery.Where(x => x.TotalDeaths >= minDeaths.Value);
+        }
+
+        if (minKdRatio.HasValue)
+        {
+            playerStatsQuery = playerStatsQuery.Where(x => 
+                x.TotalDeaths > 0 ? (double)x.TotalKills / x.TotalDeaths >= minKdRatio.Value : x.TotalKills >= minKdRatio.Value);
+        }
+
+        if (minPlayTimeMinutes.HasValue)
+        {
+            playerStatsQuery = playerStatsQuery.Where(x => x.TotalPlayTimeMinutes >= minPlayTimeMinutes.Value);
+        }
+
+        // Get the total count of filtered players for pagination
+        var totalItems = await playerStatsQuery.CountAsync();
+
+        // Apply dynamic ordering and pagination
+        var orderedQuery = orderBy.ToLowerInvariant() switch
+        {
+            "totalscore" => isDescending ? playerStatsQuery.OrderByDescending(x => x.TotalScore) : playerStatsQuery.OrderBy(x => x.TotalScore),
+            "totalkills" => isDescending ? playerStatsQuery.OrderByDescending(x => x.TotalKills) : playerStatsQuery.OrderBy(x => x.TotalKills),
+            "totaldeaths" => isDescending ? playerStatsQuery.OrderByDescending(x => x.TotalDeaths) : playerStatsQuery.OrderBy(x => x.TotalDeaths),
+            "totalplaytimeminutes" => isDescending ? playerStatsQuery.OrderByDescending(x => x.TotalPlayTimeMinutes) : playerStatsQuery.OrderBy(x => x.TotalPlayTimeMinutes),
+            "kdratio" => isDescending 
+                ? playerStatsQuery.OrderByDescending(x => x.TotalDeaths > 0 ? (double)x.TotalKills / x.TotalDeaths : x.TotalKills)
+                : playerStatsQuery.OrderBy(x => x.TotalDeaths > 0 ? (double)x.TotalKills / x.TotalDeaths : x.TotalKills),
+            _ => playerStatsQuery.OrderByDescending(x => x.TotalScore) // Default fallback
+        };
+
+        var finalQuery = orderedQuery
             .Skip((page - 1) * pageSize)
             .Take(pageSize);
 
         // Execute the query and materialize results
-        var playerStats = await playerStatsQuery.ToListAsync();
+        var playerStats = await finalQuery.ToListAsync();
 
         // Now rank just the paged results in memory
         var items = playerStats

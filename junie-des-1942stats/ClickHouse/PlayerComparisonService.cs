@@ -13,6 +13,7 @@ public class PlayerComparisonService
 {
     private readonly ClickHouseConnection _connection;
     private readonly ILogger<PlayerComparisonService> _logger;
+    private readonly string _serverGuidFilter;
 
     public PlayerComparisonService(ClickHouseConnection connection, ILogger<PlayerComparisonService> logger)
     {
@@ -20,7 +21,7 @@ public class PlayerComparisonService
         _logger = logger;
     }
 
-    public async Task<PlayerComparisonResult> ComparePlayersAsync(string player1, string player2)
+    public async Task<PlayerComparisonResult> ComparePlayersAsync(string player1, string player2, string serverGuid = null)
     {
         var result = new PlayerComparisonResult
         {
@@ -31,19 +32,19 @@ public class PlayerComparisonService
         await EnsureConnectionOpenAsync();
 
         // 1. Kill Rate (per minute)
-        result.KillRates = await GetKillRates(player1, player2);
+        result.KillRates = await GetKillRates(player1, player2, serverGuid);
 
         // 2. Totals in Buckets
-        result.BucketTotals = await GetBucketTotals(player1, player2);
+        result.BucketTotals = await GetBucketTotals(player1, player2, serverGuid);
 
         // 3. Average Ping
-        result.AveragePing = await GetAveragePing(player1, player2);
+        result.AveragePing = await GetAveragePing(player1, player2, serverGuid);
 
         // 4. Map Performance
-        result.MapPerformance = await GetMapPerformance(player1, player2);
+        result.MapPerformance = await GetMapPerformance(player1, player2, serverGuid);
 
         // 5. Overlapping Sessions (Head-to-Head)
-        result.HeadToHead = await GetHeadToHead(player1, player2);
+        result.HeadToHead = await GetHeadToHead(player1, player2, serverGuid);
 
         return result;
     }
@@ -56,10 +57,11 @@ public class PlayerComparisonService
         }
     }
 
-    private async Task<List<KillRateComparison>> GetKillRates(string player1, string player2)
+    private async Task<List<KillRateComparison>> GetKillRates(string player1, string player2, string serverGuid = null)
     {
         // Calculate kill rate (kills per minute) for each player
-        var query = @"
+        var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
+        var query = $@"
 WITH diffs AS (
     SELECT
         player_name,
@@ -67,13 +69,12 @@ WITH diffs AS (
         kills - lagInFrame(kills, 1, 0) OVER (PARTITION BY player_name, server_guid ORDER BY timestamp) AS kills_diff,
         dateDiff('minute', lagInFrame(timestamp, 1, timestamp) OVER (PARTITION BY player_name, server_guid ORDER BY timestamp), timestamp) AS minutes_diff
     FROM player_metrics
-    WHERE player_name IN ({0}, {1})
+    WHERE player_name IN ({Quote(player1)}, {Quote(player2)}){serverFilter}
 )
 SELECT player_name, sum(kills_diff) / nullIf(sum(minutes_diff), 0) AS kill_rate
 FROM diffs
 WHERE minutes_diff > 0 AND kills_diff >= 0
 GROUP BY player_name";
-        query = string.Format(query, Quote(player1), Quote(player2));
 
         var result = new List<KillRateComparison>();
         await using var cmd = _connection.CreateCommand();
@@ -90,7 +91,7 @@ GROUP BY player_name";
         return result;
     }
 
-    private async Task<List<BucketTotalsComparison>> GetBucketTotals(string player1, string player2)
+    private async Task<List<BucketTotalsComparison>> GetBucketTotals(string player1, string player2, string serverGuid = null)
     {
         // Buckets: last 30 days, last 6 months, last year, all time
         var buckets = new[]
@@ -101,6 +102,7 @@ GROUP BY player_name";
             ("AllTime", "1=1")
         };
         var results = new List<BucketTotalsComparison>();
+        var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
         foreach (var (label, condition) in buckets)
         {
             var query = $@"
@@ -112,7 +114,7 @@ WITH round_sessions AS (
          dateDiff('minute', lagInFrame(timestamp, 1, timestamp) OVER w, timestamp) >= 15 OR
          ROW_NUMBER() OVER w = 1) AS is_round_start
     FROM player_metrics
-    WHERE player_name IN ({Quote(player1)}, {Quote(player2)}) AND {condition}
+    WHERE player_name IN ({Quote(player1)}, {Quote(player2)}) AND {condition}{serverFilter}
     WINDOW w AS (PARTITION BY player_name ORDER BY map_name, timestamp)
 ),
 round_numbers AS (
@@ -159,12 +161,13 @@ GROUP BY player_name";
         return results;
     }
 
-    private async Task<List<PingComparison>> GetAveragePing(string player1, string player2)
+    private async Task<List<PingComparison>> GetAveragePing(string player1, string player2, string serverGuid = null)
     {
+        var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
         var query = $@"
 SELECT player_name, avg(ping)
 FROM player_metrics
-WHERE player_name IN ({Quote(player1)}, {Quote(player2)})
+WHERE player_name IN ({Quote(player1)}, {Quote(player2)}){serverFilter}
 GROUP BY player_name";
         var result = new List<PingComparison>();
         await using var cmd = _connection.CreateCommand();
@@ -181,8 +184,9 @@ GROUP BY player_name";
         return result;
     }
 
-    private async Task<List<MapPerformanceComparison>> GetMapPerformance(string player1, string player2)
+    private async Task<List<MapPerformanceComparison>> GetMapPerformance(string player1, string player2, string serverGuid = null)
     {
+        var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
         var query = $@"
 WITH round_sessions AS (
     SELECT *,
@@ -192,7 +196,7 @@ WITH round_sessions AS (
          dateDiff('minute', lagInFrame(timestamp, 1, timestamp) OVER w, timestamp) >= 15 OR
          ROW_NUMBER() OVER w = 1) AS is_round_start
     FROM player_metrics
-    WHERE player_name IN ({Quote(player1)}, {Quote(player2)})
+    WHERE player_name IN ({Quote(player1)}, {Quote(player2)}){serverFilter}
     WINDOW w AS (PARTITION BY player_name ORDER BY map_name, timestamp)
 ),
 round_numbers AS (
@@ -239,9 +243,10 @@ GROUP BY map_name, player_name";
         return mapStats.Values.ToList();
     }
 
-    private async Task<List<HeadToHeadSession>> GetHeadToHead(string player1, string player2)
+    private async Task<List<HeadToHeadSession>> GetHeadToHead(string player1, string player2, string serverGuid = null)
     {
         // Find overlapping rounds using round detection
+        var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
         var query = $@"
 WITH p1_rounds AS (
     SELECT *,
@@ -251,7 +256,7 @@ WITH p1_rounds AS (
          dateDiff('minute', lagInFrame(timestamp, 1, timestamp) OVER w, timestamp) >= 15 OR
          ROW_NUMBER() OVER w = 1) AS is_round_start
     FROM player_metrics
-    WHERE player_name = {Quote(player1)}
+    WHERE player_name = {Quote(player1)}{serverFilter}
     WINDOW w AS (ORDER BY map_name, timestamp)
 ),
 p1_numbered AS (
@@ -278,7 +283,7 @@ p2_rounds AS (
          dateDiff('minute', lagInFrame(timestamp, 1, timestamp) OVER w, timestamp) >= 15 OR
          ROW_NUMBER() OVER w = 1) AS is_round_start
     FROM player_metrics
-    WHERE player_name = {Quote(player2)}
+    WHERE player_name = {Quote(player2)}{serverFilter}
     WINDOW w AS (ORDER BY map_name, timestamp)
 ),
 p2_numbered AS (

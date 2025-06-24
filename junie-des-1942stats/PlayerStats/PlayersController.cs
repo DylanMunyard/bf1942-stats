@@ -320,14 +320,14 @@ public class PlayersController : ControllerBase
     }
 
     [HttpGet("compare")]
-    public async Task<IActionResult> ComparePlayers([FromQuery] string player1, [FromQuery] string player2)
+    public async Task<IActionResult> ComparePlayers([FromQuery] string player1, [FromQuery] string player2, [FromQuery] string? serverGuid = null)
     {
         if (string.IsNullOrWhiteSpace(player1) || string.IsNullOrWhiteSpace(player2))
             return BadRequest("Both player1 and player2 must be provided.");
 
         try
         {
-            var result = await _playerComparisonService.ComparePlayersAsync(player1, player2);
+            var result = await _playerComparisonService.ComparePlayersAsync(player1, player2, serverGuid);
             return Ok(result);
         }
         catch (Exception ex)

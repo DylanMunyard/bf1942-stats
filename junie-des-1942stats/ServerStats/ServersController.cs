@@ -39,11 +39,22 @@ public class ServersController : ControllerBase
         string serverName,
         [FromQuery] int? year = null,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 100)
+        [FromQuery] int pageSize = 100,
+        [FromQuery] string? playerName = null,
+        [FromQuery] int? minScore = null,
+        [FromQuery] int? minKills = null,
+        [FromQuery] int? minDeaths = null,
+        [FromQuery] double? minKdRatio = null,
+        [FromQuery] int? minPlayTimeMinutes = null,
+        [FromQuery] string? orderBy = "TotalScore",
+        [FromQuery] string? orderDirection = "desc")
     {
         try
         {
-            var result = await _serverStatsService.GetServerRankings(serverName, year, page, pageSize);
+            var result = await _serverStatsService.GetServerRankings(
+                serverName, year, page, pageSize, playerName, 
+                minScore, minKills, minDeaths, minKdRatio, minPlayTimeMinutes,
+                orderBy, orderDirection);
             return Ok(result);
         }
         catch (ArgumentException ex)
