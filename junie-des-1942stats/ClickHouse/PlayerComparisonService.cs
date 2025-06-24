@@ -5,6 +5,8 @@ using System.Threading.Tasks;
 using ClickHouse.Client.ADO;
 using ClickHouse.Client.ADO.Readers;
 using junie_des_1942stats.PlayerStats.Models;
+using junie_des_1942stats.PlayerTracking;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace junie_des_1942stats.ClickHouse;
@@ -13,12 +15,13 @@ public class PlayerComparisonService
 {
     private readonly ClickHouseConnection _connection;
     private readonly ILogger<PlayerComparisonService> _logger;
-    private readonly string _serverGuidFilter;
+    private readonly PlayerTrackerDbContext _dbContext;
 
-    public PlayerComparisonService(ClickHouseConnection connection, ILogger<PlayerComparisonService> logger)
+    public PlayerComparisonService(ClickHouseConnection connection, ILogger<PlayerComparisonService> logger, PlayerTrackerDbContext dbContext)
     {
         _connection = connection;
         _logger = logger;
+        _dbContext = dbContext;
     }
 
     public async Task<PlayerComparisonResult> ComparePlayersAsync(string player1, string player2, string serverGuid = null)
@@ -28,6 +31,29 @@ public class PlayerComparisonService
             Player1 = player1,
             Player2 = player2
         };
+
+        // If serverGuid is provided, look up server details
+        if (!string.IsNullOrEmpty(serverGuid))
+        {
+            var server = await _dbContext.Servers
+                .Where(s => s.Guid == serverGuid)
+                .Select(s => new ServerDetails
+                {
+                    Guid = s.Guid,
+                    Name = s.Name,
+                    Ip = s.Ip,
+                    Port = s.Port,
+                    GameId = s.GameId,
+                    Country = s.Country,
+                    Region = s.Region,
+                    City = s.City,
+                    Timezone = s.Timezone,
+                    Org = s.Org
+                })
+                .FirstOrDefaultAsync();
+            
+            result.ServerDetails = server;
+        }
 
         await EnsureConnectionOpenAsync();
 
@@ -341,6 +367,7 @@ public class PlayerComparisonResult
 {
     public string Player1 { get; set; }
     public string Player2 { get; set; }
+    public ServerDetails? ServerDetails { get; set; }
     public List<KillRateComparison> KillRates { get; set; } = new();
     public List<BucketTotalsComparison> BucketTotals { get; set; } = new();
     public List<PingComparison> AveragePing { get; set; } = new();
@@ -393,4 +420,18 @@ public class HeadToHeadSession
     public int Player2Score { get; set; }
     public int Player2Kills { get; set; }
     public int Player2Deaths { get; set; }
+}
+
+public class ServerDetails
+{
+    public string Guid { get; set; }
+    public string Name { get; set; }
+    public string Ip { get; set; }
+    public int Port { get; set; }
+    public string GameId { get; set; }
+    public string? Country { get; set; }
+    public string? Region { get; set; }
+    public string? City { get; set; }
+    public string? Timezone { get; set; }
+    public string? Org { get; set; }
 } 
