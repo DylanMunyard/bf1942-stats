@@ -125,14 +125,16 @@ round_totals AS (
     SELECT player_name, round_id, server_guid, map_name,
         MAX(score) AS final_score,
         MAX(kills) AS final_kills, 
-        MAX(deaths) AS final_deaths
+        MAX(deaths) AS final_deaths,
+        dateDiff('minute', MIN(timestamp), MAX(timestamp)) AS play_time_minutes
     FROM round_numbers
     GROUP BY player_name, round_id, server_guid, map_name
 )
 SELECT player_name, 
     SUM(final_score) AS total_score,
     SUM(final_kills) AS total_kills,
-    SUM(final_deaths) AS total_deaths
+    SUM(final_deaths) AS total_deaths,
+    SUM(play_time_minutes) AS total_play_time_minutes
 FROM round_totals
 GROUP BY player_name";
             await using var cmd = _connection.CreateCommand();
@@ -146,7 +148,8 @@ GROUP BY player_name";
                 {
                     Score = reader.IsDBNull(1) ? 0 : Convert.ToInt32(reader.GetValue(1)),
                     Kills = reader.IsDBNull(2) ? 0u : Convert.ToUInt32(reader.GetValue(2)),
-                    Deaths = reader.IsDBNull(3) ? 0u : Convert.ToUInt32(reader.GetValue(3))
+                    Deaths = reader.IsDBNull(3) ? 0u : Convert.ToUInt32(reader.GetValue(3)),
+                    PlayTimeMinutes = reader.IsDBNull(4) ? 0.0 : Convert.ToDouble(reader.GetValue(4))
                 };
                 if (name == player1) bucket.Player1Totals = totals;
                 else if (name == player2) bucket.Player2Totals = totals;
@@ -202,14 +205,16 @@ round_totals AS (
     SELECT player_name, round_id, server_guid, map_name,
         MAX(score) AS final_score,
         MAX(kills) AS final_kills, 
-        MAX(deaths) AS final_deaths
+        MAX(deaths) AS final_deaths,
+        dateDiff('minute', MIN(timestamp), MAX(timestamp)) AS play_time_minutes
     FROM round_numbers
     GROUP BY player_name, round_id, server_guid, map_name
 )
 SELECT map_name, player_name, 
     SUM(final_score) AS total_score,
     SUM(final_kills) AS total_kills,
-    SUM(final_deaths) AS total_deaths
+    SUM(final_deaths) AS total_deaths,
+    SUM(play_time_minutes) AS total_play_time_minutes
 FROM round_totals
 GROUP BY map_name, player_name";
         var mapStats = new Dictionary<string, MapPerformanceComparison>();
@@ -223,12 +228,13 @@ GROUP BY map_name, player_name";
             var score = reader.IsDBNull(2) ? 0 : Convert.ToInt32(reader.GetValue(2));
             var kills = reader.IsDBNull(3) ? 0u : Convert.ToUInt32(reader.GetValue(3));
             var deaths = reader.IsDBNull(4) ? 0u : Convert.ToUInt32(reader.GetValue(4));
+            var playTime = reader.IsDBNull(5) ? 0.0 : Convert.ToDouble(reader.GetValue(5));
             if (!mapStats.ContainsKey(map))
                 mapStats[map] = new MapPerformanceComparison { MapName = map };
             if (name == player1)
-                mapStats[map].Player1Totals = new PlayerTotals { Score = score, Kills = kills, Deaths = deaths };
+                mapStats[map].Player1Totals = new PlayerTotals { Score = score, Kills = kills, Deaths = deaths, PlayTimeMinutes = playTime };
             else if (name == player2)
-                mapStats[map].Player2Totals = new PlayerTotals { Score = score, Kills = kills, Deaths = deaths };
+                mapStats[map].Player2Totals = new PlayerTotals { Score = score, Kills = kills, Deaths = deaths, PlayTimeMinutes = playTime };
         }
         return mapStats.Values.ToList();
     }
@@ -355,6 +361,7 @@ public class PlayerTotals
     public int Score { get; set; }
     public uint Kills { get; set; }
     public uint Deaths { get; set; }
+    public double PlayTimeMinutes { get; set; }
 }
 
 public class PingComparison
