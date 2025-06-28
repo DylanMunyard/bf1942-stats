@@ -72,6 +72,9 @@ public class PlayerComparisonService
         // 5. Overlapping Sessions (Head-to-Head)
         result.HeadToHead = await GetHeadToHead(player1, player2, serverGuid);
 
+        // 6. Common Servers (servers where both players have played)
+        result.CommonServers = await GetCommonServers(player1, player2);
+
         return result;
     }
 
@@ -192,8 +195,13 @@ GROUP BY player_name";
         var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
         var query = $@"
 SELECT player_name, avg(ping)
-FROM player_metrics
-WHERE player_name IN ({Quote(player1)}, {Quote(player2)}){serverFilter}
+FROM (
+    SELECT player_name, ping
+    FROM player_metrics 
+    WHERE player_name IN ({Quote(player1)}, {Quote(player2)}) AND ping > 0{serverFilter}
+    ORDER BY timestamp DESC
+    LIMIT 300 BY player_name
+)
 GROUP BY player_name";
         var result = new List<PingComparison>();
         await using var cmd = _connection.CreateCommand();
@@ -336,7 +344,8 @@ JOIN p2_final p2 ON p1.server_guid = p2.server_guid
     AND p1.map_name = p2.map_name
     AND p1.round_start <= p2.round_end 
     AND p2.round_start <= p1.round_end
-ORDER BY p1.round_start";
+ORDER BY p1.round_start DESC
+LIMIT 50";
         var sessions = new List<HeadToHeadSession>();
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
@@ -359,6 +368,53 @@ ORDER BY p1.round_start";
         return sessions;
     }
 
+    private async Task<List<ServerDetails>> GetCommonServers(string player1, string player2)
+    {
+        // Get servers where both players have played in the last 6 months
+        var query = $@"
+SELECT DISTINCT server_guid
+FROM player_metrics
+WHERE player_name = {Quote(player1)} AND timestamp >= now() - INTERVAL 6 MONTH
+INTERSECT
+SELECT DISTINCT server_guid
+FROM player_metrics
+WHERE player_name = {Quote(player2)} AND timestamp >= now() - INTERVAL 6 MONTH";
+
+        var serverGuids = new List<string>();
+        await using var cmd = _connection.CreateCommand();
+        cmd.CommandText = query;
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            serverGuids.Add(reader.GetString(0));
+        }
+
+        // Get server details from the database
+        if (serverGuids.Any())
+        {
+            var servers = await _dbContext.Servers
+                .Where(s => serverGuids.Contains(s.Guid))
+                .Select(s => new ServerDetails
+                {
+                    Guid = s.Guid,
+                    Name = s.Name,
+                    Ip = s.Ip,
+                    Port = s.Port,
+                    GameId = s.GameId,
+                    Country = s.Country,
+                    Region = s.Region,
+                    City = s.City,
+                    Timezone = s.Timezone,
+                    Org = s.Org
+                })
+                .ToListAsync();
+            
+            return servers;
+        }
+
+        return new List<ServerDetails>();
+    }
+
     private static string Quote(string s) => $"'{s.Replace("'", "''")}'";
 }
 
@@ -373,6 +429,7 @@ public class PlayerComparisonResult
     public List<PingComparison> AveragePing { get; set; } = new();
     public List<MapPerformanceComparison> MapPerformance { get; set; } = new();
     public List<HeadToHeadSession> HeadToHead { get; set; } = new();
+    public List<ServerDetails> CommonServers { get; set; } = new();
 }
 
 public class KillRateComparison
