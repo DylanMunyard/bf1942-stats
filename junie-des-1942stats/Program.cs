@@ -153,6 +153,9 @@ try
 
     // Register the ServerStatsService
     builder.Services.AddScoped<ServerStatsService>();
+    
+    // Register the HistoricalRoundsService
+    builder.Services.AddScoped<HistoricalRoundsService>();
 
     // Register the stat collector background services
     builder.Services.AddHostedService<StatsCollectionBackgroundService>();
