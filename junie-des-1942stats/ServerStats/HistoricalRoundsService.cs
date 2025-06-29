@@ -55,9 +55,6 @@ public class HistoricalRoundsService(PlayerTrackerDbContext dbContext)
                     COUNT(DISTINCT ps.PlayerName) as ParticipantCount,
                     COUNT(*) as TotalSessions,
                     MAX(CASE WHEN ps.IsActive = 1 THEN 1 ELSE 0 END) as IsActive,
-                    SUM(ps.TotalScore) as TotalScore,
-                    SUM(ps.TotalKills) as TotalKills,
-                    SUM(ps.TotalDeaths) as TotalDeaths,
                     LAG(ps.MapName) OVER (PARTITION BY ps.ServerGuid ORDER BY ps.StartTime) as PrevMapName,
                     ROW_NUMBER() OVER (PARTITION BY ps.ServerGuid ORDER BY ps.StartTime) as RowNum
                 FROM PlayerSessions ps
@@ -141,10 +138,7 @@ public class HistoricalRoundsService(PlayerTrackerDbContext dbContext)
                 cast((strftime('%s', EndTime) - strftime('%s', StartTime)) / 60.0 as integer) as DurationMinutes,
                 ParticipantCount,
                 TotalSessions,
-                IsActive,
-                TotalScore,
-                TotalKills,
-                TotalDeaths
+                IsActive
             FROM RoundGroups
             WHERE (PrevMapName IS NULL OR PrevMapName != MapName OR RowNum = 1)
             ORDER BY EndTime DESC";

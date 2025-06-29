@@ -48,7 +48,7 @@ public class RoundsController : ControllerBase
         var validSortFields = new[]
         {
             "StartTime", "EndTime", "DurationMinutes", "ParticipantCount", 
-            "ServerName", "MapName", "IsActive", "TotalScore"
+            "ServerName", "MapName", "IsActive"
         };
 
         if (!validSortFields.Contains(sortBy, StringComparer.OrdinalIgnoreCase))

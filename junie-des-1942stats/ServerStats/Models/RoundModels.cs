@@ -15,9 +15,6 @@ public class RoundListItem
     public int ParticipantCount { get; set; }
     public int TotalSessions { get; set; }
     public bool IsActive { get; set; }
-    public int TotalScore { get; set; }
-    public int TotalKills { get; set; }
-    public int TotalDeaths { get; set; }
 }
 
 
