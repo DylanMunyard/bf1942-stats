@@ -40,115 +40,168 @@ public class HistoricalRoundsService(PlayerTrackerDbContext dbContext)
 
     private IQueryable<RoundListItem> BuildRoundsQuery(string? serverGuid, RoundFilters? filters)
     {
-        var sessionQuery = _dbContext.PlayerSessions
-            .Include(s => s.Server)
-            .AsQueryable();
+        var sql = @"
+            WITH RoundGroups AS (
+                SELECT 
+                    ps.ServerGuid,
+                    ps.MapName,
+                    ps.GameType,
+                    gs.Name as ServerName,
+                    MIN(ps.StartTime) as StartTime,
+                    CASE 
+                        WHEN MAX(CASE WHEN ps.IsActive = 1 THEN 1 ELSE 0 END) = 1 THEN datetime('now')
+                        ELSE MAX(ps.LastSeenTime)
+                    END as EndTime,
+                    COUNT(DISTINCT ps.PlayerName) as ParticipantCount,
+                    COUNT(*) as TotalSessions,
+                    MAX(CASE WHEN ps.IsActive = 1 THEN 1 ELSE 0 END) as IsActive,
+                    SUM(ps.TotalScore) as TotalScore,
+                    SUM(ps.TotalKills) as TotalKills,
+                    SUM(ps.TotalDeaths) as TotalDeaths,
+                    LAG(ps.MapName) OVER (PARTITION BY ps.ServerGuid ORDER BY ps.StartTime) as PrevMapName,
+                    ROW_NUMBER() OVER (PARTITION BY ps.ServerGuid ORDER BY ps.StartTime) as RowNum
+                FROM PlayerSessions ps
+                INNER JOIN Servers gs ON ps.ServerGuid = gs.Guid
+                WHERE 1=1";
+
+        var parameters = new List<object>();
+        var paramIndex = 0;
 
         if (!string.IsNullOrEmpty(serverGuid))
         {
-            sessionQuery = sessionQuery.Where(s => s.ServerGuid == serverGuid);
+            sql += $" AND ps.ServerGuid = {{{paramIndex}}}";
+            parameters.Add(serverGuid);
+            paramIndex++;
         }
 
         if (filters != null)
         {
             if (!string.IsNullOrEmpty(filters.ServerName))
             {
-                sessionQuery = sessionQuery.Where(s => EF.Functions.Like(s.Server.Name, $"%{filters.ServerName}%"));
+                sql += $" AND gs.Name LIKE {{{paramIndex}}}";
+                parameters.Add($"%{filters.ServerName}%");
+                paramIndex++;
             }
 
             if (!string.IsNullOrEmpty(filters.ServerGuid))
             {
-                sessionQuery = sessionQuery.Where(s => s.ServerGuid == filters.ServerGuid);
+                sql += $" AND ps.ServerGuid = {{{paramIndex}}}";
+                parameters.Add(filters.ServerGuid);
+                paramIndex++;
             }
 
             if (!string.IsNullOrEmpty(filters.MapName))
             {
-                sessionQuery = sessionQuery.Where(s => EF.Functions.Like(s.MapName, $"%{filters.MapName}%"));
+                sql += $" AND ps.MapName LIKE {{{paramIndex}}}";
+                parameters.Add($"%{filters.MapName}%");
+                paramIndex++;
             }
 
             if (!string.IsNullOrEmpty(filters.GameType))
             {
-                sessionQuery = sessionQuery.Where(s => s.GameType == filters.GameType);
+                sql += $" AND ps.GameType = {{{paramIndex}}}";
+                parameters.Add(filters.GameType);
+                paramIndex++;
             }
 
             if (!string.IsNullOrEmpty(filters.GameId))
             {
-                sessionQuery = sessionQuery.Where(s => s.Server.GameId == filters.GameId);
+                sql += $" AND gs.GameId = {{{paramIndex}}}";
+                parameters.Add(filters.GameId);
+                paramIndex++;
             }
 
             if (filters.StartTimeFrom.HasValue)
             {
-                sessionQuery = sessionQuery.Where(s => s.StartTime >= filters.StartTimeFrom.Value);
+                sql += $" AND ps.StartTime >= {{{paramIndex}}}";
+                parameters.Add(filters.StartTimeFrom.Value);
+                paramIndex++;
             }
 
             if (filters.StartTimeTo.HasValue)
             {
-                sessionQuery = sessionQuery.Where(s => s.StartTime <= filters.StartTimeTo.Value);
+                sql += $" AND ps.StartTime <= {{{paramIndex}}}";
+                parameters.Add(filters.StartTimeTo.Value);
+                paramIndex++;
             }
-
         }
 
-        var roundsQuery = sessionQuery
-            .GroupBy(s => new { s.ServerGuid, s.MapName, s.StartTime.Date, s.StartTime.Hour })
-            .Select(g => new RoundListItem
-            {
-                RoundId = g.Key.ServerGuid + "_" + g.Key.MapName + "_" + g.Min(s => s.StartTime).ToString("yyyy-MM-dd_HH-mm-ss"),
-                ServerName = g.First().Server.Name,
-                ServerGuid = g.Key.ServerGuid,
-                MapName = g.Key.MapName,
-                GameType = g.First().GameType,
-                StartTime = g.Min(s => s.StartTime),
-                EndTime = g.Max(s => s.IsActive) ? DateTime.UtcNow : g.Max(s => s.LastSeenTime),
-                DurationMinutes = g.Max(s => s.IsActive) 
-                    ? (int)(DateTime.UtcNow - g.Min(s => s.StartTime)).TotalMinutes
-                    : (int)(g.Max(s => s.LastSeenTime) - g.Min(s => s.StartTime)).TotalMinutes,
-                ParticipantCount = g.Select(s => s.PlayerName).Distinct().Count(),
-                TotalSessions = g.Count(),
-                IsActive = g.Max(s => s.IsActive),
-                TotalScore = g.Sum(s => s.TotalScore),
-                TotalKills = g.Sum(s => s.TotalKills),
-                TotalDeaths = g.Sum(s => s.TotalDeaths)
-            });
+        sql += @"
+                GROUP BY ps.ServerGuid, ps.MapName, ps.GameType, gs.Name, 
+                         datetime(ps.StartTime, 'start of day', '+' || (cast(strftime('%H', ps.StartTime) as integer) / 2 * 2) || ' hours')
+            )
+            SELECT 
+                ServerGuid || '_' || MapName || '_' || strftime('%Y-%m-%d_%H-%M-%S', StartTime) as RoundId,
+                ServerName,
+                ServerGuid,
+                MapName,
+                GameType,
+                StartTime,
+                EndTime,
+                cast((strftime('%s', EndTime) - strftime('%s', StartTime)) / 60.0 as integer) as DurationMinutes,
+                ParticipantCount,
+                TotalSessions,
+                IsActive,
+                TotalScore,
+                TotalKills,
+                TotalDeaths
+            FROM RoundGroups
+            WHERE (PrevMapName IS NULL OR PrevMapName != MapName OR RowNum = 1)
+            ORDER BY EndTime DESC";
 
         if (filters != null)
         {
             if (filters.MinDuration.HasValue)
             {
-                roundsQuery = roundsQuery.Where(r => r.DurationMinutes >= filters.MinDuration.Value);
+                sql += $" AND cast((strftime('%s', EndTime) - strftime('%s', StartTime)) / 60.0 as integer) >= {{{paramIndex}}}";
+                parameters.Add(filters.MinDuration.Value);
+                paramIndex++;
             }
 
             if (filters.MaxDuration.HasValue)
             {
-                roundsQuery = roundsQuery.Where(r => r.DurationMinutes <= filters.MaxDuration.Value);
+                sql += $" AND cast((strftime('%s', EndTime) - strftime('%s', StartTime)) / 60.0 as integer) <= {{{paramIndex}}}";
+                parameters.Add(filters.MaxDuration.Value);
+                paramIndex++;
             }
 
             if (filters.MinParticipants.HasValue)
             {
-                roundsQuery = roundsQuery.Where(r => r.ParticipantCount >= filters.MinParticipants.Value);
+                sql += $" AND ParticipantCount >= {{{paramIndex}}}";
+                parameters.Add(filters.MinParticipants.Value);
+                paramIndex++;
             }
 
             if (filters.MaxParticipants.HasValue)
             {
-                roundsQuery = roundsQuery.Where(r => r.ParticipantCount <= filters.MaxParticipants.Value);
+                sql += $" AND ParticipantCount <= {{{paramIndex}}}";
+                parameters.Add(filters.MaxParticipants.Value);
+                paramIndex++;
             }
 
             if (filters.EndTimeFrom.HasValue)
             {
-                roundsQuery = roundsQuery.Where(r => r.EndTime >= filters.EndTimeFrom.Value);
+                sql += $" AND EndTime >= {{{paramIndex}}}";
+                parameters.Add(filters.EndTimeFrom.Value);
+                paramIndex++;
             }
 
             if (filters.EndTimeTo.HasValue)
             {
-                roundsQuery = roundsQuery.Where(r => r.EndTime <= filters.EndTimeTo.Value);
+                sql += $" AND EndTime <= {{{paramIndex}}}";
+                parameters.Add(filters.EndTimeTo.Value);
+                paramIndex++;
             }
 
             if (filters.IsActive.HasValue)
             {
-                roundsQuery = roundsQuery.Where(r => r.IsActive == filters.IsActive.Value);
+                sql += $" AND IsActive = {{{paramIndex}}}";
+                parameters.Add(filters.IsActive.Value ? 1 : 0);
+                paramIndex++;
             }
         }
 
-        return roundsQuery;
+        return _dbContext.Set<RoundListItem>().FromSqlRaw(sql, parameters.ToArray());
     }
 
 }
