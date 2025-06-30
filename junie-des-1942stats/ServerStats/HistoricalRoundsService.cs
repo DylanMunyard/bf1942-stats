@@ -41,22 +41,23 @@ public class HistoricalRoundsService(PlayerTrackerDbContext dbContext)
     private IQueryable<RoundListItem> BuildRoundsQuery(string? serverGuid, RoundFilters? filters)
     {
         var sql = @"
-            WITH RoundGroups AS (
+            WITH SessionsWithGaps AS (
                 SELECT 
                     ps.ServerGuid,
                     ps.MapName,
                     ps.GameType,
+                    ps.PlayerName,
+                    ps.StartTime,
+                    ps.LastSeenTime,
+                    ps.IsActive,
                     gs.Name as ServerName,
-                    MIN(ps.StartTime) as StartTime,
+                    LAG(ps.StartTime) OVER (PARTITION BY ps.ServerGuid, ps.MapName ORDER BY ps.StartTime) as PrevStartTime,
                     CASE 
-                        WHEN MAX(CASE WHEN ps.IsActive = 1 THEN 1 ELSE 0 END) = 1 THEN datetime('now')
-                        ELSE MAX(ps.LastSeenTime)
-                    END as EndTime,
-                    COUNT(DISTINCT ps.PlayerName) as ParticipantCount,
-                    COUNT(*) as TotalSessions,
-                    MAX(CASE WHEN ps.IsActive = 1 THEN 1 ELSE 0 END) as IsActive,
-                    LAG(ps.MapName) OVER (PARTITION BY ps.ServerGuid ORDER BY ps.StartTime) as PrevMapName,
-                    ROW_NUMBER() OVER (PARTITION BY ps.ServerGuid ORDER BY ps.StartTime) as RowNum
+                        WHEN LAG(ps.StartTime) OVER (PARTITION BY ps.ServerGuid, ps.MapName ORDER BY ps.StartTime) IS NULL 
+                        OR (strftime('%s', ps.StartTime) - strftime('%s', LAG(ps.StartTime) OVER (PARTITION BY ps.ServerGuid, ps.MapName ORDER BY ps.StartTime))) > 600 
+                        THEN 1 
+                        ELSE 0 
+                    END as IsNewRound
                 FROM PlayerSessions ps
                 INNER JOIN Servers gs ON ps.ServerGuid = gs.Guid
                 WHERE 1=1";
@@ -124,11 +125,33 @@ public class HistoricalRoundsService(PlayerTrackerDbContext dbContext)
         }
 
         sql += @"
-                GROUP BY ps.ServerGuid, ps.MapName, ps.GameType, gs.Name, 
-                         datetime(ps.StartTime, 'start of day', '+' || (cast(strftime('%H', ps.StartTime) as integer) / 2 * 2) || ' hours')
+            ),
+            SessionsWithRoundGroups AS (
+                SELECT 
+                    s.*,
+                    SUM(s.IsNewRound) OVER (PARTITION BY s.ServerGuid, s.MapName ORDER BY s.StartTime ROWS UNBOUNDED PRECEDING) as RoundGroup
+                FROM SessionsWithGaps s
+            ),
+            RoundGroups AS (
+                SELECT 
+                    s.ServerGuid,
+                    s.MapName,
+                    s.GameType,
+                    s.ServerName,
+                    s.RoundGroup,
+                    MIN(s.StartTime) as StartTime,
+                    CASE 
+                        WHEN MAX(CASE WHEN s.IsActive = 1 THEN 1 ELSE 0 END) = 1 THEN datetime('now')
+                        ELSE MAX(s.LastSeenTime)
+                    END as EndTime,
+                    COUNT(DISTINCT s.PlayerName) as ParticipantCount,
+                    COUNT(*) as TotalSessions,
+                    MAX(CASE WHEN s.IsActive = 1 THEN 1 ELSE 0 END) as IsActive
+                FROM SessionsWithRoundGroups s
+                GROUP BY s.ServerGuid, s.MapName, s.GameType, s.ServerName, s.RoundGroup
             )
             SELECT 
-                ServerGuid || '_' || MapName || '_' || strftime('%Y-%m-%d_%H-%M-%S', StartTime) as RoundId,
+                ServerGuid || '_' || MapName || '_' || RoundGroup || '_' || strftime('%Y-%m-%d_%H-%M-%S', StartTime) as RoundId,
                 ServerName,
                 ServerGuid,
                 MapName,
@@ -140,7 +163,6 @@ public class HistoricalRoundsService(PlayerTrackerDbContext dbContext)
                 TotalSessions,
                 IsActive
             FROM RoundGroups
-            WHERE (PrevMapName IS NULL OR PrevMapName != MapName OR RowNum = 1)
             ORDER BY EndTime DESC";
 
         if (filters != null)
