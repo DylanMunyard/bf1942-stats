@@ -8,6 +8,7 @@ using junie_des_1942stats.Prometheus;
 using junie_des_1942stats.ServerStats;
 using junie_des_1942stats.StatsCollectors;
 using junie_des_1942stats.ClickHouse;
+using junie_des_1942stats.Caching;
 using Prometheus;
 using Serilog;
 using Microsoft.Extensions.Logging;
@@ -211,6 +212,18 @@ try
     // Register ServerStatisticsService
     builder.Services.AddSingleton<ServerStatisticsService>();
 
+    // Configure Redis caching
+    var redisConnectionString = Environment.GetEnvironmentVariable("REDIS_CONNECTION_STRING") ?? "42redis.home.net:6379";
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = redisConnectionString;
+        options.InstanceName = serviceName;
+    });
+
+    // Register caching services
+    builder.Services.AddScoped<ICacheService, CacheService>();
+    builder.Services.AddScoped<ICacheKeyService, CacheKeyService>();
+
     // Register PlayerComparisonService
     builder.Services.AddScoped<PlayerComparisonService>(sp =>
     {
@@ -220,7 +233,9 @@ try
         var connection = new ClickHouse.Client.ADO.ClickHouseConnection(connectionString);
         var logger = sp.GetRequiredService<ILogger<PlayerComparisonService>>();
         var dbContext = sp.GetRequiredService<PlayerTrackerDbContext>();
-        return new PlayerComparisonService(connection, logger, dbContext);
+        var cacheService = sp.GetRequiredService<ICacheService>();
+        var cacheKeyService = sp.GetRequiredService<ICacheKeyService>();
+        return new PlayerComparisonService(connection, logger, dbContext, cacheService, cacheKeyService);
     });
 
     var host = builder.Build();

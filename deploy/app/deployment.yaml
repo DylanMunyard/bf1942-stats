@@ -43,7 +43,9 @@ spec:
             - name: PROMETHEUS_URL
               value: "http://kube-prometheus-stack-prometheus.monitoring:9090/api/v1"
             - name: CLICKHOUSE_URL
-              value: "http://clickhouse-service.clickhouse:8123"              
+              value: "http://clickhouse-service.clickhouse:8123"
+            - name: REDIS_CONNECTION_STRING
+              value: "redis-service.bf42-stats:6379"              
           volumeMounts:
             - name: stats-data
               mountPath: /mnt/data
@@ -71,3 +73,100 @@ spec:
     - port: 8080
       targetPort: 8080
       name: api
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: bf42-stats
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          args:
+            - redis-server
+            - --appendonly
+            - "yes"
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+      volumes:
+        - name: redis-data
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: bf42-stats
+  labels:
+    app: redis
+spec:
+  selector:
+    app: redis
+  type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-commander
+  namespace: bf42-stats
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-commander
+  template:
+    metadata:
+      labels:
+        app: redis-commander
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      containers:
+        - name: redis-commander
+          image: erikdubbelboer/phpredisadmin:latest
+          ports:
+            - containerPort: 80
+          env:
+            - name: REDIS_1_HOST
+              value: "redis-service.bf42-stats"
+            - name: REDIS_1_PORT
+              value: "6379"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-commander-service
+  namespace: bf42-stats
+  labels:
+    app: redis-commander
+spec:
+  selector:
+    app: redis-commander
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      name: web

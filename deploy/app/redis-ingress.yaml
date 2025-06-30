@@ -1,0 +1,30 @@
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: redis
+  namespace: bf42-stats
+spec:
+  entryPoints:
+    - websecure
+  routes:
+  - match: Host(`42redis.home.net`)
+    kind: Rule
+    services:
+    - name: redis-service
+      port: 6379
+
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: redis-commander
+  namespace: bf42-stats
+spec:
+  entryPoints:
+    - websecure
+  routes:
+  - match: Host(`42rediscommander.home.net`)
+    kind: Rule
+    services:
+    - name: redis-commander-service
+      port: 80

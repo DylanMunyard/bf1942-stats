@@ -2,6 +2,7 @@ using System.Data.SqlTypes;
 using junie_des_1942stats.PlayerTracking;
 using junie_des_1942stats.Prometheus;
 using junie_des_1942stats.ServerStats.Models;
+using junie_des_1942stats.Caching;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -14,16 +15,35 @@ public class PingTimestampData
     public int Ping { get; set; }
 }
 
-public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusService prometheusService, ILogger<ServerStatsService> logger)
+public class ServerStatsService(
+    PlayerTrackerDbContext dbContext, 
+    PrometheusService prometheusService, 
+    ILogger<ServerStatsService> logger,
+    ICacheService cacheService,
+    ICacheKeyService cacheKeyService)
 {
     private readonly PlayerTrackerDbContext _dbContext = dbContext;
     private readonly PrometheusService _prometheusService = prometheusService;
     private readonly ILogger<ServerStatsService> _logger = logger;
+    private readonly ICacheService _cacheService = cacheService;
+    private readonly ICacheKeyService _cacheKeyService = cacheKeyService;
 
     public async Task<ServerStatistics> GetServerStatistics(
         string serverName,
         int daysToAnalyze = 7)
     {
+        // Check cache first
+        var cacheKey = _cacheKeyService.GetServerStatisticsKey(serverName, daysToAnalyze);
+        var cachedResult = await _cacheService.GetAsync<ServerStatistics>(cacheKey);
+        
+        if (cachedResult != null)
+        {
+            _logger.LogDebug("Cache hit for server statistics: {ServerName}, {Days} days", serverName, daysToAnalyze);
+            return cachedResult;
+        }
+
+        _logger.LogDebug("Cache miss for server statistics: {ServerName}, {Days} days", serverName, daysToAnalyze);
+
         // Calculate the time period
         var endPeriod = DateTime.UtcNow;
         var startPeriod = endPeriod.AddDays(-daysToAnalyze);
@@ -149,6 +169,10 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
             statistics.AveragePlayerCountChangePercent = null;
         }
 
+        // Cache the result for 10 minutes
+        await _cacheService.SetAsync(cacheKey, statistics, TimeSpan.FromMinutes(10));
+        _logger.LogDebug("Cached server statistics: {ServerName}, {Days} days", serverName, daysToAnalyze);
+
         return statistics;
     }
 
@@ -156,6 +180,18 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
         string? playerName = null, int? minScore = null, int? minKills = null, int? minDeaths = null, 
         double? minKdRatio = null, int? minPlayTimeMinutes = null, string? orderBy = "TotalScore", string? orderDirection = "desc")
     {
+        // Check cache first
+        var cacheKey = _cacheKeyService.GetServerRankingsKey(serverName, year, page, pageSize, playerName, minScore, minKills, minDeaths, minKdRatio, minPlayTimeMinutes, orderBy, orderDirection);
+        var cachedResult = await _cacheService.GetAsync<PagedResult<ServerRanking>>(cacheKey);
+        
+        if (cachedResult != null)
+        {
+            _logger.LogDebug("Cache hit for server rankings: {ServerName}", serverName);
+            return cachedResult;
+        }
+
+        _logger.LogDebug("Cache miss for server rankings: {ServerName}", serverName);
+
         if (page < 1)
             throw new ArgumentException("Page number must be at least 1");
         
@@ -277,7 +313,7 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
             ServerName = serverName
         };
 
-        return new PagedResult<ServerRanking>
+        var result = new PagedResult<ServerRanking>
         {
             CurrentPage = page,
             TotalPages = (int)Math.Ceiling(totalItems / (double)pageSize),
@@ -285,6 +321,12 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
             TotalItems = totalItems,
             ServerContext = serverContext
         };
+
+        // Cache the result for 15 minutes
+        await _cacheService.SetAsync(cacheKey, result, TimeSpan.FromMinutes(15));
+        _logger.LogDebug("Cached server rankings: {ServerName}", serverName);
+
+        return result;
     }
 
     public async Task<MapStatistics> GetMapStatistics(string serverName, string mapName, int daysToAnalyze = 7)
@@ -534,6 +576,18 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
 
     public async Task<ServerInsights> GetServerInsights(string serverName, int daysToAnalyze = 7)
     {
+        // Check cache first
+        var cacheKey = _cacheKeyService.GetServerInsightsKey(serverName, daysToAnalyze);
+        var cachedResult = await _cacheService.GetAsync<ServerInsights>(cacheKey);
+        
+        if (cachedResult != null)
+        {
+            _logger.LogDebug("Cache hit for server insights: {ServerName}, {Days} days", serverName, daysToAnalyze);
+            return cachedResult;
+        }
+
+        _logger.LogDebug("Cache miss for server insights: {ServerName}, {Days} days", serverName, daysToAnalyze);
+
         if (daysToAnalyze > 31)
         {
             throw new ArgumentException("The analysis period cannot exceed 31 days for this insight.");
@@ -611,6 +665,10 @@ public class ServerStatsService(PlayerTrackerDbContext dbContext, PrometheusServ
         {
             Data = hourlyPings
         };
+
+        // Cache the result for 20 minutes
+        await _cacheService.SetAsync(cacheKey, insights, TimeSpan.FromMinutes(20));
+        _logger.LogDebug("Cached server insights: {ServerName}, {Days} days", serverName, daysToAnalyze);
 
         return insights;
     }

@@ -6,6 +6,7 @@ using ClickHouse.Client.ADO;
 using ClickHouse.Client.ADO.Readers;
 using junie_des_1942stats.PlayerStats.Models;
 using junie_des_1942stats.PlayerTracking;
+using junie_des_1942stats.Caching;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -16,16 +17,37 @@ public class PlayerComparisonService
     private readonly ClickHouseConnection _connection;
     private readonly ILogger<PlayerComparisonService> _logger;
     private readonly PlayerTrackerDbContext _dbContext;
+    private readonly ICacheService _cacheService;
+    private readonly ICacheKeyService _cacheKeyService;
 
-    public PlayerComparisonService(ClickHouseConnection connection, ILogger<PlayerComparisonService> logger, PlayerTrackerDbContext dbContext)
+    public PlayerComparisonService(
+        ClickHouseConnection connection, 
+        ILogger<PlayerComparisonService> logger, 
+        PlayerTrackerDbContext dbContext,
+        ICacheService cacheService,
+        ICacheKeyService cacheKeyService)
     {
         _connection = connection;
         _logger = logger;
         _dbContext = dbContext;
+        _cacheService = cacheService;
+        _cacheKeyService = cacheKeyService;
     }
 
     public async Task<PlayerComparisonResult> ComparePlayersAsync(string player1, string player2, string serverGuid = null)
     {
+        // Check cache first
+        var cacheKey = _cacheKeyService.GetPlayerComparisonKey(player1, player2, serverGuid);
+        var cachedResult = await _cacheService.GetAsync<PlayerComparisonResult>(cacheKey);
+        
+        if (cachedResult != null)
+        {
+            _logger.LogDebug("Cache hit for player comparison: {Player1} vs {Player2}", player1, player2);
+            return cachedResult;
+        }
+
+        _logger.LogDebug("Cache miss for player comparison: {Player1} vs {Player2}", player1, player2);
+
         var result = new PlayerComparisonResult
         {
             Player1 = player1,
@@ -74,6 +96,10 @@ public class PlayerComparisonService
 
         // 6. Common Servers (servers where both players have played)
         result.CommonServers = await GetCommonServers(player1, player2);
+
+        // Cache the result for 45 minutes
+        await _cacheService.SetAsync(cacheKey, result, TimeSpan.FromMinutes(45));
+        _logger.LogDebug("Cached player comparison result: {Player1} vs {Player2}", player1, player2);
 
         return result;
     }
