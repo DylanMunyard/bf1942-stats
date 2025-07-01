@@ -212,11 +212,11 @@ try
     // Register ServerStatisticsService
     builder.Services.AddSingleton<ServerStatisticsService>();
 
-    // Configure Redis caching
+    // Configure Redis caching with short timeouts
     var redisConnectionString = Environment.GetEnvironmentVariable("REDIS_CONNECTION_STRING") ?? "42redis.home.net:6379";
     builder.Services.AddStackExchangeRedisCache(options =>
     {
-        options.Configuration = redisConnectionString;
+        options.Configuration = $"{redisConnectionString},connectTimeout=1000,syncTimeout=1000,connectRetry=1,abortConnect=false";
         options.InstanceName = serviceName;
     });
 
