@@ -257,7 +257,8 @@ GROUP BY map_name, player_name";
         var query = $@"
 SELECT p1.round_start_time, p1.round_end_time, p1.server_guid, p1.map_name,
        p1.final_score, p1.final_kills, p1.final_deaths,
-       p2.final_score, p2.final_kills, p2.final_deaths
+       p2.final_score, p2.final_kills, p2.final_deaths,
+       p2.round_start_time, p2.round_end_time
 FROM player_rounds p1
 JOIN player_rounds p2 ON p1.server_guid = p2.server_guid 
     AND p1.map_name = p2.map_name
@@ -283,7 +284,8 @@ LIMIT 50";
                 Player1Deaths = reader.IsDBNull(6) ? 0 : Convert.ToInt32(reader.GetValue(6)),
                 Player2Score = reader.IsDBNull(7) ? 0 : Convert.ToInt32(reader.GetValue(7)),
                 Player2Kills = reader.IsDBNull(8) ? 0 : Convert.ToInt32(reader.GetValue(8)),
-                Player2Deaths = reader.IsDBNull(9) ? 0 : Convert.ToInt32(reader.GetValue(9))
+                Player2Deaths = reader.IsDBNull(9) ? 0 : Convert.ToInt32(reader.GetValue(9)),
+                Player2Timestamp = reader.IsDBNull(10) ? DateTime.MinValue : reader.GetDateTime(10)
             });
         }
         return sessions;
@@ -608,6 +610,7 @@ public class HeadToHeadSession
     public int Player2Score { get; set; }
     public int Player2Kills { get; set; }
     public int Player2Deaths { get; set; }
+    public DateTime Player2Timestamp { get; set; }
 }
 
 public class ServerDetails
