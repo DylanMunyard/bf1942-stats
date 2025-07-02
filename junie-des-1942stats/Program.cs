@@ -212,6 +212,17 @@ try
     // Register ServerStatisticsService
     builder.Services.AddSingleton<ServerStatisticsService>();
 
+    // Register PlayerRoundsService
+    builder.Services.AddSingleton<PlayerRoundsService>(sp =>
+    {
+        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
+        httpClient.Timeout = TimeSpan.FromSeconds(2);
+        var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
+        var logger = sp.GetRequiredService<ILogger<PlayerRoundsService>>();
+        return new PlayerRoundsService(httpClient, clickHouseUrl, scopeFactory, logger);
+    });
+
     // Configure Redis caching with short timeouts
     var redisConnectionString = Environment.GetEnvironmentVariable("REDIS_CONNECTION_STRING") ?? "42redis.home.net:6379";
     builder.Services.AddStackExchangeRedisCache(options =>
@@ -282,6 +293,18 @@ try
         catch (Exception ex)
         {
             logger.LogError(ex, "An error occurred while creating ClickHouse schema");
+        }
+
+        try
+        {
+            // Ensure ClickHouse player_rounds schema is created
+            var playerRoundsService = scope.ServiceProvider.GetRequiredService<PlayerRoundsService>();
+            await playerRoundsService.EnsureSchemaAsync();
+            logger.LogInformation("ClickHouse player_rounds schema created successfully");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "An error occurred while creating ClickHouse player_rounds schema");
         }
     }
 

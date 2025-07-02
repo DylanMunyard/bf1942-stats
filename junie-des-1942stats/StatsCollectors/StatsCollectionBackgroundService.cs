@@ -12,6 +12,7 @@ using junie_des_1942stats.Bflist;
 using junie_des_1942stats.StatsCollectors.Modals;
 using junie_des_1942stats.ClickHouse;
 using Serilog.Context;
+using Microsoft.Extensions.Configuration;
 
 namespace junie_des_1942stats.StatsCollectors;
 
@@ -22,6 +23,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     private Timer _timer;
     private int _isRunning = 0;
     private int _cycleCount = 0;
+    private readonly bool _enableAutoPlayerRoundsSync;
     
     // Metrics
     private readonly Gauge _totalPlayersGauge;
@@ -34,9 +36,12 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     private const string BF1942_BASE_URL = "https://api.bflist.io/v2/bf1942/";
     private const string FH2_BASE_URL = "https://api.bflist.io/v2/fh2/";
 
-    public StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory)
+    public StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory, IConfiguration configuration)
     {
         _scopeFactory = scopeFactory;
+        
+        // Read the setting to enable/disable automatic player rounds sync
+        _enableAutoPlayerRoundsSync = configuration.GetValue<bool>("EnableAutoPlayerRoundsSync", true);
         
         // Initialize metrics
         _totalPlayersGauge = Metrics.CreateGauge(
@@ -63,6 +68,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     public Task StartAsync(CancellationToken cancellationToken)
     {
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Stats collection service starting (15s intervals)...");
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRounds auto-sync: {(_enableAutoPlayerRoundsSync ? "Enabled" : "Disabled")}");
         
         // Initialize timer to run immediately (dueTime: 0) and then every 15 seconds
         _timer = new Timer(
@@ -98,6 +104,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             {
                 var playerTrackingService = scope.ServiceProvider.GetRequiredService<PlayerTrackingService>();
                 var playerMetricsService = scope.ServiceProvider.GetRequiredService<PlayerMetricsService>();
+                var playerRoundsService = scope.ServiceProvider.GetRequiredService<PlayerRoundsService>();
                 
                 // 1. Global timeout cleanup (only on every 4th cycle to avoid too frequent DB operations)
                 if (isEvenCycle)
@@ -135,6 +142,31 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
                 await playerMetricsService.StoreBatchedPlayerMetricsAsync(allServers, timestamp);
                 clickHouseStopwatch.Stop();
                 Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse batch storage: {clickHouseStopwatch.ElapsedMilliseconds}ms ({allServers.Count} servers)");
+
+                // 5. Sync completed PlayerSessions to ClickHouse player_rounds (every 4th cycle)
+                // Only run if auto sync is enabled - can be disabled via EnableAutoPlayerRoundsSync setting
+                if (isEvenCycle && _enableAutoPlayerRoundsSync)
+                {
+                    var roundsSyncStopwatch = Stopwatch.StartNew();
+                    try
+                    {
+                        // Use incremental sync based on last synced timestamp (no explicit paging needed)
+                        // The method internally handles paging efficiently for the incremental data
+                        var result = await playerRoundsService.SyncCompletedSessionsAsync();
+                        
+                        roundsSyncStopwatch.Stop();
+                        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRounds sync: {result.ProcessedCount} records ({roundsSyncStopwatch.ElapsedMilliseconds}ms)");
+                    }
+                    catch (Exception ex)
+                    {
+                        roundsSyncStopwatch.Stop();
+                        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRounds sync failed: {ex.Message} ({roundsSyncStopwatch.ElapsedMilliseconds}ms)");
+                    }
+                }
+                else if (isEvenCycle && !_enableAutoPlayerRoundsSync)
+                {
+                    Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRounds auto-sync disabled via configuration");
+                }
             }
         }
         catch (Exception ex)
