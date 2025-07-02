@@ -338,4 +338,29 @@ public class PlayersController : ControllerBase
             return StatusCode(500, "An internal server error occurred while comparing players.");
         }
     }
+
+    [HttpGet("{playerName}/similar")]
+    public async Task<IActionResult> GetSimilarPlayers(string playerName, [FromQuery] int limit = 10)
+    {
+        if (string.IsNullOrWhiteSpace(playerName))
+            return BadRequest("Player name cannot be empty");
+
+        if (limit < 1 || limit > 50)
+            return BadRequest("Limit must be between 1 and 50");
+
+        try
+        {
+            var result = await _playerComparisonService.FindSimilarPlayersAsync(playerName, limit);
+            
+            if (result.TargetPlayerStats == null)
+                return NotFound($"Player '{playerName}' not found or has insufficient data");
+            
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error finding similar players for {PlayerName}", playerName);
+            return StatusCode(500, "An internal server error occurred while finding similar players.");
+        }
+    }
 }
