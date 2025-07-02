@@ -14,13 +14,15 @@ public class PlayersController : ControllerBase
     private readonly PlayerStatsService _playerStatsService;
     private readonly ServerStatisticsService _serverStatisticsService;
     private readonly PlayerComparisonService _playerComparisonService;
+    private readonly PlayerRoundsService _playerRoundsService;
     private readonly ILogger<PlayersController> _logger;
 
-    public PlayersController(PlayerStatsService playerStatsService, ServerStatisticsService serverStatisticsService, PlayerComparisonService playerComparisonService, ILogger<PlayersController> logger)
+    public PlayersController(PlayerStatsService playerStatsService, ServerStatisticsService serverStatisticsService, PlayerComparisonService playerComparisonService, PlayerRoundsService playerRoundsService, ILogger<PlayersController> logger)
     {
         _playerStatsService = playerStatsService;
         _serverStatisticsService = serverStatisticsService;
         _playerComparisonService = playerComparisonService;
+        _playerRoundsService = playerRoundsService;
         _logger = logger;
     }
     
@@ -361,6 +363,100 @@ public class PlayersController : ControllerBase
         {
             _logger.LogError(ex, "Error finding similar players for {PlayerName}", playerName);
             return StatusCode(500, "An internal server error occurred while finding similar players.");
+        }
+    }
+
+    // NEW: Fast aggregated player statistics using ClickHouse player_rounds table
+    // This demonstrates the performance improvements from the pre-aggregated round data
+    [HttpGet("fast-stats")]
+    public async Task<IActionResult> GetFastPlayerStats(
+        [FromQuery] string? playerName = null,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null)
+    {
+        try
+        {
+            // Default to last 6 months if no date range specified
+            if (!fromDate.HasValue && !toDate.HasValue)
+            {
+                fromDate = DateTime.UtcNow.AddMonths(-6);
+            }
+
+            var result = await _playerRoundsService.GetPlayerStatsAsync(playerName, fromDate, toDate);
+            
+            // Return raw TSV data with proper content type for demonstration
+            // In production, you'd probably parse this into a proper model
+            return Content(result, "text/tab-separated-values");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving fast player stats for player: {PlayerName}", playerName);
+            return StatusCode(500, $"An error occurred while retrieving player statistics: {ex.Message}");
+        }
+    }
+
+    // Management endpoint for manual sync operations (for bulk initial load)
+    [HttpPost("sync-rounds")]
+    public async Task<IActionResult> SyncPlayerRounds(
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] int pageSize = 1000,
+        [FromQuery] int maxPages = 100,
+        [FromQuery] bool excludeRecentData = true)
+    {
+        try
+        {
+            _logger.LogInformation("Manual player rounds sync initiated from API");
+            
+            var startTime = DateTime.UtcNow;
+            var pageNumber = 0;
+            var totalProcessed = 0;
+            var results = new List<object>();
+            
+            while (pageNumber < maxPages)
+            {
+                var result = await _playerRoundsService.SyncCompletedSessionsAsync(fromDate, pageSize, pageNumber, excludeRecentData);
+                totalProcessed += result.ProcessedCount;
+                
+                results.Add(new
+                {
+                    Page = pageNumber,
+                    ProcessedCount = result.ProcessedCount,
+                    HasMorePages = result.HasMorePages,
+                    Duration = result.Duration.TotalMilliseconds,
+                    Success = result.Success,
+                    ErrorMessage = result.ErrorMessage
+                });
+                
+                if (!result.Success)
+                {
+                    _logger.LogError("Sync failed at page {PageNumber}: {ErrorMessage}", pageNumber, result.ErrorMessage);
+                    break;
+                }
+                
+                if (!result.HasMorePages)
+                {
+                    _logger.LogInformation("Sync completed - no more pages");
+                    break;
+                }
+                
+                pageNumber++;
+            }
+            
+            var totalDuration = DateTime.UtcNow - startTime;
+            
+            return Ok(new
+            {
+                TotalProcessed = totalProcessed,
+                TotalPages = pageNumber + 1,
+                TotalDuration = totalDuration.TotalMilliseconds,
+                CompletedSuccessfully = pageNumber < maxPages, // If we hit maxPages, it might not be complete
+                Results = results
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during manual player rounds sync");
+            return StatusCode(500, $"An error occurred during sync: {ex.Message}");
         }
     }
 }
