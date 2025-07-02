@@ -44,11 +44,15 @@ public class RealTimeAnalyticsService : IDisposable
                 await _connection.OpenAsync();
             }
 
-            const string query = @"
-WITH 
--- Step 1: Get previous values and detect resets
-reset_detection AS (
-    SELECT
+            // NOTE: This query CANNOT be optimized with player_rounds table because:
+            // 1. We need real-time point-in-time snapshots to detect score drops
+            // 2. We need to analyze timestamp-ordered sequences to detect team killing patterns
+            // 3. player_rounds only contains final round stats, not the intermediate snapshots
+            // 4. The complex window functions detect session resets and score deltas in real-time
+            var query = @"
+-- Step 1: Detect session resets and calculate deltas
+WITH reset_detection AS (
+    SELECT 
         timestamp,
         server_name,
         server_guid,

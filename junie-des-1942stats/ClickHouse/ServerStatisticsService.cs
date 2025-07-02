@@ -59,64 +59,21 @@ public class ServerStatisticsService : IDisposable
             var serverFilter = string.IsNullOrEmpty(serverGuid) ? "" : $"AND server_guid = '{serverGuid}'";
             var timePeriodCondition = GetTimePeriodCondition(period);
 
+            // Optimized query using player_rounds table - much simpler and faster
             var query = $@"
-WITH session_boundaries AS (
-    SELECT 
-        player_name,
-        map_name,
-        server_guid,
-        server_name,
-        timestamp,
-        score,
-        kills,
-        deaths,
-        CASE 
-            WHEN kills < prev_kills OR timestamp > prev_timestamp + INTERVAL 1 HOUR 
-            THEN 1 
-            ELSE 0 
-        END AS is_new_session
-    FROM (
-        SELECT 
-            *,
-            lagInFrame(kills, 1, 0) OVER (PARTITION BY player_name, map_name, server_guid ORDER BY timestamp) AS prev_kills,
-            lagInFrame(timestamp, 1, timestamp) OVER (PARTITION BY player_name, map_name, server_guid ORDER BY timestamp) AS prev_timestamp
-        FROM player_metrics
-        WHERE player_name = '{playerName}'
-        {serverFilter}
-        {timePeriodCondition}
-        ORDER BY player_name, map_name, server_guid, timestamp
-    )
-    ORDER BY player_name, map_name, server_guid, server_name, timestamp
-),
-sessions AS (
-    SELECT 
-        *,
-        sum(is_new_session) OVER (PARTITION BY player_name, map_name, server_guid ORDER BY timestamp) AS session_id
-    FROM session_boundaries
-    ORDER BY player_name, map_name, server_guid, timestamp
-)
 SELECT 
-    server_name,
     map_name,
-    sum(max_score) AS total_score,
-    sum(max_kills) AS total_kills,
-    sum(max_deaths) AS total_deaths,
-    count(DISTINCT server_guid, session_id) AS sessions_played,
-    sum(session_duration_minutes) AS total_play_time_minutes
-FROM (
-    SELECT 
-        map_name,
-        server_guid,
-        server_name,
-        session_id,
-        max(score) AS max_score,
-        max(kills) AS max_kills,
-        max(deaths) AS max_deaths,
-        dateDiff('minute', min(timestamp), max(timestamp)) AS session_duration_minutes
-    FROM sessions
-    GROUP BY map_name, server_guid, server_name, session_id
-)
-GROUP BY map_name, server_name
+    argMax(server_name, round_start_time) AS server_name,
+    SUM(final_score) AS total_score,
+    SUM(final_kills) AS total_kills,
+    SUM(final_deaths) AS total_deaths,
+    COUNT(*) AS sessions_played,
+    SUM(play_time_minutes) AS total_play_time_minutes
+FROM player_rounds
+WHERE player_name = '{playerName.Replace("'", "''")}'
+{serverFilter}
+{timePeriodCondition.Replace("timestamp", "round_start_time")}
+GROUP BY map_name
 ORDER BY total_kills DESC";
 
             var results = new List<ServerStatistics>();
@@ -129,8 +86,8 @@ ORDER BY total_kills DESC";
             {
                 results.Add(new ServerStatistics
                 {
-                    ServerName = reader.GetString(0),
-                    MapName = reader.GetString(1),
+                    MapName = reader.GetString(0),
+                    ServerName = reader.GetString(1),
                     TotalScore = Convert.ToInt32(reader.GetValue(2)),
                     TotalKills = Convert.ToInt32(reader.GetValue(3)),
                     TotalDeaths = Convert.ToInt32(reader.GetValue(4)),

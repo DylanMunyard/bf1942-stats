@@ -188,16 +188,18 @@ GROUP BY player_name";
     private async Task<List<PingComparison>> GetAveragePing(string player1, string player2, string serverGuid = null)
     {
         var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
+        
+        // Optimized ping query - get recent pings more efficiently
         var query = $@"
-SELECT player_name, avg(ping)
-FROM (
-    SELECT player_name, ping
-    FROM player_metrics 
-    WHERE player_name IN ({Quote(player1)}, {Quote(player2)}) AND ping > 0{serverFilter}
-    ORDER BY timestamp DESC
-    LIMIT 300 BY player_name
-)
+SELECT player_name, avg(ping) as avg_ping
+FROM player_metrics 
+WHERE player_name IN ({Quote(player1)}, {Quote(player2)}) 
+  AND ping > 0 
+  AND ping < 1000  -- Filter out unrealistic ping values
+  AND timestamp >= now() - INTERVAL 7 DAY  -- Only recent data for more relevant ping
+{serverFilter}
 GROUP BY player_name";
+
         var result = new List<PingComparison>();
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
