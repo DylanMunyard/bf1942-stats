@@ -114,21 +114,13 @@ public class PlayerComparisonService
 
     private async Task<List<KillRateComparison>> GetKillRates(string player1, string player2, string serverGuid = null)
     {
-        // Calculate kill rate (kills per minute) for each player
+        // Calculate kill rate (kills per minute) using player_rounds data
         var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
         var query = $@"
-WITH diffs AS (
-    SELECT
-        player_name,
-        timestamp,
-        kills - lagInFrame(kills, 1, 0) OVER (PARTITION BY player_name, server_guid ORDER BY timestamp) AS kills_diff,
-        dateDiff('minute', lagInFrame(timestamp, 1, timestamp) OVER (PARTITION BY player_name, server_guid ORDER BY timestamp), timestamp) AS minutes_diff
-    FROM player_metrics
-    WHERE player_name IN ({Quote(player1)}, {Quote(player2)}){serverFilter}
-)
-SELECT player_name, sum(kills_diff) / nullIf(sum(minutes_diff), 0) AS kill_rate
-FROM diffs
-WHERE minutes_diff > 0 AND kills_diff >= 0
+SELECT player_name, 
+    SUM(final_kills) / nullIf(SUM(play_time_minutes), 0) AS kill_rate
+FROM player_rounds
+WHERE player_name IN ({Quote(player1)}, {Quote(player2)}){serverFilter}
 GROUP BY player_name";
 
         var result = new List<KillRateComparison>();
@@ -151,49 +143,26 @@ GROUP BY player_name";
         // Buckets: last 30 days, last 6 months, last year, all time
         var buckets = new[]
         {
-            ("Last30Days", "timestamp >= now() - INTERVAL 30 DAY"),
-            ("Last6Months", "timestamp >= now() - INTERVAL 6 MONTH"),
-            ("LastYear", "timestamp >= now() - INTERVAL 1 YEAR"),
+            ("Last30Days", "round_start_time >= now() - INTERVAL 30 DAY"),
+            ("Last6Months", "round_start_time >= now() - INTERVAL 6 MONTH"),
+            ("LastYear", "round_start_time >= now() - INTERVAL 1 YEAR"),
             ("AllTime", "1=1")
         };
         var results = new List<BucketTotalsComparison>();
         var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
+        
         foreach (var (label, condition) in buckets)
         {
             var query = $@"
-WITH round_sessions AS (
-    SELECT *,
-        (kills < lagInFrame(kills, 1, 0) OVER w OR 
-         deaths < lagInFrame(deaths, 1, 0) OVER w OR
-         map_name != lagInFrame(map_name, 1, map_name) OVER w OR
-         dateDiff('minute', lagInFrame(timestamp, 1, timestamp) OVER w, timestamp) >= 15 OR
-         ROW_NUMBER() OVER w = 1) AS is_round_start
-    FROM player_metrics
-    WHERE player_name IN ({Quote(player1)}, {Quote(player2)}) AND {condition}{serverFilter}
-    WINDOW w AS (PARTITION BY player_name ORDER BY map_name, timestamp)
-),
-round_numbers AS (
-    SELECT *,
-        SUM(CASE WHEN is_round_start THEN 1 ELSE 0 END) OVER 
-        (PARTITION BY player_name ORDER BY timestamp ROWS UNBOUNDED PRECEDING) AS round_id
-    FROM round_sessions
-),
-round_totals AS (
-    SELECT player_name, round_id, server_guid, map_name,
-        MAX(score) AS final_score,
-        MAX(kills) AS final_kills, 
-        MAX(deaths) AS final_deaths,
-        dateDiff('minute', MIN(timestamp), MAX(timestamp)) AS play_time_minutes
-    FROM round_numbers
-    GROUP BY player_name, round_id, server_guid, map_name
-)
 SELECT player_name, 
     SUM(final_score) AS total_score,
     SUM(final_kills) AS total_kills,
     SUM(final_deaths) AS total_deaths,
     SUM(play_time_minutes) AS total_play_time_minutes
-FROM round_totals
+FROM player_rounds
+WHERE player_name IN ({Quote(player1)}, {Quote(player2)}) AND {condition}{serverFilter}
 GROUP BY player_name";
+
             await using var cmd = _connection.CreateCommand();
             cmd.CommandText = query;
             await using var reader = await cmd.ExecuteReaderAsync();
@@ -248,39 +217,15 @@ GROUP BY player_name";
     {
         var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
         var query = $@"
-WITH round_sessions AS (
-    SELECT *,
-        (kills < lagInFrame(kills, 1, 0) OVER w OR 
-         deaths < lagInFrame(deaths, 1, 0) OVER w OR
-         map_name != lagInFrame(map_name, 1, map_name) OVER w OR
-         dateDiff('minute', lagInFrame(timestamp, 1, timestamp) OVER w, timestamp) >= 15 OR
-         ROW_NUMBER() OVER w = 1) AS is_round_start
-    FROM player_metrics
-    WHERE player_name IN ({Quote(player1)}, {Quote(player2)}){serverFilter}
-    WINDOW w AS (PARTITION BY player_name ORDER BY map_name, timestamp)
-),
-round_numbers AS (
-    SELECT *,
-        SUM(CASE WHEN is_round_start THEN 1 ELSE 0 END) OVER 
-        (PARTITION BY player_name ORDER BY timestamp ROWS UNBOUNDED PRECEDING) AS round_id
-    FROM round_sessions
-),
-round_totals AS (
-    SELECT player_name, round_id, server_guid, map_name,
-        MAX(score) AS final_score,
-        MAX(kills) AS final_kills, 
-        MAX(deaths) AS final_deaths,
-        dateDiff('minute', MIN(timestamp), MAX(timestamp)) AS play_time_minutes
-    FROM round_numbers
-    GROUP BY player_name, round_id, server_guid, map_name
-)
 SELECT map_name, player_name, 
     SUM(final_score) AS total_score,
     SUM(final_kills) AS total_kills,
     SUM(final_deaths) AS total_deaths,
     SUM(play_time_minutes) AS total_play_time_minutes
-FROM round_totals
+FROM player_rounds
+WHERE player_name IN ({Quote(player1)}, {Quote(player2)}){serverFilter}
 GROUP BY map_name, player_name";
+
         var mapStats = new Dictionary<string, MapPerformanceComparison>();
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
@@ -305,73 +250,21 @@ GROUP BY map_name, player_name";
 
     private async Task<List<HeadToHeadSession>> GetHeadToHead(string player1, string player2, string serverGuid = null)
     {
-        // Find overlapping rounds using round detection
-        var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
+        // Find overlapping rounds using the player_rounds table
+        var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND p1.server_guid = {Quote(serverGuid)}" : "";
         var query = $@"
-WITH p1_rounds AS (
-    SELECT *,
-        (kills < lagInFrame(kills, 1, 0) OVER w OR 
-         deaths < lagInFrame(deaths, 1, 0) OVER w OR
-         map_name != lagInFrame(map_name, 1, map_name) OVER w OR
-         dateDiff('minute', lagInFrame(timestamp, 1, timestamp) OVER w, timestamp) >= 15 OR
-         ROW_NUMBER() OVER w = 1) AS is_round_start
-    FROM player_metrics
-    WHERE player_name = {Quote(player1)}{serverFilter}
-    WINDOW w AS (ORDER BY map_name, timestamp)
-),
-p1_numbered AS (
-    SELECT *,
-        SUM(CASE WHEN is_round_start THEN 1 ELSE 0 END) OVER 
-        (ORDER BY timestamp ROWS UNBOUNDED PRECEDING) AS round_id
-    FROM p1_rounds
-),
-p1_final AS (
-    SELECT round_id, server_guid, map_name, 
-        MIN(timestamp) AS round_start,
-        MAX(timestamp) AS round_end,
-        MAX(score) AS final_score,
-        MAX(kills) AS final_kills,
-        MAX(deaths) AS final_deaths
-    FROM p1_numbered
-    GROUP BY round_id, server_guid, map_name
-),
-p2_rounds AS (
-    SELECT *,
-        (kills < lagInFrame(kills, 1, 0) OVER w OR 
-         deaths < lagInFrame(deaths, 1, 0) OVER w OR
-         map_name != lagInFrame(map_name, 1, map_name) OVER w OR
-         dateDiff('minute', lagInFrame(timestamp, 1, timestamp) OVER w, timestamp) >= 15 OR
-         ROW_NUMBER() OVER w = 1) AS is_round_start
-    FROM player_metrics
-    WHERE player_name = {Quote(player2)}{serverFilter}
-    WINDOW w AS (ORDER BY map_name, timestamp)
-),
-p2_numbered AS (
-    SELECT *,
-        SUM(CASE WHEN is_round_start THEN 1 ELSE 0 END) OVER 
-        (ORDER BY timestamp ROWS UNBOUNDED PRECEDING) AS round_id
-    FROM p2_rounds
-),
-p2_final AS (
-    SELECT round_id, server_guid, map_name, 
-        MIN(timestamp) AS round_start,
-        MAX(timestamp) AS round_end,
-        MAX(score) AS final_score,
-        MAX(kills) AS final_kills,
-        MAX(deaths) AS final_deaths
-    FROM p2_numbered
-    GROUP BY round_id, server_guid, map_name
-)
-SELECT p1.round_start, p1.round_end, p1.server_guid, p1.map_name,
+SELECT p1.round_start_time, p1.round_end_time, p1.server_guid, p1.map_name,
        p1.final_score, p1.final_kills, p1.final_deaths,
        p2.final_score, p2.final_kills, p2.final_deaths
-FROM p1_final p1
-JOIN p2_final p2 ON p1.server_guid = p2.server_guid 
+FROM player_rounds p1
+JOIN player_rounds p2 ON p1.server_guid = p2.server_guid 
     AND p1.map_name = p2.map_name
-    AND p1.round_start <= p2.round_end 
-    AND p2.round_start <= p1.round_end
-ORDER BY p1.round_start DESC
+    AND p1.round_start_time <= p2.round_end_time 
+    AND p2.round_start_time <= p1.round_end_time
+WHERE p1.player_name = {Quote(player1)} AND p2.player_name = {Quote(player2)}{serverFilter}
+ORDER BY p1.round_start_time DESC
 LIMIT 50";
+
         var sessions = new List<HeadToHeadSession>();
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
@@ -399,12 +292,12 @@ LIMIT 50";
         // Get servers where both players have played in the last 6 months
         var query = $@"
 SELECT DISTINCT server_guid
-FROM player_metrics
-WHERE player_name = {Quote(player1)} AND timestamp >= now() - INTERVAL 6 MONTH
+FROM player_rounds
+WHERE player_name = {Quote(player1)} AND round_start_time >= now() - INTERVAL 6 MONTH
 INTERSECT
 SELECT DISTINCT server_guid
-FROM player_metrics
-WHERE player_name = {Quote(player2)} AND timestamp >= now() - INTERVAL 6 MONTH";
+FROM player_rounds
+WHERE player_name = {Quote(player2)} AND round_start_time >= now() - INTERVAL 6 MONTH";
 
         var serverGuids = new List<string>();
         await using var cmd = _connection.CreateCommand();
@@ -480,47 +373,19 @@ WHERE player_name = {Quote(player2)} AND timestamp >= now() - INTERVAL 6 MONTH";
     private async Task<PlayerSimilarityStats?> GetPlayerStatsForSimilarity(string playerName)
     {
         var query = $@"
-WITH round_sessions AS (
-    SELECT *,
-        (kills < lagInFrame(kills, 1, 0) OVER w OR 
-         deaths < lagInFrame(deaths, 1, 0) OVER w OR
-         map_name != lagInFrame(map_name, 1, map_name) OVER w OR
-         dateDiff('minute', lagInFrame(timestamp, 1, timestamp) OVER w, timestamp) >= 15 OR
-         ROW_NUMBER() OVER w = 1) AS is_round_start
-    FROM player_metrics
-    WHERE player_name = {Quote(playerName)} AND timestamp >= now() - INTERVAL 6 MONTH
-    WINDOW w AS (PARTITION BY player_name ORDER BY map_name, timestamp)
-),
-round_numbers AS (
-    SELECT *,
-        SUM(CASE WHEN is_round_start THEN 1 ELSE 0 END) OVER 
-        (PARTITION BY player_name ORDER BY timestamp ROWS UNBOUNDED PRECEDING) AS round_id
-    FROM round_sessions
-),
-round_totals AS (
-    SELECT player_name, round_id, server_guid, map_name,
-        MAX(score) AS final_score,
-        MAX(kills) AS final_kills, 
-        MAX(deaths) AS final_deaths,
-        dateDiff('minute', MIN(timestamp), MAX(timestamp)) AS play_time_minutes
-    FROM round_numbers
-    GROUP BY player_name, round_id, server_guid, map_name
-),
-server_playtime AS (
-    SELECT server_guid, SUM(play_time_minutes) AS total_minutes
-    FROM round_totals
-    GROUP BY server_guid
-),
-total_stats AS (
+WITH total_stats AS (
     SELECT 
         SUM(final_kills) AS total_kills,
         SUM(final_deaths) AS total_deaths,
         SUM(play_time_minutes) AS total_play_time_minutes
-    FROM round_totals
+    FROM player_rounds
+    WHERE player_name = {Quote(playerName)} AND round_start_time >= now() - INTERVAL 6 MONTH
 ),
-favorite_server AS (
-    SELECT server_guid, total_minutes
-    FROM server_playtime
+server_playtime AS (
+    SELECT server_guid, SUM(play_time_minutes) AS total_minutes
+    FROM player_rounds
+    WHERE player_name = {Quote(playerName)} AND round_start_time >= now() - INTERVAL 6 MONTH
+    GROUP BY server_guid
     ORDER BY total_minutes DESC
     LIMIT 1
 )
@@ -528,10 +393,10 @@ SELECT
     t.total_kills,
     t.total_deaths,
     t.total_play_time_minutes,
-    f.server_guid as favorite_server_guid,
-    f.total_minutes as favorite_server_minutes
+    s.server_guid as favorite_server_guid,
+    s.total_minutes as favorite_server_minutes
 FROM total_stats t
-CROSS JOIN favorite_server f";
+CROSS JOIN server_playtime s";
 
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
@@ -569,47 +434,23 @@ CROSS JOIN favorite_server f";
         var kdrMax = targetStats.KillDeathRatio + 0.4;
 
         var query = $@"
-WITH round_sessions AS (
-    SELECT *,
-        (kills < lagInFrame(kills, 1, 0) OVER w OR 
-         deaths < lagInFrame(deaths, 1, 0) OVER w OR
-         map_name != lagInFrame(map_name, 1, map_name) OVER w OR
-         dateDiff('minute', lagInFrame(timestamp, 1, timestamp) OVER w, timestamp) >= 15 OR
-         ROW_NUMBER() OVER w = 1) AS is_round_start
-    FROM player_metrics
-    WHERE player_name != {Quote(targetPlayer)} AND timestamp >= now() - INTERVAL 6 MONTH
-    WINDOW w AS (PARTITION BY player_name ORDER BY map_name, timestamp)
-),
-round_numbers AS (
-    SELECT *,
-        SUM(CASE WHEN is_round_start THEN 1 ELSE 0 END) OVER 
-        (PARTITION BY player_name ORDER BY timestamp ROWS UNBOUNDED PRECEDING) AS round_id
-    FROM round_sessions
-),
-round_totals AS (
-    SELECT player_name, round_id, server_guid, map_name,
-        MAX(score) AS final_score,
-        MAX(kills) AS final_kills, 
-        MAX(deaths) AS final_deaths,
-        dateDiff('minute', MIN(timestamp), MAX(timestamp)) AS play_time_minutes
-    FROM round_numbers
-    GROUP BY player_name, round_id, server_guid, map_name
-),
-player_stats AS (
+WITH player_stats AS (
     SELECT 
         player_name,
         SUM(final_kills) AS total_kills,
         SUM(final_deaths) AS total_deaths,
         SUM(play_time_minutes) AS total_play_time_minutes,
-        CASE WHEN SUM(final_deaths) > 0 THEN SUM(final_kills) / SUM(final_deaths) ELSE SUM(final_kills) END AS kdr
-    FROM round_totals
+        CASE WHEN SUM(final_deaths) > 0 THEN SUM(final_kills) / SUM(final_deaths) ELSE toFloat64(SUM(final_kills)) END AS kdr
+    FROM player_rounds
+    WHERE player_name != {Quote(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH
     GROUP BY player_name
     HAVING total_play_time_minutes BETWEEN {playTimeMin} AND {playTimeMax}
        AND kdr BETWEEN {kdrMin} AND {kdrMax}
 ),
 server_playtime AS (
     SELECT player_name, server_guid, SUM(play_time_minutes) AS total_minutes
-    FROM round_totals
+    FROM player_rounds
+    WHERE player_name != {Quote(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH
     GROUP BY player_name, server_guid
 ),
 favorite_servers AS (

@@ -202,14 +202,20 @@ try
     {
         var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
         httpClient.Timeout = TimeSpan.FromSeconds(2);
-        var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
-        return new PlayerMetricsService(httpClient, clickHouseUrl);
+        
+        // Use write URL for PlayerMetricsService (falls back to read URL if not set)
+        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? clickHouseReadUrl;
+        
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerMetricsService ClickHouse Write URL: {clickHouseWriteUrl}");
+        
+        return new PlayerMetricsService(httpClient, clickHouseWriteUrl);
     });
 
-    // Register RealTimeAnalyticsService
+    // Register RealTimeAnalyticsService (read-only)
     builder.Services.AddSingleton<RealTimeAnalyticsService>();
 
-    // Register ServerStatisticsService
+    // Register ServerStatisticsService (read-only)
     builder.Services.AddSingleton<ServerStatisticsService>();
 
     // Register PlayerRoundsService
@@ -217,10 +223,16 @@ try
     {
         var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
         httpClient.Timeout = TimeSpan.FromSeconds(2);
-        var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        
+        // Use write URL for PlayerRoundsService (falls back to read URL if not set)
+        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? clickHouseReadUrl;
+        
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRoundsService ClickHouse Write URL: {clickHouseWriteUrl}");
+        
         var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
         var logger = sp.GetRequiredService<ILogger<PlayerRoundsService>>();
-        return new PlayerRoundsService(httpClient, clickHouseUrl, scopeFactory, logger);
+        return new PlayerRoundsService(httpClient, clickHouseWriteUrl, scopeFactory, logger);
     });
 
     // Configure Redis caching with short timeouts
@@ -235,11 +247,15 @@ try
     builder.Services.AddScoped<ICacheService, CacheService>();
     builder.Services.AddScoped<ICacheKeyService, CacheKeyService>();
 
-    // Register PlayerComparisonService
+    // Register PlayerComparisonService (read-only)
     builder.Services.AddScoped<PlayerComparisonService>(sp =>
     {
-        var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
-        var uri = new Uri(clickHouseUrl);
+        // Use read URL for PlayerComparisonService
+        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerComparisonService ClickHouse Read URL: {clickHouseReadUrl}");
+        
+        var uri = new Uri(clickHouseReadUrl);
         var connectionString = $"Host={uri.Host};Port={uri.Port};Database=default;User=default;Password=;Protocol={uri.Scheme}";
         var connection = new ClickHouse.Client.ADO.ClickHouseConnection(connectionString);
         var logger = sp.GetRequiredService<ILogger<PlayerComparisonService>>();
@@ -273,6 +289,10 @@ try
         var playerMetricsService = scope.ServiceProvider.GetRequiredService<PlayerMetricsService>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
         
+        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? clickHouseReadUrl;
+        var isWriteUrlSet = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") != null;
+        
         try
         {
             // Apply EF Core migrations for SQLite
@@ -284,27 +304,35 @@ try
             logger.LogError(ex, "An error occurred while applying SQLite migrations");
         }
 
-        try
+        // Only attempt ClickHouse schema creation if write URL is properly configured or in development
+        if (isWriteUrlSet || host.Environment.IsDevelopment())
         {
-            // Ensure ClickHouse schema is created
-            await playerMetricsService.EnsureSchemaAsync();
-            logger.LogInformation("ClickHouse schema created successfully");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "An error occurred while creating ClickHouse schema");
-        }
+            try
+            {
+                // Ensure ClickHouse schema is created (using write service)
+                await playerMetricsService.EnsureSchemaAsync();
+                logger.LogInformation("ClickHouse schema created successfully at: {WriteUrl}", clickHouseWriteUrl);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Could not create ClickHouse schema at: {WriteUrl}. This is normal in dev environments with read-only access", clickHouseWriteUrl);
+            }
 
-        try
-        {
-            // Ensure ClickHouse player_rounds schema is created
-            var playerRoundsService = scope.ServiceProvider.GetRequiredService<PlayerRoundsService>();
-            await playerRoundsService.EnsureSchemaAsync();
-            logger.LogInformation("ClickHouse player_rounds schema created successfully");
+            try
+            {
+                // Ensure ClickHouse player_rounds schema is created (using write service)
+                var playerRoundsService = scope.ServiceProvider.GetRequiredService<PlayerRoundsService>();
+                await playerRoundsService.EnsureSchemaAsync();
+                logger.LogInformation("ClickHouse player_rounds schema created successfully at: {WriteUrl}", clickHouseWriteUrl);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Could not create ClickHouse player_rounds schema at: {WriteUrl}. This is normal in dev environments with read-only access", clickHouseWriteUrl);
+            }
         }
-        catch (Exception ex)
+        else
         {
-            logger.LogError(ex, "An error occurred while creating ClickHouse player_rounds schema");
+            logger.LogInformation("Skipping ClickHouse schema creation - no write URL configured and not in development environment");
         }
     }
 

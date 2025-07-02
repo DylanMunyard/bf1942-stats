@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Prometheus;
 using System.Text.Json;
 using junie_des_1942stats.PlayerTracking;
@@ -18,10 +19,14 @@ namespace junie_des_1942stats.StatsCollectors;
 public class StatsCollectionBackgroundService : IHostedService, IDisposable
 {
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IConfiguration _configuration;
     private readonly TimeSpan _collectionInterval = TimeSpan.FromSeconds(15);
     private Timer _timer;
     private int _isRunning = 0;
     private int _cycleCount = 0;
+    
+    // Configuration setting for round syncing
+    private readonly bool _enableRoundSyncing;
     
     // Metrics
     private readonly Gauge _totalPlayersGauge;
@@ -34,9 +39,22 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     private const string BF1942_BASE_URL = "https://api.bflist.io/v2/bf1942/";
     private const string FH2_BASE_URL = "https://api.bflist.io/v2/fh2/";
 
-    public StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory)
+    public StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory, IConfiguration configuration)
     {
         _scopeFactory = scopeFactory;
+        _configuration = configuration;
+        
+        // Check environment variable for round syncing - default to false (disabled)
+        _enableRoundSyncing = Environment.GetEnvironmentVariable("ENABLE_ROUND_SYNCING")?.ToLowerInvariant() == "true";
+        
+        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? clickHouseReadUrl;
+        var isWriteUrlSet = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") != null;
+        
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse Read URL: {clickHouseReadUrl}");
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse Write URL: {clickHouseWriteUrl} {(isWriteUrlSet ? "(custom)" : "(fallback to read URL)")}");
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Round syncing to ClickHouse: {(_enableRoundSyncing ? "ENABLED" : "DISABLED")}");
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] To avoid writes to production: Set CLICKHOUSE_WRITE_URL to dev instance or leave ENABLE_ROUND_SYNCING=false");
         
         // Initialize metrics
         _totalPlayersGauge = Metrics.CreateGauge(
@@ -138,7 +156,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
                 Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse batch storage: {clickHouseStopwatch.ElapsedMilliseconds}ms ({allServers.Count} servers)");
 
                 // 5. Sync completed PlayerSessions to ClickHouse player_rounds (every 4th cycle)
-                if (isEvenCycle)
+                if (isEvenCycle && _enableRoundSyncing)
                 {
                     var roundsSyncStopwatch = Stopwatch.StartNew();
                     try
@@ -155,6 +173,10 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
                         roundsSyncStopwatch.Stop();
                         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRounds sync failed: {ex.Message} ({roundsSyncStopwatch.ElapsedMilliseconds}ms)");
                     }
+                }
+                else if (isEvenCycle && !_enableRoundSyncing)
+                {
+                    Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRounds sync: SKIPPED (disabled by configuration)");
                 }
             }
         }

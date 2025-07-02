@@ -312,7 +312,7 @@ SELECT
     SUM(final_deaths) as total_deaths, 
     SUM(play_time_minutes) as total_play_time_minutes,
     AVG(final_score) as avg_score_per_round,
-    round(SUM(final_kills) / SUM(final_deaths), 3) as kd_ratio
+    CASE WHEN SUM(final_deaths) > 0 THEN round(SUM(final_kills) / SUM(final_deaths), 3) ELSE toFloat64(SUM(final_kills)) END as kd_ratio
 FROM player_rounds 
 {whereClause}
 GROUP BY player_name
