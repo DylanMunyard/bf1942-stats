@@ -47,7 +47,7 @@ public class ServerStatisticsService : IDisposable
         };
     }
 
-    public async Task<List<ServerStatistics>> GetServerStats(string playerName, TimePeriod period, string serverGuid = null)
+    public async Task<List<ServerStatistics>> GetServerStats(string playerName, TimePeriod period, string serverGuid)
     {
         try
         {
@@ -56,14 +56,13 @@ public class ServerStatisticsService : IDisposable
                 await _connection.OpenAsync();
             }
 
-            var serverFilter = string.IsNullOrEmpty(serverGuid) ? "" : $"AND server_guid = '{serverGuid}'";
+            var serverFilter = string.IsNullOrEmpty(serverGuid) ? "" : $"";
             var timePeriodCondition = GetTimePeriodCondition(period);
 
             // Optimized query using player_rounds table - much simpler and faster
             var query = $@"
 SELECT 
     map_name,
-    argMax(server_name, round_start_time) AS server_name,
     SUM(final_score) AS total_score,
     SUM(final_kills) AS total_kills,
     SUM(final_deaths) AS total_deaths,
@@ -71,7 +70,7 @@ SELECT
     SUM(play_time_minutes) AS total_play_time_minutes
 FROM player_rounds
 WHERE player_name = '{playerName.Replace("'", "''")}'
-{serverFilter}
+AND server_guid = '{serverGuid}'
 {timePeriodCondition.Replace("timestamp", "round_start_time")}
 GROUP BY map_name
 ORDER BY total_kills DESC";
@@ -87,12 +86,11 @@ ORDER BY total_kills DESC";
                 results.Add(new ServerStatistics
                 {
                     MapName = reader.GetString(0),
-                    ServerName = reader.GetString(1),
-                    TotalScore = Convert.ToInt32(reader.GetValue(2)),
-                    TotalKills = Convert.ToInt32(reader.GetValue(3)),
-                    TotalDeaths = Convert.ToInt32(reader.GetValue(4)),
-                    SessionsPlayed = Convert.ToInt32(reader.GetValue(5)),
-                    TotalPlayTimeMinutes = Convert.ToInt32(reader.GetValue(6))
+                    TotalScore = Convert.ToInt32(reader.GetValue(1)),
+                    TotalKills = Convert.ToInt32(reader.GetValue(2)),
+                    TotalDeaths = Convert.ToInt32(reader.GetValue(3)),
+                    SessionsPlayed = Convert.ToInt32(reader.GetValue(4)),
+                    TotalPlayTimeMinutes = Convert.ToInt32(reader.GetValue(5))
                 });
             }
 

@@ -53,25 +53,7 @@ public class TopScore
     public int SessionId { get; set; }
 }
 
-public class MapStatistics
-{
-    public string ServerGuid { get; set; } = "";
-    public string ServerName { get; set; } = "";
-    public string MapName { get; set; } = "";
-    public DateTime StartPeriod { get; set; }
-    public DateTime EndPeriod { get; set; }
-    
-    // Map statistics
-    public int PlayerCount { get; set; }
-    public int TotalMinutesPlayed { get; set; }
-    public int TotalSessions { get; set; }
-    
-    // Most active players by time played on this map
-    public List<PlayerActivity> MostActivePlayersByTime { get; set; } = new List<PlayerActivity>();
-    
-    // Top scores on this map
-    public List<TopScore> TopScores { get; set; } = new List<TopScore>();
-}
+
 
 public class ServerRanking
 {

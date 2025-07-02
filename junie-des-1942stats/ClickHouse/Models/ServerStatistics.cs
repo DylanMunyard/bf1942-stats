@@ -5,8 +5,7 @@ namespace junie_des_1942stats.ClickHouse.Models;
 [DataContract(Name = "ClickHouseServerStatistics")]
 public class ServerStatistics
 {
-    public string ServerName { get; set; }
-    public string MapName { get; set; }
+    public string MapName { get; set; } = "";
     public int TotalScore { get; set; }
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }
