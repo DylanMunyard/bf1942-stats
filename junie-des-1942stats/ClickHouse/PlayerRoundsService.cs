@@ -155,7 +155,8 @@ SETTINGS index_granularity = 8192";
             {
                 // For incremental sync, get all new records (no artificial paging)
                 // But limit to reasonable batch size to avoid memory issues
-                const int incrementalBatchSize = 5000;
+                // Use provided pageSize if specified, otherwise default to 5000
+                int incrementalBatchSize = pageSize > 0 ? pageSize : 5000;
                 completedSessions = await query
                     .Take(incrementalBatchSize)
                     .Include(ps => ps.Observations.OrderByDescending(o => o.Timestamp).Take(1))
@@ -286,8 +287,9 @@ SETTINGS index_granularity = 8192";
 
     private string GenerateRoundId(PlayerSession session)
     {
-        // Create a deterministic round ID based on player, server, map, and start time
-        var input = $"{session.PlayerName}_{session.ServerGuid}_{session.MapName}_{session.StartTime:yyyyMMddHHmmss}";
+        // Create a deterministic round ID based on player, server, map, start time, and session ID
+        // Including SessionId ensures uniqueness even for rapid reconnections
+        var input = $"{session.PlayerName}_{session.ServerGuid}_{session.MapName}_{session.StartTime:yyyyMMddHHmmss}_{session.SessionId}";
         return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(input)))[..16];
     }
 
