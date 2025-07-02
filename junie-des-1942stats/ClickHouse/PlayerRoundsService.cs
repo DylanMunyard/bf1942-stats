@@ -101,130 +101,65 @@ SETTINGS index_granularity = 8192";
     }
 
     /// <summary>
-    /// Syncs completed PlayerSessions to ClickHouse player_rounds table
+    /// Syncs completed PlayerSessions to ClickHouse player_rounds table using incremental sync
     /// </summary>
-    public async Task<SyncResult> SyncCompletedSessionsAsync(DateTime? syncFromDate = null, int pageSize = 1000, int pageNumber = 0, bool excludeRecentData = false)
+    public async Task<SyncResult> SyncCompletedSessionsAsync(int batchSize = 5000)
     {
         var startTime = DateTime.UtcNow;
         try
         {
-            // Default to syncing from 365 days ago if no date specified
-            var fromDate = syncFromDate ?? DateTime.UtcNow.AddDays(-365);
+            // Use last synced timestamp from ClickHouse for incremental sync
+            var lastSyncedTime = await GetLastSyncedTimestampAsync();
+            var fromDate = lastSyncedTime ?? DateTime.UtcNow.AddDays(-365);
             
-            // Determine if this is incremental sync (pageNumber = 0 and no explicit fromDate) or manual paging
-            var isIncrementalSync = pageNumber == 0 && syncFromDate == null;
-            
-            DateTime actualFromDate;
-            if (isIncrementalSync)
-            {
-                // For incremental sync, use last synced timestamp from ClickHouse
-                var lastSyncedTime = await GetLastSyncedTimestampAsync();
-                actualFromDate = lastSyncedTime?.AddMinutes(-5) ?? fromDate; // 5 minute overlap for safety
-                _logger.LogInformation("Starting incremental sync of completed player sessions from {FromDate}", actualFromDate);
-            }
-            else
-            {
-                // For manual paging, use the specified date range
-                actualFromDate = fromDate;
-                _logger.LogInformation("Starting manual sync of completed player sessions from {FromDate}, page {PageNumber}, pageSize {PageSize}", 
-                    fromDate, pageNumber, pageSize);
-            }
+            _logger.LogInformation("Starting incremental sync of completed player sessions from {FromDate}", fromDate);
 
             // Use scoped DbContext for database access
             using var scope = _scopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
 
-            // Build the base query
-            IQueryable<PlayerSession> query = dbContext.PlayerSessions
-                .Where(ps => !ps.IsActive && ps.LastSeenTime >= actualFromDate);
-
-            // For manual sync, exclude recent data to avoid conflicts with background service
-            if (excludeRecentData)
-            {
-                var cutoffTime = DateTime.UtcNow.AddHours(-2); // Exclude data newer than 2 hours
-                query = query.Where(ps => ps.LastSeenTime <= cutoffTime);
-                _logger.LogInformation("Manual sync excluding data newer than {CutoffTime} to avoid background service conflicts", cutoffTime);
-            }
-
-            query = query.OrderBy(ps => ps.SessionId); // Consistent ordering
-
-            List<PlayerSession> completedSessions;
-            bool hasMorePages = false;
-
-            if (isIncrementalSync)
-            {
-                // For incremental sync, get all new records (no artificial paging)
-                // But limit to reasonable batch size to avoid memory issues
-                // Use provided pageSize if specified, otherwise default to 5000
-                int incrementalBatchSize = pageSize > 0 ? pageSize : 5000;
-                completedSessions = await query
-                    .Take(incrementalBatchSize)
-                    .Include(ps => ps.Observations.OrderByDescending(o => o.Timestamp).Take(1))
-                    .ToListAsync();
+            // Get completed sessions since last sync, ordered consistently
+            // Use > instead of >= to avoid re-syncing the exact last record and prevent duplicates
+            var query = lastSyncedTime.HasValue 
+                ? dbContext.PlayerSessions.Where(ps => !ps.IsActive && ps.LastSeenTime > fromDate)
+                : dbContext.PlayerSessions.Where(ps => !ps.IsActive && ps.LastSeenTime >= fromDate);
                 
-                // Check if there are more records beyond this batch
-                var totalCount = await dbContext.PlayerSessions
-                    .Where(ps => !ps.IsActive && ps.LastSeenTime >= actualFromDate)
-                    .CountAsync();
-                hasMorePages = totalCount > incrementalBatchSize;
-            }
-            else
-            {
-                // For manual paging, use explicit pagination
-                var totalCount = await query.CountAsync();
-                completedSessions = await query
-                    .Skip(pageNumber * pageSize)
-                    .Take(pageSize)
-                    .Include(ps => ps.Observations.OrderByDescending(o => o.Timestamp).Take(1))
-                    .ToListAsync();
-                hasMorePages = (pageNumber + 1) * pageSize < totalCount;
-            }
+            var completedSessions = await query
+                .OrderBy(ps => ps.SessionId)
+                .Take(batchSize)
+                .Include(ps => ps.Observations.OrderByDescending(o => o.Timestamp).Take(1))
+                .ToListAsync();
 
             if (!completedSessions.Any())
             {
-                _logger.LogInformation("No sessions found" + (isIncrementalSync ? " for incremental sync" : $" for page {pageNumber}"));
+                _logger.LogInformation("No new sessions found for incremental sync");
                 return new SyncResult
                 {
                     ProcessedCount = 0,
-                    HasMorePages = false,
-                    PageNumber = pageNumber,
                     Duration = DateTime.UtcNow - startTime
                 };
             }
 
             var playerRounds = completedSessions.Select(ConvertToPlayerRound).ToList();
-            
             await InsertPlayerRoundsAsync(playerRounds);
             
             var duration = DateTime.UtcNow - startTime;
-            if (isIncrementalSync)
-            {
-                _logger.LogInformation("Successfully synced {Count} completed sessions to ClickHouse (incremental) in {Duration}ms", 
-                    playerRounds.Count, duration.TotalMilliseconds);
-            }
-            else
-            {
-                _logger.LogInformation("Successfully synced {Count} completed sessions to ClickHouse (page {PageNumber}, hasMorePages: {HasMorePages}) in {Duration}ms", 
-                    playerRounds.Count, pageNumber, hasMorePages, duration.TotalMilliseconds);
-            }
+            _logger.LogInformation("Successfully synced {Count} completed sessions to ClickHouse in {Duration}ms", 
+                playerRounds.Count, duration.TotalMilliseconds);
 
             return new SyncResult
             {
                 ProcessedCount = playerRounds.Count,
-                HasMorePages = hasMorePages,
-                PageNumber = pageNumber,
                 Duration = duration
             };
         }
         catch (Exception ex)
         {
             var duration = DateTime.UtcNow - startTime;
-            _logger.LogError(ex, "Failed to sync completed sessions" + (pageNumber > 0 ? $" on page {pageNumber}" : ""));
+            _logger.LogError(ex, "Failed to sync completed sessions");
             return new SyncResult
             {
                 ProcessedCount = 0,
-                HasMorePages = false,
-                PageNumber = pageNumber,
                 Duration = duration,
                 ErrorMessage = ex.Message
             };
@@ -401,8 +336,6 @@ FORMAT TabSeparatedWithNames";
 public class SyncResult
 {
     public int ProcessedCount { get; set; }
-    public bool HasMorePages { get; set; }
-    public int PageNumber { get; set; }
     public TimeSpan Duration { get; set; }
     public string? ErrorMessage { get; set; }
     public bool Success => string.IsNullOrEmpty(ErrorMessage);

@@ -46,8 +46,6 @@ spec:
               value: "http://clickhouse-service.clickhouse:8123"
             - name: REDIS_CONNECTION_STRING
               value: "redis-service.bf42-stats:6379"
-            - name: EnableAutoPlayerRoundsSync
-              value: "false"              
           volumeMounts:
             - name: stats-data
               mountPath: /mnt/data
