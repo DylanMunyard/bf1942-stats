@@ -7,6 +7,7 @@ namespace junie_des_1942stats.Services;
 public interface IBfListApiService
 {
     Task<ServerSummary[]> FetchServersAsync(string game, int perPage = 100, string? cursor = null, string? after = null);
+    Task<ServerSummary[]> FetchAllServersAsync(string game);
     Task<ServerSummary?> FetchSingleServerAsync(string game, string serverIdentifier);
 }
 
@@ -65,6 +66,94 @@ public class BfListApiService : IBfListApiService
             // Sort by player count descending (as per requirements)
             return servers.OrderByDescending(s => s.NumPlayers).ToArray();
         }
+    }
+    
+    public async Task<ServerSummary[]> FetchAllServersAsync(string game)
+    {
+        var allServers = new List<ServerSummary>();
+        string? cursor = null;
+        string? after = null;
+        var pageCount = 0;
+        const int maxPages = 10;
+        bool hasMore = true;
+        
+        while (hasMore && pageCount < maxPages)
+        {
+            pageCount++;
+            
+            var httpClient = _httpClientFactory.CreateClient("BfListApi");
+            var baseUrl = $"https://api.bflist.io/v2/{game}/servers?perPage=100";
+            
+            if (!string.IsNullOrEmpty(cursor))
+            {
+                baseUrl += $"&cursor={Uri.EscapeDataString(cursor)}";
+            }
+            if (!string.IsNullOrEmpty(after))
+            {
+                baseUrl += $"&after={Uri.EscapeDataString(after)}";
+            }
+
+            _logger.LogDebug("Fetching servers page {PageCount} from BFList API: {Url}", pageCount, baseUrl);
+            
+            var response = await httpClient.GetAsync(baseUrl);
+            response.EnsureSuccessStatusCode();
+            var content = await response.Content.ReadAsStringAsync();
+            
+            if (game.ToLower() == "bf1942")
+            {
+                var bf1942Response = JsonSerializer.Deserialize<Bf1942ServersResponse>(content, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+                
+                if (bf1942Response?.Servers != null && bf1942Response.Servers.Length > 0)
+                {
+                    var servers = bf1942Response.Servers.Select(MapBf1942ToSummary).ToArray();
+                    allServers.AddRange(servers);
+                    
+                    // Set pagination parameters for next request
+                    cursor = bf1942Response.Cursor;
+                    after = $"{servers.Last().Ip}:{servers.Last().Port}";
+                    hasMore = bf1942Response.HasMore;
+                }
+                else
+                {
+                    hasMore = false;
+                }
+            }
+            else // fh2
+            {
+                var fh2Response = JsonSerializer.Deserialize<Fh2ServersResponse>(content, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+                
+                if (fh2Response?.Servers != null && fh2Response.Servers.Length > 0)
+                {
+                    var servers = fh2Response.Servers.Select(MapFh2ToSummary).ToArray();
+                    allServers.AddRange(servers);
+                    
+                    // Set pagination parameters for next request
+                    cursor = fh2Response.Cursor;
+                    after = $"{servers.Last().Ip}:{servers.Last().Port}";
+                    hasMore = fh2Response.HasMore;
+                }
+                else
+                {
+                    hasMore = false;
+                }
+            }
+        }
+        
+        if (pageCount >= maxPages && hasMore)
+        {
+            _logger.LogWarning("Reached maximum pages ({MaxPages}) while fetching all servers for game {Game}, there may be more servers", maxPages, game);
+        }
+        
+        _logger.LogDebug("Fetched {TotalServers} servers across {PageCount} pages for game {Game}", allServers.Count, pageCount, game);
+        
+        // Sort all servers by player count descending
+        return allServers.OrderByDescending(s => s.NumPlayers).ToArray();
     }
     
     public async Task<ServerSummary?> FetchSingleServerAsync(string game, string serverIdentifier)

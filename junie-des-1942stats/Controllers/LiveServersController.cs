@@ -33,26 +33,17 @@ public class LiveServersController : ControllerBase
     /// Get all servers for a specific game with intelligent caching
     /// </summary>
     /// <param name="game">Game type: bf1942 or fh2</param>
-    /// <param name="perPage">Number of servers per page (default: 100, max: 1000)</param>
-    /// <param name="cursor">Pagination cursor</param>
-    /// <param name="after">After parameter for pagination</param>
     /// <returns>Server list with caching metadata</returns>
     [HttpGet("{game}/servers")]
-    public async Task<ActionResult<ServerListResponse>> GetServers(
-        string game,
-        [FromQuery] int perPage = DefaultPageSize,
-        [FromQuery] string? cursor = null,
-        [FromQuery] string? after = null)
+    public async Task<ActionResult<ServerListResponse>> GetServers(string game)
     {
         if (!ValidGames.Contains(game.ToLower()))
         {
             return BadRequest($"Invalid game type. Valid types: {string.Join(", ", ValidGames)}");
         }
 
-        perPage = Math.Min(perPage, MaxPageSize);
-        
-        // Create cache key based on all parameters
-        var cacheKey = $"servers:{game}:{perPage}:{cursor ?? ""}:{after ?? ""}";
+        // Create cache key for all servers of this game
+        var cacheKey = $"all_servers:{game}";
         
         try
         {
@@ -60,15 +51,15 @@ public class LiveServersController : ControllerBase
             var cachedResponse = await _cacheService.GetAsync<ServerListResponse>(cacheKey);
             if (cachedResponse != null)
             {
-                _logger.LogDebug("Cache hit for game {Game}, perPage {PerPage}", game, perPage);
+                _logger.LogDebug("Cache hit for all servers of game {Game}", game);
                 cachedResponse.CacheHit = true;
                 return Ok(cachedResponse);
             }
 
-            // Cache miss - fetch from BFList API
-            _logger.LogDebug("Cache miss for game {Game}, perPage {PerPage}", game, perPage);
+            // Cache miss - fetch all servers from BFList API
+            _logger.LogDebug("Cache miss for all servers of game {Game}", game);
             
-            var servers = await _bfListApiService.FetchServersAsync(game, perPage, cursor, after);
+            var servers = await _bfListApiService.FetchAllServersAsync(game);
             
             var response = new ServerListResponse
             {
@@ -84,12 +75,12 @@ public class LiveServersController : ControllerBase
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Failed to fetch servers from BFList API for game {Game}", game);
+            _logger.LogError(ex, "Failed to fetch all servers from BFList API for game {Game}", game);
             return StatusCode(502, "Failed to fetch server data from upstream API");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error fetching servers for game {Game}", game);
+            _logger.LogError(ex, "Unexpected error fetching all servers for game {Game}", game);
             return StatusCode(500, "Internal server error");
         }
     }
