@@ -247,6 +247,33 @@ try
     builder.Services.AddScoped<ICacheService, CacheService>();
     builder.Services.AddScoped<ICacheKeyService, CacheKeyService>();
 
+    // Register BFList API service with configured HTTP client and resilience
+    builder.Services.AddHttpClient("BfListApi", client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(10);
+        client.DefaultRequestHeaders.Add("User-Agent", "bf1942-stats/1.0");
+    })
+    .AddStandardResilienceHandler(options =>
+    {
+        // Configure retry policy
+        options.Retry.MaxRetryAttempts = 3;
+        options.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
+        options.Retry.Delay = TimeSpan.FromSeconds(1);
+        options.Retry.MaxDelay = TimeSpan.FromSeconds(10);
+        
+        // Configure timeout policy
+        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(8);
+        options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(30);
+        
+        // Configure circuit breaker
+        options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
+        options.CircuitBreaker.FailureRatio = 0.5; // 50% failure rate
+        options.CircuitBreaker.MinimumThroughput = 5;
+        options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(15);
+    });
+    
+    builder.Services.AddScoped<junie_des_1942stats.Services.IBfListApiService, junie_des_1942stats.Services.BfListApiService>();
+
     // Register PlayerComparisonService (read-only)
     builder.Services.AddScoped<PlayerComparisonService>(sp =>
     {
