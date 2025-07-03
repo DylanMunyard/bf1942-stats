@@ -159,7 +159,7 @@ public class BfListApiService : IBfListApiService
     public async Task<ServerSummary?> FetchSingleServerAsync(string game, string serverIdentifier)
     {
         var httpClient = _httpClientFactory.CreateClient("BfListApi");
-        var url = $"https://api.bflist.io/v2/{game}/servers/{Uri.EscapeDataString(serverIdentifier)}";
+        var url = $"https://api.bflist.io/v2/{game}/servers/{serverIdentifier}";
         
         _logger.LogDebug("Fetching single server from BFList API: {Url}", url);
         
