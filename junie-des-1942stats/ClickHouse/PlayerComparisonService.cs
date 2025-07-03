@@ -338,7 +338,65 @@ WHERE player_name = {Quote(player2)} AND round_start_time >= now() - INTERVAL 6 
         return new List<ServerDetails>();
     }
 
-    public async Task<SimilarPlayersResult> FindSimilarPlayersAsync(string targetPlayer, int limit = 10)
+    public async Task<PlayerActivityHoursComparison> ComparePlayersActivityHoursAsync(string player1, string player2)
+    {
+        await EnsureConnectionOpenAsync();
+
+        var result = new PlayerActivityHoursComparison
+        {
+            Player1 = player1,
+            Player2 = player2
+        };
+
+        // Get activity hours for both players using the same logic as single player insights
+        result.Player1ActivityHours = await GetPlayerActivityHours(player1);
+        result.Player2ActivityHours = await GetPlayerActivityHours(player2);
+
+        return result;
+    }
+
+    private async Task<List<HourlyActivity>> GetPlayerActivityHours(string playerName)
+    {
+        // Use the same approach as PlayerStatsService but with ClickHouse player_rounds data
+        var query = $@"
+SELECT 
+    toHour(round_start_time) as hour_of_day,
+    SUM(play_time_minutes) as total_minutes
+FROM player_rounds
+WHERE player_name = {Quote(playerName)} 
+  AND round_start_time >= now() - INTERVAL 6 MONTH
+GROUP BY hour_of_day
+ORDER BY hour_of_day";
+
+        var hourlyActivity = new List<HourlyActivity>();
+        
+        // Initialize all hours with 0 minutes
+        for (int hour = 0; hour < 24; hour++)
+        {
+            hourlyActivity.Add(new HourlyActivity { Hour = hour, MinutesActive = 0 });
+        }
+
+        await using var cmd = _connection.CreateCommand();
+        cmd.CommandText = query;
+        await using var reader = await cmd.ExecuteReaderAsync();
+        
+        while (await reader.ReadAsync())
+        {
+            var hour = Convert.ToInt32(reader.GetValue(0));
+            var minutes = reader.IsDBNull(1) ? 0 : Convert.ToInt32(reader.GetValue(1));
+            
+            // Update the existing hour entry
+            var hourEntry = hourlyActivity.FirstOrDefault(h => h.Hour == hour);
+            if (hourEntry != null)
+            {
+                hourEntry.MinutesActive = minutes;
+            }
+        }
+
+        return hourlyActivity.OrderByDescending(ha => ha.MinutesActive).ToList();
+    }
+
+    public async Task<SimilarPlayersResult> FindSimilarPlayersAsync(string targetPlayer, int limit = 10, bool filterBySimilarOnlineTime = true)
     {
         await EnsureConnectionOpenAsync();
 
@@ -358,8 +416,15 @@ WHERE player_name = {Quote(player2)} AND round_start_time >= now() - INTERVAL 6 
 
         result.TargetPlayerStats = targetStats;
 
+        // Get target player's typical online hours if temporal filtering is enabled
+        List<int> targetOnlineHours = null;
+        if (filterBySimilarOnlineTime)
+        {
+            targetOnlineHours = await GetPlayerTypicalOnlineHours(targetPlayer);
+        }
+
         // Find similar players based on multiple criteria
-        var similarPlayers = await FindPlayersBySimilarity(targetPlayer, targetStats, limit * 3); // Get more candidates
+        var similarPlayers = await FindPlayersBySimilarity(targetPlayer, targetStats, limit * 3, targetOnlineHours); // Get more candidates
 
         // Calculate similarity scores and rank them
         var rankedPlayers = similarPlayers
@@ -392,15 +457,23 @@ server_playtime AS (
     GROUP BY server_guid
     ORDER BY total_minutes DESC
     LIMIT 1
+),
+game_ids AS (
+    SELECT DISTINCT game_id
+    FROM player_rounds
+    WHERE player_name = {Quote(playerName)} AND round_start_time >= now() - INTERVAL 6 MONTH
 )
 SELECT 
     t.total_kills,
     t.total_deaths,
     t.total_play_time_minutes,
     s.server_guid as favorite_server_guid,
-    s.total_minutes as favorite_server_minutes
+    s.total_minutes as favorite_server_minutes,
+    arrayStringConcat(groupArray(g.game_id), ',') as game_ids
 FROM total_stats t
-CROSS JOIN server_playtime s";
+CROSS JOIN server_playtime s
+CROSS JOIN game_ids g
+GROUP BY t.total_kills, t.total_deaths, t.total_play_time_minutes, s.server_guid, s.total_minutes";
 
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
@@ -413,8 +486,9 @@ CROSS JOIN server_playtime s";
             var totalPlayTime = reader.IsDBNull(2) ? 0.0 : Convert.ToDouble(reader.GetValue(2));
             var favoriteServerGuid = reader.IsDBNull(3) ? "" : reader.GetString(3);
             var favoriteServerMinutes = reader.IsDBNull(4) ? 0.0 : Convert.ToDouble(reader.GetValue(4));
+            var gameIds = reader.IsDBNull(5) ? "" : reader.GetString(5);
 
-            return new PlayerSimilarityStats
+            var playerStats = new PlayerSimilarityStats
             {
                 PlayerName = playerName,
                 TotalKills = totalKills,
@@ -422,20 +496,53 @@ CROSS JOIN server_playtime s";
                 TotalPlayTimeMinutes = totalPlayTime,
                 KillDeathRatio = totalDeaths > 0 ? (double)totalKills / totalDeaths : totalKills,
                 FavoriteServerGuid = favoriteServerGuid,
-                FavoriteServerPlayTimeMinutes = favoriteServerMinutes
+                FavoriteServerPlayTimeMinutes = favoriteServerMinutes,
+                GameIds = gameIds.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList()
             };
+
+            // Get player's typical online hours
+            playerStats.TypicalOnlineHours = await GetPlayerTypicalOnlineHours(playerName);
+            
+            return playerStats;
         }
 
         return null;
     }
 
-    private async Task<List<PlayerSimilarityStats>> FindPlayersBySimilarity(string targetPlayer, PlayerSimilarityStats targetStats, int limit)
+    private async Task<List<PlayerSimilarityStats>> FindPlayersBySimilarity(string targetPlayer, PlayerSimilarityStats targetStats, int limit, List<int> targetOnlineHours = null)
     {
         // Find players with similar stats, excluding the target player
         var playTimeMin = targetStats.TotalPlayTimeMinutes * 0.7; // ±30% play time range
         var playTimeMax = targetStats.TotalPlayTimeMinutes * 1.3;
         var kdrMin = Math.Max(0, targetStats.KillDeathRatio - 0.4); // ±0.4 KDR range
         var kdrMax = targetStats.KillDeathRatio + 0.4;
+
+        // Create game_id filter - only include players who have played the same games
+        var gameIdFilter = "";
+        if (targetStats.GameIds.Any())
+        {
+            var gameIdList = string.Join(", ", targetStats.GameIds.Select(Quote));
+            gameIdFilter = $" AND game_id IN ({gameIdList})";
+        }
+
+        // Build temporal filter if target online hours are provided
+        var temporalFilter = "";
+        if (targetOnlineHours != null && targetOnlineHours.Any())
+        {
+            var hoursList = string.Join(",", targetOnlineHours);
+            temporalFilter = $@"
+temporal_overlap AS (
+    SELECT 
+        player_name,
+        SUM(play_time_minutes) as overlap_minutes
+    FROM player_rounds
+    WHERE player_name != {Quote(targetPlayer)} 
+      AND round_start_time >= now() - INTERVAL 6 MONTH{gameIdFilter}
+      AND toHour(round_start_time) IN ({hoursList})
+    GROUP BY player_name
+    HAVING overlap_minutes >= 30  -- At least 30 minutes of overlap
+),";
+        }
 
         var query = $@"
 WITH player_stats AS (
@@ -446,21 +553,28 @@ WITH player_stats AS (
         SUM(play_time_minutes) AS total_play_time_minutes,
         CASE WHEN SUM(final_deaths) > 0 THEN SUM(final_kills) / SUM(final_deaths) ELSE toFloat64(SUM(final_kills)) END AS kdr
     FROM player_rounds
-    WHERE player_name != {Quote(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH
+    WHERE player_name != {Quote(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH{gameIdFilter}
     GROUP BY player_name
     HAVING total_play_time_minutes BETWEEN {playTimeMin} AND {playTimeMax}
        AND kdr BETWEEN {kdrMin} AND {kdrMax}
 ),
+{temporalFilter}
 server_playtime AS (
     SELECT player_name, server_guid, SUM(play_time_minutes) AS total_minutes
     FROM player_rounds
-    WHERE player_name != {Quote(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH
+    WHERE player_name != {Quote(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH{gameIdFilter}
     GROUP BY player_name, server_guid
 ),
 favorite_servers AS (
     SELECT player_name, server_guid, total_minutes,
            ROW_NUMBER() OVER (PARTITION BY player_name ORDER BY total_minutes DESC) as rn
     FROM server_playtime
+),
+player_game_ids AS (
+    SELECT player_name, arrayStringConcat(groupArray(DISTINCT game_id), ',') as game_ids
+    FROM player_rounds
+    WHERE player_name != {Quote(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH{gameIdFilter}
+    GROUP BY player_name
 )
 SELECT 
     p.player_name,
@@ -469,9 +583,11 @@ SELECT
     p.total_play_time_minutes,
     p.kdr,
     f.server_guid as favorite_server_guid,
-    f.total_minutes as favorite_server_minutes
+    f.total_minutes as favorite_server_minutes,
+    g.game_ids{(targetOnlineHours != null && targetOnlineHours.Any() ? ",\n    t.overlap_minutes" : "")}
 FROM player_stats p
 LEFT JOIN favorite_servers f ON p.player_name = f.player_name AND f.rn = 1
+LEFT JOIN player_game_ids g ON p.player_name = g.player_name{(targetOnlineHours != null && targetOnlineHours.Any() ? "\nINNER JOIN temporal_overlap t ON p.player_name = t.player_name" : "")}
 ORDER BY abs(p.total_play_time_minutes - {targetStats.TotalPlayTimeMinutes}) + 
          abs(p.kdr - {targetStats.KillDeathRatio}) * 100
 LIMIT {limit}";
@@ -490,8 +606,16 @@ LIMIT {limit}";
             var kdr = reader.IsDBNull(4) ? 0.0 : Convert.ToDouble(reader.GetValue(4));
             var favoriteServerGuid = reader.IsDBNull(5) ? "" : reader.GetString(5);
             var favoriteServerMinutes = reader.IsDBNull(6) ? 0.0 : Convert.ToDouble(reader.GetValue(6));
+            var gameIds = reader.IsDBNull(7) ? "" : reader.GetString(7);
+            var temporalOverlapMinutes = 0.0;
+            
+            // Read temporal overlap if available
+            if (targetOnlineHours != null && targetOnlineHours.Any())
+            {
+                temporalOverlapMinutes = reader.IsDBNull(8) ? 0.0 : Convert.ToDouble(reader.GetValue(8));
+            }
 
-            players.Add(new PlayerSimilarityStats
+            var playerStats = new PlayerSimilarityStats
             {
                 PlayerName = playerName,
                 TotalKills = totalKills,
@@ -499,8 +623,18 @@ LIMIT {limit}";
                 TotalPlayTimeMinutes = totalPlayTime,
                 KillDeathRatio = kdr,
                 FavoriteServerGuid = favoriteServerGuid,
-                FavoriteServerPlayTimeMinutes = favoriteServerMinutes
-            });
+                FavoriteServerPlayTimeMinutes = favoriteServerMinutes,
+                GameIds = gameIds.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList(),
+                TemporalOverlapMinutes = temporalOverlapMinutes
+            };
+
+            // Get the candidate player's typical online hours if temporal filtering is enabled
+            if (targetOnlineHours != null && targetOnlineHours.Any())
+            {
+                playerStats.TypicalOnlineHours = await GetPlayerTypicalOnlineHours(playerName);
+            }
+
+            players.Add(playerStats);
         }
 
         return players;
@@ -510,30 +644,55 @@ LIMIT {limit}";
     {
         double score = 0;
         var reasons = new List<string>();
+        
+        // Determine if temporal similarity is available
+        var hasTemporalData = target.TypicalOnlineHours.Any() && candidate.TypicalOnlineHours.Any();
+        
+        // Adjust weights based on whether temporal data is available
+        var playTimeWeight = hasTemporalData ? 0.2 : 0.3;
+        var kdrWeight = hasTemporalData ? 0.35 : 0.4;
+        var serverWeight = hasTemporalData ? 0.2 : 0.3;
+        var temporalWeight = hasTemporalData ? 0.25 : 0.0;
 
-        // Play time similarity (30% weight)
+        // Play time similarity
         var playTimeDiff = Math.Abs(target.TotalPlayTimeMinutes - candidate.TotalPlayTimeMinutes);
         var playTimeRatio = Math.Max(target.TotalPlayTimeMinutes, candidate.TotalPlayTimeMinutes);
         var playTimeScore = playTimeRatio > 0 ? Math.Max(0, 1 - (playTimeDiff / playTimeRatio)) : 1;
-        score += playTimeScore * 0.3;
+        score += playTimeScore * playTimeWeight;
         
         if (playTimeScore > 0.8)
             reasons.Add($"Similar play time ({candidate.TotalPlayTimeMinutes:F0} vs {target.TotalPlayTimeMinutes:F0} minutes)");
 
-        // KDR similarity (40% weight)
+        // KDR similarity
         var kdrDiff = Math.Abs(target.KillDeathRatio - candidate.KillDeathRatio);
         var kdrScore = Math.Max(0, Math.Min(1, 1 - (kdrDiff / 2.0))); // Normalize KDR diff
-        score += kdrScore * 0.4;
+        score += kdrScore * kdrWeight;
         
         if (kdrScore > 0.7)
             reasons.Add($"Similar KDR ({candidate.KillDeathRatio:F2} vs {target.KillDeathRatio:F2})");
 
-        // Server affinity (30% weight)
+        // Server affinity
         var serverScore = target.FavoriteServerGuid == candidate.FavoriteServerGuid ? 1.0 : 0.0;
-        score += serverScore * 0.3;
+        score += serverScore * serverWeight;
         
         if (serverScore > 0)
             reasons.Add("Plays on same favorite server");
+
+        // Temporal similarity (overlap in online hours)
+        if (hasTemporalData)
+        {
+            var commonHours = target.TypicalOnlineHours.Intersect(candidate.TypicalOnlineHours).Count();
+            var totalUniqueHours = target.TypicalOnlineHours.Union(candidate.TypicalOnlineHours).Count();
+            var temporalScore = totalUniqueHours > 0 ? (double)commonHours / totalUniqueHours : 0;
+            score += temporalScore * temporalWeight;
+            
+            if (temporalScore > 0.5)
+            {
+                var overlapHours = target.TypicalOnlineHours.Intersect(candidate.TypicalOnlineHours).OrderBy(h => h).ToList();
+                var hoursText = string.Join(", ", overlapHours.Select(h => $"{h:D2}:00"));
+                reasons.Add($"Similar online times ({overlapHours.Count} overlapping hours: {hoursText})");
+            }
+        }
 
         return new SimilarPlayer
         {
@@ -546,6 +705,41 @@ LIMIT {limit}";
             SimilarityScore = score,
             SimilarityReasons = reasons
         };
+    }
+
+    private async Task<List<int>> GetPlayerTypicalOnlineHours(string playerName)
+    {
+        var query = $@"
+WITH hourly_playtime AS (
+    SELECT 
+        toHour(round_start_time) as hour_of_day,
+        SUM(play_time_minutes) as total_minutes
+    FROM player_rounds
+    WHERE player_name = {Quote(playerName)} 
+      AND round_start_time >= now() - INTERVAL 6 MONTH
+    GROUP BY hour_of_day
+),
+percentiles AS (
+    SELECT 
+        quantile(0.95)(total_minutes) as p95_minutes
+    FROM hourly_playtime
+)
+SELECT hour_of_day
+FROM hourly_playtime, percentiles
+WHERE total_minutes >= p95_minutes * 0.5  -- Include hours with at least 50% of p95 activity
+ORDER BY hour_of_day";
+
+        var activeHours = new List<int>();
+        await using var cmd = _connection.CreateCommand();
+        cmd.CommandText = query;
+        await using var reader = await cmd.ExecuteReaderAsync();
+        
+        while (await reader.ReadAsync())
+        {
+            activeHours.Add(Convert.ToInt32(reader.GetValue(0)));
+        }
+
+        return activeHours;
     }
 
     private static string Quote(string s) => $"'{s.Replace("'", "''")}'";
@@ -644,6 +838,9 @@ public class PlayerSimilarityStats
     public double KillDeathRatio { get; set; }
     public string FavoriteServerGuid { get; set; } = "";
     public double FavoriteServerPlayTimeMinutes { get; set; }
+    public List<string> GameIds { get; set; } = new();
+    public double TemporalOverlapMinutes { get; set; }
+    public List<int> TypicalOnlineHours { get; set; } = new();
 }
 
 public class SimilarPlayer
@@ -656,4 +853,12 @@ public class SimilarPlayer
     public string FavoriteServerGuid { get; set; } = "";
     public double SimilarityScore { get; set; }
     public List<string> SimilarityReasons { get; set; } = new();
+}
+
+public class PlayerActivityHoursComparison
+{
+    public string Player1 { get; set; } = "";
+    public string Player2 { get; set; } = "";
+    public List<HourlyActivity> Player1ActivityHours { get; set; } = new();
+    public List<HourlyActivity> Player2ActivityHours { get; set; } = new();
 } 

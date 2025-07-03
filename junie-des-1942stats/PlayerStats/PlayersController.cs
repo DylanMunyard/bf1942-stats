@@ -394,4 +394,22 @@ public class PlayersController : ControllerBase
             return StatusCode(500, $"An error occurred while retrieving player statistics: {ex.Message}");
         }
     }
+
+    [HttpGet("compare/activity-hours")]
+    public async Task<IActionResult> ComparePlayersActivityHours([FromQuery] string player1, [FromQuery] string player2)
+    {
+        if (string.IsNullOrWhiteSpace(player1) || string.IsNullOrWhiteSpace(player2))
+            return BadRequest("Both player1 and player2 must be provided.");
+
+        try
+        {
+            var result = await _playerComparisonService.ComparePlayersActivityHoursAsync(player1, player2);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error comparing activity hours for players {Player1} and {Player2}", player1, player2);
+            return StatusCode(500, "An internal server error occurred while comparing player activity hours.");
+        }
+    }
 }
