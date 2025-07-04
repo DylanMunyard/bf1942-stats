@@ -1,5 +1,6 @@
 using junie_des_1942stats.ServerStats.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace junie_des_1942stats.ServerStats;
 
@@ -8,10 +9,12 @@ namespace junie_des_1942stats.ServerStats;
 public class ServersController : ControllerBase
 {
     private readonly ServerStatsService _serverStatsService;
+    private readonly ILogger<ServersController> _logger;
 
-    public ServersController(ServerStatsService serverStatsService)
+    public ServersController(ServerStatsService serverStatsService, ILogger<ServersController> logger)
     {
         _serverStatsService = serverStatsService;
+        _logger = logger;
     }
     
     // Get detailed server statistics with optional days parameter
@@ -23,12 +26,17 @@ public class ServersController : ControllerBase
         if (string.IsNullOrWhiteSpace(serverName))
             return BadRequest("Server name cannot be empty");
             
+        _logger.LogInformation("Looking up server statistics for server name: '{ServerName}'", serverName);
+            
         var stats = await _serverStatsService.GetServerStatistics(
             serverName,
             days ?? 7); // Default to 7 days if not specified
         
         if (string.IsNullOrEmpty(stats.ServerGuid))
+        {
+            _logger.LogWarning("Server not found in database: '{ServerName}'", serverName);
             return NotFound($"Server '{serverName}' not found");
+        }
             
         return Ok(stats);
     }

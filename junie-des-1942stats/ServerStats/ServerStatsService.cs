@@ -67,7 +67,12 @@ public class ServerStatsService(
         var server = serverWithCurrentMap?.Server;
 
         if (server == null)
+        {
+            _logger.LogWarning("Server lookup failed. Searching for server with name: '{ServerName}'. Available servers: {Servers}",
+                serverName,
+                string.Join(", ", await _dbContext.Servers.Select(s => $"'{s.Name}'").ToListAsync()));
             return new ServerStatistics { ServerName = serverName, StartPeriod = startPeriod, EndPeriod = endPeriod };
+        }
 
         // Create the statistics object
         var statistics = new ServerStatistics
