@@ -3,6 +3,7 @@ using junie_des_1942stats.PlayerTracking;
 using junie_des_1942stats.Prometheus;
 using junie_des_1942stats.ServerStats.Models;
 using junie_des_1942stats.Caching;
+using junie_des_1942stats.ClickHouse;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -20,13 +21,15 @@ public class ServerStatsService(
     PrometheusService prometheusService, 
     ILogger<ServerStatsService> logger,
     ICacheService cacheService,
-    ICacheKeyService cacheKeyService)
+    ICacheKeyService cacheKeyService,
+    PlayerRoundsService playerRoundsService)
 {
     private readonly PlayerTrackerDbContext _dbContext = dbContext;
     private readonly PrometheusService _prometheusService = prometheusService;
     private readonly ILogger<ServerStatsService> _logger = logger;
     private readonly ICacheService _cacheService = cacheService;
     private readonly ICacheKeyService _cacheKeyService = cacheKeyService;
+    private readonly PlayerRoundsService _playerRoundsService = playerRoundsService;
 
     public async Task<ServerStatistics> GetServerStatistics(
         string serverName,
@@ -69,65 +72,20 @@ public class ServerStatsService(
             EndPeriod = endPeriod
         };
 
-        // Get sessions for this server within the time period
-        var sessions = await _dbContext.PlayerSessions
-            .Where(ps => ps.ServerGuid == server.Guid && ps.StartTime >= startPeriod && ps.LastSeenTime <= endPeriod)
-            .Include(s => s.Player)
-            .ToListAsync();
-
-        // Get most active players by time played using raw SQL
-        var mostActivePlayers = await _dbContext.Database.SqlQueryRaw<PlayerActivity>(@"
-            SELECT 
-                ps.PlayerName AS PlayerName,
-                CAST(SUM((julianday(ps.LastSeenTime) - julianday(ps.StartTime)) * 1440) AS INTEGER) AS MinutesPlayed,
-                SUM(ps.TotalKills) AS TotalKills,
-                SUM(ps.TotalDeaths) AS TotalDeaths
-            FROM PlayerSessions ps
-            WHERE ps.ServerGuid = {0}
-              AND ps.StartTime >= {1}
-              AND ps.LastSeenTime <= {2}
-            GROUP BY ps.PlayerName
-            ORDER BY MinutesPlayed DESC
-            LIMIT 10",
-            server.Guid, startPeriod, endPeriod).ToListAsync();
+        // Get most active players by time played using ClickHouse
+        var mostActivePlayers = await _playerRoundsService.GetMostActivePlayersAsync(server.Guid, startPeriod, endPeriod, 10);
 
         statistics.MostActivePlayersByTime = mostActivePlayers;
 
-        // Get top 10 scores in the period using LINQ to SQL
-        var topScores = await _dbContext.PlayerSessions
-            .Where(s => s.ServerGuid == server.Guid && s.StartTime >= startPeriod && s.LastSeenTime <= endPeriod)
-            .OrderByDescending(s => s.TotalScore)
-            .Take(10)
-            .Select(s => new TopScore
-            {
-                PlayerName = s.PlayerName,
-                Score = s.TotalScore,
-                Kills = s.TotalKills,
-                Deaths = s.TotalDeaths,
-                MapName = s.MapName,
-                Timestamp = s.LastSeenTime,
-                SessionId = s.SessionId
-            })
-            .ToListAsync();
+        // Get top 10 scores in the period using ClickHouse
+        var topScores = await _playerRoundsService.GetTopScoresAsync(server.Guid, startPeriod, endPeriod, 10);
 
         statistics.TopScores = topScores;
 
         // Get the last 5 rounds (unique maps) showing when each map was last played
         // Use a fixed 5-hour window for recent map rotations (much faster than analyzing days of data)
         var recentRoundsStart = DateTime.UtcNow.AddHours(-5);
-        var lastRounds = await _dbContext.Database.SqlQueryRaw<RoundInfo>(@"
-            SELECT 
-                ps.MapName,
-                MAX(ps.StartTime) as StartTime,
-                MAX(ps.LastSeenTime) as EndTime,
-                CASE WHEN SUM(CASE WHEN ps.IsActive = 1 THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END as IsActive
-            FROM PlayerSessions ps
-            WHERE ps.ServerGuid = {0} 
-              AND ps.StartTime >= {1}
-            GROUP BY ps.MapName
-            ORDER BY MAX(ps.StartTime) DESC
-            LIMIT 5",
-            server.Guid, recentRoundsStart).ToListAsync();
+        var lastRounds = await _playerRoundsService.GetLastRoundsAsync(server.Guid, recentRoundsStart, 5);
 
         statistics.LastRounds = lastRounds;
 

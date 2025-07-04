@@ -5,6 +5,7 @@ using CsvHelper;
 using CsvHelper.Configuration;
 using junie_des_1942stats.ClickHouse.Models;
 using junie_des_1942stats.PlayerTracking;
+using junie_des_1942stats.ServerStats.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
@@ -330,6 +331,162 @@ FORMAT TabSeparatedWithNames";
         }
 
         return await response.Content.ReadAsStringAsync();
+    }
+
+    /// <summary>
+    /// Get most active players by time played from ClickHouse
+    /// </summary>
+    public async Task<List<PlayerActivity>> GetMostActivePlayersAsync(string serverGuid, DateTime startPeriod, DateTime endPeriod, int limit = 10)
+    {
+        var query = $@"
+SELECT 
+    player_name,
+    CAST(SUM(play_time_minutes) AS INTEGER) as minutes_played,
+    SUM(final_kills) as total_kills,
+    SUM(final_deaths) as total_deaths
+FROM player_rounds
+WHERE server_guid = '{serverGuid.Replace("'", "''")}'
+  AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
+  AND round_end_time <= '{endPeriod:yyyy-MM-dd HH:mm:ss}'
+GROUP BY player_name
+ORDER BY minutes_played DESC
+LIMIT {limit}
+FORMAT TabSeparated";
+
+        var content = new StringContent(query, Encoding.UTF8, "text/plain");
+        var response = await _httpClient.PostAsync($"{_clickHouseUrl}/", content);
+        
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorContent = await response.Content.ReadAsStringAsync();
+            _logger.LogError("ClickHouse query failed: {StatusCode} - {Error}", response.StatusCode, errorContent);
+            return new List<PlayerActivity>();
+        }
+
+        var result = await response.Content.ReadAsStringAsync();
+        var players = new List<PlayerActivity>();
+        
+        foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = line.Split('\t');
+            if (parts.Length >= 4)
+            {
+                players.Add(new PlayerActivity
+                {
+                    PlayerName = parts[0],
+                    MinutesPlayed = int.Parse(parts[1]),
+                    TotalKills = int.Parse(parts[2]),
+                    TotalDeaths = int.Parse(parts[3])
+                });
+            }
+        }
+
+        return players;
+    }
+
+    /// <summary>
+    /// Get top scores from ClickHouse
+    /// </summary>
+    public async Task<List<TopScore>> GetTopScoresAsync(string serverGuid, DateTime startPeriod, DateTime endPeriod, int limit = 10)
+    {
+        var query = $@"
+SELECT 
+    player_name,
+    final_score,
+    final_kills,
+    final_deaths,
+    map_name,
+    round_end_time,
+    round_id
+FROM player_rounds
+WHERE server_guid = '{serverGuid.Replace("'", "''")}'
+  AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
+  AND round_end_time <= '{endPeriod:yyyy-MM-dd HH:mm:ss}'
+ORDER BY final_score DESC
+LIMIT {limit}
+FORMAT TabSeparated";
+
+        var content = new StringContent(query, Encoding.UTF8, "text/plain");
+        var response = await _httpClient.PostAsync($"{_clickHouseUrl}/", content);
+        
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorContent = await response.Content.ReadAsStringAsync();
+            _logger.LogError("ClickHouse query failed: {StatusCode} - {Error}", response.StatusCode, errorContent);
+            return new List<TopScore>();
+        }
+
+        var result = await response.Content.ReadAsStringAsync();
+        var topScores = new List<TopScore>();
+        
+        foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = line.Split('\t');
+            if (parts.Length >= 7)
+            {
+                topScores.Add(new TopScore
+                {
+                    PlayerName = parts[0],
+                    Score = int.Parse(parts[1]),
+                    Kills = int.Parse(parts[2]),
+                    Deaths = int.Parse(parts[3]),
+                    MapName = parts[4],
+                    Timestamp = DateTime.Parse(parts[5]),
+                    SessionId = parts[6].GetHashCode() // Use round_id hash as session ID substitute
+                });
+            }
+        }
+
+        return topScores;
+    }
+
+    /// <summary>
+    /// Get last rounds from ClickHouse
+    /// </summary>
+    public async Task<List<RoundInfo>> GetLastRoundsAsync(string serverGuid, DateTime recentRoundsStart, int limit = 5)
+    {
+        var query = $@"
+SELECT 
+    map_name,
+    MAX(round_start_time) as start_time,
+    MAX(round_end_time) as end_time
+FROM player_rounds
+WHERE server_guid = '{serverGuid.Replace("'", "''")}'
+  AND round_start_time >= '{recentRoundsStart:yyyy-MM-dd HH:mm:ss}'
+GROUP BY map_name
+ORDER BY start_time DESC
+LIMIT {limit}
+FORMAT TabSeparated";
+
+        var content = new StringContent(query, Encoding.UTF8, "text/plain");
+        var response = await _httpClient.PostAsync($"{_clickHouseUrl}/", content);
+        
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorContent = await response.Content.ReadAsStringAsync();
+            _logger.LogError("ClickHouse query failed: {StatusCode} - {Error}", response.StatusCode, errorContent);
+            return new List<RoundInfo>();
+        }
+
+        var result = await response.Content.ReadAsStringAsync();
+        var lastRounds = new List<RoundInfo>();
+        
+        foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = line.Split('\t');
+            if (parts.Length >= 3)
+            {
+                lastRounds.Add(new RoundInfo
+                {
+                    MapName = parts[0],
+                    StartTime = DateTime.Parse(parts[1]),
+                    EndTime = DateTime.Parse(parts[2]),
+                    IsActive = false // ClickHouse only contains completed rounds
+                });
+            }
+        }
+
+        return lastRounds;
     }
 }
 
