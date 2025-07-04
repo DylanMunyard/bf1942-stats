@@ -1,6 +1,7 @@
 using junie_des_1942stats.ServerStats.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using System.Web;
 
 namespace junie_des_1942stats.ServerStats;
 
@@ -25,6 +26,9 @@ public class ServersController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(serverName))
             return BadRequest("Server name cannot be empty");
+            
+        // Decode any remaining URL encoded characters in the server name
+        serverName = HttpUtility.UrlDecode(serverName);
             
         _logger.LogInformation("Looking up server statistics for server name: '{ServerName}'", serverName);
             
