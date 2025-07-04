@@ -83,15 +83,27 @@ public class ServerStatsService(
             EndPeriod = endPeriod
         };
 
-        // Get most active players by time played using ClickHouse
-        var mostActivePlayers = await _playerRoundsService.GetMostActivePlayersAsync(server.Guid, startPeriod, endPeriod, 10);
+        // Get most active players for 1 week (7 days)
+        var oneWeekStart = endPeriod.AddDays(-7);
+        var mostActivePlayersWeek = await _playerRoundsService.GetMostActivePlayersAsync(server.Guid, oneWeekStart, endPeriod, 10);
 
-        statistics.MostActivePlayersByTime = mostActivePlayers;
+        statistics.MostActivePlayersByTimeWeek = mostActivePlayersWeek;
 
-        // Get top 10 scores in the period using ClickHouse
-        var topScores = await _playerRoundsService.GetTopScoresAsync(server.Guid, startPeriod, endPeriod, 10);
+        // Get top scores for 1 week (7 days)
+        var topScoresWeek = await _playerRoundsService.GetTopScoresAsync(server.Guid, oneWeekStart, endPeriod, 10);
 
-        statistics.TopScores = topScores;
+        statistics.TopScoresWeek = topScoresWeek;
+
+        // Get most active players for 1 month (30 days)
+        var oneMonthStart = endPeriod.AddDays(-30);
+        var mostActivePlayersMonth = await _playerRoundsService.GetMostActivePlayersAsync(server.Guid, oneMonthStart, endPeriod, 10);
+
+        statistics.MostActivePlayersByTimeMonth = mostActivePlayersMonth;
+
+        // Get top scores for 1 month (30 days)
+        var topScoresMonth = await _playerRoundsService.GetTopScoresAsync(server.Guid, oneMonthStart, endPeriod, 10);
+
+        statistics.TopScoresMonth = topScoresMonth;
 
         // Get the last 5 rounds (unique maps) showing when each map was last played
         // Use a fixed 5-hour window for recent map rotations (much faster than analyzing days of data)

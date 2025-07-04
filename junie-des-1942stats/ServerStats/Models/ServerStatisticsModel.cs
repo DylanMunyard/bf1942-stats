@@ -17,11 +17,17 @@ public class ServerStatistics
     public string ServerIp { get; set; } = "";
     public int ServerPort { get; set; }
     
-    // Most active players by time played
-    public List<PlayerActivity> MostActivePlayersByTime { get; set; } = new List<PlayerActivity>();
+    // Most active players by time played (1 week)
+    public List<PlayerActivity> MostActivePlayersByTimeWeek { get; set; } = new List<PlayerActivity>();
     
-    // Top 10 best scores in the period
-    public List<TopScore> TopScores { get; set; } = new List<TopScore>();
+    // Top 10 best scores in the period (1 week)
+    public List<TopScore> TopScoresWeek { get; set; } = new List<TopScore>();
+    
+    // Most active players by time played (1 month)
+    public List<PlayerActivity> MostActivePlayersByTimeMonth { get; set; } = new List<PlayerActivity>();
+    
+    // Top 10 best scores in the period (1 month)
+    public List<TopScore> TopScoresMonth { get; set; } = new List<TopScore>();
     
     // Player count metrics
     public List<PrometheusService.TimeSeriesPoint> PlayerCountMetrics { get; set; } = [];
