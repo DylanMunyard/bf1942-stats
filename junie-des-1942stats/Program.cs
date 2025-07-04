@@ -381,6 +381,10 @@ try
                 var playerRoundsService = scope.ServiceProvider.GetRequiredService<PlayerRoundsWriteService>();
                 await playerRoundsService.EnsureSchemaAsync();
                 logger.LogInformation("ClickHouse player_rounds schema created successfully at: {WriteUrl}", clickHouseWriteUrl);
+
+                // Migrate player_rounds table to ReplacingMergeTree engine
+                await playerRoundsService.MigrateToReplacingMergeTreeAsync();
+                logger.LogInformation("ClickHouse player_rounds table migrated to ReplacingMergeTree engine at: {WriteUrl}", clickHouseWriteUrl);
             }
             catch (Exception ex)
             {

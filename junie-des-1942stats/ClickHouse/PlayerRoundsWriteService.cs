@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS player_rounds (
     team_label String,
     game_id String,
     created_at DateTime DEFAULT now()
-) ENGINE = MergeTree()
+) ENGINE = ReplacingMergeTree(round_id)
 ORDER BY (player_name, server_guid, round_start_time)
 PARTITION BY toYYYYMM(round_start_time)
 SETTINGS index_granularity = 8192";
@@ -91,6 +91,92 @@ SETTINGS index_granularity = 8192";
                 // Indexes might already exist or fail for other reasons, just log and continue
                 _logger.LogWarning(ex, "Failed to create index, might already exist: {Query}", indexQuery);
             }
+        }
+    }
+
+    /// <summary>
+    /// Migrates the player_rounds table to use ReplacingMergeTree engine for deduplication
+    /// </summary>
+    public async Task MigrateToReplacingMergeTreeAsync()
+    {
+        try
+        {
+            // Create new table with ReplacingMergeTree engine
+            var createTempTableQuery = @"
+CREATE TABLE IF NOT EXISTS player_rounds_new (
+    player_name String,
+    server_guid String,
+    map_name String,
+    round_start_time DateTime,
+    round_end_time DateTime,
+    final_score Int32,
+    final_kills UInt32,
+    final_deaths UInt32,
+    play_time_minutes Float64,
+    round_id String,
+    team_label String,
+    game_id String,
+    created_at DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(round_id)
+ORDER BY (player_name, server_guid, round_start_time)
+PARTITION BY toYYYYMM(round_start_time)
+SETTINGS index_granularity = 8192";
+
+            await ExecuteCommandAsync(createTempTableQuery);
+
+            // Copy data from old table to new table
+            var copyDataQuery = @"
+INSERT INTO player_rounds_new
+SELECT DISTINCT ON (round_id)
+    player_name,
+    server_guid,
+    map_name,
+    round_start_time,
+    round_end_time,
+    final_score,
+    final_kills,
+    final_deaths,
+    play_time_minutes,
+    round_id,
+    team_label,
+    game_id,
+    created_at
+FROM player_rounds
+ORDER BY round_id, created_at DESC";
+
+            await ExecuteCommandAsync(copyDataQuery);
+
+            // Drop old table
+            await ExecuteCommandAsync("DROP TABLE IF EXISTS player_rounds");
+
+            // Rename new table to original name
+            await ExecuteCommandAsync("RENAME TABLE player_rounds_new TO player_rounds");
+
+            // Recreate indexes
+            var indexQueries = new[]
+            {
+                "ALTER TABLE player_rounds ADD INDEX IF NOT EXISTS idx_player_time (player_name, round_start_time) TYPE minmax GRANULARITY 1",
+                "ALTER TABLE player_rounds ADD INDEX IF NOT EXISTS idx_time_player (round_start_time, player_name) TYPE bloom_filter GRANULARITY 1"
+            };
+
+            foreach (var indexQuery in indexQueries)
+            {
+                try
+                {
+                    await ExecuteCommandAsync(indexQuery);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to create index, might already exist: {Query}", indexQuery);
+                }
+            }
+
+            _logger.LogInformation("Successfully migrated player_rounds table to ReplacingMergeTree engine");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to migrate player_rounds table to ReplacingMergeTree engine");
+            throw;
         }
     }
 
