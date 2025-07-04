@@ -68,9 +68,7 @@ public class ServerStatsService(
 
         if (server == null)
         {
-            _logger.LogWarning("Server lookup failed. Searching for server with name: '{ServerName}'. Available servers: {Servers}",
-                serverName,
-                string.Join(", ", await _dbContext.Servers.Select(s => $"'{s.Name}'").ToListAsync()));
+            _logger.LogWarning("Server not found: '{ServerName}'", serverName);
             return new ServerStatistics { ServerName = serverName, StartPeriod = startPeriod, EndPeriod = endPeriod };
         }
 

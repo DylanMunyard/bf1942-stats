@@ -113,6 +113,11 @@ public class ServersController : ControllerBase
         if (string.IsNullOrWhiteSpace(serverName))
             return BadRequest("Server name cannot be empty");
 
+        // Decode any remaining URL encoded characters in the server name
+        serverName = HttpUtility.UrlDecode(serverName);
+
+        _logger.LogInformation("Looking up server insights for server name: '{ServerName}'", serverName);
+
         try
         {
             var insights = await _serverStatsService.GetServerInsights(
@@ -120,7 +125,10 @@ public class ServersController : ControllerBase
                 days ?? 7); // Default to 7 days if not specified
 
             if (string.IsNullOrEmpty(insights.ServerGuid))
+            {
+                _logger.LogWarning("Server not found: '{ServerName}'", serverName);
                 return NotFound($"Server '{serverName}' not found");
+            }
 
             return Ok(insights);
         }
