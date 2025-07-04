@@ -31,6 +31,9 @@ public class ServerStatistics
     
     // Last 5 rounds with session links
     public List<RoundInfo> LastRounds { get; set; } = new List<RoundInfo>();
+    
+    // Current map being played (null if server has no active players)
+    public string? CurrentMap { get; set; }
 }
 
 public class PlayerActivity

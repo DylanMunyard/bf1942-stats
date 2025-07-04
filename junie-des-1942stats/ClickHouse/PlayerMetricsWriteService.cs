@@ -1,23 +1,20 @@
 using System.Net.Http;
 using System.Text;
-using System.Text.Json;
 using System.Globalization;
 using CsvHelper;
 using CsvHelper.Configuration;
 using junie_des_1942stats.Bflist;
+using junie_des_1942stats.ClickHouse.Interfaces;
+using junie_des_1942stats.ClickHouse.Base;
 using junie_des_1942stats.PlayerTracking;
 
 namespace junie_des_1942stats.ClickHouse;
 
-public class PlayerMetricsService
+public class PlayerMetricsWriteService : BaseClickHouseService, IClickHouseWriter
 {
-    private readonly HttpClient _httpClient;
-    private readonly string _clickHouseUrl;
-
-    public PlayerMetricsService(HttpClient httpClient, string clickHouseUrl)
+    public PlayerMetricsWriteService(HttpClient httpClient, string clickHouseUrl) 
+        : base(httpClient, clickHouseUrl)
     {
-        _httpClient = httpClient;
-        _clickHouseUrl = clickHouseUrl.TrimEnd('/');
     }
 
     /// <summary>
@@ -57,7 +54,7 @@ CREATE TABLE IF NOT EXISTS player_metrics (
 ORDER BY (server_guid, timestamp)
 PARTITION BY toYYYYMM(timestamp)";
 
-        await ExecuteQueryAsync(createTableQuery);
+        await ExecuteCommandAsync(createTableQuery);
     }
 
     private async Task CreateDailyRankingsViewAsync()
@@ -77,19 +74,12 @@ AS SELECT
 FROM player_metrics
 GROUP BY server_guid, server_name, date, player_name";
 
-        await ExecuteQueryAsync(createViewQuery);
+        await ExecuteCommandAsync(createViewQuery);
     }
 
-    private async Task ExecuteQueryAsync(string query)
+    public async Task ExecuteCommandAsync(string command)
     {
-        var content = new StringContent(query, Encoding.UTF8, "text/plain");
-        var response = await _httpClient.PostAsync($"{_clickHouseUrl}/", content);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var errorContent = await response.Content.ReadAsStringAsync();
-            throw new Exception($"ClickHouse query failed: {response.StatusCode} - {errorContent}");
-        }
+        await ExecuteCommandInternalAsync(command);
     }
 
     public async Task StoreBatchedPlayerMetricsAsync(IEnumerable<IGameServer> servers, DateTime timestamp)
@@ -174,26 +164,14 @@ GROUP BY server_guid, server_name, date, player_name";
             var query = $"INSERT INTO player_metrics (timestamp, server_guid, server_name, player_name, score, kills, deaths, ping, team_name, map_name, game_type) FORMAT CSV";
             var fullRequest = query + "\n" + csvData;
 
-            var content = new StringContent(fullRequest, Encoding.UTF8, "text/plain");
-            var response = await _httpClient.PostAsync($"{_clickHouseUrl}/", content);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse error: {response.StatusCode} - {errorContent}");
-            }
-            else
-            {
-                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Successfully stored {metrics.Count} player metrics to ClickHouse");
-            }
+            await ExecuteCommandAsync(fullRequest);
+            Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Successfully stored {metrics.Count} player metrics to ClickHouse");
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Failed to store player metrics to ClickHouse: {ex.Message}");
         }
     }
-
-
 }
 
 public class PlayerMetric

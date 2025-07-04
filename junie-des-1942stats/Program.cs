@@ -186,8 +186,8 @@ try
         return new PrometheusService(httpClient, prometheusUrl);
     });
 
-    // Add ClickHouse service with 2 second timeout
-    builder.Services.AddHttpClient<PlayerMetricsService>(client => 
+    // Add ClickHouse HTTP clients with 2 second timeout
+    builder.Services.AddHttpClient<PlayerMetricsWriteService>(client => 
     {
         client.Timeout = TimeSpan.FromSeconds(2);
         // Add ClickHouse authentication header
@@ -198,18 +198,64 @@ try
         ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
     });
 
-    builder.Services.AddSingleton<PlayerMetricsService>(sp =>
+    builder.Services.AddHttpClient<PlayerRoundsWriteService>(client => 
     {
-        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
-        httpClient.Timeout = TimeSpan.FromSeconds(2);
+        client.Timeout = TimeSpan.FromSeconds(2);
+        client.DefaultRequestHeaders.Add("X-ClickHouse-User", "default");
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+    });
+
+    builder.Services.AddHttpClient<PlayerRoundsReadService>(client => 
+    {
+        client.Timeout = TimeSpan.FromSeconds(2);
+        client.DefaultRequestHeaders.Add("X-ClickHouse-User", "default");
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+    });
+
+    // Register ClickHouse Write Services (use CLICKHOUSE_WRITE_URL)
+    builder.Services.AddSingleton<PlayerMetricsWriteService>(sp =>
+    {
+        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(PlayerMetricsWriteService));
         
-        // Use write URL for PlayerMetricsService (falls back to read URL if not set)
         var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
         var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? clickHouseReadUrl;
         
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerMetricsService ClickHouse Write URL: {clickHouseWriteUrl}");
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerMetricsWriteService ClickHouse Write URL: {clickHouseWriteUrl}");
         
-        return new PlayerMetricsService(httpClient, clickHouseWriteUrl);
+        return new PlayerMetricsWriteService(httpClient, clickHouseWriteUrl);
+    });
+
+    builder.Services.AddSingleton<PlayerRoundsWriteService>(sp =>
+    {
+        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(PlayerRoundsWriteService));
+        
+        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? clickHouseReadUrl;
+        
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRoundsWriteService ClickHouse Write URL: {clickHouseWriteUrl}");
+        
+        var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
+        var logger = sp.GetRequiredService<ILogger<PlayerRoundsWriteService>>();
+        return new PlayerRoundsWriteService(httpClient, clickHouseWriteUrl, scopeFactory, logger);
+    });
+
+    // Register ClickHouse Read Services (use CLICKHOUSE_URL)
+    builder.Services.AddSingleton<PlayerRoundsReadService>(sp =>
+    {
+        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(PlayerRoundsReadService));
+        
+        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRoundsReadService ClickHouse Read URL: {clickHouseReadUrl}");
+        
+        var logger = sp.GetRequiredService<ILogger<PlayerRoundsReadService>>();
+        return new PlayerRoundsReadService(httpClient, clickHouseReadUrl, logger);
     });
 
     // Register RealTimeAnalyticsService (read-only)
@@ -218,22 +264,6 @@ try
     // Register ServerStatisticsService (read-only)
     builder.Services.AddSingleton<ServerStatisticsService>();
 
-    // Register PlayerRoundsService
-    builder.Services.AddSingleton<PlayerRoundsService>(sp =>
-    {
-        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
-        httpClient.Timeout = TimeSpan.FromSeconds(2);
-        
-        // Use write URL for PlayerRoundsService (falls back to read URL if not set)
-        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
-        var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? clickHouseReadUrl;
-        
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRoundsService ClickHouse Write URL: {clickHouseWriteUrl}");
-        
-        var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
-        var logger = sp.GetRequiredService<ILogger<PlayerRoundsService>>();
-        return new PlayerRoundsService(httpClient, clickHouseWriteUrl, scopeFactory, logger);
-    });
 
     // Configure Redis caching with short timeouts
     var redisConnectionString = Environment.GetEnvironmentVariable("REDIS_CONNECTION_STRING") ?? "42redis.home.net:6379";
@@ -313,7 +343,7 @@ try
     using (var scope = host.Services.CreateScope())
     {
         var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
-        var playerMetricsService = scope.ServiceProvider.GetRequiredService<PlayerMetricsService>();
+        var playerMetricsService = scope.ServiceProvider.GetRequiredService<PlayerMetricsWriteService>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
         
         var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
@@ -348,7 +378,7 @@ try
             try
             {
                 // Ensure ClickHouse player_rounds schema is created (using write service)
-                var playerRoundsService = scope.ServiceProvider.GetRequiredService<PlayerRoundsService>();
+                var playerRoundsService = scope.ServiceProvider.GetRequiredService<PlayerRoundsWriteService>();
                 await playerRoundsService.EnsureSchemaAsync();
                 logger.LogInformation("ClickHouse player_rounds schema created successfully at: {WriteUrl}", clickHouseWriteUrl);
             }

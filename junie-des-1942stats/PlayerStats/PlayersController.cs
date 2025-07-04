@@ -14,10 +14,10 @@ public class PlayersController : ControllerBase
     private readonly PlayerStatsService _playerStatsService;
     private readonly ServerStatisticsService _serverStatisticsService;
     private readonly PlayerComparisonService _playerComparisonService;
-    private readonly PlayerRoundsService _playerRoundsService;
+    private readonly PlayerRoundsReadService _playerRoundsService;
     private readonly ILogger<PlayersController> _logger;
 
-    public PlayersController(PlayerStatsService playerStatsService, ServerStatisticsService serverStatisticsService, PlayerComparisonService playerComparisonService, PlayerRoundsService playerRoundsService, ILogger<PlayersController> logger)
+    public PlayersController(PlayerStatsService playerStatsService, ServerStatisticsService serverStatisticsService, PlayerComparisonService playerComparisonService, PlayerRoundsReadService playerRoundsService, ILogger<PlayersController> logger)
     {
         _playerStatsService = playerStatsService;
         _serverStatisticsService = serverStatisticsService;

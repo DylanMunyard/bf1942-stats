@@ -115,8 +115,8 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             using (var scope = _scopeFactory.CreateScope())
             {
                 var playerTrackingService = scope.ServiceProvider.GetRequiredService<PlayerTrackingService>();
-                var playerMetricsService = scope.ServiceProvider.GetRequiredService<PlayerMetricsService>();
-                var playerRoundsService = scope.ServiceProvider.GetRequiredService<PlayerRoundsService>();
+                var playerMetricsService = scope.ServiceProvider.GetRequiredService<PlayerMetricsWriteService>();
+                var playerRoundsService = scope.ServiceProvider.GetRequiredService<PlayerRoundsWriteService>();
                 
                 // 1. Global timeout cleanup (only on every 4th cycle to avoid too frequent DB operations)
                 if (isEvenCycle)

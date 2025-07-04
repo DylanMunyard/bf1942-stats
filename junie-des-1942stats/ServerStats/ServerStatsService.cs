@@ -22,14 +22,14 @@ public class ServerStatsService(
     ILogger<ServerStatsService> logger,
     ICacheService cacheService,
     ICacheKeyService cacheKeyService,
-    PlayerRoundsService playerRoundsService)
+    PlayerRoundsReadService playerRoundsService)
 {
     private readonly PlayerTrackerDbContext _dbContext = dbContext;
     private readonly PrometheusService _prometheusService = prometheusService;
     private readonly ILogger<ServerStatsService> _logger = logger;
     private readonly ICacheService _cacheService = cacheService;
     private readonly ICacheKeyService _cacheKeyService = cacheKeyService;
-    private readonly PlayerRoundsService _playerRoundsService = playerRoundsService;
+    private readonly PlayerRoundsReadService _playerRoundsService = playerRoundsService;
 
     public async Task<ServerStatistics> GetServerStatistics(
         string serverName,
@@ -51,9 +51,20 @@ public class ServerStatsService(
         var endPeriod = DateTime.UtcNow;
         var startPeriod = endPeriod.AddDays(-daysToAnalyze);
 
-        // Get the server by name
-        var server = await _dbContext.Servers
-            .FirstOrDefaultAsync(s => s.Name == serverName);
+        // Get the server by name and current map in one query
+        var serverWithCurrentMap = await _dbContext.Servers
+            .Where(s => s.Name == serverName)
+            .Select(s => new
+            {
+                Server = s,
+                CurrentMap = s.Sessions
+                    .Where(session => session.IsActive)
+                    .Select(session => session.MapName)
+                    .FirstOrDefault()
+            })
+            .FirstOrDefaultAsync();
+
+        var server = serverWithCurrentMap?.Server;
 
         if (server == null)
             return new ServerStatistics { ServerName = serverName, StartPeriod = startPeriod, EndPeriod = endPeriod };
@@ -88,6 +99,9 @@ public class ServerStatsService(
         var lastRounds = await _playerRoundsService.GetLastRoundsAsync(server.Guid, recentRoundsStart, 5);
 
         statistics.LastRounds = lastRounds;
+
+        // Set current map from the combined query
+        statistics.CurrentMap = serverWithCurrentMap?.CurrentMap;
 
         // Call both Prometheus methods in parallel
         try
