@@ -122,44 +122,6 @@ public class ServerStatsService(
         // Set current map from the combined query
         statistics.CurrentMap = serverWithCurrentMap?.CurrentMap;
 
-        // Call both Prometheus methods in parallel
-        try
-        {
-            var playerHistoryTask = _prometheusService.GetServerPlayersHistory(serverName, server.GameId, daysToAnalyze);
-            var playerCountChangeTask = _prometheusService.GetAveragePlayerCountChange(serverName, server.GameId, daysToAnalyze);
-
-            await Task.WhenAll(playerHistoryTask, playerCountChangeTask);
-
-            var playerHistory = await playerHistoryTask;
-            var playerCountChange = await playerCountChangeTask;
-
-            // Process player history metrics
-            if (playerHistory != null &&
-                playerHistory.Status.Equals("success", StringComparison.OrdinalIgnoreCase) &&
-                playerHistory.Data.Result.Count > 0)
-            {
-                statistics.PlayerCountMetrics = playerHistory.Data.Result[0].Values;
-            }
-
-            // Process player count change percentage
-            if (playerCountChange != null &&
-                playerCountChange.Status.Equals("success", StringComparison.OrdinalIgnoreCase) &&
-                playerCountChange.Data.Result.Count > 0 &&
-                playerCountChange.Data.Result[0].Value is not null)
-            {
-                var changeValue = playerCountChange.Data.Result[0].Value.Value;
-                // Round to nearest whole number
-                statistics.AveragePlayerCountChangePercent = (int)Math.Round(changeValue);
-            }
-        }
-        catch (Exception ex)
-        {
-            // Log the error but continue with empty metrics
-            _logger.LogError(ex, "Error fetching metrics from Prometheus");
-            statistics.PlayerCountMetrics = [];
-            statistics.AveragePlayerCountChangePercent = null;
-        }
-
         // Cache the result for 10 minutes
         await _cacheService.SetAsync(cacheKey, statistics, TimeSpan.FromMinutes(10));
         _logger.LogDebug("Cached server statistics: {ServerName}, {Days} days", serverName, daysToAnalyze);
@@ -516,6 +478,44 @@ public class ServerStatsService(
             StartPeriod = startPeriod,
             EndPeriod = endPeriod
         };
+
+        // Call both Prometheus methods in parallel
+        try
+        {
+            var playerHistoryTask = _prometheusService.GetServerPlayersHistory(serverName, server.GameId, daysToAnalyze);
+            var playerCountChangeTask = _prometheusService.GetAveragePlayerCountChange(serverName, server.GameId, daysToAnalyze);
+
+            await Task.WhenAll(playerHistoryTask, playerCountChangeTask);
+
+            var playerHistory = await playerHistoryTask;
+            var playerCountChange = await playerCountChangeTask;
+
+            // Process player history metrics
+            if (playerHistory != null &&
+                playerHistory.Status.Equals("success", StringComparison.OrdinalIgnoreCase) &&
+                playerHistory.Data.Result.Count > 0)
+            {
+                insights.PlayerCountMetrics = playerHistory.Data.Result[0].Values;
+            }
+
+            // Process player count change percentage
+            if (playerCountChange != null &&
+                playerCountChange.Status.Equals("success", StringComparison.OrdinalIgnoreCase) &&
+                playerCountChange.Data.Result.Count > 0 &&
+                playerCountChange.Data.Result[0].Value is not null)
+            {
+                var changeValue = playerCountChange.Data.Result[0].Value.Value;
+                // Round to nearest whole number
+                insights.AveragePlayerCountChangePercent = (int)Math.Round(changeValue);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log the error but continue with empty metrics
+            _logger.LogError(ex, "Error fetching metrics from Prometheus");
+            insights.PlayerCountMetrics = [];
+            insights.AveragePlayerCountChangePercent = null;
+        }
 
         // Use ClickHouse to calculate ping statistics by hour
         var query = $@"

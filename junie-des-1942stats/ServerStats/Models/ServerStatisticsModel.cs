@@ -1,5 +1,4 @@
 using System.Text.Json;
-using junie_des_1942stats.Prometheus;
 using System.Runtime.Serialization;
 
 namespace junie_des_1942stats.ServerStats.Models;
@@ -28,12 +27,6 @@ public class ServerStatistics
     
     // Top 10 best scores in the period (1 month)
     public List<TopScore> TopScoresMonth { get; set; } = new List<TopScore>();
-    
-    // Player count metrics
-    public List<PrometheusService.TimeSeriesPoint> PlayerCountMetrics { get; set; } = [];
-    
-    // Average player count change percentage (rounded to nearest whole number)
-    public int? AveragePlayerCountChangePercent { get; set; }
     
     // Last 5 rounds with session links
     public List<RoundInfo> LastRounds { get; set; } = new List<RoundInfo>();

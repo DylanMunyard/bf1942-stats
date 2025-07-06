@@ -1,3 +1,5 @@
+using junie_des_1942stats.Prometheus;
+
 namespace junie_des_1942stats.ServerStats.Models
 {
     public class ServerInsights
@@ -7,6 +9,12 @@ namespace junie_des_1942stats.ServerStats.Models
         public DateTime StartPeriod { get; set; }
         public DateTime EndPeriod { get; set; }
         public PingByHourInsight? PingByHour { get; set; }
+        
+        // Player count metrics from Prometheus
+        public List<PrometheusService.TimeSeriesPoint> PlayerCountMetrics { get; set; } = [];
+        
+        // Average player count change percentage (rounded to nearest whole number)
+        public int? AveragePlayerCountChangePercent { get; set; }
     }
 
     public class PingByHourInsight
