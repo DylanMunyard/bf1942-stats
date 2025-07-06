@@ -2,7 +2,6 @@ using junie_des_1942stats.ServerStats.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using System;
-using System.Linq;
 
 namespace junie_des_1942stats.ServerStats;
 
@@ -28,15 +27,10 @@ public class ServersController : ControllerBase
         if (string.IsNullOrWhiteSpace(serverName))
             return BadRequest("Server name cannot be empty");
             
-        _logger.LogInformation("Raw server name from URL: '{ServerName}'", serverName);
-            
         // Use modern URL decoding that preserves + signs
         serverName = Uri.UnescapeDataString(serverName);
             
-        _logger.LogInformation("Server name after decoding: '{ServerName}', Length: {Length}, Bytes: {Bytes}", 
-            serverName, 
-            serverName.Length,
-            string.Join(" ", System.Text.Encoding.UTF8.GetBytes(serverName).Select(b => b.ToString("X2"))));
+        _logger.LogInformation("Looking up server statistics for server name: '{ServerName}'", serverName);
             
         var stats = await _serverStatsService.GetServerStatistics(
             serverName,
