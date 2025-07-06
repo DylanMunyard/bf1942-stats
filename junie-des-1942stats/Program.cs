@@ -8,6 +8,8 @@ using junie_des_1942stats.Prometheus;
 using junie_des_1942stats.ServerStats;
 using junie_des_1942stats.StatsCollectors;
 using junie_des_1942stats.ClickHouse;
+using junie_des_1942stats.ClickHouse.Interfaces;
+using junie_des_1942stats.ClickHouse.Base;
 using junie_des_1942stats.Caching;
 using Prometheus;
 using Serilog;
@@ -260,6 +262,14 @@ try
 
     // Register RealTimeAnalyticsService (read-only)
     builder.Services.AddSingleton<RealTimeAnalyticsService>();
+
+    // Register IClickHouseReader service
+    builder.Services.AddScoped<IClickHouseReader>(sp =>
+    {
+        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
+        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        return new ClickHouseReader(httpClient, clickHouseReadUrl);
+    });
 
     // Register ServerStatisticsService (read-only)
     builder.Services.AddSingleton<ServerStatisticsService>();

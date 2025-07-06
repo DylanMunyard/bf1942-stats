@@ -4,6 +4,8 @@ using junie_des_1942stats.Prometheus;
 using junie_des_1942stats.ServerStats.Models;
 using junie_des_1942stats.Caching;
 using junie_des_1942stats.ClickHouse;
+using junie_des_1942stats.ClickHouse.Base;
+using junie_des_1942stats.ClickHouse.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -22,7 +24,8 @@ public class ServerStatsService(
     ILogger<ServerStatsService> logger,
     ICacheService cacheService,
     ICacheKeyService cacheKeyService,
-    PlayerRoundsReadService playerRoundsService)
+    PlayerRoundsReadService playerRoundsService,
+    IClickHouseReader clickHouseReader)
 {
     private readonly PlayerTrackerDbContext _dbContext = dbContext;
     private readonly PrometheusService _prometheusService = prometheusService;
@@ -30,6 +33,7 @@ public class ServerStatsService(
     private readonly ICacheService _cacheService = cacheService;
     private readonly ICacheKeyService _cacheKeyService = cacheKeyService;
     private readonly PlayerRoundsReadService _playerRoundsService = playerRoundsService;
+    private readonly IClickHouseReader _clickHouseReader = clickHouseReader;
 
     public async Task<ServerStatistics> GetServerStatistics(
         string serverName,
@@ -513,52 +517,46 @@ public class ServerStatsService(
             EndPeriod = endPeriod
         };
 
-        // Use a more efficient raw SQL query that avoids the expensive JOIN
-        // Instead, use a subquery to get session IDs first, then filter observations
-        var observations = await _dbContext.Database.SqlQueryRaw<PingTimestampData>(@"
-            SELECT po.Timestamp, po.Ping
-            FROM PlayerObservations po
-            WHERE po.SessionId IN (
-                SELECT ps.SessionId 
-                FROM PlayerSessions ps 
-                WHERE ps.ServerGuid = {0}
-                AND ps.StartTime <= {2}
-                AND ps.LastSeenTime >= {1}
-            )
-            AND po.Timestamp >= {1} 
-            AND po.Timestamp <= {2}",
-            server.Guid, startPeriod, endPeriod).ToListAsync();
+        // Use ClickHouse to calculate ping statistics by hour
+        var query = $@"
+WITH filtered_pings AS (
+    SELECT 
+        toHour(timestamp) as hour,
+        ping
+    FROM player_metrics
+    WHERE server_guid = '{server.Guid.Replace("'", "''")}'
+        AND timestamp >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
+        AND timestamp <= '{endPeriod:yyyy-MM-dd HH:mm:ss}'
+        AND ping > 0 
+        AND ping < 1000  -- Filter out unrealistic ping values
+)
+SELECT 
+    hour,
+    round(avg(ping), 2) as avg_ping,
+    round(quantile(0.5)(ping), 2) as median_ping,
+    round(quantile(0.95)(ping), 2) as p95_ping
+FROM filtered_pings
+GROUP BY hour
+ORDER BY hour
+FORMAT TabSeparated";
 
-        var hourlyPings = observations
-            .GroupBy(o => o.Timestamp.Hour)
-            .Select(g =>
+        var result = await _clickHouseReader.ExecuteQueryAsync(query);
+        var hourlyPings = new List<PingDataPoint>();
+
+        foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = line.Split('\t');
+            if (parts.Length >= 4)
             {
-                var orderedPings = g.Select(x => x.Ping).OrderBy(p => p).ToList();
-                var count = orderedPings.Count;
-                if (count == 0) return null;
-
-                var avg = orderedPings.Average();
-                
-                var median = (count % 2 == 0)
-                    ? (orderedPings[count / 2 - 1] + orderedPings[count / 2]) / 2.0
-                    : orderedPings[count / 2];
-
-                var p95Index = (int)Math.Ceiling(0.95 * count) - 1;
-                var p95 = orderedPings[p95Index < 0 ? 0 : p95Index];
-
-                return new PingDataPoint
+                hourlyPings.Add(new PingDataPoint
                 {
-                    Hour = g.Key,
-                    AveragePing = Math.Round(avg, 2),
-                    MedianPing = Math.Round(median, 2),
-                    P95Ping = p95
-                };
-            })
-            .Where(x => x != null)
-            .Select(x => x!)
-            .OrderBy(x => x.Hour)
-            .ToList();
-
+                    Hour = int.Parse(parts[0]),
+                    AveragePing = double.Parse(parts[1]),
+                    MedianPing = double.Parse(parts[2]),
+                    P95Ping = (int)Math.Round(double.Parse(parts[3])) // Convert P95 to int after rounding
+                });
+            }
+        }
 
         insights.PingByHour = new PingByHourInsight
         {
