@@ -1,7 +1,8 @@
 using junie_des_1942stats.ServerStats.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
-using System.Web;
+using System;
+using System.Linq;
 
 namespace junie_des_1942stats.ServerStats;
 
@@ -27,10 +28,15 @@ public class ServersController : ControllerBase
         if (string.IsNullOrWhiteSpace(serverName))
             return BadRequest("Server name cannot be empty");
             
-        // Decode any remaining URL encoded characters in the server name
-        serverName = HttpUtility.UrlDecode(serverName);
+        _logger.LogInformation("Raw server name from URL: '{ServerName}'", serverName);
             
-        _logger.LogInformation("Looking up server statistics for server name: '{ServerName}'", serverName);
+        // Use modern URL decoding that preserves + signs
+        serverName = Uri.UnescapeDataString(serverName);
+            
+        _logger.LogInformation("Server name after decoding: '{ServerName}', Length: {Length}, Bytes: {Bytes}", 
+            serverName, 
+            serverName.Length,
+            string.Join(" ", System.Text.Encoding.UTF8.GetBytes(serverName).Select(b => b.ToString("X2"))));
             
         var stats = await _serverStatsService.GetServerStatistics(
             serverName,
@@ -63,6 +69,9 @@ public class ServersController : ControllerBase
     {
         try
         {
+            // Use modern URL decoding that preserves + signs
+            serverName = Uri.UnescapeDataString(serverName);
+            
             var result = await _serverStatsService.GetServerRankings(
                 serverName, year, page, pageSize, playerName, 
                 minScore, minKills, minDeaths, minKdRatio, minPlayTimeMinutes,
@@ -74,8 +83,6 @@ public class ServersController : ControllerBase
             return BadRequest(ex.Message);
         }
     }
-
-
 
     // Get round report by server, map, and date
     [HttpGet("round-report")]
@@ -113,8 +120,8 @@ public class ServersController : ControllerBase
         if (string.IsNullOrWhiteSpace(serverName))
             return BadRequest("Server name cannot be empty");
 
-        // Decode any remaining URL encoded characters in the server name
-        serverName = HttpUtility.UrlDecode(serverName);
+        // Use modern URL decoding that preserves + signs
+        serverName = Uri.UnescapeDataString(serverName);
 
         _logger.LogInformation("Looking up server insights for server name: '{ServerName}'", serverName);
 
