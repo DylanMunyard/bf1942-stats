@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
-using System.Web;
 
 namespace junie_des_1942stats.PlayerTracking;
 
@@ -209,7 +208,7 @@ public class PlayerTrackingService
             server = new GameServer
             {
                 Guid = serverInfo.Guid,
-                Name = HttpUtility.UrlDecode(serverInfo.Name),
+                Name = serverInfo.Name,
                 Ip = serverInfo.Ip,
                 Port = serverInfo.Port,
                 GameId = serverInfo.GameId
@@ -226,7 +225,7 @@ public class PlayerTrackingService
             }
             if (server.Name != serverInfo.Name || server.GameId != serverInfo.GameId)
             {
-                server.Name = HttpUtility.UrlDecode(serverInfo.Name);
+                server.Name = serverInfo.Name;
                 server.GameId = serverInfo.GameId;
             }
         }
