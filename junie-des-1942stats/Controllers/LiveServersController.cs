@@ -59,7 +59,7 @@ public class LiveServersController : ControllerBase
             // Cache miss - fetch all servers from BFList API
             _logger.LogDebug("Cache miss for all servers of game {Game}", game);
             
-            var servers = await _bfListApiService.FetchAllServersAsync(game);
+            var servers = await _bfListApiService.FetchAllServerSummariesAsync(game);
             
             var response = new ServerListResponse
             {
@@ -121,7 +121,7 @@ public class LiveServersController : ControllerBase
             // Cache miss - fetch from BFList API
             _logger.LogDebug("Cache miss for server {Game}:{ServerIdentifier}", game, serverIdentifier);
             
-            var server = await _bfListApiService.FetchSingleServerAsync(game, serverIdentifier);
+            var server = await _bfListApiService.FetchSingleServerSummaryAsync(game, serverIdentifier);
             if (server == null)
             {
                 return NotFound($"Server {serverIdentifier} not found");

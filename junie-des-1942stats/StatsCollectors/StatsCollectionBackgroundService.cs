@@ -12,7 +12,10 @@ using junie_des_1942stats.PlayerTracking;
 using junie_des_1942stats.Bflist;
 using junie_des_1942stats.StatsCollectors.Modals;
 using junie_des_1942stats.ClickHouse;
+using junie_des_1942stats.Services;
 using Serilog.Context;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace junie_des_1942stats.StatsCollectors;
 
@@ -33,11 +36,6 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     private readonly Gauge _serverPlayersGauge;
     private readonly Gauge _fh2TotalPlayersGauge;
     private readonly Gauge _fh2ServerPlayersGauge;
-    private readonly HttpClient _httpClient;
-
-    // API URLs
-    private const string BF1942_BASE_URL = "https://api.bflist.io/v2/bf1942/";
-    private const string FH2_BASE_URL = "https://api.bflist.io/v2/fh2/";
 
     public StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory, IConfiguration configuration)
     {
@@ -74,8 +72,6 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             "fh2_server_players",
             "Number of players on each FH2 server",
             new GaugeConfiguration { LabelNames = new[] { "server_name" } });
-
-        _httpClient = new HttpClient();
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
@@ -117,6 +113,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
                 var playerTrackingService = scope.ServiceProvider.GetRequiredService<PlayerTrackingService>();
                 var playerMetricsService = scope.ServiceProvider.GetRequiredService<PlayerMetricsWriteService>();
                 var playerRoundsService = scope.ServiceProvider.GetRequiredService<PlayerRoundsWriteService>();
+                var bfListApiService = scope.ServiceProvider.GetRequiredService<IBfListApiService>();
                 
                 // 1. Global timeout cleanup (only on every 2nd cycle to avoid too frequent DB operations)
                 if (isEvenCycle)
@@ -129,18 +126,18 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
 
                 // 2. BF1942 stats
                 var bf1942Stopwatch = Stopwatch.StartNew();
-                await CollectTotalPlayersAsync(CancellationToken.None);
+                await CollectTotalPlayersAsync(bfListApiService, "bf1942", CancellationToken.None);
                 var bf1942ServersStopwatch = Stopwatch.StartNew();
-                var bf1942Servers = await CollectServerStatsAsync(playerTrackingService, isEvenCycle, CancellationToken.None);
+                var bf1942Servers = await CollectServerStatsAsync(bfListApiService, playerTrackingService, "bf1942", isEvenCycle, CancellationToken.None);
                 bf1942ServersStopwatch.Stop();
                 bf1942Stopwatch.Stop();
                 Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] BF1942 stats: {bf1942Stopwatch.ElapsedMilliseconds}ms (Servers: {bf1942ServersStopwatch.ElapsedMilliseconds}ms)");
 
                 // 3. FH2 stats
                 var fh2Stopwatch = Stopwatch.StartNew();
-                await CollectFh2TotalPlayersAsync(CancellationToken.None);
+                await CollectFh2TotalPlayersAsync(bfListApiService, CancellationToken.None);
                 var fh2ServersStopwatch = Stopwatch.StartNew();
-                var fh2Servers = await CollectFh2ServerStatsAsync(playerTrackingService, isEvenCycle, CancellationToken.None);
+                var fh2Servers = await CollectFh2ServerStatsAsync(bfListApiService, playerTrackingService, isEvenCycle, CancellationToken.None);
                 fh2ServersStopwatch.Stop();
                 fh2Stopwatch.Stop();
                 Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] FH2 stats: {fh2Stopwatch.ElapsedMilliseconds}ms (Servers: {fh2ServersStopwatch.ElapsedMilliseconds}ms)");
@@ -192,85 +189,24 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         }
     }
 
-    private async Task CollectTotalPlayersAsync(CancellationToken stoppingToken)
+    private async Task CollectTotalPlayersAsync(IBfListApiService bfListApiService, string game, CancellationToken stoppingToken)
     {
-        var url = $"{BF1942_BASE_URL}livestats";
-        var response = await _httpClient.GetStringAsync(url, stoppingToken);
-        var stats = JsonSerializer.Deserialize<NumberPlayerStats>(response, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        });
+        var stats = await bfListApiService.FetchLiveStatsAsync(game);
         
-        if (stats != null)
+        if (game == "bf1942")
         {
             _totalPlayersGauge.Set(stats.Players);
         }
-    }
-
-    private async Task<List<TServer>> FetchAllServersAsync<TServer, TResponse>(
-        string baseUrl, 
-        string serverType,
-        Func<TResponse, TServer[]> getServers,
-        Func<TResponse, string> getCursor,
-        Func<TResponse, bool> getHasMore,
-        Func<TServer, string> getServerIp,
-        Func<TServer, int> getServerPort,
-        CancellationToken stoppingToken)
-    {
-        var allServers = new List<TServer>();
-        var url = baseUrl;
-        var pageCount = 0;
-        const int maxPages = 5;
-        
-        // Fetch all pages with circuit breaker
-        do
+        else
         {
-            pageCount++;
-            if (pageCount > maxPages)
-            {
-                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] {serverType} servers: Circuit breaker triggered - reached max pages ({maxPages})");
-                break;
-            }
-
-            var response = await _httpClient.GetStringAsync(url, stoppingToken);
-            var serversResponse = JsonSerializer.Deserialize<TResponse>(response, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
-
-            if (serversResponse == null) break;
-            
-            var servers = getServers(serversResponse);
-            if (servers == null || servers.Length == 0) break;
-            
-            allServers.AddRange(servers);
-            
-            if (!getHasMore(serversResponse)) break;
-            
-            // Build next page URL
-            var lastServer = servers.Last();
-            var cursor = getCursor(serversResponse);
-            var serverIp = getServerIp(lastServer);
-            var serverPort = getServerPort(lastServer);
-            url = $"{baseUrl}&cursor={cursor}&after={serverIp}:{serverPort}";
-            
-        } while (true);
-
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] {serverType} servers: Fetched {allServers.Count} servers across {pageCount} pages");
-        return allServers;
+            _fh2TotalPlayersGauge.Set(stats.Players);
+        }
     }
 
-    private async Task<List<IGameServer>> CollectServerStatsAsync(PlayerTrackingService playerTrackingService, bool enableSqliteStorage, CancellationToken stoppingToken)
+    private async Task<List<IGameServer>> CollectServerStatsAsync(IBfListApiService bfListApiService, PlayerTrackingService playerTrackingService, string game, bool enableSqliteStorage, CancellationToken stoppingToken)
     {
-        var allServers = await FetchAllServersAsync<Bf1942ServerInfo, Bf1942ServersResponse>(
-            $"{BF1942_BASE_URL}servers?perPage=100",
-            "BF1942",
-            response => response.Servers,
-            response => response.Cursor,
-            response => response.HasMore,
-            server => server.Ip,
-            server => server.Port,
-            stoppingToken);
+        var allServersObjects = await bfListApiService.FetchAllServersAsync(game);
+        var allServers = allServersObjects.Cast<Bf1942ServerInfo>().ToList();
 
         var currentLabelSets = new HashSet<string>();
         var timestamp = DateTime.UtcNow;
@@ -304,32 +240,15 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         return gameServerAdapters;
     }
 
-    private async Task CollectFh2TotalPlayersAsync(CancellationToken stoppingToken)
+    private async Task CollectFh2TotalPlayersAsync(IBfListApiService bfListApiService, CancellationToken stoppingToken)
     {
-        var url = $"{FH2_BASE_URL}livestats";
-        var response = await _httpClient.GetStringAsync(url, stoppingToken);
-        var stats = JsonSerializer.Deserialize<NumberPlayerStats>(response, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        });
-        
-        if (stats != null)
-        {
-            _fh2TotalPlayersGauge.Set(stats.Players);
-        }
+        await CollectTotalPlayersAsync(bfListApiService, "fh2", stoppingToken);
     }
 
-    private async Task<List<IGameServer>> CollectFh2ServerStatsAsync(PlayerTrackingService playerTrackingService, bool enableSqliteStorage, CancellationToken stoppingToken)
+    private async Task<List<IGameServer>> CollectFh2ServerStatsAsync(IBfListApiService bfListApiService, PlayerTrackingService playerTrackingService, bool enableSqliteStorage, CancellationToken stoppingToken)
     {
-        var allServers = await FetchAllServersAsync<Fh2ServerInfo, Fh2ServersResponse>(
-            $"{FH2_BASE_URL}servers?perPage=100",
-            "FH2",
-            response => response.Servers,
-            response => response.Cursor,
-            response => response.HasMore,
-            server => server.Ip,
-            server => server.Port,
-            stoppingToken);
+        var allServersObjects = await bfListApiService.FetchAllServersAsync("fh2");
+        var allServers = allServersObjects.Cast<Fh2ServerInfo>().ToList();
 
         var currentLabelSets = new HashSet<string>();
         var timestamp = DateTime.UtcNow;
@@ -373,6 +292,5 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     public void Dispose()
     {
         _timer?.Dispose();
-        _httpClient?.Dispose();
     }
 }
