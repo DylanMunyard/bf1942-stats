@@ -16,7 +16,7 @@ public class LiveServersController : ControllerBase
     private static readonly string[] ValidGames = ["bf1942", "fh2"];
     private const int DefaultPageSize = 100;
     private const int MaxPageSize = 1000;
-    private const int ServerListCacheSeconds = 12; // 12 seconds to allow for 15s refresh with buffer
+    private const int ServerListCacheSeconds = 20; // 20 seconds to match upstream API cache time
     private const int SingleServerCacheSeconds = 8; // 8 seconds for individual server updates
     
     public LiveServersController(
