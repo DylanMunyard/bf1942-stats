@@ -1,6 +1,7 @@
 using System.Text.Json;
 using junie_des_1942stats.Bflist;
 using junie_des_1942stats.StatsCollectors.Modals;
+using junie_des_1942stats.Caching;
 using Microsoft.Extensions.Logging;
 
 namespace junie_des_1942stats.Services;
@@ -21,11 +22,16 @@ public interface IBfListApiService
 public class BfListApiService : IBfListApiService
 {
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ICacheService _cacheService;
     private readonly ILogger<BfListApiService> _logger;
     
-    public BfListApiService(IHttpClientFactory httpClientFactory, ILogger<BfListApiService> logger)
+    private const int ServerListCacheSeconds = 20; // 20 seconds to match upstream API cache time
+    private const int SingleServerCacheSeconds = 8; // 8 seconds for individual server updates
+    
+    public BfListApiService(IHttpClientFactory httpClientFactory, ICacheService cacheService, ILogger<BfListApiService> logger)
     {
         _httpClientFactory = httpClientFactory;
+        _cacheService = cacheService;
         _logger = logger;
     }
     
@@ -221,23 +227,49 @@ public class BfListApiService : IBfListApiService
     
     public async Task<ServerSummary[]> FetchAllServerSummariesAsync(string game)
     {
+        var cacheKey = $"all_servers:{game}";
+        var cachedResult = await _cacheService.GetAsync<ServerSummary[]>(cacheKey);
+
+        if (cachedResult != null)
+        {
+            _logger.LogDebug("Cache hit for all servers of game {Game}", game);
+            return cachedResult;
+        }
+
+        _logger.LogDebug("Cache miss for all servers of game {Game}", game);
         var servers = await FetchAllServersAsync(game);
-        return ConvertToServerSummaries(servers, game);
+        var summaries = ConvertToServerSummaries(servers, game);
+        await _cacheService.SetAsync(cacheKey, summaries, TimeSpan.FromSeconds(ServerListCacheSeconds));
+        return summaries;
     }
     
     public async Task<ServerSummary?> FetchSingleServerSummaryAsync(string game, string serverIdentifier)
     {
+        var cacheKey = $"server:{game}:{serverIdentifier}";
+        var cachedResult = await _cacheService.GetAsync<ServerSummary?>(cacheKey);
+
+        if (cachedResult != null)
+        {
+            _logger.LogDebug("Cache hit for server {Game}:{ServerIdentifier}", game, serverIdentifier);
+            return cachedResult;
+        }
+
+        _logger.LogDebug("Cache miss for server {Game}:{ServerIdentifier}", game, serverIdentifier);
         var server = await FetchSingleServerAsync(game, serverIdentifier);
         
         if (server == null) return null;
         
         if (game.ToLower() == "bf1942" && server is Bf1942ServerInfo bf1942Server)
         {
-            return MapBf1942ToSummary(bf1942Server);
+            var summary = MapBf1942ToSummary(bf1942Server);
+            await _cacheService.SetAsync(cacheKey, summary, TimeSpan.FromSeconds(SingleServerCacheSeconds));
+            return summary;
         }
         else if (server is Fh2ServerInfo fh2Server)
         {
-            return MapFh2ToSummary(fh2Server);
+            var summary = MapFh2ToSummary(fh2Server);
+            await _cacheService.SetAsync(cacheKey, summary, TimeSpan.FromSeconds(SingleServerCacheSeconds));
+            return summary;
         }
         
         return null;

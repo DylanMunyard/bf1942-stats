@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using junie_des_1942stats.Caching;
 using junie_des_1942stats.Services;
 using Microsoft.Extensions.Logging;
 
@@ -10,30 +9,23 @@ namespace junie_des_1942stats.Controllers;
 public class LiveServersController : ControllerBase
 {
     private readonly IBfListApiService _bfListApiService;
-    private readonly ICacheService _cacheService;
     private readonly ILogger<LiveServersController> _logger;
     
     private static readonly string[] ValidGames = ["bf1942", "fh2"];
-    private const int DefaultPageSize = 100;
-    private const int MaxPageSize = 1000;
-    private const int ServerListCacheSeconds = 20; // 20 seconds to match upstream API cache time
-    private const int SingleServerCacheSeconds = 8; // 8 seconds for individual server updates
     
     public LiveServersController(
         IBfListApiService bfListApiService,
-        ICacheService cacheService,
         ILogger<LiveServersController> logger)
     {
         _bfListApiService = bfListApiService;
-        _cacheService = cacheService;
         _logger = logger;
     }
 
     /// <summary>
-    /// Get all servers for a specific game with intelligent caching
+    /// Get all servers for a specific game
     /// </summary>
     /// <param name="game">Game type: bf1942 or fh2</param>
-    /// <returns>Server list with caching metadata</returns>
+    /// <returns>Server list</returns>
     [HttpGet("{game}/servers")]
     public async Task<ActionResult<ServerListResponse>> GetServers(string game)
     {
@@ -42,34 +34,16 @@ public class LiveServersController : ControllerBase
             return BadRequest($"Invalid game type. Valid types: {string.Join(", ", ValidGames)}");
         }
 
-        // Create cache key for all servers of this game
-        var cacheKey = $"all_servers:{game}";
-        
         try
         {
-            // Try to get from cache first
-            var cachedResponse = await _cacheService.GetAsync<ServerListResponse>(cacheKey);
-            if (cachedResponse != null)
-            {
-                _logger.LogDebug("Cache hit for all servers of game {Game}", game);
-                cachedResponse.CacheHit = true;
-                return Ok(cachedResponse);
-            }
-
-            // Cache miss - fetch all servers from BFList API
-            _logger.LogDebug("Cache miss for all servers of game {Game}", game);
-            
             var servers = await _bfListApiService.FetchAllServerSummariesAsync(game);
             
             var response = new ServerListResponse
             {
                 Servers = servers,
                 LastUpdated = DateTime.UtcNow.ToString("O"),
-                CacheHit = false
+                CacheHit = false // This is now handled internally by the service
             };
-
-            // Cache the response
-            await _cacheService.SetAsync(cacheKey, response, TimeSpan.FromSeconds(ServerListCacheSeconds));
             
             return Ok(response);
         }
@@ -106,29 +80,14 @@ public class LiveServersController : ControllerBase
         }
 
         var serverIdentifier = $"{ip}:{port}";
-        var cacheKey = $"server:{game}:{serverIdentifier}";
         
         try
         {
-            // Try cache first
-            var cachedServer = await _cacheService.GetAsync<ServerSummary>(cacheKey);
-            if (cachedServer != null)
-            {
-                _logger.LogDebug("Cache hit for server {Game}:{ServerIdentifier}", game, serverIdentifier);
-                return Ok(cachedServer);
-            }
-
-            // Cache miss - fetch from BFList API
-            _logger.LogDebug("Cache miss for server {Game}:{ServerIdentifier}", game, serverIdentifier);
-            
             var server = await _bfListApiService.FetchSingleServerSummaryAsync(game, serverIdentifier);
             if (server == null)
             {
                 return NotFound($"Server {serverIdentifier} not found");
             }
-
-            // Cache the response
-            await _cacheService.SetAsync(cacheKey, server, TimeSpan.FromSeconds(SingleServerCacheSeconds));
             
             return Ok(server);
         }
