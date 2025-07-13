@@ -20,7 +20,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
-    private readonly TimeSpan _collectionInterval = TimeSpan.FromSeconds(15);
+    private readonly TimeSpan _collectionInterval = TimeSpan.FromSeconds(30);
     private Timer _timer;
     private int _isRunning = 0;
     private int _cycleCount = 0;
@@ -80,9 +80,9 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Stats collection service starting (15s intervals)...");
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Stats collection service starting (30s intervals)...");
         
-        // Initialize timer to run immediately (dueTime: 0) and then every 15 seconds
+        // Initialize timer to run immediately (dueTime: 0) and then every 30 seconds
         _timer = new Timer(
             callback: ExecuteCollectionCycle,
             state: null,
@@ -101,7 +101,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         }
 
         var currentCycle = Interlocked.Increment(ref _cycleCount);
-        var isEvenCycle = currentCycle % 4 == 0; // Every 4th cycle (60s) for SQLite
+        var isEvenCycle = currentCycle % 2 == 0; // Every 2nd cycle (60s) for SQLite
         
         var cycleStopwatch = Stopwatch.StartNew();
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Starting stats collection cycle #{currentCycle} (ClickHouse: Always, SQLite: {(isEvenCycle ? "Yes" : "No")})...");
@@ -118,7 +118,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
                 var playerMetricsService = scope.ServiceProvider.GetRequiredService<PlayerMetricsWriteService>();
                 var playerRoundsService = scope.ServiceProvider.GetRequiredService<PlayerRoundsWriteService>();
                 
-                // 1. Global timeout cleanup (only on every 4th cycle to avoid too frequent DB operations)
+                // 1. Global timeout cleanup (only on every 2nd cycle to avoid too frequent DB operations)
                 if (isEvenCycle)
                 {
                     var timeoutStopwatch = Stopwatch.StartNew();
@@ -155,7 +155,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
                 clickHouseStopwatch.Stop();
                 Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse batch storage: {clickHouseStopwatch.ElapsedMilliseconds}ms ({allServers.Count} servers)");
 
-                // 5. Sync completed PlayerSessions to ClickHouse player_rounds (every 4th cycle)
+                // 5. Sync completed PlayerSessions to ClickHouse player_rounds (every 2nd cycle)
                 if (isEvenCycle && _enableRoundSyncing)
                 {
                     var roundsSyncStopwatch = Stopwatch.StartNew();
@@ -285,7 +285,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             var adapter = new Bf1942ServerAdapter(server);
             gameServerAdapters.Add(adapter);
             
-            // Only store to SQLite on every 4th cycle (every 60s)
+            // Only store to SQLite on every 2nd cycle (every 60s)
             if (enableSqliteStorage)
             {
                 await playerTrackingService.TrackPlayersFromServerInfo(server, timestamp);
@@ -344,7 +344,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             var adapter = new Fh2ServerAdapter(server);
             gameServerAdapters.Add(adapter);
             
-            // Only store to SQLite on every 4th cycle (every 60s)
+            // Only store to SQLite on every 2nd cycle (every 60s)
             if (enableSqliteStorage)
             {
                 await playerTrackingService.TrackPlayersFromServerInfo(server, timestamp);
