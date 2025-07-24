@@ -572,7 +572,7 @@ FORMAT TabSeparated";
                 break;
             case "1m":
                 startPeriod = endPeriod.AddDays(-30);
-                granularity = TimeGranularity.Hourly;
+                granularity = TimeGranularity.FourHourly;
                 break;
             case "3m":
                 startPeriod = endPeriod.AddDays(-90);
@@ -599,6 +599,7 @@ FORMAT TabSeparated";
         return granularity switch
         {
             TimeGranularity.Hourly => "toStartOfHour(timestamp)",
+            TimeGranularity.FourHourly => "toDateTime(toUnixTimestamp(toStartOfHour(timestamp)) - (toUnixTimestamp(toStartOfHour(timestamp)) % 14400))",
             TimeGranularity.Daily => "toStartOfDay(timestamp)",
             TimeGranularity.Weekly => "toMonday(timestamp)",
             TimeGranularity.Monthly => "toStartOfMonth(timestamp)",
@@ -611,6 +612,7 @@ FORMAT TabSeparated";
         return granularity switch
         {
             TimeGranularity.Hourly => DateTime.Parse(timePeriodStr),
+            TimeGranularity.FourHourly => DateTime.Parse(timePeriodStr),
             TimeGranularity.Daily => DateTime.Parse(timePeriodStr),
             TimeGranularity.Weekly => DateTime.Parse(timePeriodStr),
             TimeGranularity.Monthly => DateTime.Parse(timePeriodStr),
@@ -829,6 +831,7 @@ FORMAT TabSeparated";
         return granularity switch
         {
             TimeGranularity.Hourly => "toStartOfHour(round_start_time)",
+            TimeGranularity.FourHourly => "toDateTime(toUnixTimestamp(toStartOfHour(round_start_time)) - (toUnixTimestamp(toStartOfHour(round_start_time)) % 14400))",
             TimeGranularity.Daily => "toStartOfDay(round_start_time)",
             TimeGranularity.Weekly => "toMonday(round_start_time)",
             TimeGranularity.Monthly => "toStartOfMonth(round_start_time)",
@@ -841,6 +844,7 @@ FORMAT TabSeparated";
 public enum TimeGranularity
 {
     Hourly,
+    FourHourly,
     Daily,
     Weekly,
     Monthly
