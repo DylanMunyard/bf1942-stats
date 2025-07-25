@@ -103,7 +103,6 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
 
                 // 2. BF1942 stats
                 var bf1942Stopwatch = Stopwatch.StartNew();
-                await CollectTotalPlayersAsync(bfListApiService, "bf1942", CancellationToken.None);
                 var bf1942ServersStopwatch = Stopwatch.StartNew();
                 var bf1942Servers = await CollectServerStatsAsync(bfListApiService, playerTrackingService, "bf1942", isEvenCycle, CancellationToken.None);
                 bf1942ServersStopwatch.Stop();
@@ -112,18 +111,26 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
 
                 // 3. FH2 stats
                 var fh2Stopwatch = Stopwatch.StartNew();
-                await CollectFh2TotalPlayersAsync(bfListApiService, CancellationToken.None);
                 var fh2ServersStopwatch = Stopwatch.StartNew();
                 var fh2Servers = await CollectFh2ServerStatsAsync(bfListApiService, playerTrackingService, isEvenCycle, CancellationToken.None);
                 fh2ServersStopwatch.Stop();
                 fh2Stopwatch.Stop();
                 Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] FH2 stats: {fh2Stopwatch.ElapsedMilliseconds}ms (Servers: {fh2ServersStopwatch.ElapsedMilliseconds}ms)");
 
+                // BFV stats
+                var bfvietnamStopwatch = Stopwatch.StartNew();
+                var bfvietnamServersStopwatch = Stopwatch.StartNew();
+                var bfvietnamServers = await CollectBfvietnamServerStatsAsync(bfListApiService, playerTrackingService, isEvenCycle, CancellationToken.None);
+                bfvietnamServersStopwatch.Stop();
+                bfvietnamStopwatch.Stop();
+                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] BFV stats: {bfvietnamStopwatch.ElapsedMilliseconds}ms (Servers: {bfvietnamServersStopwatch.ElapsedMilliseconds}ms)");
+
                 // 4. Batch store all player metrics to ClickHouse
                 var clickHouseStopwatch = Stopwatch.StartNew();
                 var allServers = new List<IGameServer>();
                 allServers.AddRange(bf1942Servers);
                 allServers.AddRange(fh2Servers);
+                allServers.AddRange(bfvietnamServers);
                 var timestamp = DateTime.UtcNow;
                 await playerMetricsService.StoreBatchedPlayerMetricsAsync(allServers, timestamp);
                 clickHouseStopwatch.Stop();
@@ -166,13 +173,6 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         }
     }
 
-    private async Task CollectTotalPlayersAsync(IBfListApiService bfListApiService, string game, CancellationToken stoppingToken)
-    {
-        var stats = await bfListApiService.FetchLiveStatsAsync(game);
-        
-        // Player count stats are now tracked in ClickHouse
-    }
-
     private async Task<List<IGameServer>> CollectServerStatsAsync(IBfListApiService bfListApiService, PlayerTrackingService playerTrackingService, string game, bool enableSqliteStorage, CancellationToken stoppingToken)
     {
         var allServersObjects = await bfListApiService.FetchAllServersAsync(game);
@@ -190,16 +190,35 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             // Only store to SQLite on every 2nd cycle (every 60s)
             if (enableSqliteStorage)
             {
-                await playerTrackingService.TrackPlayersFromServerInfo(server, timestamp);
+                await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp);
             }
         }
 
         return gameServerAdapters;
     }
 
-    private async Task CollectFh2TotalPlayersAsync(IBfListApiService bfListApiService, CancellationToken stoppingToken)
+    private async Task<List<IGameServer>> CollectBfvietnamServerStatsAsync(IBfListApiService bfListApiService, PlayerTrackingService playerTrackingService, bool enableSqliteStorage, CancellationToken stoppingToken)
     {
-        await CollectTotalPlayersAsync(bfListApiService, "fh2", stoppingToken);
+        var allServersObjects = await bfListApiService.FetchAllServersAsync("bfvietnam");
+        var allServers = allServersObjects.Cast<BfvietnamServerInfo>().ToList();
+
+        var timestamp = DateTime.UtcNow;
+        var gameServerAdapters = new List<IGameServer>();
+
+        foreach (var server in allServers)
+        {
+            // Create adapter for ClickHouse batching
+            var adapter = new BfvietnamServerAdapter(server);
+            gameServerAdapters.Add(adapter);
+
+            // Only store to SQLite on every 2nd cycle (every 60s)
+            if (enableSqliteStorage)
+            {
+                await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp);
+            }
+        }
+
+        return gameServerAdapters;
     }
 
     private async Task<List<IGameServer>> CollectFh2ServerStatsAsync(IBfListApiService bfListApiService, PlayerTrackingService playerTrackingService, bool enableSqliteStorage, CancellationToken stoppingToken)
@@ -219,7 +238,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             // Only store to SQLite on every 2nd cycle (every 60s)
             if (enableSqliteStorage)
             {
-                await playerTrackingService.TrackPlayersFromServerInfo(server, timestamp);
+                await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp);
             }
         }
 

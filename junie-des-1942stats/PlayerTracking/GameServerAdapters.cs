@@ -41,4 +41,18 @@ namespace junie_des_1942stats.PlayerTracking
         public IEnumerable<PlayerInfo> Players => serverInfo.Players;
         public IEnumerable<TeamInfo> Teams => serverInfo.Teams;
     }
+
+    public class BfvietnamServerAdapter(BfvietnamServerInfo serverInfo) : IGameServer
+    {
+        private readonly BfvietnamServerInfo _serverInfo = serverInfo;
+        public string Guid => _serverInfo.Guid;
+        public string Name => _serverInfo.Name;
+        public string Ip => _serverInfo.Ip;
+        public int Port => _serverInfo.Port;
+        public string GameId => "bfvietnam";
+        public string GameType => _serverInfo.GameType;
+        public IEnumerable<PlayerInfo> Players => _serverInfo.Players;
+        public IEnumerable<TeamInfo> Teams => _serverInfo.Teams;
+        public string MapName => _serverInfo.MapName;
+    }
 }

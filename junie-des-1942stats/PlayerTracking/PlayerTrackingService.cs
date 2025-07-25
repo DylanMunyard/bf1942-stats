@@ -37,6 +37,19 @@ public class PlayerTrackingService
         await TrackPlayersFromServer(adapter, timestamp);
     }
 
+    // Method to track players from BfvServerInfo
+    public async Task TrackPlayersFromServerInfo(BfvietnamServerInfo serverInfo, DateTime timestamp)
+    {
+        // Create an adapter to treat BfvServerInfo as a generic IGameServer
+        var adapter = new BfvietnamServerAdapter(serverInfo);
+        await TrackPlayersFromServer(adapter, timestamp);
+    }
+    
+    public async Task TrackPlayersFromServerInfo(IGameServer server, DateTime timestamp)
+    {
+        await TrackPlayersFromServer(server, timestamp);
+    }
+
     // Core method that works with the common interface
     private async Task TrackPlayersFromServer(IGameServer server, DateTime timestamp)
     {

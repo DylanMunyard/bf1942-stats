@@ -11,7 +11,6 @@ public interface IBfListApiService
     Task<object[]> FetchServersAsync(string game, int perPage = 100, string? cursor = null, string? after = null);
     Task<object[]> FetchAllServersAsync(string game);
     Task<object?> FetchSingleServerAsync(string game, string serverIdentifier);
-    Task<NumberPlayerStats> FetchLiveStatsAsync(string game);
     
     // Helper methods for UI that need ServerSummary
     Task<ServerSummary[]> FetchServerSummariesAsync(string game, int perPage = 100, string? cursor = null, string? after = null);
@@ -63,6 +62,15 @@ public class BfListApiService : IBfListApiService
             });
             
             return bf1942Response?.Servers?.Cast<object>().ToArray() ?? [];
+        }
+        else if (game.ToLower() == "bfvietnam")
+        {
+            var bfvResponse = JsonSerializer.Deserialize<BfvietnamServersResponse>(content, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+            
+            return bfvResponse?.Servers?.Cast<object>().ToArray() ?? [];
         }
         else // fh2
         {
@@ -127,6 +135,27 @@ public class BfListApiService : IBfListApiService
                     hasMore = false;
                 }
             }
+            else if (game.ToLower() == "bfvietnam")
+            {
+                var bfvResponse = JsonSerializer.Deserialize<BfvietnamServersResponse>(content, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                if (bfvResponse?.Servers != null && bfvResponse.Servers.Length > 0)
+                {
+                    allServers.AddRange(bfvResponse.Servers.Cast<object>());
+
+                    // Set pagination parameters for next request
+                    cursor = bfvResponse.Cursor;
+                    after = $"{bfvResponse.Servers.Last().Ip}:{bfvResponse.Servers.Last().Port}";
+                    hasMore = bfvResponse.HasMore;
+                }
+                else
+                {
+                    hasMore = false;
+                }
+            }
             else // fh2
             {
                 var fh2Response = JsonSerializer.Deserialize<Fh2ServersResponse>(content, new JsonSerializerOptions
@@ -163,13 +192,13 @@ public class BfListApiService : IBfListApiService
     public async Task<object?> FetchSingleServerAsync(string game, string serverIdentifier)
     {
         var httpClient = _httpClientFactory.CreateClient("BfListApi");
-        var url = $"https://api.bflist.io/v2/{game}/servers/{serverIdentifier}";
+        var baseUrl = $"https://api.bflist.io/v2/{game}/servers/{serverIdentifier}";
         
-        _logger.LogDebug("Fetching single server from BFList API: {Url}", url);
+        _logger.LogDebug("Fetching single server from BFList API: {Url}", baseUrl);
         
         try
         {
-            var response = await httpClient.GetAsync(url);
+            var response = await httpClient.GetAsync(baseUrl);
             response.EnsureSuccessStatusCode();
             var content = await response.Content.ReadAsStringAsync();
             
@@ -181,6 +210,15 @@ public class BfListApiService : IBfListApiService
                 });
                 
                 return bf1942Server;
+            }
+            else if (game.ToLower() == "bfvietnam")
+            {
+                var bfvServer = JsonSerializer.Deserialize<BfvietnamServerInfo>(content, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                return bfvServer;
             }
             else // fh2
             {
@@ -197,25 +235,6 @@ public class BfListApiService : IBfListApiService
             _logger.LogWarning("Failed to fetch single server {ServerIdentifier}: {Error}", serverIdentifier, ex.Message);
             return null;
         }
-    }
-    
-    public async Task<NumberPlayerStats> FetchLiveStatsAsync(string game)
-    {
-        var httpClient = _httpClientFactory.CreateClient("BfListApi");
-        var url = $"https://api.bflist.io/v2/{game}/livestats";
-        
-        _logger.LogDebug("Fetching live stats from BFList API: {Url}", url);
-        
-        var response = await httpClient.GetAsync(url);
-        response.EnsureSuccessStatusCode();
-        var content = await response.Content.ReadAsStringAsync();
-        
-        var stats = JsonSerializer.Deserialize<NumberPlayerStats>(content, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        });
-        
-        return stats ?? new NumberPlayerStats();
     }
     
     // Helper methods for UI that need ServerSummary
@@ -265,6 +284,12 @@ public class BfListApiService : IBfListApiService
             await _cacheService.SetAsync(cacheKey, summary, TimeSpan.FromSeconds(SingleServerCacheSeconds));
             return summary;
         }
+        else if (game.ToLower() == "bfvietnam" && server is BfvietnamServerInfo bfvServer)
+        {
+            var summary = MapBfvToSummary(bfvServer);
+            await _cacheService.SetAsync(cacheKey, summary, TimeSpan.FromSeconds(SingleServerCacheSeconds));
+            return summary;
+        }
         else if (server is Fh2ServerInfo fh2Server)
         {
             var summary = MapFh2ToSummary(fh2Server);
@@ -281,6 +306,13 @@ public class BfListApiService : IBfListApiService
         {
             return servers.Cast<Bf1942ServerInfo>()
                 .Select(MapBf1942ToSummary)
+                .OrderByDescending(s => s.NumPlayers)
+                .ToArray();
+        }
+        else if (game.ToLower() == "bfvietnam")
+        {
+            return servers.Cast<BfvietnamServerInfo>()
+                .Select(MapBfvToSummary)
                 .OrderByDescending(s => s.NumPlayers)
                 .ToArray();
         }
@@ -309,6 +341,27 @@ public class BfListApiService : IBfListApiService
             RoundTimeRemain = server.RoundTimeRemain,
             Tickets1 = server.Tickets1,
             Tickets2 = server.Tickets2,
+            Players = server.Players ?? [],
+            Teams = server.Teams ?? []
+        };
+    }
+
+    private static ServerSummary MapBfvToSummary(BfvietnamServerInfo server)
+    {
+        return new ServerSummary
+        {
+            Guid = server.Guid,
+            Name = server.Name,
+            Ip = server.Ip,
+            Port = server.Port,
+            NumPlayers = server.NumPlayers,
+            MaxPlayers = server.MaxPlayers,
+            MapName = server.MapName,
+            GameType = server.GameType,
+            JoinLink = server.JoinLink,
+            RoundTimeRemain = 0, // BFV doesn't have this field in the provided sample
+            Tickets1 = server.Teams?.FirstOrDefault(t => t.Index == 1)?.Tickets ?? 0,
+            Tickets2 = server.Teams?.FirstOrDefault(t => t.Index == 2)?.Tickets ?? 0,
             Players = server.Players ?? [],
             Teams = server.Teams ?? []
         };
@@ -355,6 +408,13 @@ public class ServerListResponse
     /// Whether this response was served from cache
     /// </summary>
     public bool CacheHit { get; set; }
+}
+
+public class BfvietnamServersResponse : ServerListResponse
+{
+    public new BfvietnamServerInfo[] Servers { get; set; } = [];
+    public string? Cursor { get; set; }
+    public bool HasMore { get; set; }
 }
 
 /// <summary>

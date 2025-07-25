@@ -11,7 +11,7 @@ public class LiveServersController : ControllerBase
     private readonly IBfListApiService _bfListApiService;
     private readonly ILogger<LiveServersController> _logger;
     
-    private static readonly string[] ValidGames = ["bf1942", "fh2"];
+    private static readonly string[] ValidGames = ["bf1942", "fh2", "bfvietnam"];
     
     public LiveServersController(
         IBfListApiService bfListApiService,
