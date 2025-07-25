@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
-using Prometheus;
+
 using System.Text.Json;
 using junie_des_1942stats.PlayerTracking;
 using junie_des_1942stats.Bflist;
@@ -23,7 +23,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
-    private readonly TimeSpan _collectionInterval = TimeSpan.FromSeconds(30);
+    private readonly TimeSpan _collectionInterval = TimeSpan.FromSeconds(15);
     private Timer _timer;
     private int _isRunning = 0;
     private int _cycleCount = 0;
@@ -31,11 +31,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     // Configuration setting for round syncing
     private readonly bool _enableRoundSyncing;
     
-    // Metrics
-    private readonly Gauge _totalPlayersGauge;
-    private readonly Gauge _serverPlayersGauge;
-    private readonly Gauge _fh2TotalPlayersGauge;
-    private readonly Gauge _fh2ServerPlayersGauge;
+
 
     public StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory, IConfiguration configuration)
     {
@@ -53,32 +49,13 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse Write URL: {clickHouseWriteUrl} {(isWriteUrlSet ? "(custom)" : "(fallback to read URL)")}");
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Round syncing to ClickHouse: {(_enableRoundSyncing ? "ENABLED" : "DISABLED")}");
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] To avoid writes to production: Set CLICKHOUSE_WRITE_URL to dev instance or leave ENABLE_ROUND_SYNCING=false");
-        
-        // Initialize metrics
-        _totalPlayersGauge = Metrics.CreateGauge(
-            "bf1942_players_online", 
-            "Number of players currently online in BF1942");
-        
-        _serverPlayersGauge = Metrics.CreateGauge(
-            "bf1942_server_players",
-            "Number of players on each BF1942 server",
-            new GaugeConfiguration { LabelNames = new[] { "server_name" } });
-
-        _fh2TotalPlayersGauge = Metrics.CreateGauge(
-            "fh2_players_online", 
-            "Number of players currently online in FH2");
-        
-        _fh2ServerPlayersGauge = Metrics.CreateGauge(
-            "fh2_server_players",
-            "Number of players on each FH2 server",
-            new GaugeConfiguration { LabelNames = new[] { "server_name" } });
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Stats collection service starting (30s intervals)...");
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Stats collection service starting (15s intervals)...");
         
-        // Initialize timer to run immediately (dueTime: 0) and then every 30 seconds
+        // Initialize timer to run immediately (dueTime: 0) and then every 15 seconds
         _timer = new Timer(
             callback: ExecuteCollectionCycle,
             state: null,
@@ -193,14 +170,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     {
         var stats = await bfListApiService.FetchLiveStatsAsync(game);
         
-        if (game == "bf1942")
-        {
-            _totalPlayersGauge.Set(stats.Players);
-        }
-        else
-        {
-            _fh2TotalPlayersGauge.Set(stats.Players);
-        }
+        // Player count stats are now tracked in ClickHouse
     }
 
     private async Task<List<IGameServer>> CollectServerStatsAsync(IBfListApiService bfListApiService, PlayerTrackingService playerTrackingService, string game, bool enableSqliteStorage, CancellationToken stoppingToken)
@@ -208,15 +178,11 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         var allServersObjects = await bfListApiService.FetchAllServersAsync(game);
         var allServers = allServersObjects.Cast<Bf1942ServerInfo>().ToList();
 
-        var currentLabelSets = new HashSet<string>();
         var timestamp = DateTime.UtcNow;
         var gameServerAdapters = new List<IGameServer>();
 
         foreach (var server in allServers)
         {
-            _serverPlayersGauge.WithLabels(server.Name).Set(server.NumPlayers);
-            currentLabelSets.Add(server.Name);
-            
             // Create adapter for ClickHouse batching
             var adapter = new Bf1942ServerAdapter(server);
             gameServerAdapters.Add(adapter);
@@ -225,15 +191,6 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             if (enableSqliteStorage)
             {
                 await playerTrackingService.TrackPlayersFromServerInfo(server, timestamp);
-            }
-        }
-
-        // Clean up old server metrics
-        foreach (var labelSet in _serverPlayersGauge.GetAllLabelValues())
-        {
-            if (!currentLabelSets.Contains(labelSet[0]))
-            {
-                _serverPlayersGauge.RemoveLabelled(labelSet);
             }
         }
 
@@ -250,15 +207,11 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         var allServersObjects = await bfListApiService.FetchAllServersAsync("fh2");
         var allServers = allServersObjects.Cast<Fh2ServerInfo>().ToList();
 
-        var currentLabelSets = new HashSet<string>();
         var timestamp = DateTime.UtcNow;
         var gameServerAdapters = new List<IGameServer>();
 
         foreach (var server in allServers)
         {
-            _fh2ServerPlayersGauge.WithLabels(server.Name).Set(server.NumPlayers);
-            currentLabelSets.Add(server.Name);
-            
             // Create adapter for ClickHouse batching
             var adapter = new Fh2ServerAdapter(server);
             gameServerAdapters.Add(adapter);
@@ -267,15 +220,6 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             if (enableSqliteStorage)
             {
                 await playerTrackingService.TrackPlayersFromServerInfo(server, timestamp);
-            }
-        }
-
-        // Clean up old server metrics
-        foreach (var labelSet in _fh2ServerPlayersGauge.GetAllLabelValues())
-        {
-            if (!currentLabelSets.Contains(labelSet[0]))
-            {
-                _fh2ServerPlayersGauge.RemoveLabelled(labelSet);
             }
         }
 

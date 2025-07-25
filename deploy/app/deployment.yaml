@@ -40,8 +40,7 @@ spec:
               value: "/mnt/data/playertracker.db"
             - name: ASPNETCORE_URLS
               value: "http://+:8080"
-            - name: PROMETHEUS_URL
-              value: "http://kube-prometheus-stack-prometheus.monitoring:9090/api/v1"
+
             - name: CLICKHOUSE_URL
               value: "http://clickhouse-service.clickhouse:8123"
             - name: CLICKHOUSE_WRITE_URL
@@ -71,9 +70,6 @@ spec:
     app: bf42-stats
   type: ClusterIP
   ports:
-    - port: 9091
-      targetPort: 9091
-      name: metrics
     - port: 8080
       targetPort: 8080
       name: api

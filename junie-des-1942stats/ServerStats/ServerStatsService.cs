@@ -1,6 +1,5 @@
 using System.Data.SqlTypes;
 using junie_des_1942stats.PlayerTracking;
-using junie_des_1942stats.Prometheus;
 using junie_des_1942stats.ServerStats.Models;
 using junie_des_1942stats.Caching;
 using junie_des_1942stats.ClickHouse;
@@ -20,7 +19,6 @@ public class PingTimestampData
 
 public class ServerStatsService(
     PlayerTrackerDbContext dbContext, 
-    PrometheusService prometheusService, 
     ILogger<ServerStatsService> logger,
     ICacheService cacheService,
     ICacheKeyService cacheKeyService,
@@ -28,7 +26,6 @@ public class ServerStatsService(
     IClickHouseReader clickHouseReader)
 {
     private readonly PlayerTrackerDbContext _dbContext = dbContext;
-    private readonly PrometheusService _prometheusService = prometheusService;
     private readonly ILogger<ServerStatsService> _logger = logger;
     private readonly ICacheService _cacheService = cacheService;
     private readonly ICacheKeyService _cacheKeyService = cacheKeyService;

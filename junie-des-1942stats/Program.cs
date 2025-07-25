@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using junie_des_1942stats.PlayerTracking;
-using junie_des_1942stats.Prometheus;
 using junie_des_1942stats.ServerStats;
 using junie_des_1942stats.StatsCollectors;
 using junie_des_1942stats.ClickHouse;
@@ -116,8 +115,7 @@ try
                 return "ClickHouse";
             if (typeNamespace.Contains("PlayerTracking"))
                 return "PlayerTracking";
-            if (typeNamespace.Contains("Prometheus"))
-                return "Prometheus";
+
             if (typeNamespace.Contains("StatsCollectors"))
                 return "StatsCollectors";
                 
@@ -170,23 +168,6 @@ try
         options.Port = 9091;
     });
 
-    // Add Prometheus service with 5 second timeout
-    builder.Services.AddHttpClient<PrometheusService>(client => 
-    {
-        client.Timeout = TimeSpan.FromSeconds(2);
-    })
-    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-    {
-        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-    });
-
-    builder.Services.AddSingleton<PrometheusService>(sp =>
-    {
-        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
-        httpClient.Timeout = TimeSpan.FromSeconds(5);
-        var prometheusUrl = Environment.GetEnvironmentVariable("PROMETHEUS_URL") ?? "http://prometheus.home.net/api/v1";
-        return new PrometheusService(httpClient, prometheusUrl);
-    });
 
     // Add ClickHouse HTTP clients with 2 second timeout
     builder.Services.AddHttpClient<PlayerMetricsWriteService>(client => 
