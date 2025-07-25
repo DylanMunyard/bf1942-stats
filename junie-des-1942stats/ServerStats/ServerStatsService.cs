@@ -78,6 +78,7 @@ public class ServerStatsService(
         {
             ServerGuid = server.Guid,
             ServerName = server.Name,
+            GameId = server.GameId,
             Region = server.Region ?? string.Empty,
             Country = server.Country ?? string.Empty,
             Timezone = server.Timezone ?? string.Empty,
