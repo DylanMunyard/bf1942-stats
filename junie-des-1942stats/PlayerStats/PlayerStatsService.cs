@@ -1,12 +1,15 @@
 using junie_des_1942stats.PlayerStats.Models;
 using junie_des_1942stats.PlayerTracking;
+using junie_des_1942stats.ClickHouse;
 using Microsoft.EntityFrameworkCore;
 
 namespace junie_des_1942stats.PlayerStats;
 
-public class PlayerStatsService(PlayerTrackerDbContext dbContext)
+public class PlayerStatsService(PlayerTrackerDbContext dbContext, PlayerInsightsService playerInsightsService, PlayerRoundsReadService playerRoundsReadService)
 {
     private readonly PlayerTrackerDbContext _dbContext = dbContext;
+    private readonly PlayerInsightsService _playerInsightsService = playerInsightsService;
+    private readonly PlayerRoundsReadService _playerRoundsReadService = playerRoundsReadService;
 
     // Define a threshold for considering a player "active" (e.g., 5 minutes)
     private readonly TimeSpan _activeThreshold = TimeSpan.FromMinutes(5);
@@ -156,20 +159,28 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
 
         var now = DateTime.UtcNow;
 
-        // Get aggregated stats directly from the database
-        var aggregateStats = await _dbContext.PlayerSessions
+        // Get aggregated stats from ClickHouse for better performance and accuracy
+        var clickHouseStats = await GetPlayerStatsFromClickHouse(playerName);
+        
+        // Get session-based stats for fields not available in ClickHouse
+        var sessionStats = await _dbContext.PlayerSessions
             .Where(ps => ps.PlayerName == playerName)
             .GroupBy(ps => ps.PlayerName)
             .Select(g => new
             {
-                TotalSessions = g.Count(),
                 FirstPlayed = g.Min(s => s.StartTime),
-                LastPlayed = g.Max(s => s.LastSeenTime),
-                HighestScore = g.Max(s => s.TotalScore),
-                TotalKills = g.Sum(s => s.TotalKills),
-                TotalDeaths = g.Sum(s => s.TotalDeaths)
+                LastPlayed = g.Max(s => s.LastSeenTime)
             })
             .FirstOrDefaultAsync();
+
+        var aggregateStats = new
+        {
+            FirstPlayed = sessionStats?.FirstPlayed ?? DateTime.MinValue,
+            LastPlayed = sessionStats?.LastPlayed ?? DateTime.MinValue,
+            TotalKills = clickHouseStats?.TotalKills ?? 0,
+            TotalDeaths = clickHouseStats?.TotalDeaths ?? 0,
+            TotalPlayTimeMinutes = clickHouseStats?.TotalPlayTimeMinutes ?? 0
+        };
 
         if (aggregateStats == null)
             return new PlayerTimeStatistics();
@@ -208,15 +219,44 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
                         (now - activeSession.LastSeenTime) <= _activeThreshold;
 
         var insights = await GetPlayerInsights(playerName);
-        var bestScores = await GetPlayerBestScores(playerName, showAllServers);
+        
+        List<KillMilestone> killMilestones;
+        try
+        {
+            killMilestones = await _playerInsightsService.GetPlayerKillMilestonesAsync(playerName);
+        }
+        catch (Exception)
+        {
+            killMilestones = new List<KillMilestone>();
+        }
+        
+        List<ServerInsight> serverInsights;
+        try
+        {
+            serverInsights = await _playerInsightsService.GetPlayerServerInsightsAsync(playerName);
+        }
+        catch (Exception)
+        {
+            serverInsights = new List<ServerInsight>();
+        }
+
+        // Get server names for the insights
+        foreach (var serverInsight in serverInsights)
+        {
+            var server = await _dbContext.Servers
+                .FirstOrDefaultAsync(s => s.Guid == serverInsight.ServerGuid);
+            if (server != null)
+            {
+                serverInsight.ServerName = server.Name;
+                serverInsight.GameId = server.GameId;
+            }
+        }
 
         var stats = new PlayerTimeStatistics
         {
-            TotalSessions = aggregateStats.TotalSessions,
-            TotalPlayTimeMinutes = player.TotalPlayTimeMinutes,
+            TotalPlayTimeMinutes = aggregateStats.TotalPlayTimeMinutes,
             FirstPlayed = aggregateStats.FirstPlayed,
             LastPlayed = aggregateStats.LastPlayed,
-            HighestScore = aggregateStats.HighestScore,
             TotalKills = aggregateStats.TotalKills,
             TotalDeaths = aggregateStats.TotalDeaths,
 
@@ -234,7 +274,8 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
                 : null,
             RecentSessions = recentSessions,
             Insights = insights,
-            BestScores = bestScores
+            KillMilestones = killMilestones,
+            Servers = serverInsights
         };
 
         return stats;
@@ -384,7 +425,6 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
             .GroupBy(ps => ps.PlayerName)
             .Select(g => new
             {
-                TotalSessions = g.Count(),
                 FirstPlayed = g.Min(s => s.StartTime),
                 TotalKills = g.Sum(s => s.TotalKills),
                 TotalDeaths = g.Sum(s => s.TotalDeaths)
@@ -472,7 +512,6 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
                 FirstSeen = aggregateStats?.FirstPlayed ?? player.FirstSeen,
                 LastSeen = player.LastSeen,
                 IsActive = isActive,
-                TotalSessions = aggregateStats?.TotalSessions ?? 0,
                 TotalKills = aggregateStats?.TotalKills ?? 0,
                 TotalDeaths = aggregateStats?.TotalDeaths ?? 0,
                 CurrentServer = isActive && activeSession != null
@@ -720,101 +759,50 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
         return insights;
     }
 
-    private async Task<List<ServerBestScore>> GetPlayerBestScores(string playerName, bool showAllServers)
+    private async Task<PlayerClickHouseStats?> GetPlayerStatsFromClickHouse(string playerName)
     {
-        var sql = showAllServers ? 
-            @"
-            WITH ServerPlayTime AS (
-                SELECT 
-                    ps.ServerGuid,
-                    s.Name as ServerName,
-                    SUM((julianday(ps.LastSeenTime) - julianday(ps.StartTime)) * 24 * 60) as TotalMinutes
-                FROM PlayerSessions ps
-                INNER JOIN Servers s ON ps.ServerGuid = s.Guid
-                WHERE ps.PlayerName = {0}
-                GROUP BY ps.ServerGuid, s.Name
-            ),
-            BestScores AS (
-                SELECT 
-                    ps.ServerGuid,
-                    ps.SessionId,
-                    ps.TotalScore,
-                    ps.TotalKills,
-                    ps.TotalDeaths,
-                    ps.StartTime,
-                    ps.MapName,
-                    ROW_NUMBER() OVER (PARTITION BY ps.ServerGuid ORDER BY ps.TotalScore DESC) as rn
-                FROM PlayerSessions ps
-                WHERE ps.PlayerName = {0}
-            )
-            SELECT 
-                spt.ServerGuid,
-                spt.ServerName,
-                bs.TotalScore as BestScore,
-                bs.TotalKills,
-                bs.TotalDeaths,
-                CAST(spt.TotalMinutes as INTEGER) as PlayTimeMinutes,
-                bs.StartTime as BestScoreDate,
-                bs.MapName,
-                bs.SessionId
-            FROM ServerPlayTime spt
-            INNER JOIN BestScores bs ON spt.ServerGuid = bs.ServerGuid AND bs.rn = 1
-            ORDER BY bs.TotalScore DESC
-            " :
-            @"
-            WITH ServerPlayTime AS (
-                SELECT 
-                    ps.ServerGuid,
-                    s.Name as ServerName,
-                    SUM((julianday(ps.LastSeenTime) - julianday(ps.StartTime)) * 24 * 60) as TotalMinutes
-                FROM PlayerSessions ps
-                INNER JOIN Servers s ON ps.ServerGuid = s.Guid
-                WHERE ps.PlayerName = {0}
-                GROUP BY ps.ServerGuid, s.Name
-                ORDER BY TotalMinutes DESC
-                LIMIT 5
-            ),
-            BestScores AS (
-                SELECT 
-                    ps.ServerGuid,
-                    ps.SessionId,
-                    ps.TotalScore,
-                    ps.TotalKills,
-                    ps.TotalDeaths,
-                    ps.StartTime,
-                    ps.MapName,
-                    ROW_NUMBER() OVER (PARTITION BY ps.ServerGuid ORDER BY ps.TotalScore DESC) as rn
-                FROM PlayerSessions ps
-                WHERE ps.PlayerName = {0}
-            )
-            SELECT 
-                spt.ServerGuid,
-                spt.ServerName,
-                bs.TotalScore as BestScore,
-                bs.TotalKills,
-                bs.TotalDeaths,
-                CAST(spt.TotalMinutes as INTEGER) as PlayTimeMinutes,
-                bs.StartTime as BestScoreDate,
-                bs.MapName,
-                bs.SessionId
-            FROM ServerPlayTime spt
-            INNER JOIN BestScores bs ON spt.ServerGuid = bs.ServerGuid AND bs.rn = 1
-            ORDER BY bs.TotalScore DESC
-            ";
-
-        var results = await _dbContext.Database.SqlQueryRaw<ServerBestScoreRaw>(sql, playerName).ToListAsync();
-        
-        return results.Select(r => new ServerBestScore
+        try
         {
-            ServerGuid = r.ServerGuid,
-            ServerName = r.ServerName,
-            BestScore = r.BestScore,
-            TotalKills = r.TotalKills,
-            TotalDeaths = r.TotalDeaths,
-            PlayTimeMinutes = r.PlayTimeMinutes,
-            BestScoreDate = r.BestScoreDate,
-            MapName = r.MapName,
-            SessionId = r.SessionId
-        }).ToList();
+            var result = await _playerRoundsReadService.GetPlayerStatsAsync(playerName);
+            
+            // Parse the tab-separated results
+            // Expected format: player_name	total_rounds	total_kills	total_deaths	total_play_time_minutes	avg_score_per_round	kd_ratio
+            var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            
+            // Skip header row if it exists
+            var dataLines = lines.Where(line => !line.StartsWith("player_name")).ToArray();
+            
+            if (dataLines.Length == 0)
+                return null;
+                
+            var parts = dataLines[0].Split('\t');
+            if (parts.Length >= 5)
+            {
+                return new PlayerClickHouseStats
+                {
+                    PlayerName = parts[0],
+                    TotalRounds = int.Parse(parts[1]),
+                    TotalKills = int.Parse(parts[2]),
+                    TotalDeaths = int.Parse(parts[3]),
+                    TotalPlayTimeMinutes = (int)Math.Round(double.Parse(parts[4]))
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log error but don't fail the request
+            // _logger?.LogError(ex, "Failed to get player stats from ClickHouse for player: {PlayerName}", playerName);
+        }
+        
+        return null;
     }
+}
+
+public class PlayerClickHouseStats
+{
+    public string PlayerName { get; set; } = "";
+    public int TotalRounds { get; set; }
+    public int TotalKills { get; set; }
+    public int TotalDeaths { get; set; }
+    public int TotalPlayTimeMinutes { get; set; }
 }

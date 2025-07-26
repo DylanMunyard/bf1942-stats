@@ -119,7 +119,7 @@ public class PlayersController : ControllerBase
             
         var stats = await _playerStatsService.GetPlayerStatistics(playerName, showAllServers);
         
-        if (stats.TotalSessions == 0)
+        if (stats.TotalKills == 0 && stats.TotalPlayTimeMinutes == 0)
             return NotFound($"Player '{playerName}' not found");
             
         return Ok(stats);

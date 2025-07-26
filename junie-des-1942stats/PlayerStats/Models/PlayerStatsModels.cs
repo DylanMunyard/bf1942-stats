@@ -36,11 +36,9 @@ public class PlayerFilters
 
 public class PlayerTimeStatistics
 {
-    public int TotalSessions { get; set; }
     public int TotalPlayTimeMinutes { get; set; }
     public DateTime FirstPlayed { get; set; }
     public DateTime LastPlayed { get; set; }
-    public int HighestScore { get; set; }
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }
 
@@ -51,8 +49,11 @@ public class PlayerTimeStatistics
     
     public PlayerInsights Insights { get; set; } = new();
     
-    // Best scores per server
-    public List<ServerBestScore> BestScores { get; set; } = new();
+    // Kill milestones (5k, 10k, 20k, 50k)
+    public List<KillMilestone> KillMilestones { get; set; } = new();
+    
+    // Server-specific insights (replaces BestScores)
+    public List<ServerInsight> Servers { get; set; } = new();
 }
 
 public class ServerInfo
@@ -243,7 +244,6 @@ public class PlayerContextInfo
     public DateTime FirstSeen { get; set; }
     public DateTime LastSeen { get; set; }
     public bool IsActive { get; set; }
-    public int TotalSessions { get; set; }
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }
     public ServerInfo? CurrentServer { get; set; }
@@ -263,6 +263,29 @@ public class SessionListItem
     public int Kills { get; set; }
     public int Deaths { get; set; }
     public bool IsActive { get; set; }
+}
+
+// New model classes for enhanced insights
+public class KillMilestone
+{
+    public int Milestone { get; set; }
+    public DateTime AchievedDate { get; set; }
+    public int TotalKillsAtMilestone { get; set; }
+    public int DaysToAchieve { get; set; }
+}
+
+public class ServerInsight
+{
+    public string ServerGuid { get; set; } = "";
+    public string ServerName { get; set; } = "";
+    public string GameId { get; set; } = "";
+    public double TotalMinutes { get; set; }
+    public int TotalKills { get; set; }
+    public int TotalDeaths { get; set; }
+    public int HighestScore { get; set; }
+    public double KillsPerMinute { get; set; }
+    public int TotalRounds { get; set; }
+    public double KdRatio => TotalDeaths > 0 ? Math.Round((double)TotalKills / TotalDeaths, 2) : TotalKills;
 }
 
 
