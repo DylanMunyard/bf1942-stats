@@ -283,6 +283,9 @@ public class ServerInsight
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }
     public int HighestScore { get; set; }
+    public string HighestScoreSessionId { get; set; } = "";
+    public string HighestScoreMapName { get; set; } = "";
+    public DateTime HighestScoreStartTime { get; set; }
     public double KillsPerMinute { get; set; }
     public int TotalRounds { get; set; }
     public double KdRatio => TotalDeaths > 0 ? Math.Round((double)TotalKills / TotalDeaths, 2) : TotalKills;
