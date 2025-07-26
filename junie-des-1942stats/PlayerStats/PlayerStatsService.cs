@@ -859,7 +859,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext, PlayerInsights
         foreach (var session in activeSessions)
         {
             // Get the latest observation for this session from our dictionary
-            latestObservations.TryGetValue(session.SessionId, out var latestObservation);
+            latestObservations.TryGetValue(session.SessionId, out PlayerObservation? latestObservation);
 
             var sessionDurationMinutes = (int)Math.Ceiling((now - session.StartTime).TotalMinutes);
 
@@ -899,6 +899,164 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext, PlayerInsights
             TotalOnline = onlinePlayers.Count,
             LastUpdated = now,
             GameBreakdown = gameBreakdown
+        };
+    }
+
+    /// <summary>
+    /// Get currently online players with pagination, sorting, and their session information
+    /// </summary>
+    public async Task<PagedResult<OnlinePlayer>> GetOnlinePlayersWithPagingAsync(
+        int page = 1,
+        int pageSize = 50,
+        string sortBy = "SessionDurationMinutes",
+        string sortOrder = "desc",
+        string? gameId = null,
+        string? playerNameFilter = null,
+        string? serverNameFilter = null)
+    {
+        var now = DateTime.UtcNow;
+        var activeThreshold = TimeSpan.FromMinutes(5); // Consider players active if seen within last 5 minutes
+        var thresholdTime = now.Subtract(activeThreshold); // Calculate the cutoff time
+
+        // Build the base query for active sessions with all filters
+        var baseQuery = _dbContext.PlayerSessions
+            .Where(s => s.IsActive && s.LastSeenTime >= thresholdTime);
+
+        // Apply filters
+        if (!string.IsNullOrEmpty(gameId))
+        {
+            baseQuery = baseQuery.Where(s => s.Server.GameId == gameId);
+        }
+
+        if (!string.IsNullOrEmpty(playerNameFilter))
+        {
+            baseQuery = baseQuery.Where(s => s.PlayerName.Contains(playerNameFilter));
+        }
+
+        if (!string.IsNullOrEmpty(serverNameFilter))
+        {
+            baseQuery = baseQuery.Where(s => s.Server.Name.Contains(serverNameFilter));
+        }
+
+        // Get total count for pagination (before sorting and paging)
+        var totalCount = await baseQuery.CountAsync();
+
+        if (totalCount == 0)
+        {
+            return new PagedResult<OnlinePlayer>
+            {
+                Items = new List<OnlinePlayer>(),
+                Page = page,
+                PageSize = pageSize,
+                TotalItems = 0,
+                TotalPages = 0
+            };
+        }
+
+        // Apply includes after all filters
+        var queryWithIncludes = baseQuery
+            .Include(s => s.Server)
+            .Include(s => s.Player);
+
+        // Apply sorting - for SessionDurationMinutes we'll sort after loading data
+        // Other fields can be sorted at the database level
+        var isDescending = sortOrder.ToLower() == "desc";
+        
+        List<PlayerSession> activeSessions;
+        if (sortBy.ToLower() == "sessiondurationminutes")
+        {
+            // Get all sessions, calculate duration, sort, then paginate
+            var allSessions = await queryWithIncludes.ToListAsync();
+            var sessionsWithDuration = allSessions.Select(s => new 
+            { 
+                Session = s, 
+                Duration = (int)Math.Ceiling((now - s.StartTime).TotalMinutes) 
+            });
+            
+            var sortedSessions = isDescending 
+                ? sessionsWithDuration.OrderByDescending(x => x.Duration)
+                : sessionsWithDuration.OrderBy(x => x.Duration);
+                
+            activeSessions = sortedSessions
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => x.Session)
+                .ToList();
+        }
+        else
+        {
+            // Apply sorting and pagination for other fields
+            var orderedQuery = sortBy.ToLower() switch
+            {
+                "playername" => isDescending 
+                    ? queryWithIncludes.OrderByDescending(s => s.PlayerName)
+                    : queryWithIncludes.OrderBy(s => s.PlayerName),
+                "joinedat" => isDescending 
+                    ? queryWithIncludes.OrderByDescending(s => s.StartTime)
+                    : queryWithIncludes.OrderBy(s => s.StartTime),
+                "servername" => isDescending 
+                    ? queryWithIncludes.OrderByDescending(s => s.Server.Name)
+                    : queryWithIncludes.OrderBy(s => s.Server.Name),
+                "gameid" => isDescending 
+                    ? queryWithIncludes.OrderByDescending(s => s.Server.GameId)
+                    : queryWithIncludes.OrderBy(s => s.Server.GameId),
+                _ => queryWithIncludes.OrderByDescending(s => s.StartTime) // Default sort by join time
+            };
+
+            activeSessions = await orderedQuery
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+        }
+
+        // Get latest observations for all active sessions in a single efficient query
+        var sessionIds = activeSessions.Select(s => s.SessionId).ToList();
+        var latestObservations = await _dbContext.PlayerObservations
+            .Where(o => sessionIds.Contains(o.SessionId))
+            .GroupBy(o => o.SessionId)
+            .Select(g => g.OrderByDescending(o => o.Timestamp).First())
+            .ToDictionaryAsync(o => o.SessionId, o => o);
+
+        var onlinePlayers = new List<OnlinePlayer>();
+
+        foreach (var session in activeSessions)
+        {
+            // Get the latest observation for this session from our dictionary
+            latestObservations.TryGetValue(session.SessionId, out var latestObservation);
+
+            var sessionDurationMinutes = (int)Math.Ceiling((now - session.StartTime).TotalMinutes);
+
+            var onlinePlayer = new OnlinePlayer
+            {
+                PlayerName = session.PlayerName,
+                SessionDurationMinutes = sessionDurationMinutes,
+                JoinedAt = session.StartTime,
+                CurrentServer = new OnlinePlayerServer
+                {
+                    ServerGuid = session.ServerGuid,
+                    ServerName = session.Server.Name,
+                    GameId = session.Server.GameId,
+                    MapName = session.MapName,
+                    SessionKills = session.TotalKills,
+                    SessionDeaths = session.TotalDeaths,
+                    CurrentScore = session.TotalScore,
+                    Ping = latestObservation?.Ping,
+                    TeamName = latestObservation?.TeamLabel
+                }
+            };
+
+            onlinePlayers.Add(onlinePlayer);
+        }
+
+        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+        return new PagedResult<OnlinePlayer>
+        {
+            Items = onlinePlayers,
+            Page = page,
+            PageSize = pageSize,
+            TotalItems = totalCount,
+            TotalPages = totalPages
         };
     }
 }

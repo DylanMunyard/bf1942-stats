@@ -425,14 +425,38 @@ public class PlayersController : ControllerBase
     }
 
     [HttpGet("online")]
-    public async Task<ActionResult<OnlinePlayersResponse>> GetOnlinePlayers(
+    public async Task<ActionResult<PagedResult<OnlinePlayer>>> GetOnlinePlayers(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] string sortBy = "SessionDurationMinutes",
+        [FromQuery] string sortOrder = "desc",
         [FromQuery] string? gameId = null,
         [FromQuery] string? playerName = null,
         [FromQuery] string? serverName = null)
     {
+        // Validate parameters
+        if (page < 1)
+            return BadRequest("Page number must be at least 1");
+        
+        if (pageSize < 1 || pageSize > 500)
+            return BadRequest("Page size must be between 1 and 500");
+
+        // Valid sort fields
+        var validSortFields = new[]
+        {
+            "PlayerName", "SessionDurationMinutes", "JoinedAt", "ServerName", "GameId"
+        };
+
+        if (!validSortFields.Contains(sortBy, StringComparer.OrdinalIgnoreCase))
+            return BadRequest($"Invalid sortBy field. Valid options: {string.Join(", ", validSortFields)}");
+
+        if (!new[] { "asc", "desc" }.Contains(sortOrder.ToLower()))
+            return BadRequest("Sort order must be 'asc' or 'desc'");
+
         try
         {
-            var result = await _playerStatsService.GetOnlinePlayersAsync(gameId, playerName, serverName);
+            var result = await _playerStatsService.GetOnlinePlayersWithPagingAsync(
+                page, pageSize, sortBy, sortOrder, gameId, playerName, serverName);
             return Ok(result);
         }
         catch (Exception ex)
