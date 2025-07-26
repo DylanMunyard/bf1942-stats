@@ -19,19 +19,22 @@ public class PlayerComparisonService
     private readonly PlayerTrackerDbContext _dbContext;
     private readonly ICacheService _cacheService;
     private readonly ICacheKeyService _cacheKeyService;
+    private readonly PlayerInsightsService _playerInsightsService;
 
     public PlayerComparisonService(
         ClickHouseConnection connection, 
         ILogger<PlayerComparisonService> logger, 
         PlayerTrackerDbContext dbContext,
         ICacheService cacheService,
-        ICacheKeyService cacheKeyService)
+        ICacheKeyService cacheKeyService,
+        PlayerInsightsService playerInsightsService)
     {
         _connection = connection;
         _logger = logger;
         _dbContext = dbContext;
         _cacheService = cacheService;
         _cacheKeyService = cacheKeyService;
+        _playerInsightsService = playerInsightsService;
     }
 
     public async Task<PlayerComparisonResult> ComparePlayersAsync(string player1, string player2, string serverGuid = null)
@@ -96,6 +99,23 @@ public class PlayerComparisonService
 
         // 6. Common Servers (servers where both players have played)
         result.CommonServers = await GetCommonServers(player1, player2);
+
+        // 7. Kill Milestones for both players
+        var killMilestones = await _playerInsightsService.GetPlayersKillMilestonesAsync(new List<string> { player1, player2 });
+        result.Player1KillMilestones = killMilestones.Where(m => m.PlayerName == player1).Select(m => new KillMilestone
+        {
+            Milestone = m.Milestone,
+            AchievedDate = m.AchievedDate,
+            TotalKillsAtMilestone = m.TotalKillsAtMilestone,
+            DaysToAchieve = m.DaysToAchieve
+        }).ToList();
+        result.Player2KillMilestones = killMilestones.Where(m => m.PlayerName == player2).Select(m => new KillMilestone
+        {
+            Milestone = m.Milestone,
+            AchievedDate = m.AchievedDate,
+            TotalKillsAtMilestone = m.TotalKillsAtMilestone,
+            DaysToAchieve = m.DaysToAchieve
+        }).ToList();
 
         // Cache the result for 45 minutes
         await _cacheService.SetAsync(cacheKey, result, TimeSpan.FromMinutes(45));
@@ -742,6 +762,7 @@ ORDER BY hour_of_day";
         return activeHours;
     }
 
+
     private static string Quote(string s) => $"'{s.Replace("'", "''")}'";
 }
 
@@ -757,6 +778,8 @@ public class PlayerComparisonResult
     public List<MapPerformanceComparison> MapPerformance { get; set; } = new();
     public List<HeadToHeadSession> HeadToHead { get; set; } = new();
     public List<ServerDetails> CommonServers { get; set; } = new();
+    public List<KillMilestone> Player1KillMilestones { get; set; } = new();
+    public List<KillMilestone> Player2KillMilestones { get; set; } = new();
 }
 
 public class KillRateComparison

@@ -23,7 +23,8 @@ public class ServerStatsService(
     ICacheService cacheService,
     ICacheKeyService cacheKeyService,
     PlayerRoundsReadService playerRoundsService,
-    IClickHouseReader clickHouseReader)
+    IClickHouseReader clickHouseReader,
+    HistoricalRoundsService historicalRoundsService)
 {
     private readonly PlayerTrackerDbContext _dbContext = dbContext;
     private readonly ILogger<ServerStatsService> _logger = logger;
@@ -31,6 +32,7 @@ public class ServerStatsService(
     private readonly ICacheKeyService _cacheKeyService = cacheKeyService;
     private readonly PlayerRoundsReadService _playerRoundsService = playerRoundsService;
     private readonly IClickHouseReader _clickHouseReader = clickHouseReader;
+    private readonly HistoricalRoundsService _historicalRoundsService = historicalRoundsService;
 
     public async Task<ServerStatistics> GetServerStatistics(
         string serverName,
@@ -113,7 +115,7 @@ public class ServerStatsService(
         // Get the last 5 rounds (unique maps) showing when each map was last played
         // Use a fixed 5-hour window for recent map rotations (much faster than analyzing days of data)
         var recentRoundsStart = DateTime.UtcNow.AddHours(-5);
-        var lastRounds = await _playerRoundsService.GetLastRoundsAsync(server.Guid, recentRoundsStart, 5);
+        var lastRounds = await GetLastRoundsAsync(server.Guid, 5);
 
         statistics.LastRounds = lastRounds;
 
@@ -280,6 +282,20 @@ public class ServerStatsService(
         return result;
     }
 
+
+    private async Task<List<RoundInfo>> GetLastRoundsAsync(string serverGuid, int limit)
+    {
+        var filters = new RoundFilters { ServerGuid = serverGuid };
+        var roundsResult = await _historicalRoundsService.GetAllRounds(1, limit, "StartTime", "desc", filters);
+
+        return roundsResult.Items.Select(r => new RoundInfo
+        {
+            MapName = r.MapName,
+            StartTime = r.StartTime,
+            EndTime = r.EndTime,
+            IsActive = r.IsActive,
+        }).ToList();
+    }
 
 
     public async Task<SessionRoundReport?> GetRoundReport(string serverGuid, string mapName, DateTime startTime)

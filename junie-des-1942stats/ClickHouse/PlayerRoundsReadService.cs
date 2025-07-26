@@ -146,42 +146,4 @@ FORMAT TabSeparated";
         return topScores;
     }
 
-    /// <summary>
-    /// Get last rounds from ClickHouse
-    /// </summary>
-    public async Task<List<RoundInfo>> GetLastRoundsAsync(string serverGuid, DateTime recentRoundsStart, int limit = 5)
-    {
-        var query = $@"
-SELECT 
-    any(map_name),
-    MIN(round_start_time) as start_time,
-    MAX(round_end_time) as end_time
-FROM player_rounds
-WHERE server_guid = '{serverGuid.Replace("'", "''")}'
-  AND round_start_time >= '{recentRoundsStart:yyyy-MM-dd HH:mm:ss}'
-GROUP BY round_id
-ORDER BY start_time DESC
-LIMIT {limit}
-FORMAT TabSeparated";
-
-        var result = await ExecuteQueryAsync(query);
-        var lastRounds = new List<RoundInfo>();
-        
-        foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var parts = line.Split('\t');
-            if (parts.Length >= 3)
-            {
-                lastRounds.Add(new RoundInfo
-                {
-                    MapName = parts[0],
-                    StartTime = DateTime.Parse(parts[1]),
-                    EndTime = DateTime.Parse(parts[2]),
-                    IsActive = false // ClickHouse only contains completed rounds
-                });
-            }
-        }
-
-        return lastRounds;
-    }
 }

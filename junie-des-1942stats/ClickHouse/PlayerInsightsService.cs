@@ -21,10 +21,14 @@ public class PlayerInsightsService : BaseClickHouseService, IClickHouseReader
     }
 
     /// <summary>
-    /// Get kill milestones for a player (5k, 10k, 20k, 50k kills)
+    /// Get kill milestones for one or more players (5k, 10k, 20k, 50k kills)
     /// </summary>
-    public async Task<List<KillMilestone>> GetPlayerKillMilestonesAsync(string playerName)
+    public async Task<List<PlayerKillMilestone>> GetPlayersKillMilestonesAsync(List<string> playerNames)
     {
+        if (!playerNames.Any()) return new List<PlayerKillMilestone>();
+        
+        var playerNamesQuoted = string.Join(", ", playerNames.Select(p => $"'{p.Replace("'", "''")}'"));
+        
         var query = $@"
 WITH PlayerRoundsCumulative AS (
     SELECT 
@@ -32,10 +36,10 @@ WITH PlayerRoundsCumulative AS (
         round_end_time,
         final_kills,
         SUM(final_kills) OVER (PARTITION BY player_name ORDER BY round_end_time ROWS UNBOUNDED PRECEDING) as cumulative_kills,
-        rowNumberInAllBlocks() as row_num
+        row_number() OVER (PARTITION BY player_name ORDER BY round_end_time) as row_num
     FROM player_rounds
-    WHERE player_name = '{playerName.Replace("'", "''")}'
-    ORDER BY round_end_time
+    WHERE player_name IN ({playerNamesQuoted})
+    ORDER BY player_name, round_end_time
 ),
 PlayerRoundsWithPrevious AS (
     SELECT 
@@ -44,7 +48,7 @@ PlayerRoundsWithPrevious AS (
         p1.cumulative_kills,
         COALESCE(p2.cumulative_kills, 0) as previous_cumulative_kills
     FROM PlayerRoundsCumulative p1
-    LEFT JOIN PlayerRoundsCumulative p2 ON p1.row_num = p2.row_num + 1
+    LEFT JOIN PlayerRoundsCumulative p2 ON p1.player_name = p2.player_name AND p1.row_num = p2.row_num + 1
 ),
 MilestoneRounds AS (
     SELECT 
@@ -59,58 +63,43 @@ MilestoneRounds AS (
             ELSE 0
         END as milestone
     FROM PlayerRoundsWithPrevious
+),
+FirstRounds AS (
+    SELECT 
+        player_name,
+        MIN(round_start_time) as first_round_time
+    FROM player_rounds
+    WHERE player_name IN ({playerNamesQuoted})
+    GROUP BY player_name
 )
 SELECT 
-    milestone,
-    round_end_time as achieved_date,
-    cumulative_kills as total_kills_at_milestone
-FROM MilestoneRounds 
-WHERE milestone > 0
-ORDER BY milestone
+    m.player_name,
+    m.milestone,
+    m.round_end_time as achieved_date,
+    m.cumulative_kills as total_kills_at_milestone,
+    dateDiff('day', f.first_round_time, m.round_end_time) as days_to_achieve
+FROM MilestoneRounds m
+JOIN FirstRounds f ON m.player_name = f.player_name
+WHERE m.milestone > 0
+ORDER BY m.player_name, m.milestone
 FORMAT TabSeparated";
 
         var result = await ExecuteQueryAsync(query);
-        var milestones = new List<KillMilestone>();
+        var milestones = new List<PlayerKillMilestone>();
 
         foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             var parts = line.Split('\t');
-            if (parts.Length >= 3)
+            if (parts.Length >= 5)
             {
-                milestones.Add(new KillMilestone
+                milestones.Add(new PlayerKillMilestone
                 {
-                    Milestone = int.Parse(parts[0]),
-                    AchievedDate = DateTime.Parse(parts[1]),
-                    TotalKillsAtMilestone = int.Parse(parts[2])
+                    PlayerName = parts[0],
+                    Milestone = int.Parse(parts[1]),
+                    AchievedDate = DateTime.Parse(parts[2]),
+                    TotalKillsAtMilestone = int.Parse(parts[3]),
+                    DaysToAchieve = int.Parse(parts[4])
                 });
-            }
-        }
-
-        // Calculate time to reach each milestone
-        var firstRoundQuery = $@"
-SELECT MIN(round_end_time) as first_round
-FROM player_rounds
-WHERE player_name = '{playerName.Replace("'", "''")}'
-FORMAT TabSeparated";
-
-        var firstRoundResult = await ExecuteQueryAsync(firstRoundQuery);
-        DateTime? firstRound = null;
-        
-        if (!string.IsNullOrEmpty(firstRoundResult))
-        {
-            var firstRoundLine = firstRoundResult.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-            if (!string.IsNullOrEmpty(firstRoundLine) && DateTime.TryParse(firstRoundLine, out var parsed))
-            {
-                firstRound = parsed;
-            }
-        }
-
-        // Calculate days to reach each milestone
-        if (firstRound.HasValue)
-        {
-            foreach (var milestone in milestones)
-            {
-                milestone.DaysToAchieve = (int)(milestone.AchievedDate - firstRound.Value).TotalDays;
             }
         }
 
@@ -202,4 +191,28 @@ FORMAT TabSeparated";
 
         return insights;
     }
+    
+    /// <summary>
+    /// Get kill milestones for a single player (convenience method)
+    /// </summary>
+    public async Task<List<KillMilestone>> GetPlayerKillMilestonesAsync(string playerName)
+    {
+        var playerMilestones = await GetPlayersKillMilestonesAsync(new List<string> { playerName });
+        return playerMilestones.Select(m => new KillMilestone
+        {
+            Milestone = m.Milestone,
+            AchievedDate = m.AchievedDate,
+            TotalKillsAtMilestone = m.TotalKillsAtMilestone,
+            DaysToAchieve = m.DaysToAchieve
+        }).ToList();
+    }
+}
+
+public class PlayerKillMilestone
+{
+    public string PlayerName { get; set; } = "";
+    public int Milestone { get; set; }
+    public DateTime AchievedDate { get; set; }
+    public int TotalKillsAtMilestone { get; set; }
+    public int DaysToAchieve { get; set; }
 }
