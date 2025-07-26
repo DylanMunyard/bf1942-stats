@@ -101,12 +101,23 @@ public class PlayersController : ControllerBase
     
     // Get detailed player statistics
     [HttpGet("{playerName}")]
-    public async Task<ActionResult<PlayerTimeStatistics>> GetPlayerStats(string playerName)
+    public async Task<ActionResult<PlayerTimeStatistics>> GetPlayerStats(
+        string playerName,
+        [FromQuery] string? show = null)
     {
         if (string.IsNullOrWhiteSpace(playerName))
             return BadRequest("Player name cannot be empty");
+
+        // Validate show parameter
+        bool showAllServers = false;
+        if (!string.IsNullOrEmpty(show))
+        {
+            if (show.ToLower() != "all")
+                return BadRequest("Invalid 'show' parameter. Valid option: 'all'");
+            showAllServers = true;
+        }
             
-        var stats = await _playerStatsService.GetPlayerStatistics(playerName);
+        var stats = await _playerStatsService.GetPlayerStatistics(playerName, showAllServers);
         
         if (stats.TotalSessions == 0)
             return NotFound($"Player '{playerName}' not found");

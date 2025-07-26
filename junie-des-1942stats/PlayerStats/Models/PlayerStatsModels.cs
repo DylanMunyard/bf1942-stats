@@ -47,10 +47,12 @@ public class PlayerTimeStatistics
 // New properties
     public bool IsActive { get; set; }
     public ServerInfo? CurrentServer { get; set; }
-    public Session? BestSession { get; set; }
     public List<Session> RecentSessions { get; set; } = [];
     
     public PlayerInsights Insights { get; set; } = new();
+    
+    // Best scores per server
+    public List<ServerBestScore> BestScores { get; set; } = new();
 }
 
 public class ServerInfo
@@ -193,6 +195,32 @@ public class HourlyActivity
     public int Hour { get; set; }
     public int MinutesActive { get; set; }
     public string FormattedHour => $"{Hour:D2}:00 - {Hour:D2}:59";
+}
+
+public class ServerBestScore
+{
+    public string ServerGuid { get; set; } = string.Empty;
+    public string ServerName { get; set; } = string.Empty; 
+    public int BestScore { get; set; }
+    public int TotalKills { get; set; }
+    public int TotalDeaths { get; set; }
+    public int PlayTimeMinutes { get; set; }
+    public DateTime BestScoreDate { get; set; }
+    public string MapName { get; set; } = string.Empty;
+    public int SessionId { get; set; }
+}
+
+public class ServerBestScoreRaw
+{
+    public string ServerGuid { get; set; } = string.Empty;
+    public string ServerName { get; set; } = string.Empty; 
+    public int BestScore { get; set; }
+    public int TotalKills { get; set; }
+    public int TotalDeaths { get; set; }
+    public int PlayTimeMinutes { get; set; }
+    public DateTime BestScoreDate { get; set; }
+    public string MapName { get; set; } = string.Empty;
+    public int SessionId { get; set; }
 }
 
 public class PagedResult<T>

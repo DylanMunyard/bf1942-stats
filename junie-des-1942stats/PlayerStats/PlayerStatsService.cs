@@ -145,7 +145,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
         };
     }
 
-    public async Task<PlayerTimeStatistics> GetPlayerStatistics(string playerName)
+    public async Task<PlayerTimeStatistics> GetPlayerStatistics(string playerName, bool showAllServers = false)
     {
         // First check if the player exists
         var player = await _dbContext.Players
@@ -195,25 +195,6 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
             })
             .ToListAsync();
 
-        // Get the best session (highest kills, then by score if tied)
-        var bestSession = await _dbContext.PlayerSessions
-            .Where(ps => ps.PlayerName == playerName)
-            .OrderByDescending(s => s.TotalScore)
-            .Include(s => s.Server)
-            .Select(s => new Session
-            {
-                SessionId = s.SessionId,
-                ServerName = s.Server.Name,
-                ServerGuid = s.ServerGuid,
-                MapName = s.MapName,
-                GameType = s.GameType,
-                StartTime = s.StartTime,
-                TotalKills = s.TotalKills,
-                TotalDeaths = s.TotalDeaths,
-                TotalScore = s.TotalScore,
-                IsActive = s.IsActive
-            })
-            .FirstOrDefaultAsync();
 
         // Get the current active session if any
         var activeSession = await _dbContext.PlayerSessions
@@ -227,6 +208,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
                         (now - activeSession.LastSeenTime) <= _activeThreshold;
 
         var insights = await GetPlayerInsights(playerName);
+        var bestScores = await GetPlayerBestScores(playerName, showAllServers);
 
         var stats = new PlayerTimeStatistics
         {
@@ -251,8 +233,8 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
                 }
                 : null,
             RecentSessions = recentSessions,
-            BestSession = bestSession,
-            Insights = insights
+            Insights = insights,
+            BestScores = bestScores
         };
 
         return stats;
@@ -736,5 +718,103 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext)
             .ToList();
 
         return insights;
+    }
+
+    private async Task<List<ServerBestScore>> GetPlayerBestScores(string playerName, bool showAllServers)
+    {
+        var sql = showAllServers ? 
+            @"
+            WITH ServerPlayTime AS (
+                SELECT 
+                    ps.ServerGuid,
+                    s.Name as ServerName,
+                    SUM((julianday(ps.LastSeenTime) - julianday(ps.StartTime)) * 24 * 60) as TotalMinutes
+                FROM PlayerSessions ps
+                INNER JOIN Servers s ON ps.ServerGuid = s.Guid
+                WHERE ps.PlayerName = {0}
+                GROUP BY ps.ServerGuid, s.Name
+            ),
+            BestScores AS (
+                SELECT 
+                    ps.ServerGuid,
+                    ps.SessionId,
+                    ps.TotalScore,
+                    ps.TotalKills,
+                    ps.TotalDeaths,
+                    ps.StartTime,
+                    ps.MapName,
+                    ROW_NUMBER() OVER (PARTITION BY ps.ServerGuid ORDER BY ps.TotalScore DESC) as rn
+                FROM PlayerSessions ps
+                WHERE ps.PlayerName = {0}
+            )
+            SELECT 
+                spt.ServerGuid,
+                spt.ServerName,
+                bs.TotalScore as BestScore,
+                bs.TotalKills,
+                bs.TotalDeaths,
+                CAST(spt.TotalMinutes as INTEGER) as PlayTimeMinutes,
+                bs.StartTime as BestScoreDate,
+                bs.MapName,
+                bs.SessionId
+            FROM ServerPlayTime spt
+            INNER JOIN BestScores bs ON spt.ServerGuid = bs.ServerGuid AND bs.rn = 1
+            ORDER BY bs.TotalScore DESC
+            " :
+            @"
+            WITH ServerPlayTime AS (
+                SELECT 
+                    ps.ServerGuid,
+                    s.Name as ServerName,
+                    SUM((julianday(ps.LastSeenTime) - julianday(ps.StartTime)) * 24 * 60) as TotalMinutes
+                FROM PlayerSessions ps
+                INNER JOIN Servers s ON ps.ServerGuid = s.Guid
+                WHERE ps.PlayerName = {0}
+                GROUP BY ps.ServerGuid, s.Name
+                ORDER BY TotalMinutes DESC
+                LIMIT 5
+            ),
+            BestScores AS (
+                SELECT 
+                    ps.ServerGuid,
+                    ps.SessionId,
+                    ps.TotalScore,
+                    ps.TotalKills,
+                    ps.TotalDeaths,
+                    ps.StartTime,
+                    ps.MapName,
+                    ROW_NUMBER() OVER (PARTITION BY ps.ServerGuid ORDER BY ps.TotalScore DESC) as rn
+                FROM PlayerSessions ps
+                WHERE ps.PlayerName = {0}
+            )
+            SELECT 
+                spt.ServerGuid,
+                spt.ServerName,
+                bs.TotalScore as BestScore,
+                bs.TotalKills,
+                bs.TotalDeaths,
+                CAST(spt.TotalMinutes as INTEGER) as PlayTimeMinutes,
+                bs.StartTime as BestScoreDate,
+                bs.MapName,
+                bs.SessionId
+            FROM ServerPlayTime spt
+            INNER JOIN BestScores bs ON spt.ServerGuid = bs.ServerGuid AND bs.rn = 1
+            ORDER BY bs.TotalScore DESC
+            ";
+
+        var results = await _dbContext.Database.SqlQueryRaw<ServerBestScoreRaw>(sql, playerName).ToListAsync();
+        
+        return results.Select(r => new ServerBestScore
+        {
+            ServerGuid = r.ServerGuid,
+            ServerName = r.ServerName,
+            BestScore = r.BestScore,
+            TotalKills = r.TotalKills,
+            TotalDeaths = r.TotalDeaths,
+            PlayTimeMinutes = r.PlayTimeMinutes,
+            BestScoreDate = r.BestScoreDate,
+            MapName = r.MapName,
+            SessionId = r.SessionId
+        }).ToList();
     }
 }

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using junie_des_1942stats.ServerStats.Models;
+using junie_des_1942stats.PlayerStats.Models;
 
 namespace junie_des_1942stats.PlayerTracking;
 
@@ -11,6 +12,7 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<PlayerObservation> PlayerObservations { get; set; }
     public DbSet<ServerPlayerRanking> ServerPlayerRankings { get; set; }
     public DbSet<RoundListItem> RoundListItems { get; set; }
+    public DbSet<ServerBestScoreRaw> ServerBestScoreRaws { get; set; }
 
     public PlayerTrackerDbContext(DbContextOptions<PlayerTrackerDbContext> options)
         : base(options)
@@ -94,6 +96,10 @@ public class PlayerTrackerDbContext : DbContext
 
         // Configure RoundListItem as keyless entity (for query results only)
         modelBuilder.Entity<RoundListItem>()
+            .HasNoKey();
+        
+        // Configure ServerBestScoreRaw as keyless entity (for query results only)
+        modelBuilder.Entity<ServerBestScoreRaw>()
             .HasNoKey();
     }
 }
