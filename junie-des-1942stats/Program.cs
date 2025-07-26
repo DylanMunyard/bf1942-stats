@@ -332,7 +332,8 @@ try
         var dbContext = sp.GetRequiredService<PlayerTrackerDbContext>();
         var cacheService = sp.GetRequiredService<ICacheService>();
         var cacheKeyService = sp.GetRequiredService<ICacheKeyService>();
-        return new PlayerComparisonService(connection, logger, dbContext, cacheService, cacheKeyService);
+        var playerInsightsService = sp.GetRequiredService<PlayerInsightsService>();
+        return new PlayerComparisonService(connection, logger, dbContext, cacheService, cacheKeyService, playerInsightsService);
     });
 
     var host = builder.Build();
