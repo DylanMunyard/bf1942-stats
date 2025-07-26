@@ -21,7 +21,7 @@ public class PlayerInsightsService : BaseClickHouseService, IClickHouseReader
     }
 
     /// <summary>
-    /// Get kill milestones for one or more players (5k, 10k, 20k, 50k kills)
+    /// Get kill milestones for one or more players (5k, 10k, 20k, 50k, 75k, 100k kills)
     /// </summary>
     public async Task<List<PlayerKillMilestone>> GetPlayersKillMilestonesAsync(List<string> playerNames)
     {
@@ -60,6 +60,8 @@ MilestoneRounds AS (
             WHEN cumulative_kills >= 10000 AND previous_cumulative_kills < 10000 THEN 10000
             WHEN cumulative_kills >= 20000 AND previous_cumulative_kills < 20000 THEN 20000
             WHEN cumulative_kills >= 50000 AND previous_cumulative_kills < 50000 THEN 50000
+            WHEN cumulative_kills >= 75000 AND previous_cumulative_kills < 75000 THEN 75000
+            WHEN cumulative_kills >= 100000 AND previous_cumulative_kills < 100000 THEN 100000
             ELSE 0
         END as milestone
     FROM PlayerRoundsWithPrevious
