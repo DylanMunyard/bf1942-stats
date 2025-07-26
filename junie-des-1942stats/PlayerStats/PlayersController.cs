@@ -423,4 +423,23 @@ public class PlayersController : ControllerBase
             return StatusCode(500, "An internal server error occurred while comparing player activity hours.");
         }
     }
+
+    [HttpGet("online")]
+    public async Task<ActionResult<OnlinePlayersResponse>> GetOnlinePlayers(
+        [FromQuery] string? gameId = null,
+        [FromQuery] string? playerName = null,
+        [FromQuery] string? serverName = null)
+    {
+        try
+        {
+            var result = await _playerStatsService.GetOnlinePlayersAsync(gameId, playerName, serverName);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving online players with filters - gameId: {GameId}, playerName: {PlayerName}, serverName: {ServerName}", 
+                gameId, playerName, serverName);
+            return StatusCode(500, "An internal server error occurred while retrieving online players.");
+        }
+    }
 }

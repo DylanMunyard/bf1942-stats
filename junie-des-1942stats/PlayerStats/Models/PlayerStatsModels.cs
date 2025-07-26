@@ -291,4 +291,39 @@ public class ServerInsight
     public double KdRatio => TotalDeaths > 0 ? Math.Round((double)TotalKills / TotalDeaths, 2) : TotalKills;
 }
 
+// Online Players API Models
+public class OnlinePlayersResponse
+{
+    public List<OnlinePlayer> Players { get; set; } = new();
+    public int TotalOnline { get; set; }
+    public DateTime LastUpdated { get; set; }
+    public OnlineGameBreakdown GameBreakdown { get; set; } = new();
+}
+
+public class OnlinePlayer
+{
+    public string PlayerName { get; set; } = "";
+    public int SessionDurationMinutes { get; set; }
+    public DateTime JoinedAt { get; set; }
+    public OnlinePlayerServer CurrentServer { get; set; } = new();
+}
+
+public class OnlinePlayerServer
+{
+    public string ServerGuid { get; set; } = "";
+    public string ServerName { get; set; } = "";
+    public string GameId { get; set; } = "";
+    public string? MapName { get; set; }
+    public int? SessionKills { get; set; }
+    public int? SessionDeaths { get; set; }
+    public int? CurrentScore { get; set; }
+    public int? Ping { get; set; }
+    public string? TeamName { get; set; }
+}
+
+public class OnlineGameBreakdown
+{
+    public Dictionary<string, int> GameCounts { get; set; } = new();
+}
+
 

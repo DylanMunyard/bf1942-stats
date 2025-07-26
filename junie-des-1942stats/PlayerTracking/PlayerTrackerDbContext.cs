@@ -43,6 +43,10 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<PlayerSession>()
             .HasIndex(ps => new { ps.ServerGuid, ps.LastSeenTime });
             
+        // Add index optimized for online players query (IsActive + LastSeenTime)
+        modelBuilder.Entity<PlayerSession>()
+            .HasIndex(ps => new { ps.IsActive, ps.LastSeenTime });
+            
         // Configure PlayerObservation entity
         modelBuilder.Entity<PlayerObservation>()
             .HasKey(po => po.ObservationId);

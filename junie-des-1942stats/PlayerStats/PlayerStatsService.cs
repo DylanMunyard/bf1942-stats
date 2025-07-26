@@ -796,6 +796,111 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext, PlayerInsights
         
         return null;
     }
+
+    /// <summary>
+    /// Get currently online players with their session information
+    /// </summary>
+    public async Task<OnlinePlayersResponse> GetOnlinePlayersAsync(
+        string? gameId = null,
+        string? playerNameFilter = null,
+        string? serverNameFilter = null)
+    {
+        var now = DateTime.UtcNow;
+        var activeThreshold = TimeSpan.FromMinutes(5); // Consider players active if seen within last 5 minutes
+        var thresholdTime = now.Subtract(activeThreshold); // Calculate the cutoff time
+
+        // Build the base query for active sessions with all filters
+        var baseQuery = _dbContext.PlayerSessions
+            .Where(s => s.IsActive && s.LastSeenTime >= thresholdTime);
+
+        // Apply filters
+        if (!string.IsNullOrEmpty(gameId))
+        {
+            baseQuery = baseQuery.Where(s => s.Server.GameId == gameId);
+        }
+
+        if (!string.IsNullOrEmpty(playerNameFilter))
+        {
+            baseQuery = baseQuery.Where(s => s.PlayerName.Contains(playerNameFilter));
+        }
+
+        if (!string.IsNullOrEmpty(serverNameFilter))
+        {
+            baseQuery = baseQuery.Where(s => s.Server.Name.Contains(serverNameFilter));
+        }
+
+        // Apply includes after all filters (exclude observations for now)
+        var activeSessions = await baseQuery
+            .Include(s => s.Server)
+            .Include(s => s.Player)
+            .ToListAsync();
+
+        if (!activeSessions.Any())
+        {
+            return new OnlinePlayersResponse
+            {
+                Players = new List<OnlinePlayer>(),
+                TotalOnline = 0,
+                LastUpdated = now,
+                GameBreakdown = new OnlineGameBreakdown()
+            };
+        }
+
+        // Get latest observations for all active sessions in a single efficient query
+        var sessionIds = activeSessions.Select(s => s.SessionId).ToList();
+        var latestObservations = await _dbContext.PlayerObservations
+            .Where(o => sessionIds.Contains(o.SessionId))
+            .GroupBy(o => o.SessionId)
+            .Select(g => g.OrderByDescending(o => o.Timestamp).First())
+            .ToDictionaryAsync(o => o.SessionId, o => o);
+
+        var onlinePlayers = new List<OnlinePlayer>();
+
+        foreach (var session in activeSessions)
+        {
+            // Get the latest observation for this session from our dictionary
+            latestObservations.TryGetValue(session.SessionId, out var latestObservation);
+
+            var sessionDurationMinutes = (int)Math.Ceiling((now - session.StartTime).TotalMinutes);
+
+            var onlinePlayer = new OnlinePlayer
+            {
+                PlayerName = session.PlayerName,
+                SessionDurationMinutes = sessionDurationMinutes,
+                JoinedAt = session.StartTime,
+                CurrentServer = new OnlinePlayerServer
+                {
+                    ServerGuid = session.ServerGuid,
+                    ServerName = session.Server.Name,
+                    GameId = session.Server.GameId,
+                    MapName = session.MapName,
+                    SessionKills = session.TotalKills,
+                    SessionDeaths = session.TotalDeaths,
+                    CurrentScore = session.TotalScore,
+                    Ping = latestObservation?.Ping,
+                    TeamName = latestObservation?.TeamLabel
+                }
+            };
+
+            onlinePlayers.Add(onlinePlayer);
+        }
+
+        // Calculate game breakdown by grouping raw gameIds
+        var gameBreakdown = new OnlineGameBreakdown
+        {
+            GameCounts = onlinePlayers
+                .GroupBy(p => p.CurrentServer.GameId)
+                .ToDictionary(g => g.Key, g => g.Count())
+        };
+
+        return new OnlinePlayersResponse
+        {
+            Players = onlinePlayers.OrderByDescending(p => p.SessionDurationMinutes).ToList(),
+            TotalOnline = onlinePlayers.Count,
+            LastUpdated = now,
+            GameBreakdown = gameBreakdown
+        };
+    }
 }
 
 public class PlayerClickHouseStats
