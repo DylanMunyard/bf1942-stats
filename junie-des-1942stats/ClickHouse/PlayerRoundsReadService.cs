@@ -153,13 +153,13 @@ FORMAT TabSeparated";
     {
         var query = $@"
 SELECT 
-    map_name,
-    MAX(round_start_time) as start_time,
+    any(map_name),
+    MIN(round_start_time) as start_time,
     MAX(round_end_time) as end_time
 FROM player_rounds
 WHERE server_guid = '{serverGuid.Replace("'", "''")}'
   AND round_start_time >= '{recentRoundsStart:yyyy-MM-dd HH:mm:ss}'
-GROUP BY map_name
+GROUP BY round_id
 ORDER BY start_time DESC
 LIMIT {limit}
 FORMAT TabSeparated";

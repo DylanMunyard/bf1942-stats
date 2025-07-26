@@ -201,6 +201,16 @@ try
         ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
     });
 
+    builder.Services.AddHttpClient<PlayerInsightsService>(client => 
+    {
+        client.Timeout = TimeSpan.FromSeconds(2);
+        client.DefaultRequestHeaders.Add("X-ClickHouse-User", "default");
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+    });
+
     // Register ClickHouse Write Services (use CLICKHOUSE_WRITE_URL)
     builder.Services.AddSingleton<PlayerMetricsWriteService>(sp =>
     {
@@ -239,6 +249,18 @@ try
         
         var logger = sp.GetRequiredService<ILogger<PlayerRoundsReadService>>();
         return new PlayerRoundsReadService(httpClient, clickHouseReadUrl, logger);
+    });
+
+    builder.Services.AddSingleton<PlayerInsightsService>(sp =>
+    {
+        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(PlayerInsightsService));
+        
+        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerInsightsService ClickHouse Read URL: {clickHouseReadUrl}");
+        
+        var logger = sp.GetRequiredService<ILogger<PlayerInsightsService>>();
+        return new PlayerInsightsService(httpClient, clickHouseReadUrl, logger);
     });
 
     // Register RealTimeAnalyticsService (read-only)
