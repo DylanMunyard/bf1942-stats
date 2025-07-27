@@ -1,15 +1,20 @@
 using junie_des_1942stats.PlayerStats.Models;
 using junie_des_1942stats.PlayerTracking;
 using junie_des_1942stats.ClickHouse;
+using junie_des_1942stats.Caching;
 using Microsoft.EntityFrameworkCore;
 
 namespace junie_des_1942stats.PlayerStats;
 
-public class PlayerStatsService(PlayerTrackerDbContext dbContext, PlayerInsightsService playerInsightsService, PlayerRoundsReadService playerRoundsReadService)
+public class PlayerStatsService(PlayerTrackerDbContext dbContext,
+    PlayerInsightsService playerInsightsService,
+    PlayerRoundsReadService playerRoundsReadService,
+    ICacheService cacheService)
 {
     private readonly PlayerTrackerDbContext _dbContext = dbContext;
     private readonly PlayerInsightsService _playerInsightsService = playerInsightsService;
     private readonly PlayerRoundsReadService _playerRoundsReadService = playerRoundsReadService;
+    private readonly ICacheService _cacheService = cacheService;
 
     // Define a threshold for considering a player "active" (e.g., 5 minutes)
     private readonly TimeSpan _activeThreshold = TimeSpan.FromMinutes(5);
@@ -798,111 +803,6 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext, PlayerInsights
     }
 
     /// <summary>
-    /// Get currently online players with their session information
-    /// </summary>
-    public async Task<OnlinePlayersResponse> GetOnlinePlayersAsync(
-        string? gameId = null,
-        string? playerNameFilter = null,
-        string? serverNameFilter = null)
-    {
-        var now = DateTime.UtcNow;
-        var activeThreshold = TimeSpan.FromMinutes(5); // Consider players active if seen within last 5 minutes
-        var thresholdTime = now.Subtract(activeThreshold); // Calculate the cutoff time
-
-        // Build the base query for active sessions with all filters
-        var baseQuery = _dbContext.PlayerSessions
-            .Where(s => s.IsActive && s.LastSeenTime >= thresholdTime);
-
-        // Apply filters
-        if (!string.IsNullOrEmpty(gameId))
-        {
-            baseQuery = baseQuery.Where(s => s.Server.GameId == gameId);
-        }
-
-        if (!string.IsNullOrEmpty(playerNameFilter))
-        {
-            baseQuery = baseQuery.Where(s => s.PlayerName.ToLower().Contains(playerNameFilter.ToLower()));
-        }
-
-        if (!string.IsNullOrEmpty(serverNameFilter))
-        {
-            baseQuery = baseQuery.Where(s => s.Server.Name.ToLower().Contains(serverNameFilter.ToLower()));
-        }
-
-        // Apply includes after all filters (exclude observations for now)
-        var activeSessions = await baseQuery
-            .Include(s => s.Server)
-            .Include(s => s.Player)
-            .ToListAsync();
-
-        if (!activeSessions.Any())
-        {
-            return new OnlinePlayersResponse
-            {
-                Players = new List<OnlinePlayer>(),
-                TotalOnline = 0,
-                LastUpdated = now,
-                GameBreakdown = new OnlineGameBreakdown()
-            };
-        }
-
-        // Get latest observations for all active sessions in a single efficient query
-        var sessionIds = activeSessions.Select(s => s.SessionId).ToList();
-        var latestObservations = await _dbContext.PlayerObservations
-            .Where(o => sessionIds.Contains(o.SessionId))
-            .GroupBy(o => o.SessionId)
-            .Select(g => g.OrderByDescending(o => o.Timestamp).First())
-            .ToDictionaryAsync(o => o.SessionId, o => o);
-
-        var onlinePlayers = new List<OnlinePlayer>();
-
-        foreach (var session in activeSessions)
-        {
-            // Get the latest observation for this session from our dictionary
-            latestObservations.TryGetValue(session.SessionId, out PlayerObservation? latestObservation);
-
-            var sessionDurationMinutes = (int)Math.Ceiling((now - session.StartTime).TotalMinutes);
-
-            var onlinePlayer = new OnlinePlayer
-            {
-                PlayerName = session.PlayerName,
-                SessionDurationMinutes = sessionDurationMinutes,
-                JoinedAt = session.StartTime,
-                CurrentServer = new OnlinePlayerServer
-                {
-                    ServerGuid = session.ServerGuid,
-                    ServerName = session.Server.Name,
-                    GameId = session.Server.GameId,
-                    MapName = session.MapName,
-                    SessionKills = session.TotalKills,
-                    SessionDeaths = session.TotalDeaths,
-                    CurrentScore = session.TotalScore,
-                    Ping = latestObservation?.Ping,
-                    TeamName = latestObservation?.TeamLabel
-                }
-            };
-
-            onlinePlayers.Add(onlinePlayer);
-        }
-
-        // Calculate game breakdown by grouping raw gameIds
-        var gameBreakdown = new OnlineGameBreakdown
-        {
-            GameCounts = onlinePlayers
-                .GroupBy(p => p.CurrentServer.GameId)
-                .ToDictionary(g => g.Key, g => g.Count())
-        };
-
-        return new OnlinePlayersResponse
-        {
-            Players = onlinePlayers.OrderByDescending(p => p.SessionDurationMinutes).ToList(),
-            TotalOnline = onlinePlayers.Count,
-            LastUpdated = now,
-            GameBreakdown = gameBreakdown
-        };
-    }
-
-    /// <summary>
     /// Get currently online players with pagination, sorting, and their session information
     /// </summary>
     public async Task<PagedResult<OnlinePlayer>> GetOnlinePlayersWithPagingAsync(
@@ -915,6 +815,14 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext, PlayerInsights
         string? playerNameFilter = null,
         string? serverNameFilter = null)
     {
+        // ----------------- CACHING -----------------
+        var cacheKey = $"online_players_paged:{page}:{pageSize}:{sortBy}:{sortOrder}:{gameId ?? "all"}:{search ?? "null"}:{playerNameFilter ?? "null"}:{serverNameFilter ?? "null"}";
+        var cachedResult = await _cacheService.GetAsync<PagedResult<OnlinePlayer>>(cacheKey);
+        if (cachedResult != null)
+        {
+            return cachedResult;
+        }
+
         var now = DateTime.UtcNow;
         var activeThreshold = TimeSpan.FromMinutes(5); // Consider players active if seen within last 5 minutes
         var thresholdTime = now.Subtract(activeThreshold); // Calculate the cutoff time
@@ -953,7 +861,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext, PlayerInsights
 
         if (totalCount == 0)
         {
-            return new PagedResult<OnlinePlayer>
+            var emptyResult = new PagedResult<OnlinePlayer>
             {
                 Items = new List<OnlinePlayer>(),
                 Page = page,
@@ -961,6 +869,8 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext, PlayerInsights
                 TotalItems = 0,
                 TotalPages = 0
             };
+            await _cacheService.SetAsync(cacheKey, emptyResult, TimeSpan.FromSeconds(15));
+            return emptyResult;
         }
 
         // Apply includes after all filters
@@ -1066,7 +976,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext, PlayerInsights
 
         var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
 
-        return new PagedResult<OnlinePlayer>
+        var result = new PagedResult<OnlinePlayer>
         {
             Items = onlinePlayers,
             Page = page,
@@ -1074,6 +984,11 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext, PlayerInsights
             TotalItems = totalCount,
             TotalPages = totalPages
         };
+
+        // Store in cache for 15 seconds
+        await _cacheService.SetAsync(cacheKey, result, TimeSpan.FromSeconds(15));
+
+        return result;
     }
 }
 
