@@ -97,10 +97,10 @@ FORMAT TabSeparated";
                 milestones.Add(new PlayerKillMilestone
                 {
                     PlayerName = parts[0],
-                    Milestone = int.Parse(parts[1]),
-                    AchievedDate = DateTime.Parse(parts[2]),
-                    TotalKillsAtMilestone = int.Parse(parts[3]),
-                    DaysToAchieve = int.Parse(parts[4])
+                    Milestone = int.TryParse(parts[1], out var milestone) ? milestone : 0,
+                    AchievedDate = DateTime.TryParse(parts[2], out var achieved) ? achieved : DateTime.MinValue,
+                    TotalKillsAtMilestone = int.TryParse(parts[3], out var killsMilestone) ? killsMilestone : 0,
+                    DaysToAchieve = int.TryParse(parts[4], out var days) ? days : 0
                 });
             }
         }
@@ -149,10 +149,10 @@ FORMAT TabSeparated";
                     TotalMinutes = totalMinutes,
                     TotalKills = totalKills,
                     TotalDeaths = int.Parse(parts[3]),
-                    HighestScore = int.Parse(parts[4]),
+                    HighestScore = int.TryParse(parts[4], out var score) ? score : 0,
                     HighestScoreSessionId = parts[5],
                     HighestScoreMapName = parts[6],
-                    HighestScoreStartTime = DateTime.Parse(parts[7]),
+                    HighestScoreStartTime = DateTime.TryParse(parts[7], out var hsTime) ? hsTime : DateTime.MinValue,
                     KillsPerMinute = killsPerMinute,
                     TotalRounds = int.Parse(parts[8])
                 });

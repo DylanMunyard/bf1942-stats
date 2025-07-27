@@ -90,9 +90,9 @@ FORMAT TabSeparated";
                 players.Add(new PlayerActivity
                 {
                     PlayerName = parts[0],
-                    MinutesPlayed = int.Parse(parts[1]),
-                    TotalKills = int.Parse(parts[2]),
-                    TotalDeaths = int.Parse(parts[3])
+                    MinutesPlayed = int.TryParse(parts[1], out var minutes) ? minutes : 0,
+                    TotalKills = int.TryParse(parts[2], out var kills) ? kills : 0,
+                    TotalDeaths = int.TryParse(parts[3], out var deaths) ? deaths : 0
                 });
             }
         }
@@ -133,11 +133,11 @@ FORMAT TabSeparated";
                 topScores.Add(new TopScore
                 {
                     PlayerName = parts[0],
-                    Score = int.Parse(parts[1]),
-                    Kills = int.Parse(parts[2]),
-                    Deaths = int.Parse(parts[3]),
+                    Score = int.TryParse(parts[1], out var score) ? score : 0,
+                    Kills = int.TryParse(parts[2], out var kills) ? kills : 0,
+                    Deaths = int.TryParse(parts[3], out var deaths) ? deaths : 0,
                     MapName = parts[4],
-                    Timestamp = DateTime.Parse(parts[5]),
+                    Timestamp = DateTime.TryParse(parts[5], out var date) ? date : DateTime.MinValue,
                     SessionId = parts[6].GetHashCode() // Use round_id hash as session ID substitute
                 });
             }

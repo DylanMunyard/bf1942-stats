@@ -623,15 +623,13 @@ FORMAT TabSeparated";
 
     private DateTime ParseTimePeriod(string timePeriodStr, TimeGranularity granularity)
     {
-        return granularity switch
+        if (!DateTime.TryParse(timePeriodStr, out var parsed))
         {
-            TimeGranularity.Hourly => DateTime.Parse(timePeriodStr),
-            TimeGranularity.FourHourly => DateTime.Parse(timePeriodStr),
-            TimeGranularity.Daily => DateTime.Parse(timePeriodStr),
-            TimeGranularity.Weekly => DateTime.Parse(timePeriodStr),
-            TimeGranularity.Monthly => DateTime.Parse(timePeriodStr),
-            _ => throw new ArgumentException($"Invalid granularity: {granularity}")
-        };
+            _logger.LogWarning("Failed to parse time period '{TimePeriodStr}' for granularity {Granularity}. Using DateTime.MinValue.", timePeriodStr, granularity);
+            return DateTime.MinValue;
+        }
+
+        return parsed;
     }
 
     private async Task<(List<PlayerCountDataPoint> History, PlayerCountSummary Summary)> GetPlayerCountDataFromClickHouse(
