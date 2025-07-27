@@ -911,6 +911,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext, PlayerInsights
         string sortBy = "servername_kills",
         string sortOrder = "desc",
         string? gameId = null,
+        string? search = null,
         string? playerNameFilter = null,
         string? serverNameFilter = null)
     {
@@ -926,6 +927,15 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext, PlayerInsights
         if (!string.IsNullOrEmpty(gameId))
         {
             baseQuery = baseQuery.Where(s => s.Server.GameId == gameId);
+        }
+
+        // Apply combined search filter (matches player or server name)
+        if (!string.IsNullOrEmpty(search))
+        {
+            var lowered = search.ToLower();
+            baseQuery = baseQuery.Where(s =>
+                s.PlayerName.ToLower().Contains(lowered) ||
+                s.Server.Name.ToLower().Contains(lowered));
         }
 
         if (!string.IsNullOrEmpty(playerNameFilter))

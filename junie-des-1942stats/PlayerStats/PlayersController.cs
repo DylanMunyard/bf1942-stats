@@ -431,6 +431,7 @@ public class PlayersController : ControllerBase
         [FromQuery] string sortBy = "SessionDurationMinutes",
         [FromQuery] string sortOrder = "desc",
         [FromQuery] string? gameId = null,
+        [FromQuery] string? search = null,
         [FromQuery] string? playerName = null,
         [FromQuery] string? serverName = null)
     {
@@ -456,13 +457,20 @@ public class PlayersController : ControllerBase
         try
         {
             var result = await _playerStatsService.GetOnlinePlayersWithPagingAsync(
-                page, pageSize, sortBy, sortOrder, gameId, playerName, serverName);
+                page: page,
+                pageSize: pageSize,
+                sortBy: sortBy,
+                sortOrder: sortOrder,
+                gameId: gameId,
+                search: search,
+                playerNameFilter: playerName,
+                serverNameFilter: serverName);
             return Ok(result);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving online players with filters - gameId: {GameId}, playerName: {PlayerName}, serverName: {ServerName}", 
-                gameId, playerName, serverName);
+            _logger.LogError(ex, "Error retrieving online players with filters - gameId: {GameId}, search: {Search}, playerName: {PlayerName}, serverName: {ServerName}", 
+                gameId, search, playerName, serverName);
             return StatusCode(500, "An internal server error occurred while retrieving online players.");
         }
     }
