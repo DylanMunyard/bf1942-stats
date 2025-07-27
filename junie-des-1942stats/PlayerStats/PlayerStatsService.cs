@@ -821,12 +821,12 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext, PlayerInsights
 
         if (!string.IsNullOrEmpty(playerNameFilter))
         {
-            baseQuery = baseQuery.Where(s => s.PlayerName.Contains(playerNameFilter));
+            baseQuery = baseQuery.Where(s => s.PlayerName.ToLower().Contains(playerNameFilter.ToLower()));
         }
 
         if (!string.IsNullOrEmpty(serverNameFilter))
         {
-            baseQuery = baseQuery.Where(s => s.Server.Name.Contains(serverNameFilter));
+            baseQuery = baseQuery.Where(s => s.Server.Name.ToLower().Contains(serverNameFilter.ToLower()));
         }
 
         // Apply includes after all filters (exclude observations for now)
@@ -908,7 +908,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext, PlayerInsights
     public async Task<PagedResult<OnlinePlayer>> GetOnlinePlayersWithPagingAsync(
         int page = 1,
         int pageSize = 50,
-        string sortBy = "SessionDurationMinutes",
+        string sortBy = "servername_kills",
         string sortOrder = "desc",
         string? gameId = null,
         string? playerNameFilter = null,
@@ -930,12 +930,12 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext, PlayerInsights
 
         if (!string.IsNullOrEmpty(playerNameFilter))
         {
-            baseQuery = baseQuery.Where(s => s.PlayerName.Contains(playerNameFilter));
+            baseQuery = baseQuery.Where(s => s.PlayerName.ToLower().Contains(playerNameFilter.ToLower()));
         }
 
         if (!string.IsNullOrEmpty(serverNameFilter))
         {
-            baseQuery = baseQuery.Where(s => s.Server.Name.Contains(serverNameFilter));
+            baseQuery = baseQuery.Where(s => s.Server.Name.ToLower().Contains(serverNameFilter.ToLower()));
         }
 
         // Get total count for pagination (before sorting and paging)
@@ -1000,6 +1000,12 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext, PlayerInsights
                 "gameid" => isDescending 
                     ? queryWithIncludes.OrderByDescending(s => s.Server.GameId)
                     : queryWithIncludes.OrderBy(s => s.Server.GameId),
+                "kills" or "sessionkills" => isDescending 
+                    ? queryWithIncludes.OrderByDescending(s => s.TotalKills)
+                    : queryWithIncludes.OrderBy(s => s.TotalKills),
+                "servername_kills" => isDescending 
+                    ? queryWithIncludes.OrderByDescending(s => s.Server.Name).ThenByDescending(s => s.TotalKills)
+                    : queryWithIncludes.OrderBy(s => s.Server.Name).ThenBy(s => s.TotalKills),
                 _ => queryWithIncludes.OrderByDescending(s => s.StartTime) // Default sort by join time
             };
 
