@@ -502,7 +502,7 @@ public class ServerStatsService(
                 playerCountData.History?.Count ?? 0, 
                 playerCountData.Summary != null ? "Not null" : "NULL");
             
-            insights.PlayerCountHistory = playerCountData.History;
+            insights.PlayerCountHistory = playerCountData.History ?? new List<PlayerCountDataPoint>();
             insights.PlayerCountSummary = playerCountData.Summary;
         }
         catch (Exception ex)
@@ -697,7 +697,7 @@ FORMAT TabSeparated";
         var history = new List<PlayerCountDataPoint>();
 
         var lineCount = 0;
-        foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var line in result?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>())
         {
             lineCount++;
             _logger.LogDebug("Processing line {LineNumber}: '{Line}'", lineCount, line);
@@ -815,7 +815,7 @@ FORMAT TabSeparated";
 
         var summary = new PlayerCountSummary();
 
-        foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var line in result?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>())
         {
             var parts = line.Split('\t');
             if (parts.Length >= 5)
