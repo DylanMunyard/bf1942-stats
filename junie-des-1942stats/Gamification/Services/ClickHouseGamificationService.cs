@@ -1,80 +1,82 @@
 using junie_des_1942stats.Gamification.Models;
 using junie_des_1942stats.ClickHouse.Models;
+using junie_des_1942stats.ClickHouse.Base;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using System.Text;
+using System.Globalization;
+using CsvHelper;
+using CsvHelper.Configuration;
 
 namespace junie_des_1942stats.Gamification.Services;
 
-public class ClickHouseGamificationService
+public class ClickHouseGamificationService : BaseClickHouseService
 {
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly string _clickHouseUrl;
     private readonly ILogger<ClickHouseGamificationService> _logger;
 
     public ClickHouseGamificationService(
-        IHttpClientFactory httpClientFactory, 
+        HttpClient httpClient, 
         string clickHouseUrl,
         ILogger<ClickHouseGamificationService> logger)
+        : base(httpClient, clickHouseUrl)
     {
-        _httpClientFactory = httpClientFactory;
-        _clickHouseUrl = clickHouseUrl;
         _logger = logger;
     }
 
     // Achievement Operations
-    public async Task InsertAchievementAsync(Achievement achievement)
-    {
-        var query = @"
-            INSERT INTO player_achievements 
-            (player_name, achievement_type, achievement_id, achievement_name, tier, 
-             value, achieved_at, processed_at, server_guid, map_name, round_id, metadata)
-            VALUES";
-
-        var values = $@"(
-            '{EscapeString(achievement.PlayerName)}',
-            '{EscapeString(achievement.AchievementType)}',
-            '{EscapeString(achievement.AchievementId)}',
-            '{EscapeString(achievement.AchievementName)}',
-            '{EscapeString(achievement.Tier)}',
-            {achievement.Value},
-            '{achievement.AchievedAt:yyyy-MM-dd HH:mm:ss}',
-            '{achievement.ProcessedAt:yyyy-MM-dd HH:mm:ss}',
-            '{EscapeString(achievement.ServerGuid)}',
-            '{EscapeString(achievement.MapName)}',
-            '{EscapeString(achievement.RoundId)}',
-            '{EscapeString(achievement.Metadata)}'
-        )";
-
-        await ExecuteQueryAsync($"{query} {values}");
-    }
 
     public async Task InsertAchievementsBatchAsync(List<Achievement> achievements)
     {
         if (!achievements.Any()) return;
 
-        var query = @"
-            INSERT INTO player_achievements 
-            (player_name, achievement_type, achievement_id, achievement_name, tier, 
-             value, achieved_at, processed_at, server_guid, map_name, round_id, metadata)
-            VALUES";
+        const int batchSize = 10_000;
+        for (int i = 0; i < achievements.Count; i += batchSize)
+        {
+            var batch = achievements.Skip(i).Take(batchSize).ToList();
+            await InsertAchievementsBatchInternalAsync(batch);
+        }
+    }
 
-        var valuesList = achievements.Select(achievement => $@"(
-            '{EscapeString(achievement.PlayerName)}',
-            '{EscapeString(achievement.AchievementType)}',
-            '{EscapeString(achievement.AchievementId)}',
-            '{EscapeString(achievement.AchievementName)}',
-            '{EscapeString(achievement.Tier)}',
-            {achievement.Value},
-            '{achievement.AchievedAt:yyyy-MM-dd HH:mm:ss}',
-            '{achievement.ProcessedAt:yyyy-MM-dd HH:mm:ss}',
-            '{EscapeString(achievement.ServerGuid)}',
-            '{EscapeString(achievement.MapName)}',
-            '{EscapeString(achievement.RoundId)}',
-            '{EscapeString(achievement.Metadata)}'
-        )");
+    private async Task InsertAchievementsBatchInternalAsync(List<Achievement> achievements)
+    {
+        try
+        {
+            using var stringWriter = new StringWriter();
 
-        var fullQuery = $"{query} {string.Join(",", valuesList)}";
-        await ExecuteQueryAsync(fullQuery);
+            var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+            {
+                HasHeaderRecord = false
+            };
+            using var csvWriter = new CsvWriter(stringWriter, config);
+
+            csvWriter.WriteRecords(achievements.Select(a => new
+            {
+                PlayerName = a.PlayerName,
+                AchievementType = a.AchievementType,
+                AchievementId = a.AchievementId,
+                AchievementName = a.AchievementName,
+                Tier = a.Tier,
+                Value = a.Value,
+                AchievedAt = a.AchievedAt.ToString("yyyy-MM-dd HH:mm:ss"),
+                ProcessedAt = a.ProcessedAt.ToString("yyyy-MM-dd HH:mm:ss"),
+                ServerGuid = a.ServerGuid,
+                MapName = a.MapName,
+                RoundId = a.RoundId,
+                Metadata = a.Metadata
+            }));
+
+            var csvData = stringWriter.ToString();
+            var query = "INSERT INTO player_achievements (player_name, achievement_type, achievement_id, achievement_name, tier, value, achieved_at, processed_at, server_guid, map_name, round_id, metadata) FORMAT CSV";
+            var fullRequest = query + "\n" + csvData;
+
+            await ExecuteQueryAsync(fullRequest);
+            _logger.LogInformation("Successfully inserted {Count} achievements to ClickHouse", achievements.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to insert achievements to ClickHouse");
+            throw;
+        }
     }
 
     public async Task<DateTime> GetLastProcessedTimestampAsync()
@@ -147,9 +149,9 @@ public class ClickHouseGamificationService
         var query = $@"
             SELECT 
                 player_name,
-                SUM(kills) as total_kills,
-                SUM(deaths) as total_deaths,
-                SUM(score) as total_score,
+                SUM(final_kills) as total_kills,
+                SUM(final_deaths) as total_deaths,
+                SUM(final_score) as total_score,
                 SUM(play_time_minutes) as total_playtime
             FROM player_rounds
             WHERE player_name = '{EscapeString(playerName)}'
@@ -169,7 +171,7 @@ public class ClickHouseGamificationService
                 TotalKills = int.Parse(parts[1]),
                 TotalDeaths = int.Parse(parts[2]),
                 TotalScore = int.Parse(parts[3]),
-                TotalPlayTimeMinutes = int.Parse(parts[4]),
+                TotalPlayTimeMinutes = (int)Math.Round(double.Parse(parts[4], CultureInfo.InvariantCulture)),
                 LastUpdated = DateTime.UtcNow
             };
         }
@@ -182,9 +184,9 @@ public class ClickHouseGamificationService
         var query = $@"
             SELECT 
                 player_name,
-                SUM(kills) as total_kills,
-                SUM(deaths) as total_deaths,
-                SUM(score) as total_score,
+                SUM(final_kills) as total_kills,
+                SUM(final_deaths) as total_deaths,
+                SUM(final_score) as total_score,
                 SUM(play_time_minutes) as total_playtime
             FROM player_rounds
             WHERE player_name = '{EscapeString(playerName)}'
@@ -208,7 +210,7 @@ public class ClickHouseGamificationService
                 TotalKills = int.Parse(parts[1]),
                 TotalDeaths = int.Parse(parts[2]),
                 TotalScore = int.Parse(parts[3]),
-                TotalPlayTimeMinutes = int.Parse(parts[4]),
+                TotalPlayTimeMinutes = (int)Math.Round(double.Parse(parts[4], CultureInfo.InvariantCulture)),
                 LastUpdated = DateTime.UtcNow
             };
         }
@@ -219,7 +221,7 @@ public class ClickHouseGamificationService
     public async Task<List<PlayerRound>> GetPlayerRoundsSinceAsync(DateTime sinceTime)
     {
         var query = $@"
-            SELECT player_name, round_id, server_guid, map_name, kills, deaths, score, 
+            SELECT player_name, round_id, server_guid, map_name, final_kills as kills, final_deaths as deaths, final_score as score, 
                    play_time_minutes, round_end_time
             FROM player_rounds
             WHERE round_end_time >= '{sinceTime:yyyy-MM-dd HH:mm:ss}'
@@ -232,7 +234,7 @@ public class ClickHouseGamificationService
     public async Task<List<PlayerRound>> GetPlayerRoundsInPeriodAsync(DateTime startTime, DateTime endTime)
     {
         var query = $@"
-            SELECT player_name, round_id, server_guid, map_name, kills, deaths, score, 
+            SELECT player_name, round_id, server_guid, map_name, final_kills as kills, final_deaths as deaths, final_score as score, 
                    play_time_minutes, round_end_time
             FROM player_rounds
             WHERE round_end_time >= '{startTime:yyyy-MM-dd HH:mm:ss}'
@@ -246,7 +248,7 @@ public class ClickHouseGamificationService
     public async Task<List<PlayerRound>> GetPlayerRecentRoundsAsync(string playerName, int roundCount)
     {
         var query = $@"
-            SELECT player_name, round_id, server_guid, map_name, kills, deaths, score, 
+            SELECT player_name, round_id, server_guid, map_name, final_kills as kills, final_deaths as deaths, final_score as score, 
                    play_time_minutes, round_end_time
             FROM player_rounds
             WHERE player_name = '{EscapeString(playerName)}'
@@ -255,6 +257,107 @@ public class ClickHouseGamificationService
 
         var result = await QueryAsync(query);
         return ParsePlayerRounds(result);
+    }
+
+    // PlayerRound Bulk Operations
+    public async Task InsertPlayerRoundsBatchAsync(List<PlayerRound> playerRounds)
+    {
+        if (!playerRounds.Any()) return;
+
+        const int batchSize = 1000;
+        for (int i = 0; i < playerRounds.Count; i += batchSize)
+        {
+            var batch = playerRounds.Skip(i).Take(batchSize).ToList();
+            await InsertPlayerRoundsBatchInternalAsync(batch);
+        }
+    }
+
+    private async Task InsertPlayerRoundsBatchInternalAsync(List<PlayerRound> playerRounds)
+    {
+        try
+        {
+            using var stringWriter = new StringWriter();
+
+            var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+            {
+                HasHeaderRecord = false
+            };
+            using var csvWriter = new CsvWriter(stringWriter, config);
+
+            csvWriter.WriteRecords(playerRounds.Select(r => new
+            {
+                PlayerName = r.PlayerName,
+                RoundId = r.RoundId,
+                ServerGuid = r.ServerGuid,
+                MapName = r.MapName,
+                FinalKills = r.FinalKills,
+                FinalDeaths = r.FinalDeaths,
+                FinalScore = r.FinalScore,
+                PlayTimeMinutes = r.PlayTimeMinutes.ToString("F2", CultureInfo.InvariantCulture),
+                RoundEndTime = r.RoundEndTime.ToString("yyyy-MM-dd HH:mm:ss")
+            }));
+
+            var csvData = stringWriter.ToString();
+            var query = "INSERT INTO player_rounds (player_name, round_id, server_guid, map_name, final_kills, final_deaths, final_score, play_time_minutes, round_end_time) FORMAT CSV";
+            var fullRequest = query + "\n" + csvData;
+
+            await ExecuteQueryAsync(fullRequest);
+            _logger.LogInformation("Successfully inserted {Count} player rounds to ClickHouse", playerRounds.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to insert player rounds to ClickHouse");
+            throw;
+        }
+    }
+
+    // PlayerGameStats Bulk Operations
+    public async Task InsertPlayerStatsBatchAsync(List<PlayerGameStats> playerStats)
+    {
+        if (!playerStats.Any()) return;
+
+        const int batchSize = 1000;
+        for (int i = 0; i < playerStats.Count; i += batchSize)
+        {
+            var batch = playerStats.Skip(i).Take(batchSize).ToList();
+            await InsertPlayerStatsBatchInternalAsync(batch);
+        }
+    }
+
+    private async Task InsertPlayerStatsBatchInternalAsync(List<PlayerGameStats> playerStats)
+    {
+        try
+        {
+            using var stringWriter = new StringWriter();
+
+            var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+            {
+                HasHeaderRecord = false
+            };
+            using var csvWriter = new CsvWriter(stringWriter, config);
+
+            csvWriter.WriteRecords(playerStats.Select(s => new
+            {
+                PlayerName = s.PlayerName,
+                TotalKills = s.TotalKills,
+                TotalDeaths = s.TotalDeaths,
+                TotalScore = s.TotalScore,
+                TotalPlayTimeMinutes = s.TotalPlayTimeMinutes,
+                LastUpdated = s.LastUpdated.ToString("yyyy-MM-dd HH:mm:ss")
+            }));
+
+            var csvData = stringWriter.ToString();
+            var query = "INSERT INTO player_stats (player_name, total_kills, total_deaths, total_score, total_playtime_minutes, last_updated) FORMAT CSV";
+            var fullRequest = query + "\n" + csvData;
+
+            await ExecuteQueryAsync(fullRequest);
+            _logger.LogInformation("Successfully inserted {Count} player stats to ClickHouse", playerStats.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to insert player stats to ClickHouse");
+            throw;
+        }
     }
 
     // Leaderboard Operations
@@ -295,21 +398,12 @@ public class ClickHouseGamificationService
     // Helper Methods
     private async Task<string> QueryAsync(string query)
     {
-        using var httpClient = _httpClientFactory.CreateClient();
-        var response = await httpClient.PostAsync($"{_clickHouseUrl}:8123", 
-            new StringContent(query, System.Text.Encoding.UTF8, "text/plain"));
-        
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsStringAsync();
+        return await ExecuteQueryInternalAsync(query);
     }
 
     private async Task ExecuteQueryAsync(string query)
     {
-        using var httpClient = _httpClientFactory.CreateClient();
-        var response = await httpClient.PostAsync($"{_clickHouseUrl}:8123", 
-            new StringContent(query, System.Text.Encoding.UTF8, "text/plain"));
-        
-        response.EnsureSuccessStatusCode();
+        await ExecuteCommandInternalAsync(query);
     }
 
     private string EscapeString(string input)
@@ -367,7 +461,7 @@ public class ClickHouseGamificationService
                     FinalKills = uint.Parse(parts[4]),
                     FinalDeaths = uint.Parse(parts[5]),
                     FinalScore = int.Parse(parts[6]),
-                    PlayTimeMinutes = int.Parse(parts[7]),
+                    PlayTimeMinutes = (int)Math.Round(double.Parse(parts[7])),
                     RoundEndTime = DateTime.Parse(parts[8])
                 });
             }

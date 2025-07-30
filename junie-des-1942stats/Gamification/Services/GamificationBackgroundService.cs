@@ -27,7 +27,7 @@ public class GamificationBackgroundService : BackgroundService
                 var gamificationService = scope.ServiceProvider.GetRequiredService<GamificationService>();
 
                 // Process new achievements every 5 minutes
-                await gamificationService.ProcessNewAchievementsAsync();
+                // await gamificationService.ProcessNewAchievementsAsync();
                 
                 _logger.LogDebug("Completed gamification processing cycle");
             }

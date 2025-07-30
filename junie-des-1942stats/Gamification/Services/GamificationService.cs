@@ -198,7 +198,7 @@ public class GamificationService
     {
         try
         {
-            var startDate = fromDate ?? DateTime.UtcNow.AddYears(-5); // Default: 5 years back
+            var startDate = fromDate ?? DateTime.UtcNow.AddDays(-1); // Default: 4 mon
             var endDate = toDate ?? DateTime.UtcNow;
 
             _logger.LogInformation("Starting historical gamification processing from {StartDate} to {EndDate}",

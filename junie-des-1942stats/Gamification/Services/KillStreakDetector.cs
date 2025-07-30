@@ -3,23 +3,24 @@ using junie_des_1942stats.ClickHouse.Models;
 using junie_des_1942stats.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace junie_des_1942stats.Gamification.Services;
 
 public class KillStreakDetector
 {
-    private readonly PlayerTrackerDbContext _dbContext;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ClickHouseGamificationService _clickHouseService;
     private readonly BadgeDefinitionsService _badgeService;
     private readonly ILogger<KillStreakDetector> _logger;
 
     public KillStreakDetector(
-        PlayerTrackerDbContext dbContext,
+        IServiceScopeFactory scopeFactory,
         ClickHouseGamificationService clickHouseService,
         BadgeDefinitionsService badgeService,
         ILogger<KillStreakDetector> logger)
     {
-        _dbContext = dbContext;
+        _scopeFactory = scopeFactory;
         _clickHouseService = clickHouseService;
         _badgeService = badgeService;
         _logger = logger;
@@ -88,8 +89,11 @@ public class KillStreakDetector
 
     private async Task<List<PlayerObservation>> GetPlayerObservationsForRound(string roundId, string playerName)
     {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
+        
         // Get all observations for this player in this round, ordered by timestamp
-        var observations = await _dbContext.PlayerObservations
+        var observations = await dbContext.PlayerObservations
             .Include(o => o.Session)
             .Where(o => o.Session.PlayerName == playerName)
             .Where(o => o.Session.SessionId.ToString().Contains(roundId) || 
@@ -200,7 +204,10 @@ public class KillStreakDetector
     {
         try
         {
-            var server = await _dbContext.Servers
+            using var scope = _scopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
+            
+            var server = await dbContext.Servers
                 .Where(s => s.Guid == serverGuid)
                 .Select(s => s.Name)
                 .FirstOrDefaultAsync();

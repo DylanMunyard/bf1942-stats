@@ -322,13 +322,13 @@ try
     
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>(sp =>
     {
-        var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
-        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
+        var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? "";
         var logger = sp.GetRequiredService<ILogger<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>>();
         
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouseGamificationService URL: {clickHouseReadUrl}");
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouseGamificationService URL: {clickHouseWriteUrl}");
         
-        return new junie_des_1942stats.Gamification.Services.ClickHouseGamificationService(httpClientFactory, clickHouseReadUrl, logger);
+        return new junie_des_1942stats.Gamification.Services.ClickHouseGamificationService(httpClient, "http://clickhouse.home.net", logger);
     });
     
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.KillStreakDetector>();
