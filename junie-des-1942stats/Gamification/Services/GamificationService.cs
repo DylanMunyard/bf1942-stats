@@ -192,16 +192,50 @@ public class GamificationService
     }
 
     /// <summary>
-    /// Historical processing for initial migration
+    /// Historical processing for initial migration - uses optimized ClickHouse-native approach
     /// </summary>
     public async Task ProcessHistoricalDataAsync(DateTime? fromDate = null, DateTime? toDate = null)
     {
         try
         {
-            var startDate = fromDate ?? DateTime.UtcNow.AddDays(-1); // Default: 4 mon
+            var startDate = fromDate ?? DateTime.UtcNow.AddMonths(-6); // Default: 6 months
             var endDate = toDate ?? DateTime.UtcNow;
 
-            _logger.LogInformation("Starting historical gamification processing from {StartDate} to {EndDate}",
+            _logger.LogInformation("Starting OPTIMIZED historical gamification processing from {StartDate} to {EndDate}",
+                startDate, endDate);
+
+            // Use the optimized processor that leverages ClickHouse native operations
+            // This reduces query count from ~100k individual queries to ~10-50 aggregate queries
+            var optimizedProcessor = new OptimizedHistoricalProcessor(
+                _clickHouseService, 
+                _badgeDefinitionsService, 
+                _logger as ILogger<OptimizedHistoricalProcessor> ?? 
+                    new Microsoft.Extensions.Logging.Abstractions.NullLogger<OptimizedHistoricalProcessor>());
+
+            await optimizedProcessor.ProcessHistoricalDataOptimizedAsync(startDate, endDate);
+
+            _logger.LogInformation("Optimized historical gamification processing completed");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during optimized historical processing");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Legacy historical processing method - kept for reference but not recommended for large datasets
+    /// </summary>
+    [Obsolete("Use ProcessHistoricalDataAsync() which now uses optimized processing. This method is inefficient for large datasets.")]
+    public async Task ProcessHistoricalDataLegacyAsync(DateTime? fromDate = null, DateTime? toDate = null)
+    {
+        try
+        {
+            var startDate = fromDate ?? DateTime.UtcNow.AddDays(-1);
+            var endDate = toDate ?? DateTime.UtcNow;
+
+            _logger.LogWarning("Using LEGACY historical processing - this is inefficient for large datasets");
+            _logger.LogInformation("Starting legacy historical gamification processing from {StartDate} to {EndDate}",
                 startDate, endDate);
 
             // Process in monthly chunks to avoid memory issues
@@ -234,11 +268,11 @@ public class GamificationService
                 await Task.Delay(TimeSpan.FromSeconds(2));
             }
 
-            _logger.LogInformation("Historical gamification processing completed");
+            _logger.LogInformation("Legacy historical gamification processing completed");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during historical processing");
+            _logger.LogError(ex, "Error during legacy historical processing");
             throw;
         }
     }
