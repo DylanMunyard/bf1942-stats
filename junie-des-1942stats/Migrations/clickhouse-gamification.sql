@@ -17,7 +17,8 @@ CREATE TABLE player_achievements (
     metadata String                 -- JSON for additional context
 ) ENGINE = MergeTree()
 ORDER BY (player_name, achievement_type, processed_at)
-PARTITION BY toYYYYMM(achieved_at);
+PARTITION BY toYYYYMM(achieved_at)
+COMMENT 'Core gamification achievements including badges, milestones, and kill streaks';
 
 -- Kill streaks table for detailed streak tracking
 CREATE TABLE player_streaks (
@@ -32,7 +33,8 @@ CREATE TABLE player_streaks (
     is_active Bool DEFAULT 0        -- Current ongoing streak
 ) ENGINE = MergeTree()
 ORDER BY (player_name, streak_type, streak_start)
-PARTITION BY toYYYYMM(streak_start);
+PARTITION BY toYYYYMM(streak_start)
+COMMENT 'Detailed kill streak tracking per round';
 
 -- Rankings table for leaderboards with ReplacingMergeTree for overwriting
 CREATE TABLE player_rankings (
@@ -48,7 +50,8 @@ CREATE TABLE player_rankings (
     version DateTime DEFAULT now()  -- For ReplacingMergeTree
 ) ENGINE = ReplacingMergeTree(version)
 ORDER BY (ranking_period, ranking_type, ranking_scope, scope_value, rank)
-PARTITION BY toYYYYMM(calculated_at);
+PARTITION BY toYYYYMM(calculated_at)
+COMMENT 'Leaderboard rankings for various metrics and scopes';
 
 -- Player aggregated stats for quick lookups
 CREATE TABLE player_game_stats (
@@ -61,7 +64,8 @@ CREATE TABLE player_game_stats (
     last_updated DateTime,
     version DateTime DEFAULT now()
 ) ENGINE = ReplacingMergeTree(version)
-ORDER BY player_name;
+ORDER BY player_name
+COMMENT 'Aggregated player statistics for quick gamification calculations';
 
 -- Indexes for performance
 -- Achievement lookups by player and type
@@ -72,12 +76,6 @@ CREATE INDEX idx_player_rankings_type_scope ON player_rankings (ranking_type, ra
 
 -- Recent achievements index
 CREATE INDEX idx_player_achievements_recent ON player_achievements (achieved_at) TYPE minmax GRANULARITY 8192;
-
--- Comments for table purposes
-ALTER TABLE player_achievements COMMENT 'Core gamification achievements including badges, milestones, and kill streaks';
-ALTER TABLE player_streaks COMMENT 'Detailed kill streak tracking per round';
-ALTER TABLE player_rankings COMMENT 'Leaderboard rankings for various metrics and scopes';
-ALTER TABLE player_game_stats COMMENT 'Aggregated player statistics for quick gamification calculations';
 
 -- Sample queries for testing tables:
 -- SELECT COUNT(*) FROM player_achievements;

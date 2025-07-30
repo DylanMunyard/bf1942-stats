@@ -364,9 +364,9 @@ public class ClickHouseGamificationService
                     RoundId = parts[1],
                     ServerGuid = parts[2],
                     MapName = parts[3],
-                    Kills = int.Parse(parts[4]),
-                    Deaths = int.Parse(parts[5]),
-                    Score = int.Parse(parts[6]),
+                    FinalKills = uint.Parse(parts[4]),
+                    FinalDeaths = uint.Parse(parts[5]),
+                    FinalScore = int.Parse(parts[6]),
                     PlayTimeMinutes = int.Parse(parts[7]),
                     RoundEndTime = DateTime.Parse(parts[8])
                 });
