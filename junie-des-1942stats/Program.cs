@@ -317,6 +317,28 @@ try
     
     builder.Services.AddScoped<junie_des_1942stats.Services.IBfListApiService, junie_des_1942stats.Services.BfListApiService>();
 
+    // Register Gamification Services
+    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.BadgeDefinitionsService>();
+    
+    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>(sp =>
+    {
+        var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        var logger = sp.GetRequiredService<ILogger<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>>();
+        
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouseGamificationService URL: {clickHouseReadUrl}");
+        
+        return new junie_des_1942stats.Gamification.Services.ClickHouseGamificationService(httpClientFactory, clickHouseReadUrl, logger);
+    });
+    
+    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.KillStreakDetector>();
+    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.MilestoneCalculator>();
+    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.PerformanceBadgeCalculator>();
+    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.GamificationService>();
+    
+    // Register Gamification Background Service
+    builder.Services.AddHostedService<junie_des_1942stats.Gamification.Services.GamificationBackgroundService>();
+
     // Register PlayerComparisonService (read-only)
     builder.Services.AddScoped<PlayerComparisonService>(sp =>
     {

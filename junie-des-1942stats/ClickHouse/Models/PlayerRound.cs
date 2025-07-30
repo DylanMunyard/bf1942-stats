@@ -11,6 +11,11 @@ public class PlayerRound
     public uint FinalKills { get; set; }
     public uint FinalDeaths { get; set; }
     public double PlayTimeMinutes { get; set; }
+    
+    // Convenience properties for gamification (map to existing properties)
+    public int Score => FinalScore;
+    public int Kills => (int)FinalKills;
+    public int Deaths => (int)FinalDeaths;
     public string RoundId { get; set; } = "";
     public string TeamLabel { get; set; } = "";
     public string GameId { get; set; } = "";
