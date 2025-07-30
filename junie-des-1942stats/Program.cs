@@ -328,7 +328,7 @@ try
         
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouseGamificationService URL: {clickHouseWriteUrl}");
         
-        return new junie_des_1942stats.Gamification.Services.ClickHouseGamificationService(httpClient, "http://clickhouse.home.net", logger);
+        return new junie_des_1942stats.Gamification.Services.ClickHouseGamificationService(httpClient, clickHouseWriteUrl, logger);
     });
     
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.HistoricalProcessor>();
