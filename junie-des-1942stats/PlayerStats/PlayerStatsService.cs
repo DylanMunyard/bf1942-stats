@@ -793,7 +793,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                 };
             }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // Log error but don't fail the request
             // _logger?.LogError(ex, "Failed to get player stats from ClickHouse for player: {PlayerName}", playerName);

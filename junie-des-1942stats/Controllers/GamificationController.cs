@@ -215,7 +215,7 @@ public class GamificationController : ControllerBase
     /// Trigger historical data processing (admin only)
     /// </summary>
     [HttpPost("admin/process-historical")]
-    public async Task<ActionResult> ProcessHistoricalData(
+    public Task<ActionResult> ProcessHistoricalData(
         [FromQuery] DateTime? fromDate = null,
         [FromQuery] DateTime? toDate = null)
     {
@@ -235,12 +235,12 @@ public class GamificationController : ControllerBase
                 }
             });
 
-            return Accepted("Historical processing started. Check logs for progress.");
+            return Task.FromResult<ActionResult>(Accepted("Historical processing started. Check logs for progress."));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error starting historical processing");
-            return StatusCode(500, "An internal server error occurred while starting historical processing.");
+            return Task.FromResult<ActionResult>(StatusCode(500, "An internal server error occurred while starting historical processing."));
         }
     }
 
@@ -266,7 +266,7 @@ public class GamificationController : ControllerBase
     /// Get system statistics
     /// </summary>
     [HttpGet("stats")]
-    public async Task<ActionResult> GetGamificationStats()
+    public Task<ActionResult> GetGamificationStats()
     {
         try
         {
@@ -280,12 +280,12 @@ public class GamificationController : ControllerBase
                 LastUpdated = DateTime.UtcNow
             };
 
-            return Ok(stats);
+            return Task.FromResult<ActionResult>(Ok(stats));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting gamification stats");
-            return StatusCode(500, "An internal server error occurred while retrieving stats.");
+            return Task.FromResult<ActionResult>(StatusCode(500, "An internal server error occurred while retrieving stats."));
         }
     }
 } 

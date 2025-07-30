@@ -252,7 +252,7 @@ public class PerformanceBadgeCalculator
     /// <summary>
     /// Calculate map mastery badges - this should be run periodically, not per-round
     /// </summary>
-    public async Task<List<Achievement>> CheckMapMasteryBadgesAsync(string playerName, string mapName)
+    public Task<List<Achievement>> CheckMapMasteryBadgesAsync(string playerName, string mapName)
     {
         var achievements = new List<Achievement>();
 
@@ -271,7 +271,7 @@ public class PerformanceBadgeCalculator
                 playerName, mapName);
         }
 
-        return achievements;
+        return Task.FromResult(achievements);
     }
 
     public List<BadgeDefinition> GetAvailablePerformanceBadges()

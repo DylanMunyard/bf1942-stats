@@ -65,7 +65,7 @@ public class MilestoneCalculator
         return achievements;
     }
 
-    private async Task<List<Achievement>> CheckKillMilestones(
+    private Task<List<Achievement>> CheckKillMilestones(
         PlayerGameStats previousStats, PlayerGameStats newStats, PlayerRound round)
     {
         var achievements = new List<Achievement>();
@@ -100,10 +100,10 @@ public class MilestoneCalculator
             }
         }
 
-        return achievements;
+        return Task.FromResult(achievements);
     }
 
-    private async Task<List<Achievement>> CheckPlaytimeMilestones(
+    private Task<List<Achievement>> CheckPlaytimeMilestones(
         PlayerGameStats previousStats, PlayerGameStats newStats, PlayerRound round)
     {
         var achievements = new List<Achievement>();
@@ -141,10 +141,10 @@ public class MilestoneCalculator
             }
         }
 
-        return achievements;
+        return Task.FromResult(achievements);
     }
 
-    private async Task<List<Achievement>> CheckScoreMilestones(
+    private Task<List<Achievement>> CheckScoreMilestones(
         PlayerGameStats previousStats, PlayerGameStats newStats, PlayerRound round)
     {
         var achievements = new List<Achievement>();
@@ -175,7 +175,7 @@ public class MilestoneCalculator
             }
         }
 
-        return achievements;
+        return Task.FromResult(achievements);
     }
 
     private string GetScoreMilestoneTier(int scoreThreshold)

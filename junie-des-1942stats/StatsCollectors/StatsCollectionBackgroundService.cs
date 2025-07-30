@@ -15,7 +15,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
     private readonly TimeSpan _collectionInterval = TimeSpan.FromSeconds(15);
-    private Timer _timer;
+    private Timer? _timer;
     private int _isRunning = 0;
     private int _cycleCount = 0;
     
@@ -56,7 +56,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         return Task.CompletedTask;
     }
 
-    private async void ExecuteCollectionCycle(object state)
+    private async void ExecuteCollectionCycle(object? state)
     {
         if (Interlocked.CompareExchange(ref _isRunning, 1, 0) != 0)
         {

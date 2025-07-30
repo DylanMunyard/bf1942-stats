@@ -95,7 +95,7 @@ public class RankingCalculationService(IServiceProvider services) : BackgroundSe
 // Add this class to your file to support the raw SQL query results
 public class PlayerRankingData
 {
-    public string PlayerName { get; set; }
+    public string PlayerName { get; set; } = string.Empty;
     public int TotalScore { get; set; } // Changed from HighestScore
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }

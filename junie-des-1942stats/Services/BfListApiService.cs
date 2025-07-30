@@ -265,7 +265,7 @@ public class BfListApiService : IBfListApiService
     public async Task<ServerSummary?> FetchSingleServerSummaryAsync(string game, string serverIdentifier)
     {
         var cacheKey = $"server:{game}:{serverIdentifier}";
-        var cachedResult = await _cacheService.GetAsync<ServerSummary?>(cacheKey);
+        var cachedResult = await _cacheService.GetAsync<ServerSummary>(cacheKey);
 
         if (cachedResult != null)
         {

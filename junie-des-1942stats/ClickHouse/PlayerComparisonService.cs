@@ -37,7 +37,7 @@ public class PlayerComparisonService
         _playerInsightsService = playerInsightsService;
     }
 
-    public async Task<PlayerComparisonResult> ComparePlayersAsync(string player1, string player2, string serverGuid = null)
+    public async Task<PlayerComparisonResult> ComparePlayersAsync(string player1, string player2, string? serverGuid = null)
     {
         // Check cache first
         var cacheKey = _cacheKeyService.GetPlayerComparisonKey(player1, player2, serverGuid);
@@ -132,7 +132,7 @@ public class PlayerComparisonService
         }
     }
 
-    private async Task<List<KillRateComparison>> GetKillRates(string player1, string player2, string serverGuid = null)
+    private async Task<List<KillRateComparison>> GetKillRates(string player1, string player2, string? serverGuid = null)
     {
         // Calculate kill rate (kills per minute) using player_rounds data
         var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
@@ -158,7 +158,7 @@ GROUP BY player_name";
         return result;
     }
 
-    private async Task<List<BucketTotalsComparison>> GetBucketTotals(string player1, string player2, string serverGuid = null)
+    private async Task<List<BucketTotalsComparison>> GetBucketTotals(string player1, string player2, string? serverGuid = null)
     {
         // Buckets: last 30 days, last 6 months, last year, all time
         var buckets = new[]
@@ -205,7 +205,7 @@ GROUP BY player_name";
         return results;
     }
 
-    private async Task<List<PingComparison>> GetAveragePing(string player1, string player2, string serverGuid = null)
+    private async Task<List<PingComparison>> GetAveragePing(string player1, string player2, string? serverGuid = null)
     {
         var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
         
@@ -235,7 +235,7 @@ GROUP BY player_name";
         return result;
     }
 
-    private async Task<List<MapPerformanceComparison>> GetMapPerformance(string player1, string player2, string serverGuid = null)
+    private async Task<List<MapPerformanceComparison>> GetMapPerformance(string player1, string player2, string? serverGuid = null)
     {
         var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
         var query = $@"
@@ -270,7 +270,7 @@ GROUP BY map_name, player_name";
         return mapStats.Values.ToList();
     }
 
-    private async Task<List<HeadToHeadSession>> GetHeadToHead(string player1, string player2, string serverGuid = null)
+    private async Task<List<HeadToHeadSession>> GetHeadToHead(string player1, string player2, string? serverGuid = null)
     {
         // Find overlapping rounds using the player_rounds table
         var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND p1.server_guid = {Quote(serverGuid)}" : "";
@@ -437,7 +437,7 @@ ORDER BY hour_of_day";
         result.TargetPlayerStats = targetStats;
 
         // Get target player's typical online hours if temporal filtering is enabled
-        List<int> targetOnlineHours = null;
+        List<int>? targetOnlineHours = null;
         if (filterBySimilarOnlineTime)
         {
             targetOnlineHours = await GetPlayerTypicalOnlineHours(targetPlayer);
@@ -529,7 +529,7 @@ GROUP BY t.total_kills, t.total_deaths, t.total_play_time_minutes, s.server_guid
         return null;
     }
 
-    private async Task<List<PlayerSimilarityStats>> FindPlayersBySimilarity(string targetPlayer, PlayerSimilarityStats targetStats, int limit, List<int> targetOnlineHours = null)
+    private async Task<List<PlayerSimilarityStats>> FindPlayersBySimilarity(string targetPlayer, PlayerSimilarityStats targetStats, int limit, List<int>? targetOnlineHours = null)
     {
         // Find players with similar stats, excluding the target player
         var playTimeMin = targetStats.TotalPlayTimeMinutes * 0.7; // ±30% play time range
@@ -769,8 +769,8 @@ ORDER BY hour_of_day";
 // Result Models
 public class PlayerComparisonResult
 {
-    public string Player1 { get; set; }
-    public string Player2 { get; set; }
+    public string Player1 { get; set; } = string.Empty;
+    public string Player2 { get; set; } = string.Empty;
     public ServerDetails? ServerDetails { get; set; }
     public List<KillRateComparison> KillRates { get; set; } = new();
     public List<BucketTotalsComparison> BucketTotals { get; set; } = new();
@@ -784,13 +784,13 @@ public class PlayerComparisonResult
 
 public class KillRateComparison
 {
-    public string PlayerName { get; set; }
+    public string PlayerName { get; set; } = string.Empty;
     public double KillRate { get; set; }
 }
 
 public class BucketTotalsComparison
 {
-    public string Bucket { get; set; }
+    public string Bucket { get; set; } = string.Empty;
     public PlayerTotals Player1Totals { get; set; } = new();
     public PlayerTotals Player2Totals { get; set; } = new();
 }
@@ -805,13 +805,13 @@ public class PlayerTotals
 
 public class PingComparison
 {
-    public string PlayerName { get; set; }
+    public string PlayerName { get; set; } = string.Empty;
     public double AveragePing { get; set; }
 }
 
 public class MapPerformanceComparison
 {
-    public string MapName { get; set; }
+    public string MapName { get; set; } = string.Empty;
     public PlayerTotals Player1Totals { get; set; } = new();
     public PlayerTotals Player2Totals { get; set; } = new();
 }
@@ -819,8 +819,8 @@ public class MapPerformanceComparison
 public class HeadToHeadSession
 {
     public DateTime Timestamp { get; set; }
-    public string ServerGuid { get; set; }
-    public string MapName { get; set; }
+    public string ServerGuid { get; set; } = string.Empty;
+    public string MapName { get; set; } = string.Empty;
     public int Player1Score { get; set; }
     public int Player1Kills { get; set; }
     public int Player1Deaths { get; set; }
@@ -832,11 +832,11 @@ public class HeadToHeadSession
 
 public class ServerDetails
 {
-    public string Guid { get; set; }
-    public string Name { get; set; }
-    public string Ip { get; set; }
+    public string Guid { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Ip { get; set; } = string.Empty;
     public int Port { get; set; }
-    public string GameId { get; set; }
+    public string GameId { get; set; } = string.Empty;
     public string? Country { get; set; }
     public string? Region { get; set; }
     public string? City { get; set; }
