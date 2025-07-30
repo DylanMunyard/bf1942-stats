@@ -5,24 +5,24 @@ using Microsoft.Extensions.Logging;
 namespace junie_des_1942stats.Gamification.Services;
 
 /// <summary>
-/// Optimized historical processor that uses ClickHouse native operations
+/// Historical processor that uses ClickHouse native operations
 /// instead of round-by-round processing to dramatically reduce query count
 /// </summary>
-public class OptimizedHistoricalProcessor
+public class HistoricalProcessor
 {
     private readonly ClickHouseGamificationService _clickHouseService;
     private readonly BadgeDefinitionsService _badgeDefinitionsService;
-    private readonly ILogger<OptimizedHistoricalProcessor> _logger;
+    private readonly ILogger<HistoricalProcessor> _logger;
 
     // Milestone thresholds
     private readonly int[] _killMilestones = { 100, 500, 1000, 2500, 5000, 10000, 25000, 50000 };
     private readonly int[] _playtimeHourMilestones = { 10, 50, 100, 500, 1000 };
     private readonly int[] _scoreMilestones = { 10000, 50000, 100000, 500000, 1000000 };
 
-    public OptimizedHistoricalProcessor(
+    public HistoricalProcessor(
         ClickHouseGamificationService clickHouseService,
         BadgeDefinitionsService badgeDefinitionsService,
-        ILogger<OptimizedHistoricalProcessor> logger)
+        ILogger<HistoricalProcessor> logger)
     {
         _clickHouseService = clickHouseService;
         _badgeDefinitionsService = badgeDefinitionsService;
@@ -32,30 +32,30 @@ public class OptimizedHistoricalProcessor
     /// <summary>
     /// Process historical data efficiently using ClickHouse native operations
     /// </summary>
-    public async Task ProcessHistoricalDataOptimizedAsync(DateTime? fromDate = null, DateTime? toDate = null)
+    public async Task ProcessHistoricalDataAsync(DateTime? fromDate = null, DateTime? toDate = null)
     {
         var startDate = fromDate ?? DateTime.UtcNow.AddMonths(-6);
         var endDate = toDate ?? DateTime.UtcNow;
 
-        _logger.LogInformation("Starting optimized historical processing from {StartDate} to {EndDate}", 
+        _logger.LogInformation("Starting historical processing from {StartDate} to {EndDate}", 
             startDate, endDate);
 
         try
         {
             // Process milestones first (fastest - pure aggregation)
-            await ProcessMilestonesOptimizedAsync(startDate, endDate);
+            await ProcessMilestonesAsync(startDate, endDate);
 
             // Process kill streaks with boundary handling
-            await ProcessKillStreaksOptimizedAsync(startDate, endDate);
+            await ProcessKillStreaksAsync(startDate, endDate);
 
             // Process performance badges (if needed)
-            await ProcessPerformanceBadgesOptimizedAsync(startDate, endDate);
+            await ProcessPerformanceBadgesAsync(startDate, endDate);
 
-            _logger.LogInformation("Optimized historical processing completed successfully");
+            _logger.LogInformation("Historical processing completed successfully");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during optimized historical processing");
+            _logger.LogError(ex, "Error during historical processing");
             throw;
         }
     }
@@ -63,7 +63,7 @@ public class OptimizedHistoricalProcessor
     /// <summary>
     /// Process all milestones using pure ClickHouse aggregation - dramatically faster
     /// </summary>
-    private async Task ProcessMilestonesOptimizedAsync(DateTime startDate, DateTime endDate)
+    private async Task ProcessMilestonesAsync(DateTime startDate, DateTime endDate)
     {
         _logger.LogInformation("Processing milestones with ClickHouse aggregation...");
 
@@ -136,7 +136,7 @@ public class OptimizedHistoricalProcessor
     /// <summary>
     /// Process kill streaks using ClickHouse window functions with boundary handling
     /// </summary>
-    private async Task ProcessKillStreaksOptimizedAsync(DateTime startDate, DateTime endDate)
+    private async Task ProcessKillStreaksAsync(DateTime startDate, DateTime endDate)
     {
         _logger.LogInformation("Processing kill streaks with ClickHouse window functions...");
 
@@ -182,8 +182,8 @@ public class OptimizedHistoricalProcessor
     {
         _logger.LogInformation("Detecting kill streaks from player_metrics snapshots...");
         
-        // Use ClickHouse window functions to detect kill streaks from player_metrics
-        // This analyzes timestamped kill/death counters to find consecutive kills without deaths
+        // Use ClickHouse window functions to detect kill streaks within single rounds
+        // First identify round boundaries, then calculate streaks within each round
         var query = $@"
 WITH player_deltas AS (
     SELECT 
@@ -203,19 +203,32 @@ WITH player_deltas AS (
     AND (kills > 0 OR deaths > 0)  -- Only consider rows with activity
     WINDOW w AS (PARTITION BY server_guid, player_name, map_name ORDER BY timestamp)
 ),
-streak_analysis AS (
+round_boundaries AS (
     SELECT *,
-        -- Reset streak when player dies or there's a long gap (round change)
-        CASE WHEN death_delta > 0 OR time_delta > 300 THEN 1 ELSE 0 END AS streak_reset,
-        -- Only count positive kill deltas (new kills)
-        CASE WHEN kill_delta > 0 AND death_delta = 0 THEN kill_delta ELSE 0 END AS streak_kills
+        -- Create round boundaries: new round when >5min gap or map change
+        CASE WHEN time_delta > 300 OR map_name != lagInFrame(map_name, 1, map_name) OVER w2 THEN 1 ELSE 0 END AS round_start
     FROM player_deltas
     WHERE kill_delta >= 0 AND death_delta >= 0  -- Filter out counter resets
+    WINDOW w2 AS (PARTITION BY server_guid, player_name ORDER BY timestamp)
+),
+round_groups AS (
+    SELECT *,
+        -- Assign round IDs by cumulative sum of round starts
+        sum(round_start) OVER (PARTITION BY server_guid, player_name ORDER BY timestamp) AS round_id
+    FROM round_boundaries
+),
+streak_analysis AS (
+    SELECT *,
+        -- Reset streak when player dies OR round changes
+        CASE WHEN death_delta > 0 THEN 1 ELSE 0 END AS streak_reset,
+        -- Only count positive kill deltas (new kills) when no deaths
+        CASE WHEN kill_delta > 0 AND death_delta = 0 THEN kill_delta ELSE 0 END AS streak_kills
+    FROM round_groups
 ),
 streak_groups AS (
     SELECT *,
-        -- Create streak group IDs by cumulative sum of resets
-        sum(streak_reset) OVER (PARTITION BY server_guid, player_name, map_name ORDER BY timestamp) AS streak_group_id
+        -- Create streak group IDs within each round
+        sum(streak_reset) OVER (PARTITION BY server_guid, player_name, round_id ORDER BY timestamp) AS streak_group_id
     FROM streak_analysis
 ),
 max_streaks AS (
@@ -224,6 +237,7 @@ max_streaks AS (
         server_name,
         player_name,
         map_name,
+        round_id,
         streak_group_id,
         sum(streak_kills) AS total_streak_kills,
         min(timestamp) AS streak_start,
@@ -231,7 +245,7 @@ max_streaks AS (
         count(*) AS streak_observations
     FROM streak_groups
     WHERE streak_kills > 0  -- Only count observations with kills
-    GROUP BY server_guid, server_name, player_name, map_name, streak_group_id
+    GROUP BY server_guid, server_name, player_name, map_name, round_id, streak_group_id
     HAVING total_streak_kills >= 5  -- Minimum streak threshold
 )
 SELECT 
@@ -280,7 +294,7 @@ ORDER BY total_streak_kills DESC, player_name, streak_start";
     /// <summary>
     /// Process performance badges using aggregated data
     /// </summary>
-    private Task ProcessPerformanceBadgesOptimizedAsync(DateTime startDate, DateTime endDate)
+    private Task ProcessPerformanceBadgesAsync(DateTime startDate, DateTime endDate)
     {
         _logger.LogInformation("Processing performance badges...");
         

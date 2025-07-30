@@ -211,7 +211,7 @@ public class GamificationController : ControllerBase
         }
     }
 
-    /// <summary>
+    /* /// <summary>
     /// Trigger historical data processing (admin only)
     /// </summary>
     [HttpPost("admin/process-historical")]
@@ -260,7 +260,7 @@ public class GamificationController : ControllerBase
             _logger.LogError(ex, "Error during incremental processing");
             return StatusCode(500, "An internal server error occurred during incremental processing.");
         }
-    }
+    } */
 
     /// <summary>
     /// Get system statistics

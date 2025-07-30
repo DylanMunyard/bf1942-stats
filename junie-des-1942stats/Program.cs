@@ -331,6 +331,7 @@ try
         return new junie_des_1942stats.Gamification.Services.ClickHouseGamificationService(httpClient, "http://clickhouse.home.net", logger);
     });
     
+    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.HistoricalProcessor>();
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.KillStreakDetector>();
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.MilestoneCalculator>();
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.PerformanceBadgeCalculator>();

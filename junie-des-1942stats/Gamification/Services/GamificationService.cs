@@ -11,6 +11,7 @@ public class GamificationService
     private readonly MilestoneCalculator _milestoneCalculator;
     private readonly PerformanceBadgeCalculator _performanceBadgeCalculator;
     private readonly BadgeDefinitionsService _badgeDefinitionsService;
+    private readonly HistoricalProcessor _historicalProcessor;
     private readonly ILogger<GamificationService> _logger;
 
     public GamificationService(
@@ -19,6 +20,7 @@ public class GamificationService
         MilestoneCalculator milestoneCalculator,
         PerformanceBadgeCalculator performanceBadgeCalculator,
         BadgeDefinitionsService badgeDefinitionsService,
+        HistoricalProcessor historicalProcessor,
         ILogger<GamificationService> logger)
     {
         _clickHouseService = clickHouseService;
@@ -26,6 +28,7 @@ public class GamificationService
         _milestoneCalculator = milestoneCalculator;
         _performanceBadgeCalculator = performanceBadgeCalculator;
         _badgeDefinitionsService = badgeDefinitionsService;
+        _historicalProcessor = historicalProcessor;
         _logger = logger;
     }
 
@@ -192,7 +195,7 @@ public class GamificationService
     }
 
     /// <summary>
-    /// Historical processing for initial migration - uses optimized ClickHouse-native approach
+    /// Historical processing for initial migration - uses ClickHouse-native approach
     /// </summary>
     public async Task ProcessHistoricalDataAsync(DateTime? fromDate = null, DateTime? toDate = null)
     {
@@ -201,24 +204,18 @@ public class GamificationService
             var startDate = fromDate ?? DateTime.UtcNow.AddMonths(-6); // Default: 6 months
             var endDate = toDate ?? DateTime.UtcNow;
 
-            _logger.LogInformation("Starting OPTIMIZED historical gamification processing from {StartDate} to {EndDate}",
+            _logger.LogInformation("Starting historical gamification processing from {StartDate} to {EndDate}",
                 startDate, endDate);
 
-            // Use the optimized processor that leverages ClickHouse native operations
+            // Use the injected historical processor that leverages ClickHouse native operations
             // This reduces query count from ~100k individual queries to ~10-50 aggregate queries
-            var optimizedProcessor = new OptimizedHistoricalProcessor(
-                _clickHouseService, 
-                _badgeDefinitionsService, 
-                _logger as ILogger<OptimizedHistoricalProcessor> ?? 
-                    new Microsoft.Extensions.Logging.Abstractions.NullLogger<OptimizedHistoricalProcessor>());
+            await _historicalProcessor.ProcessHistoricalDataAsync(startDate, endDate);
 
-            await optimizedProcessor.ProcessHistoricalDataOptimizedAsync(startDate, endDate);
-
-            _logger.LogInformation("Optimized historical gamification processing completed");
+            _logger.LogInformation("Historical gamification processing completed");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during optimized historical processing");
+            _logger.LogError(ex, "Error during historical processing");
             throw;
         }
     }
