@@ -829,7 +829,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
 
         // Build the base query for active sessions with all filters
         var baseQuery = _dbContext.PlayerSessions
-            .Where(s => s.IsActive && s.LastSeenTime >= thresholdTime);
+            .Where(s => s.IsActive && s.LastSeenTime >= thresholdTime && !s.Player.AiBot);
 
         // Apply filters
         if (!string.IsNullOrEmpty(gameId))

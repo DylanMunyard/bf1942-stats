@@ -1,21 +1,12 @@
-using System;
 using System.Diagnostics;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
-
-using System.Text.Json;
 using junie_des_1942stats.PlayerTracking;
 using junie_des_1942stats.Bflist;
-using junie_des_1942stats.StatsCollectors.Modals;
 using junie_des_1942stats.ClickHouse;
 using junie_des_1942stats.Services;
 using Serilog.Context;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace junie_des_1942stats.StatsCollectors;
 
