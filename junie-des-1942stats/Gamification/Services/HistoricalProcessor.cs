@@ -425,9 +425,13 @@ ORDER BY player_name, threshold";
                 var threshold = int.Parse(parts[1]);
                 var achievementDate = DateTime.Parse(parts[2]);
                 
-                var achievementId = category == "playtime" 
-                    ? $"milestone_playtime_{threshold}h"
-                    : $"milestone_{category}_{threshold}";
+                var achievementId = category switch
+                {
+                    "playtime" => $"milestone_playtime_{threshold}h",
+                    "kills" => $"total_kills_{threshold}",
+                    "score" => $"total_score_{threshold}",
+                    _ => $"milestone_{category}_{threshold}"
+                };
                 
                 // Check if player already has this achievement
                 if (existingAchievements.ContainsKey(playerName) && 
