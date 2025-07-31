@@ -535,34 +535,87 @@ ORDER BY player_name, threshold";
         var achievements = new List<Achievement>();
         var thresholds = new[] { 5, 10, 15, 20, 25, 30, 50 };
         
-        foreach (var threshold in thresholds.Where(t => streak.MaxStreak >= t))
+        // Calculate when each threshold was achieved during this streak
+        var thresholdTimes = CalculateThresholdTimesForStreak(streak);
+        
+        foreach (var threshold in thresholds)
         {
-            var achievementId = $"kill_streak_{threshold}";
-            
-            // Create achievement for each threshold met by this streak - no duplicate checking needed
-            // Each streak instance should generate its own achievements
-            var badgeDefinition = _badgeDefinitionsService.GetBadgeDefinition(achievementId);
-            if (badgeDefinition != null)
+            if (thresholdTimes.TryGetValue(threshold, out var achievementTime))
             {
-                achievements.Add(new Achievement
+                var achievementId = $"kill_streak_{threshold}";
+                
+                // Check if player already has this achievement for this specific streak
+                // Since we don't have round_id in historical data, we'll check by player, achievement, and time window
+                var existingAchievements = _readService.GetPlayerAchievementsByTypeAsync(streak.PlayerName, AchievementTypes.KillStreak).Result;
+                var hasAchievementForThisStreak = existingAchievements.Any(a => 
+                    a.AchievementId == achievementId && 
+                    a.AchievedAt == achievementTime &&
+                    a.ServerGuid == streak.ServerGuid &&
+                    a.MapName == streak.MapName);
+                
+                if (!hasAchievementForThisStreak)
                 {
-                    PlayerName = streak.PlayerName,
-                    AchievementType = AchievementTypes.KillStreak,
-                    AchievementId = achievementId,
-                    AchievementName = badgeDefinition.Name,
-                    Tier = badgeDefinition.Tier,
-                    Value = (uint)threshold,
-                    AchievedAt = streak.StreakEnd,
-                    ProcessedAt = DateTime.UtcNow,
-                    ServerGuid = streak.ServerGuid,
-                    MapName = streak.MapName,
-                    RoundId = "", // Not available from metrics data
-                    Metadata = $"{{\"actual_streak\":{streak.MaxStreak},\"streak_duration_seconds\":{(streak.StreakEnd - streak.StreakStart).TotalSeconds:F0}}}"
-                });
+                    var badgeDefinition = _badgeDefinitionsService.GetBadgeDefinition(achievementId);
+                    if (badgeDefinition != null)
+                    {
+                        achievements.Add(new Achievement
+                        {
+                            PlayerName = streak.PlayerName,
+                            AchievementType = AchievementTypes.KillStreak,
+                            AchievementId = achievementId,
+                            AchievementName = badgeDefinition.Name,
+                            Tier = badgeDefinition.Tier,
+                            Value = (uint)threshold,
+                            AchievedAt = achievementTime,
+                            ProcessedAt = DateTime.UtcNow,
+                            ServerGuid = streak.ServerGuid,
+                            MapName = streak.MapName,
+                            RoundId = "", // Not available from metrics data
+                            Metadata = $"{{\"actual_streak\":{streak.MaxStreak},\"streak_duration_seconds\":{(streak.StreakEnd - streak.StreakStart).TotalSeconds:F0}}}"
+                        });
+                    }
+                }
+                else
+                {
+                    _logger.LogDebug("Skipping duplicate historical kill streak achievement: {PlayerName} already has {AchievementId} for streak ending at {AchievementTime}",
+                        streak.PlayerName, achievementId, achievementTime);
+                }
             }
         }
         
         return achievements;
+    }
+
+    /// <summary>
+    /// Calculate when each threshold was achieved during a streak
+    /// For historical data, we estimate threshold times based on streak duration
+    /// </summary>
+    private Dictionary<int, DateTime> CalculateThresholdTimesForStreak(StreakData streak)
+    {
+        var thresholdTimes = new Dictionary<int, DateTime>();
+        var thresholds = new[] { 5, 10, 15, 20, 25, 30, 50 };
+        
+        if (streak.MaxStreak < 5) return thresholdTimes;
+        
+        var streakDuration = streak.StreakEnd - streak.StreakStart;
+        
+        // For historical data, we estimate when each threshold was achieved
+        // We assume kills were distributed evenly across the streak duration
+        foreach (var threshold in thresholds.Where(t => streak.MaxStreak >= t))
+        {
+            if (streak.MaxStreak > 0)
+            {
+                // Estimate the time when this threshold was reached
+                // Use a linear interpolation based on the threshold position in the streak
+                var progressRatio = (double)threshold / streak.MaxStreak;
+                var estimatedTimeOffset = TimeSpan.FromSeconds(streakDuration.TotalSeconds * progressRatio);
+                var estimatedAchievementTime = streak.StreakStart.Add(estimatedTimeOffset);
+                
+                thresholdTimes[threshold] = estimatedAchievementTime;
+            }
+        }
+        
+        return thresholdTimes;
     }
 
     private string GetMilestoneTier(int value, string category)

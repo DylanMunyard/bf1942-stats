@@ -37,39 +37,58 @@ public class KillStreakDetector
             
             if (observations.Count < 2) return achievements; // Need at least 2 observations to detect streaks
 
-            // Calculate max consecutive kills in this round
-            var maxStreak = CalculateMaxConsecutiveKills(observations);
+            // Calculate streaks and track when each threshold was achieved
+            var streakThresholds = CalculateStreakThresholds(observations);
             
-            if (maxStreak < 5) return achievements; // Only award achievements for 5+ kill streaks
+            if (!streakThresholds.Any()) return achievements; // No streaks of 5+ kills
 
             // Check achievement thresholds: 5, 10, 15, 20, 25, 30, 50+
             var thresholds = new[] { 5, 10, 15, 20, 25, 30, 50 };
             
-            foreach (var threshold in thresholds.Where(t => maxStreak >= t))
+            foreach (var threshold in thresholds)
             {
-                // Create achievement for each threshold met by this streak - no duplicate checking needed
-                // Each streak instance should generate its own achievements
-                var badgeDefinition = _badgeService.GetBadgeDefinition($"kill_streak_{threshold}");
-                if (badgeDefinition != null)
+                if (streakThresholds.TryGetValue(threshold, out var achievementTime))
                 {
-                    achievements.Add(new Achievement
+                    var achievementId = $"kill_streak_{threshold}";
+                    
+                    // Check if player already has this achievement for this specific round/streak
+                    // Use a more specific check that considers the round context and achievement time
+                    var existingAchievement = await _readService.GetPlayerAchievementsByTypeAsync(round.PlayerName, AchievementTypes.KillStreak);
+                    var hasAchievementForThisStreak = existingAchievement.Any(a => 
+                        a.AchievementId == achievementId && 
+                        a.RoundId == round.RoundId && 
+                        a.AchievedAt == achievementTime);
+                    
+                    if (!hasAchievementForThisStreak)
                     {
-                        PlayerName = round.PlayerName,
-                        AchievementType = AchievementTypes.KillStreak,
-                        AchievementId = $"kill_streak_{threshold}",
-                        AchievementName = badgeDefinition.Name,
-                        Tier = badgeDefinition.Tier,
-                        Value = (uint)threshold,
-                        AchievedAt = round.RoundEndTime,
-                        ProcessedAt = DateTime.UtcNow,
-                        ServerGuid = round.ServerGuid,
-                        MapName = round.MapName,
-                        RoundId = round.RoundId,
-                        Metadata = $"{{\"actual_streak\":{maxStreak},\"round_kills\":{round.Kills}}}"
-                    });
+                        var badgeDefinition = _badgeService.GetBadgeDefinition(achievementId);
+                        if (badgeDefinition != null)
+                        {
+                            achievements.Add(new Achievement
+                            {
+                                PlayerName = round.PlayerName,
+                                AchievementType = AchievementTypes.KillStreak,
+                                AchievementId = achievementId,
+                                AchievementName = badgeDefinition.Name,
+                                Tier = badgeDefinition.Tier,
+                                Value = (uint)threshold,
+                                AchievedAt = achievementTime,
+                                ProcessedAt = DateTime.UtcNow,
+                                ServerGuid = round.ServerGuid,
+                                MapName = round.MapName,
+                                RoundId = round.RoundId,
+                                Metadata = $"{{\"actual_streak\":{threshold},\"round_kills\":{round.Kills}}}"
+                            });
 
-                    _logger.LogInformation("Kill streak achievement: {PlayerName} achieved {AchievementName} with {MaxStreak} kills",
-                        round.PlayerName, badgeDefinition.Name, maxStreak);
+                            _logger.LogInformation("Kill streak achievement: {PlayerName} achieved {AchievementName} with {Threshold} kills at {AchievementTime}",
+                                round.PlayerName, badgeDefinition.Name, threshold, achievementTime);
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogDebug("Skipping duplicate kill streak achievement: {PlayerName} already has {AchievementId} for round {RoundId} at {AchievementTime}",
+                            round.PlayerName, achievementId, round.RoundId, achievementTime);
+                    }
                 }
             }
         }
@@ -80,6 +99,53 @@ public class KillStreakDetector
         }
 
         return achievements;
+    }
+
+    /// <summary>
+    /// Calculate when each streak threshold was achieved during the observations
+    /// </summary>
+    private Dictionary<int, DateTime> CalculateStreakThresholds(List<PlayerObservation> observations)
+    {
+        var thresholds = new Dictionary<int, DateTime>();
+        var thresholdValues = new[] { 5, 10, 15, 20, 25, 30, 50 };
+        
+        if (observations.Count < 2) return thresholds;
+
+        int currentStreak = 0;
+        int previousKills = observations.First().Kills;
+        int previousDeaths = observations.First().Deaths;
+
+        foreach (var observation in observations.Skip(1))
+        {
+            var killsDiff = observation.Kills - previousKills;
+            var deathsDiff = observation.Deaths - previousDeaths;
+
+            if (killsDiff > 0 && deathsDiff == 0)
+            {
+                // Player got kills without dying - continue/start streak
+                currentStreak += killsDiff;
+                
+                // Check if any thresholds were reached during this observation
+                foreach (var threshold in thresholdValues)
+                {
+                    if (currentStreak >= threshold && !thresholds.ContainsKey(threshold))
+                    {
+                        // This is the first time this threshold was reached
+                        thresholds[threshold] = observation.Timestamp;
+                    }
+                }
+            }
+            else if (deathsDiff > 0)
+            {
+                // Player died - reset streak
+                currentStreak = 0;
+            }
+
+            previousKills = observation.Kills;
+            previousDeaths = observation.Deaths;
+        }
+
+        return thresholds;
     }
 
     private async Task<List<PlayerObservation>> GetPlayerObservationsForRound(string roundId, string playerName)
