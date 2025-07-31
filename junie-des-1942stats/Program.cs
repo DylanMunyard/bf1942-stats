@@ -52,7 +52,7 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 
 try
-{
+{    
     Log.Information("Starting up junie-des-1942stats application");
 
     var builder = WebApplication.CreateBuilder(args);
@@ -319,6 +319,7 @@ try
 
     // Register Gamification Services
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.BadgeDefinitionsService>();
+    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.AchievementLabelingService>();
     
     // Register ClickHouse Gamification Services - separate read and write instances
     builder.Services.AddKeyedScoped<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>("read", (sp, key) =>
