@@ -39,10 +39,14 @@ public class HistoricalProcessor
     public async Task ProcessHistoricalDataAsync(DateTime? fromDate = null, DateTime? toDate = null)
     {
         var startDate = fromDate ?? DateTime.UtcNow.AddMonths(-6);
-        var endDate = toDate ?? DateTime.UtcNow;
+        // Ensure endDate includes the full day to avoid boundary issues
+        var endDate = toDate ?? DateTime.UtcNow.Date.AddDays(1).AddSeconds(-1);
 
         _logger.LogInformation("Starting historical processing from {StartDate} to {EndDate}", 
             startDate, endDate);
+        
+        _logger.LogInformation("Date calculation details - Current time: {CurrentTime}, Start: {StartDate}, End: {EndDate}", 
+            DateTime.UtcNow, startDate, endDate);
 
         try
         {
@@ -147,7 +151,8 @@ public class HistoricalProcessor
         // Process in monthly chunks with overlap to handle boundary-crossing streaks
         var currentMonth = new DateTime(startDate.Year, startDate.Month, 1);
         
-        while (currentMonth < endDate)
+        // Use <= to ensure we process the month containing endDate
+        while (currentMonth <= endDate)
         {
             var monthEnd = currentMonth.AddMonths(1).AddDays(-1);
             if (monthEnd > endDate) monthEnd = endDate;
@@ -170,6 +175,10 @@ public class HistoricalProcessor
                 await _writeService.InsertAchievementsBatchAsync(newAchievements);
                 _logger.LogInformation("Found {AchievementCount} new kill streak achievements for {Month:yyyy-MM}", 
                     newAchievements.Count, currentMonth);
+            }
+            else
+            {
+                _logger.LogInformation("No new kill streak achievements found for {Month:yyyy-MM}", currentMonth);
             }
 
             currentMonth = currentMonth.AddMonths(1);
@@ -273,16 +282,9 @@ ORDER BY total_streak_kills DESC, player_name, streak_start";
             
             var achievements = new List<Achievement>();
             
-            // Get existing kill streak achievements to avoid N+1 queries
-            var existingStreakAchievements = await GetExistingKillStreakAchievementsAsync();
-            
             foreach (var streak in streakData)
             {
-                var playerExistingAchievements = existingStreakAchievements.ContainsKey(streak.PlayerName)
-                    ? existingStreakAchievements[streak.PlayerName]
-                    : new HashSet<string>();
-                    
-                var streakAchievements = CreateStreakAchievementsForDetectedStreak(streak, playerExistingAchievements);
+                var streakAchievements = CreateStreakAchievementsForDetectedStreak(streak);
                 achievements.AddRange(streakAchievements);
             }
             
@@ -389,7 +391,7 @@ ORDER BY total_streak_kills DESC, player_name, streak_start";
         };
     }
 
-    private List<Achievement> CreateStreakAchievementsForDetectedStreak(StreakData streak, HashSet<string> existingAchievements)
+    private List<Achievement> CreateStreakAchievementsForDetectedStreak(StreakData streak)
     {
         var achievements = new List<Achievement>();
         var thresholds = new[] { 5, 10, 15, 20, 25, 30, 50 };
@@ -398,28 +400,26 @@ ORDER BY total_streak_kills DESC, player_name, streak_start";
         {
             var achievementId = $"kill_streak_{threshold}";
             
-            // Check if player already has this achievement
-            if (!existingAchievements.Contains(achievementId))
+            // Create achievement for each threshold met by this streak - no duplicate checking needed
+            // Each streak instance should generate its own achievements
+            var badgeDefinition = _badgeDefinitionsService.GetBadgeDefinition(achievementId);
+            if (badgeDefinition != null)
             {
-                var badgeDefinition = _badgeDefinitionsService.GetBadgeDefinition(achievementId);
-                if (badgeDefinition != null)
+                achievements.Add(new Achievement
                 {
-                    achievements.Add(new Achievement
-                    {
-                        PlayerName = streak.PlayerName,
-                        AchievementType = AchievementTypes.KillStreak,
-                        AchievementId = achievementId,
-                        AchievementName = badgeDefinition.Name,
-                        Tier = badgeDefinition.Tier,
-                        Value = (uint)threshold,
-                        AchievedAt = streak.StreakEnd,
-                        ProcessedAt = DateTime.UtcNow,
-                        ServerGuid = streak.ServerGuid,
-                        MapName = streak.MapName,
-                        RoundId = "", // Not available from metrics data
-                        Metadata = $"{{\"actual_streak\":{streak.MaxStreak},\"streak_duration_seconds\":{(streak.StreakEnd - streak.StreakStart).TotalSeconds:F0}}}"
-                    });
-                }
+                    PlayerName = streak.PlayerName,
+                    AchievementType = AchievementTypes.KillStreak,
+                    AchievementId = achievementId,
+                    AchievementName = badgeDefinition.Name,
+                    Tier = badgeDefinition.Tier,
+                    Value = (uint)threshold,
+                    AchievedAt = streak.StreakEnd,
+                    ProcessedAt = DateTime.UtcNow,
+                    ServerGuid = streak.ServerGuid,
+                    MapName = streak.MapName,
+                    RoundId = "", // Not available from metrics data
+                    Metadata = $"{{\"actual_streak\":{streak.MaxStreak},\"streak_duration_seconds\":{(streak.StreakEnd - streak.StreakStart).TotalSeconds:F0}}}"
+                });
             }
         }
         
@@ -546,39 +546,6 @@ ORDER BY total_streak_kills DESC, player_name, streak_start";
             SELECT player_name, achievement_id
             FROM player_achievements 
             WHERE achievement_type = 'milestone'";
-
-        var result = await QueryPlayerRoundsAsync(query);
-        var existingAchievements = new Dictionary<string, HashSet<string>>();
-        
-        var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        foreach (var line in lines)
-        {
-            var parts = line.Split('\t');
-            if (parts.Length >= 2)
-            {
-                var playerName = parts[0];
-                var achievementId = parts[1];
-                
-                if (!existingAchievements.ContainsKey(playerName))
-                {
-                    existingAchievements[playerName] = new HashSet<string>();
-                }
-                existingAchievements[playerName].Add(achievementId);
-            }
-        }
-        
-        return existingAchievements;
-    }
-
-    /// <summary>
-    /// Get all existing kill streak achievements to avoid checking each one individually
-    /// </summary>
-    private async Task<Dictionary<string, HashSet<string>>> GetExistingKillStreakAchievementsAsync()
-    {
-        var query = @"
-            SELECT player_name, achievement_id
-            FROM player_achievements 
-            WHERE achievement_type = 'kill_streak'";
 
         var result = await QueryPlayerRoundsAsync(query);
         var existingAchievements = new Dictionary<string, HashSet<string>>();
