@@ -143,6 +143,20 @@ public class ClickHouseGamificationService : BaseClickHouseService
         return lines.Length > 0 && int.TryParse(lines[0], out var count) && count > 0;
     }
 
+    public async Task<List<string>> GetPlayerAchievementIdsAsync(string playerName)
+    {
+        var query = $@"
+            SELECT DISTINCT achievement_id
+            FROM player_achievements
+            WHERE player_name = '{EscapeString(playerName)}'
+            ORDER BY achievement_id";
+
+        var result = await QueryAsync(query);
+        var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        
+        return lines.ToList();
+    }
+
     public async Task<(List<Achievement> Achievements, int TotalCount)> GetAllAchievementsWithPagingAsync(
         int page, 
         int pageSize, 

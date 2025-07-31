@@ -15,6 +15,7 @@ public class GamificationService
     private readonly PerformanceBadgeCalculator _performanceBadgeCalculator;
     private readonly BadgeDefinitionsService _badgeDefinitionsService;
     private readonly HistoricalProcessor _historicalProcessor;
+    private readonly AchievementLabelingService _achievementLabelingService;
     private readonly ILogger<GamificationService> _logger;
 
     public GamificationService(
@@ -25,6 +26,7 @@ public class GamificationService
         PerformanceBadgeCalculator performanceBadgeCalculator,
         BadgeDefinitionsService badgeDefinitionsService,
         HistoricalProcessor historicalProcessor,
+        AchievementLabelingService achievementLabelingService,
         ILogger<GamificationService> logger)
     {
         _readService = readService;
@@ -34,6 +36,7 @@ public class GamificationService
         _performanceBadgeCalculator = performanceBadgeCalculator;
         _badgeDefinitionsService = badgeDefinitionsService;
         _historicalProcessor = historicalProcessor;
+        _achievementLabelingService = achievementLabelingService;
         _logger = logger;
     }
 
@@ -304,9 +307,9 @@ public class GamificationService
     }
 
     /// <summary>
-    /// Get all achievements with pagination and filtering
+    /// Get all achievements with pagination, filtering, and player achievement IDs
     /// </summary>
-    public async Task<PagedResult<Achievement>> GetAllAchievementsWithPagingAsync(
+    public async Task<AchievementResponse> GetAllAchievementsWithPlayerIdsAsync(
         int page,
         int pageSize,
         string sortBy = "AchievedAt",
@@ -328,18 +331,30 @@ public class GamificationService
 
             var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
 
-            return new PagedResult<Achievement>
+            // Get player achievement IDs if a player name is specified
+            var playerAchievementIds = new List<string>();
+            if (!string.IsNullOrWhiteSpace(playerName))
+            {
+                playerAchievementIds = await _readService.GetPlayerAchievementIdsAsync(playerName);
+            }
+
+            // Get labeled achievement information for the player's achievements
+            var playerAchievementLabels = _achievementLabelingService.GetAchievementLabels(playerAchievementIds);
+
+            return new AchievementResponse
             {
                 Items = achievements,
                 Page = page,
                 PageSize = pageSize,
                 TotalItems = totalCount,
-                TotalPages = totalPages
+                TotalPages = totalPages,
+                PlayerName = playerName,
+                PlayerAchievementLabels = playerAchievementLabels
             };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting achievements with paging");
+            _logger.LogError(ex, "Error getting achievements with player IDs");
             throw;
         }
     }

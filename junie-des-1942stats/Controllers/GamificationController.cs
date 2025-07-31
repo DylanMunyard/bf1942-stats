@@ -268,8 +268,16 @@ public class GamificationController : ControllerBase
     /// <summary>
     /// Get all achievements with pagination and filtering
     /// </summary>
+    /// <remarks>
+    /// Returns a paginated list of achievements with optional filtering. When a playerName is provided,
+    /// the response includes a list of all achievement IDs that the player has, allowing for client-side
+    /// filtering without being limited to the current page.
+    /// 
+    /// The PlayerAchievementIds field contains all achievement IDs the player has earned, which can be used
+    /// to build achievement progress indicators, filter available achievements, or show completion status.
+    /// </remarks>
     [HttpGet("achievements")]
-    public async Task<ActionResult<PagedResult<Achievement>>> GetAllAchievements(
+    public async Task<ActionResult<AchievementResponse>> GetAllAchievements(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         [FromQuery] string sortBy = "AchievedAt",
@@ -309,7 +317,7 @@ public class GamificationController : ControllerBase
 
         try
         {
-            var result = await _gamificationService.GetAllAchievementsWithPagingAsync(
+            var result = await _gamificationService.GetAllAchievementsWithPlayerIdsAsync(
                 page, pageSize, sortBy, sortOrder, playerName, achievementType,
                 achievementId, tier, achievedFrom, achievedTo, serverGuid, mapName);
 
