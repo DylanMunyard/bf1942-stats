@@ -47,34 +47,29 @@ public class KillStreakDetector
             
             foreach (var threshold in thresholds.Where(t => maxStreak >= t))
             {
-                // Only award if this is their first time hitting this threshold
-                var hasAchievement = await _readService.PlayerHasAchievementAsync(
-                    round.PlayerName, $"kill_streak_{threshold}");
-                
-                if (!hasAchievement)
+                // Create achievement for each threshold met by this streak - no duplicate checking needed
+                // Each streak instance should generate its own achievements
+                var badgeDefinition = _badgeService.GetBadgeDefinition($"kill_streak_{threshold}");
+                if (badgeDefinition != null)
                 {
-                    var badgeDefinition = _badgeService.GetBadgeDefinition($"kill_streak_{threshold}");
-                    if (badgeDefinition != null)
+                    achievements.Add(new Achievement
                     {
-                        achievements.Add(new Achievement
-                        {
-                            PlayerName = round.PlayerName,
-                            AchievementType = AchievementTypes.KillStreak,
-                            AchievementId = $"kill_streak_{threshold}",
-                            AchievementName = badgeDefinition.Name,
-                            Tier = badgeDefinition.Tier,
-                            Value = (uint)threshold,
-                            AchievedAt = round.RoundEndTime,
-                            ProcessedAt = DateTime.UtcNow,
-                            ServerGuid = round.ServerGuid,
-                            MapName = round.MapName,
-                            RoundId = round.RoundId,
-                            Metadata = $"{{\"actual_streak\":{maxStreak},\"round_kills\":{round.Kills}}}"
-                        });
+                        PlayerName = round.PlayerName,
+                        AchievementType = AchievementTypes.KillStreak,
+                        AchievementId = $"kill_streak_{threshold}",
+                        AchievementName = badgeDefinition.Name,
+                        Tier = badgeDefinition.Tier,
+                        Value = (uint)threshold,
+                        AchievedAt = round.RoundEndTime,
+                        ProcessedAt = DateTime.UtcNow,
+                        ServerGuid = round.ServerGuid,
+                        MapName = round.MapName,
+                        RoundId = round.RoundId,
+                        Metadata = $"{{\"actual_streak\":{maxStreak},\"round_kills\":{round.Kills}}}"
+                    });
 
-                        _logger.LogInformation("Kill streak achievement: {PlayerName} achieved {AchievementName} with {MaxStreak} kills",
-                            round.PlayerName, badgeDefinition.Name, maxStreak);
-                    }
+                    _logger.LogInformation("Kill streak achievement: {PlayerName} achieved {AchievementName} with {MaxStreak} kills",
+                        round.PlayerName, badgeDefinition.Name, maxStreak);
                 }
             }
         }
