@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using junie_des_1942stats.Gamification.Models;
 using junie_des_1942stats.Gamification.Services;
+using junie_des_1942stats.PlayerStats.Models;
 using Microsoft.Extensions.Logging;
 
 namespace junie_des_1942stats.Controllers;
@@ -211,6 +212,8 @@ public class GamificationController : ControllerBase
         }
     }
 
+
+/* 
     /// <summary>
     /// Trigger historical data processing (admin only)
     /// </summary>
@@ -243,8 +246,7 @@ public class GamificationController : ControllerBase
             return Task.FromResult<ActionResult>(StatusCode(500, "An internal server error occurred while starting historical processing."));
         }
     }
-
-/* 
+    
     /// <summary>
     /// Trigger incremental processing (admin only)
     /// </summary>
@@ -262,6 +264,63 @@ public class GamificationController : ControllerBase
             return StatusCode(500, "An internal server error occurred during incremental processing.");
         }
     } */
+
+    /// <summary>
+    /// Get all achievements with pagination and filtering
+    /// </summary>
+    [HttpGet("achievements")]
+    public async Task<ActionResult<PagedResult<Achievement>>> GetAllAchievements(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] string sortBy = "AchievedAt",
+        [FromQuery] string sortOrder = "desc",
+        [FromQuery] string? playerName = null,
+        [FromQuery] string? achievementType = null,
+        [FromQuery] string? achievementId = null,
+        [FromQuery] string? tier = null,
+        [FromQuery] DateTime? achievedFrom = null,
+        [FromQuery] DateTime? achievedTo = null,
+        [FromQuery] string? serverGuid = null,
+        [FromQuery] string? mapName = null)
+    {
+        // Validate parameters
+        if (page < 1)
+            return BadRequest("Page number must be at least 1");
+        
+        if (pageSize < 1 || pageSize > 500)
+            return BadRequest("Page size must be between 1 and 500");
+
+        // Valid sort fields
+        var validSortFields = new[]
+        {
+            "PlayerName", "AchievementType", "AchievementId", "AchievementName", 
+            "Tier", "Value", "AchievedAt", "ProcessedAt", "ServerGuid", "MapName"
+        };
+
+        if (!validSortFields.Contains(sortBy, StringComparer.OrdinalIgnoreCase))
+            return BadRequest($"Invalid sortBy field. Valid options: {string.Join(", ", validSortFields)}");
+
+        if (!new[] { "asc", "desc" }.Contains(sortOrder.ToLower()))
+            return BadRequest("Sort order must be 'asc' or 'desc'");
+
+        // Validate date range
+        if (achievedFrom.HasValue && achievedTo.HasValue && achievedFrom > achievedTo)
+            return BadRequest("AchievedFrom cannot be greater than AchievedTo");
+
+        try
+        {
+            var result = await _gamificationService.GetAllAchievementsWithPagingAsync(
+                page, pageSize, sortBy, sortOrder, playerName, achievementType,
+                achievementId, tier, achievedFrom, achievedTo, serverGuid, mapName);
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting achievements with paging");
+            return StatusCode(500, "An internal server error occurred while retrieving achievements.");
+        }
+    }
 
     /// <summary>
     /// Get system statistics

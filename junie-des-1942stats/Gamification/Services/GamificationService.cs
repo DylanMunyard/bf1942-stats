@@ -1,5 +1,6 @@
 using junie_des_1942stats.Gamification.Models;
 using junie_des_1942stats.ClickHouse.Models;
+using junie_des_1942stats.PlayerStats.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -300,5 +301,46 @@ public class GamificationService
     public async Task<bool> PlayerHasAchievementAsync(string playerName, string achievementId)
     {
         return await _readService.PlayerHasAchievementAsync(playerName, achievementId);
+    }
+
+    /// <summary>
+    /// Get all achievements with pagination and filtering
+    /// </summary>
+    public async Task<PagedResult<Achievement>> GetAllAchievementsWithPagingAsync(
+        int page,
+        int pageSize,
+        string sortBy = "AchievedAt",
+        string sortOrder = "desc",
+        string? playerName = null,
+        string? achievementType = null,
+        string? achievementId = null,
+        string? tier = null,
+        DateTime? achievedFrom = null,
+        DateTime? achievedTo = null,
+        string? serverGuid = null,
+        string? mapName = null)
+    {
+        try
+        {
+            var (achievements, totalCount) = await _readService.GetAllAchievementsWithPagingAsync(
+                page, pageSize, sortBy, sortOrder, playerName, achievementType, 
+                achievementId, tier, achievedFrom, achievedTo, serverGuid, mapName);
+
+            var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+            return new PagedResult<Achievement>
+            {
+                Items = achievements,
+                Page = page,
+                PageSize = pageSize,
+                TotalItems = totalCount,
+                TotalPages = totalPages
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting achievements with paging");
+            throw;
+        }
     }
 } 

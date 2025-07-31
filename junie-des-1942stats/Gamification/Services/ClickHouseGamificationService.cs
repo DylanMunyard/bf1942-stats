@@ -143,6 +143,98 @@ public class ClickHouseGamificationService : BaseClickHouseService
         return lines.Length > 0 && int.TryParse(lines[0], out var count) && count > 0;
     }
 
+    public async Task<(List<Achievement> Achievements, int TotalCount)> GetAllAchievementsWithPagingAsync(
+        int page, 
+        int pageSize, 
+        string sortBy = "AchievedAt", 
+        string sortOrder = "desc",
+        string? playerName = null,
+        string? achievementType = null,
+        string? achievementId = null,
+        string? tier = null,
+        DateTime? achievedFrom = null,
+        DateTime? achievedTo = null,
+        string? serverGuid = null,
+        string? mapName = null)
+    {
+        // Build WHERE clause
+        var whereConditions = new List<string>();
+        
+        if (!string.IsNullOrWhiteSpace(playerName))
+            whereConditions.Add($"player_name = '{EscapeString(playerName)}'");
+        
+        if (!string.IsNullOrWhiteSpace(achievementType))
+            whereConditions.Add($"achievement_type = '{EscapeString(achievementType)}'");
+        
+        if (!string.IsNullOrWhiteSpace(achievementId))
+            whereConditions.Add($"achievement_id = '{EscapeString(achievementId)}'");
+        
+        if (!string.IsNullOrWhiteSpace(tier))
+            whereConditions.Add($"tier = '{EscapeString(tier)}'");
+        
+        if (achievedFrom.HasValue)
+            whereConditions.Add($"achieved_at >= '{achievedFrom.Value:yyyy-MM-dd HH:mm:ss}'");
+        
+        if (achievedTo.HasValue)
+            whereConditions.Add($"achieved_at <= '{achievedTo.Value:yyyy-MM-dd HH:mm:ss}'");
+        
+        if (!string.IsNullOrWhiteSpace(serverGuid))
+            whereConditions.Add($"server_guid = '{EscapeString(serverGuid)}'");
+        
+        if (!string.IsNullOrWhiteSpace(mapName))
+            whereConditions.Add($"map_name = '{EscapeString(mapName)}'");
+
+        var whereClause = whereConditions.Any() ? $"WHERE {string.Join(" AND ", whereConditions)}" : "";
+
+        // Validate and map sort field
+        var validSortFields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "PlayerName", "player_name" },
+            { "AchievementType", "achievement_type" },
+            { "AchievementId", "achievement_id" },
+            { "AchievementName", "achievement_name" },
+            { "Tier", "tier" },
+            { "Value", "value" },
+            { "AchievedAt", "achieved_at" },
+            { "ProcessedAt", "processed_at" },
+            { "ServerGuid", "server_guid" },
+            { "MapName", "map_name" }
+        };
+
+        if (!validSortFields.ContainsKey(sortBy))
+            sortBy = "AchievedAt";
+
+        var sortField = validSortFields[sortBy];
+        var orderDirection = sortOrder.ToLower() == "asc" ? "ASC" : "DESC";
+
+        // Get total count
+        var countQuery = $@"
+            SELECT COUNT(*) as total
+            FROM player_achievements
+            {whereClause}";
+
+        var countResult = await QueryAsync(countQuery);
+        var countLines = countResult.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var totalCount = countLines.Length > 0 && int.TryParse(countLines[0], out var count) ? count : 0;
+
+        // Calculate offset
+        var offset = (page - 1) * pageSize;
+
+        // Get achievements with pagination
+        var query = $@"
+            SELECT player_name, achievement_type, achievement_id, achievement_name, tier,
+                   value, achieved_at, processed_at, server_guid, map_name, round_id, metadata
+            FROM player_achievements
+            {whereClause}
+            ORDER BY {sortField} {orderDirection}
+            LIMIT {pageSize} OFFSET {offset}";
+
+        var result = await QueryAsync(query);
+        var achievements = ParseAchievements(result);
+
+        return (achievements, totalCount);
+    }
+
     // Player Statistics Operations
     public async Task<PlayerGameStats?> GetPlayerTotalStatsAsync(string playerName)
     {

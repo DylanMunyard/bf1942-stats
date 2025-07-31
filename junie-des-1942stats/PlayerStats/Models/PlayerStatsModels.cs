@@ -49,9 +49,6 @@ public class PlayerTimeStatistics
     
     public PlayerInsights Insights { get; set; } = new();
     
-    // Kill milestones (5k, 10k, 20k, 50k)
-    public List<KillMilestone> KillMilestones { get; set; } = new();
-    
     // Server-specific insights (replaces BestScores)
     public List<ServerInsight> Servers { get; set; } = new();
 }

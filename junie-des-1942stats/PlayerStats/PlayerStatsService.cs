@@ -225,16 +225,6 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
 
         var insights = await GetPlayerInsights(playerName);
         
-        List<KillMilestone> killMilestones;
-        try
-        {
-            killMilestones = await _playerInsightsService.GetPlayerKillMilestonesAsync(playerName);
-        }
-        catch (Exception)
-        {
-            killMilestones = new List<KillMilestone>();
-        }
-        
         List<ServerInsight> serverInsights;
         try
         {
@@ -279,7 +269,6 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                 : null,
             RecentSessions = recentSessions,
             Insights = insights,
-            KillMilestones = killMilestones,
             Servers = serverInsights
         };
 
