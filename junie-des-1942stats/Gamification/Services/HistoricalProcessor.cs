@@ -1,6 +1,7 @@
 using junie_des_1942stats.Gamification.Models;
 using junie_des_1942stats.ClickHouse.Models;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace junie_des_1942stats.Gamification.Services;
 
@@ -10,7 +11,8 @@ namespace junie_des_1942stats.Gamification.Services;
 /// </summary>
 public class HistoricalProcessor
 {
-    private readonly ClickHouseGamificationService _clickHouseService;
+    private readonly ClickHouseGamificationService _readService;
+    private readonly ClickHouseGamificationService _writeService;
     private readonly BadgeDefinitionsService _badgeDefinitionsService;
     private readonly ILogger<HistoricalProcessor> _logger;
 
@@ -20,11 +22,13 @@ public class HistoricalProcessor
     private readonly int[] _scoreMilestones = { 10000, 50000, 100000, 500000, 1000000 };
 
     public HistoricalProcessor(
-        ClickHouseGamificationService clickHouseService,
+        [FromKeyedServices("read")] ClickHouseGamificationService readService,
+        [FromKeyedServices("write")] ClickHouseGamificationService writeService,
         BadgeDefinitionsService badgeDefinitionsService,
         ILogger<HistoricalProcessor> logger)
     {
-        _clickHouseService = clickHouseService;
+        _readService = readService;
+        _writeService = writeService;
         _badgeDefinitionsService = badgeDefinitionsService;
         _logger = logger;
     }
@@ -123,7 +127,7 @@ public class HistoricalProcessor
 
         if (achievements.Any())
         {
-            await _clickHouseService.InsertAchievementsBatchAsync(achievements);
+            await _writeService.InsertAchievementsBatchAsync(achievements);
             _logger.LogInformation("Processed {PlayerCount} players, created {AchievementCount} milestone achievements", 
                 allPlayerData.Count, achievements.Count);
         }
@@ -163,7 +167,7 @@ public class HistoricalProcessor
 
             if (newAchievements.Any())
             {
-                await _clickHouseService.InsertAchievementsBatchAsync(newAchievements);
+                await _writeService.InsertAchievementsBatchAsync(newAchievements);
                 _logger.LogInformation("Found {AchievementCount} new kill streak achievements for {Month:yyyy-MM}", 
                     newAchievements.Count, currentMonth);
             }
@@ -605,12 +609,12 @@ ORDER BY total_streak_kills DESC, player_name, streak_start";
     private async Task<string> QueryPlayerMetricsAsync(string query)
     {
         // Use reflection to access the protected QueryAsync method
-        var method = _clickHouseService.GetType().GetMethod("QueryAsync", 
+        var method = _readService.GetType().GetMethod("QueryAsync", 
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         
         if (method != null)
         {
-            var task = (Task<string>)method.Invoke(_clickHouseService, new object[] { query })!;
+            var task = (Task<string>)method.Invoke(_readService, new object[] { query })!;
             return await task;
         }
         
@@ -623,12 +627,12 @@ ORDER BY total_streak_kills DESC, player_name, streak_start";
     private async Task<string> QueryPlayerRoundsAsync(string query)
     {
         // Use reflection to access the protected QueryAsync method
-        var method = _clickHouseService.GetType().GetMethod("QueryAsync", 
+        var method = _readService.GetType().GetMethod("QueryAsync", 
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         
         if (method != null)
         {
-            var task = (Task<string>)method.Invoke(_clickHouseService, new object[] { query })!;
+            var task = (Task<string>)method.Invoke(_readService, new object[] { query })!;
             return await task;
         }
         

@@ -1,21 +1,22 @@
 using junie_des_1942stats.Gamification.Models;
 using junie_des_1942stats.ClickHouse.Models;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace junie_des_1942stats.Gamification.Services;
 
 public class PerformanceBadgeCalculator
 {
-    private readonly ClickHouseGamificationService _clickHouseService;
+    private readonly ClickHouseGamificationService _readService;
     private readonly BadgeDefinitionsService _badgeService;
     private readonly ILogger<PerformanceBadgeCalculator> _logger;
 
     public PerformanceBadgeCalculator(
-        ClickHouseGamificationService clickHouseService,
+        [FromKeyedServices("read")] ClickHouseGamificationService readService,
         BadgeDefinitionsService badgeService,
         ILogger<PerformanceBadgeCalculator> logger)
     {
-        _clickHouseService = clickHouseService;
+        _readService = readService;
         _badgeService = badgeService;
         _logger = logger;
     }
@@ -53,7 +54,7 @@ public class PerformanceBadgeCalculator
         try
         {
             // Get player's last 50 rounds for KPM calculation
-            var recentRounds = await _clickHouseService.GetPlayerRecentRoundsAsync(round.PlayerName, 50);
+            var recentRounds = await _readService.GetPlayerRecentRoundsAsync(round.PlayerName, 50);
             
             if (recentRounds.Count < 10) return achievements; // Need minimum rounds
 
@@ -78,7 +79,7 @@ public class PerformanceBadgeCalculator
                 if (kpm >= minKpm && recentRounds.Count >= minRounds)
                 {
                     // Check if player already has this badge
-                    var hasBadge = await _clickHouseService.PlayerHasAchievementAsync(round.PlayerName, badgeId);
+                    var hasBadge = await _readService.PlayerHasAchievementAsync(round.PlayerName, badgeId);
                     if (!hasBadge)
                     {
                         var badgeDefinition = _badgeService.GetBadgeDefinition(badgeId);
@@ -125,7 +126,7 @@ public class PerformanceBadgeCalculator
         try
         {
             // Get player's last 100 rounds for KD calculation
-            var recentRounds = await _clickHouseService.GetPlayerRecentRoundsAsync(round.PlayerName, 100);
+            var recentRounds = await _readService.GetPlayerRecentRoundsAsync(round.PlayerName, 100);
             
             if (recentRounds.Count < 25) return achievements; // Need minimum rounds
 
@@ -150,7 +151,7 @@ public class PerformanceBadgeCalculator
                 if (kdRatio >= minKd && recentRounds.Count >= minRounds)
                 {
                     // Check if player already has this badge
-                    var hasBadge = await _clickHouseService.PlayerHasAchievementAsync(round.PlayerName, badgeId);
+                    var hasBadge = await _readService.PlayerHasAchievementAsync(round.PlayerName, badgeId);
                     if (!hasBadge)
                     {
                         var badgeDefinition = _badgeService.GetBadgeDefinition(badgeId);
@@ -200,7 +201,7 @@ public class PerformanceBadgeCalculator
 
         try
         {
-            var recentRounds = await _clickHouseService.GetPlayerRecentRoundsAsync(playerName, 50);
+            var recentRounds = await _readService.GetPlayerRecentRoundsAsync(playerName, 50);
             
             if (recentRounds.Count < 50) return achievements;
 
@@ -210,7 +211,7 @@ public class PerformanceBadgeCalculator
             if (positivePercentage >= 80)
             {
                 var badgeId = "consistent_killer";
-                var hasBadge = await _clickHouseService.PlayerHasAchievementAsync(playerName, badgeId);
+                var hasBadge = await _readService.PlayerHasAchievementAsync(playerName, badgeId);
                 
                 if (!hasBadge)
                 {

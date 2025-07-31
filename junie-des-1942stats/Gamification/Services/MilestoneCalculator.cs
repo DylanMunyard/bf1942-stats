@@ -1,12 +1,13 @@
 using junie_des_1942stats.Gamification.Models;
 using junie_des_1942stats.ClickHouse.Models;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace junie_des_1942stats.Gamification.Services;
 
 public class MilestoneCalculator
 {
-    private readonly ClickHouseGamificationService _clickHouseService;
+    private readonly ClickHouseGamificationService _readService;
     private readonly BadgeDefinitionsService _badgeService;
     private readonly ILogger<MilestoneCalculator> _logger;
 
@@ -16,11 +17,11 @@ public class MilestoneCalculator
     private readonly int[] _scoreMilestones = { 10000, 50000, 100000, 500000, 1000000 };
 
     public MilestoneCalculator(
-        ClickHouseGamificationService clickHouseService,
+        [FromKeyedServices("read")] ClickHouseGamificationService readService,
         BadgeDefinitionsService badgeService,
         ILogger<MilestoneCalculator> logger)
     {
-        _clickHouseService = clickHouseService;
+        _readService = readService;
         _badgeService = badgeService;
         _logger = logger;
     }
@@ -32,7 +33,7 @@ public class MilestoneCalculator
         try
         {
             // Get player's totals before this round
-            var previousStats = await _clickHouseService.GetPlayerStatsBeforeTimestampAsync(
+            var previousStats = await _readService.GetPlayerStatsBeforeTimestampAsync(
                 round.PlayerName, round.RoundEndTime);
 
             if (previousStats == null)
@@ -193,7 +194,7 @@ public class MilestoneCalculator
     {
         try
         {
-            return await _clickHouseService.GetPlayerAchievementsByTypeAsync(playerName, AchievementTypes.Milestone);
+            return await _readService.GetPlayerAchievementsByTypeAsync(playerName, AchievementTypes.Milestone);
         }
         catch (Exception ex)
         {

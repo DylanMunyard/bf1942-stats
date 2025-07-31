@@ -1,12 +1,14 @@
 using junie_des_1942stats.Gamification.Models;
 using junie_des_1942stats.ClickHouse.Models;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace junie_des_1942stats.Gamification.Services;
 
 public class GamificationService
 {
-    private readonly ClickHouseGamificationService _clickHouseService;
+    private readonly ClickHouseGamificationService _readService;
+    private readonly ClickHouseGamificationService _writeService;
     private readonly KillStreakDetector _killStreakDetector;
     private readonly MilestoneCalculator _milestoneCalculator;
     private readonly PerformanceBadgeCalculator _performanceBadgeCalculator;
@@ -15,7 +17,8 @@ public class GamificationService
     private readonly ILogger<GamificationService> _logger;
 
     public GamificationService(
-        ClickHouseGamificationService clickHouseService,
+        [FromKeyedServices("read")] ClickHouseGamificationService readService,
+        [FromKeyedServices("write")] ClickHouseGamificationService writeService,
         KillStreakDetector killStreakDetector,
         MilestoneCalculator milestoneCalculator,
         PerformanceBadgeCalculator performanceBadgeCalculator,
@@ -23,7 +26,8 @@ public class GamificationService
         HistoricalProcessor historicalProcessor,
         ILogger<GamificationService> logger)
     {
-        _clickHouseService = clickHouseService;
+        _readService = readService;
+        _writeService = writeService;
         _killStreakDetector = killStreakDetector;
         _milestoneCalculator = milestoneCalculator;
         _performanceBadgeCalculator = performanceBadgeCalculator;
@@ -40,13 +44,13 @@ public class GamificationService
         try
         {
             // Get the last time we processed achievements
-            var lastProcessed = await _clickHouseService.GetLastProcessedTimestampAsync();
+            var lastProcessed = await _readService.GetLastProcessedTimestampAsync();
             var now = DateTime.UtcNow;
             
             _logger.LogInformation("Processing achievements since {LastProcessed}", lastProcessed);
 
             // Only process new player_rounds since last run
-            var newRounds = await _clickHouseService.GetPlayerRoundsSinceAsync(lastProcessed);
+            var newRounds = await _readService.GetPlayerRoundsSinceAsync(lastProcessed);
             
             if (!newRounds.Any()) 
             {
@@ -62,7 +66,7 @@ public class GamificationService
             // Store achievements in batch for efficiency
             if (allAchievements.Any())
             {
-                await _clickHouseService.InsertAchievementsBatchAsync(allAchievements);
+                await _writeService.InsertAchievementsBatchAsync(allAchievements);
                 _logger.LogInformation("Stored {AchievementCount} new achievements", allAchievements.Count);
             }
         }
@@ -127,7 +131,7 @@ public class GamificationService
         try
         {
             // Get all achievements for the player
-            var allAchievements = await _clickHouseService.GetPlayerAchievementsAsync(playerName, 1000);
+            var allAchievements = await _readService.GetPlayerAchievementsAsync(playerName, 1000);
             
             // Get kill streak stats
             var streakStats = await _killStreakDetector.GetPlayerKillStreakStatsAsync(playerName);
@@ -175,7 +179,7 @@ public class GamificationService
         {
             var entries = category.ToLower() switch
             {
-                "kill_streaks" => await _clickHouseService.GetKillStreakLeaderboardAsync(limit),
+                "kill_streaks" => await _readService.GetKillStreakLeaderboardAsync(limit),
                 _ => new List<LeaderboardEntry>()
             };
 
@@ -245,7 +249,7 @@ public class GamificationService
                 
                 _logger.LogInformation("Processing historical month: {Month:yyyy-MM}", currentMonth);
                 
-                var monthRounds = await _clickHouseService.GetPlayerRoundsInPeriodAsync(currentMonth, monthEnd);
+                var monthRounds = await _readService.GetPlayerRoundsInPeriodAsync(currentMonth, monthEnd);
                 
                 if (monthRounds.Any())
                 {
@@ -253,7 +257,7 @@ public class GamificationService
                     
                     if (monthAchievements.Any())
                     {
-                        await _clickHouseService.InsertAchievementsBatchAsync(monthAchievements);
+                        await _writeService.InsertAchievementsBatchAsync(monthAchievements);
                         _logger.LogInformation("Processed {RoundCount} rounds, {AchievementCount} achievements for {Month:yyyy-MM}",
                             monthRounds.Count, monthAchievements.Count, currentMonth);
                     }
@@ -295,6 +299,6 @@ public class GamificationService
     /// </summary>
     public async Task<bool> PlayerHasAchievementAsync(string playerName, string achievementId)
     {
-        return await _clickHouseService.PlayerHasAchievementAsync(playerName, achievementId);
+        return await _readService.PlayerHasAchievementAsync(playerName, achievementId);
     }
 } 

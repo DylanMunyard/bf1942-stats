@@ -10,18 +10,18 @@ namespace junie_des_1942stats.Gamification.Services;
 public class KillStreakDetector
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ClickHouseGamificationService _clickHouseService;
+    private readonly ClickHouseGamificationService _readService;
     private readonly BadgeDefinitionsService _badgeService;
     private readonly ILogger<KillStreakDetector> _logger;
 
     public KillStreakDetector(
         IServiceScopeFactory scopeFactory,
-        ClickHouseGamificationService clickHouseService,
+        [FromKeyedServices("read")] ClickHouseGamificationService readService,
         BadgeDefinitionsService badgeService,
         ILogger<KillStreakDetector> logger)
     {
         _scopeFactory = scopeFactory;
-        _clickHouseService = clickHouseService;
+        _readService = readService;
         _badgeService = badgeService;
         _logger = logger;
     }
@@ -48,7 +48,7 @@ public class KillStreakDetector
             foreach (var threshold in thresholds.Where(t => maxStreak >= t))
             {
                 // Only award if this is their first time hitting this threshold
-                var hasAchievement = await _clickHouseService.PlayerHasAchievementAsync(
+                var hasAchievement = await _readService.PlayerHasAchievementAsync(
                     round.PlayerName, $"kill_streak_{threshold}");
                 
                 if (!hasAchievement)
@@ -159,7 +159,7 @@ public class KillStreakDetector
         try
         {
             // Get all kill streak achievements for this player
-            var streakAchievements = await _clickHouseService.GetPlayerAchievementsByTypeAsync(
+            var streakAchievements = await _readService.GetPlayerAchievementsByTypeAsync(
                 playerName, AchievementTypes.KillStreak);
 
             if (!streakAchievements.Any())

@@ -320,13 +320,26 @@ try
     // Register Gamification Services
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.BadgeDefinitionsService>();
     
-    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>(sp =>
+    // Register ClickHouse Gamification Services - separate read and write instances
+    builder.Services.AddKeyedScoped<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>("read", (sp, key) =>
     {
         var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
-        var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? "";
+        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
         var logger = sp.GetRequiredService<ILogger<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>>();
         
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouseGamificationService URL: {clickHouseWriteUrl}");
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouseGamificationService (Read) URL: {clickHouseReadUrl}");
+        
+        return new junie_des_1942stats.Gamification.Services.ClickHouseGamificationService(httpClient, clickHouseReadUrl, logger);
+    });
+    
+    builder.Services.AddKeyedScoped<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>("write", (sp, key) =>
+    {
+        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
+        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? clickHouseReadUrl;
+        var logger = sp.GetRequiredService<ILogger<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>>();
+        
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouseGamificationService (Write) URL: {clickHouseWriteUrl}");
         
         return new junie_des_1942stats.Gamification.Services.ClickHouseGamificationService(httpClient, clickHouseWriteUrl, logger);
     });

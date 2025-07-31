@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace junie_des_1942stats.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("stats/[controller]")]
 public class GamificationController : ControllerBase
 {
     private readonly GamificationService _gamificationService;
