@@ -9,6 +9,7 @@
         "ASPNETCORE_ENVIRONMENT": "Development",
         "REDIS_CONNECTION_STRING": "42redis.home.net:6379",
         "ENABLE_ROUND_SYNCING": false,
+        "ENABLE_GAMIFICATION_PROCESSING": false,
         "CLICKHOUSE_WRITE_URL": ""
       }
     }

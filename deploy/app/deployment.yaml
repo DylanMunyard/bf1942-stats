@@ -49,6 +49,8 @@ spec:
               value: "redis-service.bf42-stats:6379"
             - name: ENABLE_ROUND_SYNCING
               value: "true"
+            - name: ENABLE_GAMIFICATION_PROCESSING
+              value: "false"
           volumeMounts:
             - name: stats-data
               mountPath: /mnt/data

@@ -211,7 +211,7 @@ public class GamificationController : ControllerBase
         }
     }
 
-    /* /// <summary>
+    /// <summary>
     /// Trigger historical data processing (admin only)
     /// </summary>
     [HttpPost("admin/process-historical")]
@@ -244,6 +244,7 @@ public class GamificationController : ControllerBase
         }
     }
 
+/* 
     /// <summary>
     /// Trigger incremental processing (admin only)
     /// </summary>
