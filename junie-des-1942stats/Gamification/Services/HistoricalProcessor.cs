@@ -69,71 +69,27 @@ public class HistoricalProcessor
     }
 
     /// <summary>
-    /// Process all milestones using pure ClickHouse aggregation - dramatically faster
+    /// Process all milestones with accurate achievement dates using running totals
     /// </summary>
     private async Task ProcessMilestonesAsync(DateTime startDate, DateTime endDate)
     {
-        _logger.LogInformation("Processing milestones with ClickHouse aggregation...");
+        _logger.LogInformation("Processing milestones with accurate achievement dates...");
 
         var achievements = new List<Achievement>();
 
-        // Get all player totals and their existing achievements in optimized batches
-        var allPlayerData = await GetPlayerStatsWithExistingAchievementsAsync(startDate, endDate);
+        // Get existing achievements to avoid duplicates
+        var existingAchievements = await GetExistingMilestoneAchievementsAsync();
         
-        _logger.LogInformation("Retrieved stats for {PlayerCount} players", allPlayerData.Count);
-
-        foreach (var playerData in allPlayerData)
-        {
-            var stats = playerData.Stats;
-            var existingAchievements = playerData.ExistingAchievementIds;
-
-            // Check kill milestones
-            foreach (var threshold in _killMilestones.Where(t => stats.TotalKills >= t))
-            {
-                var achievementId = $"milestone_kills_{threshold}";
-                
-                // Only add if player doesn't already have this achievement
-                if (!existingAchievements.Contains(achievementId))
-                {
-                    achievements.Add(CreateMilestoneAchievement(
-                        stats.PlayerName, achievementId, $"Kill Master ({threshold:N0})", 
-                        threshold, endDate, "kills"));
-                }
-            }
-
-            // Check score milestones
-            foreach (var threshold in _scoreMilestones.Where(t => stats.TotalScore >= t))
-            {
-                var achievementId = $"milestone_score_{threshold}";
-                
-                if (!existingAchievements.Contains(achievementId))
-                {
-                    achievements.Add(CreateMilestoneAchievement(
-                        stats.PlayerName, achievementId, $"Score Legend ({threshold:N0})", 
-                        threshold, endDate, "score"));
-                }
-            }
-
-            // Check playtime milestones (convert minutes to hours)
-            var hoursPlayed = stats.TotalPlayTimeMinutes / 60;
-            foreach (var threshold in _playtimeHourMilestones.Where(t => hoursPlayed >= t))
-            {
-                var achievementId = $"milestone_playtime_{threshold}h";
-                
-                if (!existingAchievements.Contains(achievementId))
-                {
-                    achievements.Add(CreateMilestoneAchievement(
-                        stats.PlayerName, achievementId, $"Time Warrior ({threshold}h)", 
-                        threshold, endDate, "playtime"));
-                }
-            }
-        }
+        // Process each milestone type separately for better performance
+        achievements.AddRange(await ProcessKillMilestonesAsync(startDate, endDate, existingAchievements));
+        achievements.AddRange(await ProcessScoreMilestonesAsync(startDate, endDate, existingAchievements));
+        achievements.AddRange(await ProcessPlaytimeMilestonesAsync(startDate, endDate, existingAchievements));
 
         if (achievements.Any())
         {
             await _writeService.InsertAchievementsBatchAsync(achievements);
-            _logger.LogInformation("Processed {PlayerCount} players, created {AchievementCount} milestone achievements", 
-                allPlayerData.Count, achievements.Count);
+            _logger.LogInformation("Created {AchievementCount} milestone achievements with accurate dates", 
+                achievements.Count);
         }
         else
         {
@@ -315,6 +271,185 @@ ORDER BY total_streak_kills DESC, player_name, streak_start";
         _logger.LogInformation("Performance badge processing completed (placeholder)");
         
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Process kill milestones with accurate achievement dates
+    /// </summary>
+    private async Task<List<Achievement>> ProcessKillMilestonesAsync(DateTime startDate, DateTime endDate, Dictionary<string, HashSet<string>> existingAchievements)
+    {
+        var thresholds = string.Join(",", _killMilestones);
+        var query = $@"
+WITH running_totals AS (
+    SELECT 
+        player_name,
+        round_end_time,
+        final_kills,
+        SUM(final_kills) OVER (
+            PARTITION BY player_name 
+            ORDER BY round_end_time ASC 
+            ROWS UNBOUNDED PRECEDING
+        ) AS running_kills
+    FROM player_rounds
+    WHERE round_end_time >= '{startDate:yyyy-MM-dd HH:mm:ss}'
+    AND round_end_time <= '{endDate:yyyy-MM-dd HH:mm:ss}'
+    ORDER BY player_name, round_end_time
+),
+milestone_crossings AS (
+    SELECT 
+        player_name,
+        round_end_time,
+        running_kills,
+        arrayElement([{thresholds}], number) AS threshold
+    FROM running_totals
+    ARRAY JOIN range(1, length([{thresholds}]) + 1) AS number
+    WHERE running_kills >= arrayElement([{thresholds}], number)
+    AND (running_kills - final_kills) < arrayElement([{thresholds}], number)
+)
+SELECT 
+    player_name,
+    threshold,
+    min(round_end_time) AS achievement_date
+FROM milestone_crossings
+GROUP BY player_name, threshold
+ORDER BY player_name, threshold";
+
+        var result = await QueryPlayerRoundsAsync(query);
+        return ParseMilestoneAchievements(result, "kills", existingAchievements);
+    }
+
+    /// <summary>
+    /// Process score milestones with accurate achievement dates
+    /// </summary>
+    private async Task<List<Achievement>> ProcessScoreMilestonesAsync(DateTime startDate, DateTime endDate, Dictionary<string, HashSet<string>> existingAchievements)
+    {
+        var thresholds = string.Join(",", _scoreMilestones);
+        var query = $@"
+WITH running_totals AS (
+    SELECT 
+        player_name,
+        round_end_time,
+        final_score,
+        SUM(final_score) OVER (
+            PARTITION BY player_name 
+            ORDER BY round_end_time ASC 
+            ROWS UNBOUNDED PRECEDING
+        ) AS running_score
+    FROM player_rounds
+    WHERE round_end_time >= '{startDate:yyyy-MM-dd HH:mm:ss}'
+    AND round_end_time <= '{endDate:yyyy-MM-dd HH:mm:ss}'
+    ORDER BY player_name, round_end_time
+),
+milestone_crossings AS (
+    SELECT 
+        player_name,
+        round_end_time,
+        running_score,
+        arrayElement([{thresholds}], number) AS threshold
+    FROM running_totals
+    ARRAY JOIN range(1, length([{thresholds}]) + 1) AS number
+    WHERE running_score >= arrayElement([{thresholds}], number)
+    AND (running_score - final_score) < arrayElement([{thresholds}], number)
+)
+SELECT 
+    player_name,
+    threshold,
+    min(round_end_time) AS achievement_date
+FROM milestone_crossings
+GROUP BY player_name, threshold
+ORDER BY player_name, threshold";
+
+        var result = await QueryPlayerRoundsAsync(query);
+        return ParseMilestoneAchievements(result, "score", existingAchievements);
+    }
+
+    /// <summary>
+    /// Process playtime milestones with accurate achievement dates
+    /// </summary>
+    private async Task<List<Achievement>> ProcessPlaytimeMilestonesAsync(DateTime startDate, DateTime endDate, Dictionary<string, HashSet<string>> existingAchievements)
+    {
+        var thresholds = string.Join(",", _playtimeHourMilestones.Select(h => h * 60)); // Convert hours to minutes
+        var query = $@"
+WITH running_totals AS (
+    SELECT 
+        player_name,
+        round_end_time,
+        play_time_minutes,
+        SUM(play_time_minutes) OVER (
+            PARTITION BY player_name 
+            ORDER BY round_end_time ASC 
+            ROWS UNBOUNDED PRECEDING
+        ) AS running_playtime
+    FROM player_rounds
+    WHERE round_end_time >= '{startDate:yyyy-MM-dd HH:mm:ss}'
+    AND round_end_time <= '{endDate:yyyy-MM-dd HH:mm:ss}'
+    ORDER BY player_name, round_end_time
+),
+milestone_crossings AS (
+    SELECT 
+        player_name,
+        round_end_time,
+        running_playtime,
+        arrayElement([{thresholds}], number) AS threshold_minutes
+    FROM running_totals
+    ARRAY JOIN range(1, length([{thresholds}]) + 1) AS number
+    WHERE running_playtime >= arrayElement([{thresholds}], number)
+    AND (running_playtime - play_time_minutes) < arrayElement([{thresholds}], number)
+)
+SELECT 
+    player_name,
+    threshold_minutes / 60 AS threshold,
+    min(round_end_time) AS achievement_date
+FROM milestone_crossings
+GROUP BY player_name, threshold_minutes
+ORDER BY player_name, threshold";
+
+        var result = await QueryPlayerRoundsAsync(query);
+        return ParseMilestoneAchievements(result, "playtime", existingAchievements);
+    }
+
+    /// <summary>
+    /// Parse milestone achievement results and create Achievement objects
+    /// </summary>
+    private List<Achievement> ParseMilestoneAchievements(string result, string category, Dictionary<string, HashSet<string>> existingAchievements)
+    {
+        var achievements = new List<Achievement>();
+        var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        
+        foreach (var line in lines)
+        {
+            var parts = line.Split('\t');
+            if (parts.Length >= 3)
+            {
+                var playerName = parts[0];
+                var threshold = int.Parse(parts[1]);
+                var achievementDate = DateTime.Parse(parts[2]);
+                
+                var achievementId = category == "playtime" 
+                    ? $"milestone_playtime_{threshold}h"
+                    : $"milestone_{category}_{threshold}";
+                
+                // Check if player already has this achievement
+                if (existingAchievements.ContainsKey(playerName) && 
+                    existingAchievements[playerName].Contains(achievementId))
+                {
+                    continue;
+                }
+                
+                var name = category switch
+                {
+                    "kills" => $"Kill Master ({threshold:N0})",
+                    "score" => $"Score Legend ({threshold:N0})",
+                    "playtime" => $"Time Warrior ({threshold}h)",
+                    _ => $"Milestone ({threshold:N0})"
+                };
+                
+                achievements.Add(CreateMilestoneAchievement(
+                    playerName, achievementId, name, threshold, achievementDate, category));
+            }
+        }
+        
+        return achievements;
     }
 
     /// <summary>
