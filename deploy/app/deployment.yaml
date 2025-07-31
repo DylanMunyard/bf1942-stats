@@ -50,7 +50,7 @@ spec:
             - name: ENABLE_ROUND_SYNCING
               value: "true"
             - name: ENABLE_GAMIFICATION_PROCESSING
-              value: "false"
+              value: "true"
           volumeMounts:
             - name: stats-data
               mountPath: /mnt/data

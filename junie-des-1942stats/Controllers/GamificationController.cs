@@ -78,43 +78,6 @@ public class GamificationController : ControllerBase
     }
 
     /// <summary>
-    /// Get achievements by type for a player
-    /// </summary>
-    [HttpGet("player/{playerName}/{achievementType}")]
-    public async Task<ActionResult<List<Achievement>>> GetPlayerAchievementsByType(
-        string playerName,
-        string achievementType)
-    {
-        if (string.IsNullOrWhiteSpace(playerName))
-            return BadRequest("Player name is required");
-
-        var validTypes = new[] { "kill_streak", "badge", "milestone", "ranking" };
-        if (!validTypes.Contains(achievementType.ToLower()))
-            return BadRequest($"Invalid achievement type. Valid types: {string.Join(", ", validTypes)}");
-
-        try
-        {
-            var summary = await _gamificationService.GetPlayerAchievementSummaryAsync(playerName);
-            
-            var achievements = achievementType.ToLower() switch
-            {
-                "kill_streak" => summary.RecentAchievements.Where(a => a.AchievementType == AchievementTypes.KillStreak).ToList(),
-                "badge" => summary.AllBadges,
-                "milestone" => summary.Milestones,
-                _ => new List<Achievement>()
-            };
-
-            return Ok(achievements);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting {AchievementType} achievements for player {PlayerName}", 
-                achievementType, playerName);
-            return StatusCode(500, "An internal server error occurred while retrieving achievements.");
-        }
-    }
-
-    /// <summary>
     /// Get leaderboard for specific category
     /// </summary>
     [HttpGet("leaderboard/{category}")]
