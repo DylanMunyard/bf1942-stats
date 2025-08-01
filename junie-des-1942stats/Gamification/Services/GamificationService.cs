@@ -8,8 +8,7 @@ namespace junie_des_1942stats.Gamification.Services;
 
 public class GamificationService
 {
-    private readonly ClickHouseGamificationService _readService;
-    private readonly ClickHouseGamificationService _writeService;
+    private readonly ClickHouseGamificationService _gamificationService;
     private readonly KillStreakDetector _killStreakDetector;
     private readonly MilestoneCalculator _milestoneCalculator;
     private readonly PerformanceBadgeCalculator _performanceBadgeCalculator;
@@ -19,8 +18,7 @@ public class GamificationService
     private readonly ILogger<GamificationService> _logger;
 
     public GamificationService(
-        [FromKeyedServices("read")] ClickHouseGamificationService readService,
-        [FromKeyedServices("write")] ClickHouseGamificationService writeService,
+        ClickHouseGamificationService gamificationService,
         KillStreakDetector killStreakDetector,
         MilestoneCalculator milestoneCalculator,
         PerformanceBadgeCalculator performanceBadgeCalculator,
@@ -29,8 +27,7 @@ public class GamificationService
         AchievementLabelingService achievementLabelingService,
         ILogger<GamificationService> logger)
     {
-        _readService = readService;
-        _writeService = writeService;
+        _gamificationService = gamificationService;
         _killStreakDetector = killStreakDetector;
         _milestoneCalculator = milestoneCalculator;
         _performanceBadgeCalculator = performanceBadgeCalculator;
@@ -48,13 +45,13 @@ public class GamificationService
         try
         {
             // Get the last time we processed achievements
-            var lastProcessed = await _readService.GetLastProcessedTimestampAsync();
+            var lastProcessed = await _gamificationService.GetLastProcessedTimestampAsync();
             var now = DateTime.UtcNow;
             
             _logger.LogInformation("Processing achievements since {LastProcessed}", lastProcessed);
 
             // Only process new player_rounds since last run
-            var newRounds = await _readService.GetPlayerRoundsSinceAsync(lastProcessed);
+            var newRounds = await _gamificationService.GetPlayerRoundsSinceAsync(lastProcessed);
             
             if (!newRounds.Any()) 
             {
@@ -70,7 +67,7 @@ public class GamificationService
             // Store achievements in batch for efficiency
             if (allAchievements.Any())
             {
-                await _writeService.InsertAchievementsBatchAsync(allAchievements);
+                await _gamificationService.InsertAchievementsBatchAsync(allAchievements);
                 _logger.LogInformation("Stored {AchievementCount} new achievements", allAchievements.Count);
             }
         }
@@ -82,45 +79,134 @@ public class GamificationService
     }
 
     /// <summary>
-    /// Process achievements for a specific set of rounds
+    /// Process achievements for a specific set of rounds using ClickHouse player_metrics
     /// </summary>
     public async Task<List<Achievement>> ProcessAchievementsForRounds(List<PlayerRound> rounds)
+    {
+        try
+        {
+            _logger.LogInformation("Processing achievements for {RoundCount} rounds using ClickHouse player_metrics", rounds.Count);
+
+            // Use batch processing for better performance
+            if (rounds.Count > 10)
+            {
+                return await ProcessAchievementsForRoundsBatchAsync(rounds);
+            }
+
+            return await ProcessAchievementsIndividuallyAsync(rounds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing achievements for rounds");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Individual round processing for smaller batches
+    /// </summary>
+    private async Task<List<Achievement>> ProcessAchievementsIndividuallyAsync(List<PlayerRound> rounds)
+    {
+        var allAchievements = new List<Achievement>();
+
+        foreach (var round in rounds)
+        {
+            var roundAchievements = new List<Achievement>();
+
+            // 1. Kill Streak Achievements using ClickHouse player_metrics
+            var streakAchievements = await _killStreakDetector.CalculateKillStreaksForRoundAsync(round);
+            roundAchievements.AddRange(streakAchievements);
+
+            // 2. Milestone Achievements 
+            var milestoneAchievements = await _milestoneCalculator.CheckMilestoneCrossedAsync(round);
+            roundAchievements.AddRange(milestoneAchievements);
+
+            // 3. Performance Badge Checks using ClickHouse player_metrics
+            var performanceAchievements = await _performanceBadgeCalculator.CheckPerformanceBadgesAsync(round);
+            roundAchievements.AddRange(performanceAchievements);
+
+            allAchievements.AddRange(roundAchievements);
+
+            if (roundAchievements.Any())
+            {
+                _logger.LogDebug("Round {RoundId} for {PlayerName}: {AchievementCount} achievements",
+                    round.RoundId, round.PlayerName, roundAchievements.Count);
+            }
+        }
+
+        _logger.LogInformation("Processed {RoundCount} rounds individually, generated {AchievementCount} achievements",
+            rounds.Count, allAchievements.Count);
+
+        return allAchievements;
+    }
+
+    /// <summary>
+    /// Batch process achievements for better performance with large datasets
+    /// Uses ClickHouse player_metrics for more efficient calculations
+    /// </summary>
+    private async Task<List<Achievement>> ProcessAchievementsForRoundsBatchAsync(List<PlayerRound> rounds)
     {
         var allAchievements = new List<Achievement>();
 
         try
         {
-            foreach (var round in rounds)
+            _logger.LogInformation("Using batch processing for {RoundCount} rounds", rounds.Count);
+
+            // 1. Process kill streaks individually (they're round-specific)
+            var streakTasks = rounds.Select(async round =>
             {
-                var roundAchievements = new List<Achievement>();
-
-                // 1. Kill Streak Achievements (single-round only)
-                var streakAchievements = await _killStreakDetector.CalculateKillStreaksForRoundAsync(round);
-                roundAchievements.AddRange(streakAchievements);
-
-                // 2. Milestone Achievements (check if any thresholds crossed)
-                var milestoneAchievements = await _milestoneCalculator.CheckMilestoneCrossedAsync(round);
-                roundAchievements.AddRange(milestoneAchievements);
-
-                // 3. Performance Badge Checks (triggered by new round data)
-                var performanceAchievements = await _performanceBadgeCalculator.CheckPerformanceBadgesAsync(round);
-                roundAchievements.AddRange(performanceAchievements);
-
-                allAchievements.AddRange(roundAchievements);
-
-                if (roundAchievements.Any())
+                try
                 {
-                    _logger.LogDebug("Round {RoundId} for {PlayerName}: {AchievementCount} achievements",
-                        round.RoundId, round.PlayerName, roundAchievements.Count);
+                    return await _killStreakDetector.CalculateKillStreaksForRoundAsync(round);
                 }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error processing kill streaks for round {RoundId}", round.RoundId);
+                    return new List<Achievement>();
+                }
+            });
+
+            var streakResults = await Task.WhenAll(streakTasks);
+            allAchievements.AddRange(streakResults.SelectMany(r => r));
+
+            // 2. Process milestones individually 
+            var milestoneTasks = rounds.Select(async round =>
+            {
+                try
+                {
+                    return await _milestoneCalculator.CheckMilestoneCrossedAsync(round);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error processing milestones for round {RoundId}", round.RoundId);
+                    return new List<Achievement>();
+                }
+            });
+
+            var milestoneResults = await Task.WhenAll(milestoneTasks);
+            allAchievements.AddRange(milestoneResults.SelectMany(r => r));
+
+            // 3. Process performance badges in batch (more efficient)
+            try
+            {
+                var performanceAchievements = await _performanceBadgeCalculator.ProcessPerformanceBadgesBatchAsync(rounds);
+                allAchievements.AddRange(performanceAchievements);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing performance badges in batch");
             }
 
-            _logger.LogInformation("Processed {RoundCount} rounds, generated {AchievementCount} achievements",
-                rounds.Count, allAchievements.Count);
+            _logger.LogInformation("Batch processed {RoundCount} rounds, generated {AchievementCount} achievements " +
+                "({StreakCount} streaks, {MilestoneCount} milestones, {PerformanceCount} performance)",
+                rounds.Count, allAchievements.Count,
+                streakResults.Sum(r => r.Count),
+                milestoneResults.Sum(r => r.Count),
+                allAchievements.Count - streakResults.Sum(r => r.Count) - milestoneResults.Sum(r => r.Count));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing achievements for rounds");
+            _logger.LogError(ex, "Error in batch processing achievements");
             throw;
         }
 
@@ -135,7 +221,7 @@ public class GamificationService
         try
         {
             // Get all achievements for the player
-            var allAchievements = await _readService.GetPlayerAchievementsAsync(playerName, 1000);
+            var allAchievements = await _gamificationService.GetPlayerAchievementsAsync(playerName, 1000);
             
             // Get kill streak stats
             var streakStats = await _killStreakDetector.GetPlayerKillStreakStatsAsync(playerName);
@@ -183,7 +269,7 @@ public class GamificationService
         {
             var entries = category.ToLower() switch
             {
-                "kill_streaks" => await _readService.GetKillStreakLeaderboardAsync(limit),
+                "kill_streaks" => await _gamificationService.GetKillStreakLeaderboardAsync(limit),
                 _ => new List<LeaderboardEntry>()
             };
 
@@ -227,61 +313,7 @@ public class GamificationService
             throw;
         }
     }
-
-    /// <summary>
-    /// Legacy historical processing method - kept for reference but not recommended for large datasets
-    /// </summary>
-    [Obsolete("Use ProcessHistoricalDataAsync() which now uses optimized processing. This method is inefficient for large datasets.")]
-    public async Task ProcessHistoricalDataLegacyAsync(DateTime? fromDate = null, DateTime? toDate = null)
-    {
-        try
-        {
-            var startDate = fromDate ?? DateTime.UtcNow.AddDays(-1);
-            var endDate = toDate ?? DateTime.UtcNow;
-
-            _logger.LogWarning("Using LEGACY historical processing - this is inefficient for large datasets");
-            _logger.LogInformation("Starting legacy historical gamification processing from {StartDate} to {EndDate}",
-                startDate, endDate);
-
-            // Process in monthly chunks to avoid memory issues
-            var currentMonth = new DateTime(startDate.Year, startDate.Month, 1);
-            
-            while (currentMonth < endDate)
-            {
-                var monthEnd = currentMonth.AddMonths(1).AddDays(-1);
-                if (monthEnd > endDate) monthEnd = endDate;
-                
-                _logger.LogInformation("Processing historical month: {Month:yyyy-MM}", currentMonth);
-                
-                var monthRounds = await _readService.GetPlayerRoundsInPeriodAsync(currentMonth, monthEnd);
-                
-                if (monthRounds.Any())
-                {
-                    var monthAchievements = await ProcessAchievementsForRounds(monthRounds);
-                    
-                    if (monthAchievements.Any())
-                    {
-                        await _writeService.InsertAchievementsBatchAsync(monthAchievements);
-                        _logger.LogInformation("Processed {RoundCount} rounds, {AchievementCount} achievements for {Month:yyyy-MM}",
-                            monthRounds.Count, monthAchievements.Count, currentMonth);
-                    }
-                }
-                
-                currentMonth = currentMonth.AddMonths(1);
-                
-                // Small delay to avoid overwhelming ClickHouse
-                await Task.Delay(TimeSpan.FromSeconds(2));
-            }
-
-            _logger.LogInformation("Legacy historical gamification processing completed");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error during legacy historical processing");
-            throw;
-        }
-    }
-
+    
     /// <summary>
     /// Get available badge definitions
     /// </summary>
@@ -303,7 +335,7 @@ public class GamificationService
     /// </summary>
     public async Task<bool> PlayerHasAchievementAsync(string playerName, string achievementId)
     {
-        return await _readService.PlayerHasAchievementAsync(playerName, achievementId);
+        return await _gamificationService.PlayerHasAchievementAsync(playerName, achievementId);
     }
 
     /// <summary>
@@ -325,7 +357,7 @@ public class GamificationService
     {
         try
         {
-            var (achievements, totalCount) = await _readService.GetAllAchievementsWithPagingAsync(
+            var (achievements, totalCount) = await _gamificationService.GetAllAchievementsWithPagingAsync(
                 page, pageSize, sortBy, sortOrder, playerName, achievementType, 
                 achievementId, tier, achievedFrom, achievedTo, serverGuid, mapName);
 
@@ -335,7 +367,7 @@ public class GamificationService
             var playerAchievementIds = new List<string>();
             if (!string.IsNullOrWhiteSpace(playerName))
             {
-                playerAchievementIds = await _readService.GetPlayerAchievementIdsAsync(playerName);
+                playerAchievementIds = await _gamificationService.GetPlayerAchievementIdsAsync(playerName);
             }
 
             // Get labeled achievement information for the player's achievements

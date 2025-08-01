@@ -69,8 +69,8 @@ SELECT
     COUNT(*) AS sessions_played,
     SUM(play_time_minutes) AS total_play_time_minutes
 FROM player_rounds
-WHERE player_name = '{playerName.Replace("'", "''")}'
-AND server_guid = '{serverGuid}'
+WHERE player_name = @playerName
+AND server_guid = @serverGuid
 {timePeriodCondition.Replace("timestamp", "round_start_time")}
 GROUP BY map_name
 ORDER BY total_kills DESC";
@@ -79,6 +79,10 @@ ORDER BY total_kills DESC";
             
             await using var command = _connection.CreateCommand();
             command.CommandText = query;
+            
+            // Add parameters to prevent SQL injection
+            command.Parameters.Add(CreateParameter("@playerName", playerName));
+            command.Parameters.Add(CreateParameter("@serverGuid", serverGuid));
             
             await using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
@@ -101,6 +105,15 @@ ORDER BY total_kills DESC";
             _logger.LogError(ex, "Error retrieving server statistics for player {PlayerName}", playerName);
             throw;
         }
+    }
+
+    // Helper method to create parameters
+    private System.Data.Common.DbParameter CreateParameter(string name, object value)
+    {
+        var param = _connection.CreateCommand().CreateParameter();
+        param.ParameterName = name;
+        param.Value = value ?? DBNull.Value;
+        return param;
     }
 
     public void Dispose()

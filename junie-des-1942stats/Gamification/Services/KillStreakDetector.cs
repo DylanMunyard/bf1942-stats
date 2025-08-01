@@ -1,26 +1,20 @@
 using junie_des_1942stats.Gamification.Models;
 using junie_des_1942stats.ClickHouse.Models;
-using junie_des_1942stats.PlayerTracking;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace junie_des_1942stats.Gamification.Services;
 
 public class KillStreakDetector
 {
-    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ClickHouseGamificationService _readService;
     private readonly BadgeDefinitionsService _badgeService;
     private readonly ILogger<KillStreakDetector> _logger;
 
     public KillStreakDetector(
-        IServiceScopeFactory scopeFactory,
-        [FromKeyedServices("read")] ClickHouseGamificationService readService,
+        ClickHouseGamificationService readService,
         BadgeDefinitionsService badgeService,
         ILogger<KillStreakDetector> logger)
     {
-        _scopeFactory = scopeFactory;
         _readService = readService;
         _badgeService = badgeService;
         _logger = logger;
@@ -28,192 +22,9 @@ public class KillStreakDetector
 
     public async Task<List<Achievement>> CalculateKillStreaksForRoundAsync(PlayerRound round)
     {
-        var achievements = new List<Achievement>();
-
-        try
-        {
-            // Get player observations for this round, ordered by timestamp
-            var observations = await GetPlayerObservationsForRound(round.RoundId, round.PlayerName);
-            
-            if (observations.Count < 2) return achievements; // Need at least 2 observations to detect streaks
-
-            // Calculate streaks and track when each threshold was achieved
-            var streakThresholds = CalculateStreakThresholds(observations);
-            
-            if (!streakThresholds.Any()) return achievements; // No streaks of 5+ kills
-
-            // Check achievement thresholds: 5, 10, 15, 20, 25, 30, 50+
-            var thresholds = new[] { 5, 10, 15, 20, 25, 30, 50 };
-            
-            foreach (var threshold in thresholds)
-            {
-                if (streakThresholds.TryGetValue(threshold, out var achievementTime))
-                {
-                    var achievementId = $"kill_streak_{threshold}";
-                    
-                    // Check if player already has this achievement for this specific round/streak
-                    // Use a more specific check that considers the round context and achievement time
-                    var existingAchievement = await _readService.GetPlayerAchievementsByTypeAsync(round.PlayerName, AchievementTypes.KillStreak);
-                    var hasAchievementForThisStreak = existingAchievement.Any(a => 
-                        a.AchievementId == achievementId && 
-                        a.RoundId == round.RoundId && 
-                        a.AchievedAt == achievementTime);
-                    
-                    if (!hasAchievementForThisStreak)
-                    {
-                        var badgeDefinition = _badgeService.GetBadgeDefinition(achievementId);
-                        if (badgeDefinition != null)
-                        {
-                            achievements.Add(new Achievement
-                            {
-                                PlayerName = round.PlayerName,
-                                AchievementType = AchievementTypes.KillStreak,
-                                AchievementId = achievementId,
-                                AchievementName = badgeDefinition.Name,
-                                Tier = badgeDefinition.Tier,
-                                Value = (uint)threshold,
-                                AchievedAt = achievementTime,
-                                ProcessedAt = DateTime.UtcNow,
-                                ServerGuid = round.ServerGuid,
-                                MapName = round.MapName,
-                                RoundId = round.RoundId,
-                                Metadata = $"{{\"actual_streak\":{threshold},\"round_kills\":{round.Kills}}}"
-                            });
-
-                            _logger.LogInformation("Kill streak achievement: {PlayerName} achieved {AchievementName} with {Threshold} kills at {AchievementTime}",
-                                round.PlayerName, badgeDefinition.Name, threshold, achievementTime);
-                        }
-                    }
-                    else
-                    {
-                        _logger.LogDebug("Skipping duplicate kill streak achievement: {PlayerName} already has {AchievementId} for round {RoundId} at {AchievementTime}",
-                            round.PlayerName, achievementId, round.RoundId, achievementTime);
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error calculating kill streaks for round {RoundId}, player {PlayerName}",
-                round.RoundId, round.PlayerName);
-        }
-
-        return achievements;
+        return await CalculateKillStreaksFromPlayerMetricsAsync(round);
     }
 
-    /// <summary>
-    /// Calculate when each streak threshold was achieved during the observations
-    /// </summary>
-    private Dictionary<int, DateTime> CalculateStreakThresholds(List<PlayerObservation> observations)
-    {
-        var thresholds = new Dictionary<int, DateTime>();
-        var thresholdValues = new[] { 5, 10, 15, 20, 25, 30, 50 };
-        
-        if (observations.Count < 2) return thresholds;
-
-        int currentStreak = 0;
-        int previousKills = observations.First().Kills;
-        int previousDeaths = observations.First().Deaths;
-
-        foreach (var observation in observations.Skip(1))
-        {
-            var killsDiff = observation.Kills - previousKills;
-            var deathsDiff = observation.Deaths - previousDeaths;
-
-            if (killsDiff > 0 && deathsDiff == 0)
-            {
-                // Player got kills without dying - continue/start streak
-                currentStreak += killsDiff;
-                
-                // Check if any thresholds were reached during this observation
-                foreach (var threshold in thresholdValues)
-                {
-                    if (currentStreak >= threshold && !thresholds.ContainsKey(threshold))
-                    {
-                        // This is the first time this threshold was reached
-                        thresholds[threshold] = observation.Timestamp;
-                    }
-                }
-            }
-            else if (deathsDiff > 0)
-            {
-                // Player died - reset streak
-                currentStreak = 0;
-            }
-
-            previousKills = observation.Kills;
-            previousDeaths = observation.Deaths;
-        }
-
-        return thresholds;
-    }
-
-    private async Task<List<PlayerObservation>> GetPlayerObservationsForRound(string roundId, string playerName)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
-        
-        // Get all observations for this player in this round, ordered by timestamp
-        var observations = await dbContext.PlayerObservations
-            .Include(o => o.Session)
-            .Where(o => o.Session.PlayerName == playerName)
-            .Where(o => o.Session.SessionId.ToString().Contains(roundId) || 
-                       (o.Session.StartTime <= DateTime.UtcNow && o.Session.LastSeenTime >= DateTime.UtcNow.AddHours(-6)))
-            .OrderBy(o => o.Timestamp)
-            .ToListAsync();
-
-        // Filter to observations that likely belong to this round
-        // Since we don't have a direct round_id in observations, we'll use session timing
-        if (observations.Any())
-        {
-            var firstObs = observations.First();
-            var lastObs = observations.Last();
-            var roundDuration = lastObs.Timestamp - firstObs.Timestamp;
-            
-            // Filter out observations that are too far apart (likely different rounds)
-            if (roundDuration.TotalHours > 2) // Reasonable max round duration
-            {
-                observations = observations
-                    .Where(o => o.Timestamp >= lastObs.Timestamp.AddHours(-2))
-                    .ToList();
-            }
-        }
-
-        return observations;
-    }
-
-    private int CalculateMaxConsecutiveKills(List<PlayerObservation> observations)
-    {
-        if (observations.Count < 2) return 0;
-
-        int maxStreak = 0;
-        int currentStreak = 0;
-        int previousKills = observations.First().Kills;
-        int previousDeaths = observations.First().Deaths;
-
-        foreach (var observation in observations.Skip(1))
-        {
-            var killsDiff = observation.Kills - previousKills;
-            var deathsDiff = observation.Deaths - previousDeaths;
-
-            if (killsDiff > 0 && deathsDiff == 0)
-            {
-                // Player got kills without dying - continue/start streak
-                currentStreak += killsDiff;
-                maxStreak = Math.Max(maxStreak, currentStreak);
-            }
-            else if (deathsDiff > 0)
-            {
-                // Player died - reset streak
-                currentStreak = 0;
-            }
-
-            previousKills = observation.Kills;
-            previousDeaths = observation.Deaths;
-        }
-
-        return maxStreak;
-    }
 
     public async Task<KillStreakStats> GetPlayerKillStreakStatsAsync(string playerName)
     {
@@ -235,7 +46,7 @@ public class KillStreakDetector
             {
                 BestSingleRoundStreak = (int)bestAchievement.Value,
                 BestStreakMap = bestAchievement.MapName,
-                BestStreakServer = await GetServerName(bestAchievement.ServerGuid),
+                BestStreakServer = bestAchievement.ServerGuid, // Use ServerGuid directly instead of looking up name
                 BestStreakDate = bestAchievement.AchievedAt,
                 RecentStreaks = streakAchievements
                     .OrderByDescending(a => a.AchievedAt)
@@ -261,25 +72,6 @@ public class KillStreakDetector
         }
     }
 
-    private async Task<string> GetServerName(string serverGuid)
-    {
-        try
-        {
-            using var scope = _scopeFactory.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
-            
-            var server = await dbContext.Servers
-                .Where(s => s.Guid == serverGuid)
-                .Select(s => s.Name)
-                .FirstOrDefaultAsync();
-            
-            return server ?? "Unknown Server";
-        }
-        catch
-        {
-            return "Unknown Server";
-        }
-    }
 
     public async Task<List<Achievement>> ProcessKillStreaksForRoundsAsync(List<PlayerRound> rounds)
     {
@@ -298,5 +90,200 @@ public class KillStreakDetector
         }
 
         return allAchievements;
+    }
+
+    /// <summary>
+    /// Calculate kill streaks using ClickHouse player_metrics data
+    /// This provides accurate and granular streak detection
+    /// </summary>
+    private async Task<List<Achievement>> CalculateKillStreaksFromPlayerMetricsAsync(PlayerRound round)
+    {
+        var achievements = new List<Achievement>();
+
+        try
+        {
+            // Get player metrics for the round timeframe
+            var playerMetrics = await GetPlayerMetricsForRoundAsync(round);
+            
+            if (playerMetrics.Count < 2) 
+            {
+                _logger.LogDebug("Insufficient player_metrics data for {PlayerName} round {RoundId} - found {Count} metrics", 
+                    round.PlayerName, round.RoundId, playerMetrics.Count);
+                return achievements; // Need at least 2 metrics to detect streaks
+            }
+
+            // Calculate streaks from the more granular player_metrics data
+            var streakInstances = CalculateAllStreakInstancesFromMetrics(playerMetrics);
+            
+            if (!streakInstances.Any()) return achievements; // No streaks of 5+ kills
+
+            // Get existing achievements to avoid duplicates
+            var existingAchievements = await _readService.GetPlayerAchievementsByTypeAsync(round.PlayerName, AchievementTypes.KillStreak);
+            var existingRoundAchievements = existingAchievements.Where(a => a.RoundId == round.RoundId).ToList();
+            
+            foreach (var streakInstance in streakInstances)
+            {
+                var achievementId = $"kill_streak_{streakInstance.Threshold}";
+                
+                // Check if player already has this specific achievement instance
+                var hasAchievementForThisInstance = existingRoundAchievements.Any(a => 
+                    a.AchievementId == achievementId && 
+                    Math.Abs((a.AchievedAt - streakInstance.AchievedAt).TotalMinutes) < 2); // Allow 2-minute tolerance
+                
+                if (!hasAchievementForThisInstance)
+                {
+                    var badgeDefinition = _badgeService.GetBadgeDefinition(achievementId);
+                    if (badgeDefinition != null)
+                    {
+                        achievements.Add(new Achievement
+                        {
+                            PlayerName = round.PlayerName,
+                            AchievementType = AchievementTypes.KillStreak,
+                            AchievementId = achievementId,
+                            AchievementName = badgeDefinition.Name,
+                            Tier = badgeDefinition.Tier,
+                            Value = (uint)streakInstance.Threshold,
+                            AchievedAt = streakInstance.AchievedAt,
+                            ProcessedAt = DateTime.UtcNow,
+                            ServerGuid = round.ServerGuid,
+                            MapName = round.MapName,
+                            RoundId = round.RoundId,
+                            Metadata = $"{{\"actual_streak\":{streakInstance.Threshold},\"round_kills\":{round.FinalKills}}}"
+                        });
+
+                        _logger.LogInformation("ClickHouse kill streak achievement: {PlayerName} achieved {AchievementName} with {Threshold} kills at {AchievementTime}",
+                            round.PlayerName, badgeDefinition.Name, streakInstance.Threshold, streakInstance.AchievedAt);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error calculating kill streaks from player_metrics for round {RoundId}, player {PlayerName}",
+                round.RoundId, round.PlayerName);
+        }
+
+        return achievements;
+    }
+
+    /// <summary>
+    /// Get player metrics data for a round using the round start/end times and server/map context
+    /// Uses ADO.NET with proper parameterized queries for security
+    /// </summary>
+    private async Task<List<PlayerMetric>> GetPlayerMetricsForRoundAsync(PlayerRound round)
+    {
+        try
+        {
+            var roundStartTime = round.RoundStartTime;
+            var roundEndTime = round.RoundEndTime;
+            
+            // Add some buffer to account for timing differences
+            var bufferMinutes = 2;
+            var searchStartTime = roundStartTime.AddMinutes(-bufferMinutes);
+            var searchEndTime = roundEndTime.AddMinutes(bufferMinutes);
+
+            // Use the existing ClickHouseGamificationService to get the player metrics
+            // This ensures we use ADO.NET with proper parameterized queries
+            var playerMetricPoints = await _readService.GetPlayerMetricsForRoundAsync(
+                round.PlayerName, 
+                round.ServerGuid, 
+                round.MapName, 
+                searchStartTime, 
+                searchEndTime);
+
+            var results = playerMetricPoints.Select(p => new PlayerMetric
+            {
+                Timestamp = p.Timestamp,
+                Kills = p.Kills,
+                Deaths = p.Deaths,
+                PlayerName = round.PlayerName
+            }).ToList();
+
+            _logger.LogDebug("Retrieved {Count} player metrics for {PlayerName} round {RoundId}", 
+                results.Count, round.PlayerName, round.RoundId);
+
+            return results;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching player metrics for round {RoundId}, player {PlayerName}",
+                round.RoundId, round.PlayerName);
+            return new List<PlayerMetric>();
+        }
+    }
+
+    /// <summary>
+    /// Calculate all streak instances from player metrics data
+    /// This tracks multiple instances of the same threshold being achieved in a round
+    /// </summary>
+    private List<StreakInstance> CalculateAllStreakInstancesFromMetrics(List<PlayerMetric> metrics)
+    {
+        var streakInstances = new List<StreakInstance>();
+        var thresholdValues = new[] { 5, 10, 15, 20, 25, 30, 50 };
+        
+        if (metrics.Count < 2) return streakInstances;
+
+        int currentStreak = 0;
+        var achievedThresholdsInCurrentStreak = new HashSet<int>();
+        ushort previousKills = metrics.First().Kills;
+        ushort previousDeaths = metrics.First().Deaths;
+
+        foreach (var metric in metrics.Skip(1))
+        {
+            var killsDiff = metric.Kills - previousKills;
+            var deathsDiff = metric.Deaths - previousDeaths;
+
+            if (killsDiff > 0 && deathsDiff == 0)
+            {
+                // Player got kills without dying - continue/start streak
+                currentStreak += killsDiff;
+                
+                // Check if any thresholds were reached during this metric
+                foreach (var threshold in thresholdValues)
+                {
+                    if (currentStreak >= threshold && !achievedThresholdsInCurrentStreak.Contains(threshold))
+                    {
+                        // This threshold was reached for this streak
+                        streakInstances.Add(new StreakInstance
+                        {
+                            Threshold = threshold,
+                            AchievedAt = metric.Timestamp
+                        });
+                        achievedThresholdsInCurrentStreak.Add(threshold);
+                    }
+                }
+            }
+            else if (deathsDiff > 0)
+            {
+                // Player died - reset streak and clear achieved thresholds for next streak
+                currentStreak = 0;
+                achievedThresholdsInCurrentStreak.Clear();
+            }
+
+            previousKills = metric.Kills;
+            previousDeaths = metric.Deaths;
+        }
+
+        return streakInstances;
+    }
+
+    /// <summary>
+    /// Simple PlayerMetric class for ClickHouse queries
+    /// </summary>
+    private class PlayerMetric
+    {
+        public DateTime Timestamp { get; set; }
+        public ushort Kills { get; set; }
+        public ushort Deaths { get; set; }
+        public string PlayerName { get; set; } = "";
+    }
+
+    /// <summary>
+    /// Represents a specific instance of a kill streak threshold being achieved
+    /// </summary>
+    private class StreakInstance
+    {
+        public int Threshold { get; set; }
+        public DateTime AchievedAt { get; set; }
     }
 } 
