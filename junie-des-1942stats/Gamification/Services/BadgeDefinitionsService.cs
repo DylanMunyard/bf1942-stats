@@ -60,22 +60,23 @@ public class BadgeDefinitionsService
     {
         var streakBadges = new[]
         {
-            ("kill_streak_5", "First Blood", "5 kill streak in a single round", BadgeTiers.Bronze, 5),
-            ("kill_streak_10", "Double Digits", "10 kill streak in a single round", BadgeTiers.Bronze, 10),
-            ("kill_streak_15", "Killing Spree", "15 kill streak in a single round", BadgeTiers.Silver, 15),
-            ("kill_streak_20", "Rampage", "20 kill streak in a single round", BadgeTiers.Silver, 20),
-            ("kill_streak_25", "Unstoppable", "25 kill streak in a single round", BadgeTiers.Gold, 25),
-            ("kill_streak_30", "Godlike", "30 kill streak in a single round", BadgeTiers.Gold, 30),
-            ("kill_streak_50", "Legendary", "50+ kill streak in a single round", BadgeTiers.Legend, 50)
+            ("kill_streak_5", "First Blood", "5 kill streak in a single round", "Get 5 kills without dying in one round", BadgeTiers.Bronze, 5),
+            ("kill_streak_10", "Double Digits", "10 kill streak in a single round", "Get 10 kills without dying in one round", BadgeTiers.Bronze, 10),
+            ("kill_streak_15", "Killing Spree", "15 kill streak in a single round", "Get 15 kills without dying in one round", BadgeTiers.Silver, 15),
+            ("kill_streak_20", "Rampage", "20 kill streak in a single round", "Get 20 kills without dying in one round", BadgeTiers.Silver, 20),
+            ("kill_streak_25", "Unstoppable", "25 kill streak in a single round", "Get 25 kills without dying in one round", BadgeTiers.Gold, 25),
+            ("kill_streak_30", "Godlike", "30 kill streak in a single round", "Get 30 kills without dying in one round", BadgeTiers.Gold, 30),
+            ("kill_streak_50", "Legendary", "50+ kill streak in a single round", "Get 50+ kills without dying in one round", BadgeTiers.Legend, 50)
         };
 
-        foreach (var (id, name, desc, tier, value) in streakBadges)
+        foreach (var (id, name, desc, uiDesc, tier, value) in streakBadges)
         {
             badges[id] = new BadgeDefinition
             {
                 Id = id,
                 Name = name,
                 Description = desc,
+                UIDescription = uiDesc,
                 Tier = tier,
                 Category = BadgeCategories.Performance,
                 Requirements = new Dictionary<string, object> { ["streak_count"] = value }
@@ -87,19 +88,20 @@ public class BadgeDefinitionsService
     {
         var kpmBadges = new[]
         {
-            ("sharpshooter_bronze", "Bronze Sharpshooter", "1.0+ KPM sustained over 10 rounds", BadgeTiers.Bronze, 1.0, 10),
-            ("sharpshooter_silver", "Silver Sharpshooter", "1.5+ KPM sustained over 25 rounds", BadgeTiers.Silver, 1.5, 25),
-            ("sharpshooter_gold", "Gold Sharpshooter", "2.0+ KPM sustained over 50 rounds", BadgeTiers.Gold, 2.0, 50),
-            ("sharpshooter_legend", "Legendary Marksman", "2.5+ KPM sustained over 100 rounds", BadgeTiers.Legend, 2.5, 100)
+            ("sharpshooter_bronze", "Bronze Sharpshooter", "1.0+ KPM sustained over 10 rounds", "Maintain 1+ kills per minute over 10 rounds", BadgeTiers.Bronze, 1.0, 10),
+            ("sharpshooter_silver", "Silver Sharpshooter", "1.5+ KPM sustained over 25 rounds", "Maintain 1.5+ kills per minute over 25 rounds", BadgeTiers.Silver, 1.5, 25),
+            ("sharpshooter_gold", "Gold Sharpshooter", "2.0+ KPM sustained over 50 rounds", "Maintain 2+ kills per minute over 50 rounds", BadgeTiers.Gold, 2.0, 50),
+            ("sharpshooter_legend", "Legendary Marksman", "2.5+ KPM sustained over 100 rounds", "Maintain 2.5+ kills per minute over 100 rounds", BadgeTiers.Legend, 2.5, 100)
         };
 
-        foreach (var (id, name, desc, tier, kpm, rounds) in kpmBadges)
+        foreach (var (id, name, desc, uiDesc, tier, kpm, rounds) in kpmBadges)
         {
             badges[id] = new BadgeDefinition
             {
                 Id = id,
                 Name = name,
                 Description = desc,
+                UIDescription = uiDesc,
                 Tier = tier,
                 Category = BadgeCategories.Performance,
                 Requirements = new Dictionary<string, object> 
@@ -113,19 +115,20 @@ public class BadgeDefinitionsService
         // KD Ratio badges
         var kdBadges = new[]
         {
-            ("elite_warrior_bronze", "Bronze Elite", "2.0+ KD ratio over 25 rounds", BadgeTiers.Bronze, 2.0, 25),
-            ("elite_warrior_silver", "Silver Elite", "3.0+ KD ratio over 50 rounds", BadgeTiers.Silver, 3.0, 50),
-            ("elite_warrior_gold", "Gold Elite", "4.0+ KD ratio over 100 rounds", BadgeTiers.Gold, 4.0, 100),
-            ("elite_warrior_legend", "Legendary Elite", "5.0+ KD ratio over 200 rounds", BadgeTiers.Legend, 5.0, 200)
+            ("elite_warrior_bronze", "Bronze Elite", "2.0+ KD ratio over 25 rounds", "Maintain 2+ kill/death ratio over 25 rounds", BadgeTiers.Bronze, 2.0, 25),
+            ("elite_warrior_silver", "Silver Elite", "3.0+ KD ratio over 50 rounds", "Maintain 3+ kill/death ratio over 50 rounds", BadgeTiers.Silver, 3.0, 50),
+            ("elite_warrior_gold", "Gold Elite", "4.0+ KD ratio over 100 rounds", "Maintain 4+ kill/death ratio over 100 rounds", BadgeTiers.Gold, 4.0, 100),
+            ("elite_warrior_legend", "Legendary Elite", "5.0+ KD ratio over 200 rounds", "Maintain 5+ kill/death ratio over 200 rounds", BadgeTiers.Legend, 5.0, 200)
         };
 
-        foreach (var (id, name, desc, tier, kd, rounds) in kdBadges)
+        foreach (var (id, name, desc, uiDesc, tier, kd, rounds) in kdBadges)
         {
             badges[id] = new BadgeDefinition
             {
                 Id = id,
                 Name = name,
                 Description = desc,
+                UIDescription = uiDesc,
                 Tier = tier,
                 Category = BadgeCategories.Performance,
                 Requirements = new Dictionary<string, object> 
@@ -144,6 +147,7 @@ public class BadgeDefinitionsService
             Id = "map_specialist",
             Name = "Map Specialist",
             Description = "Top 10% KD ratio on specific map (min 50 rounds)",
+            UIDescription = "Rank in top 10% on a map (50+ rounds)",
             Tier = BadgeTiers.Silver,
             Category = BadgeCategories.MapMastery,
             Requirements = new Dictionary<string, object> 
@@ -158,6 +162,7 @@ public class BadgeDefinitionsService
             Id = "map_dominator",
             Name = "Map Dominator",
             Description = "Top 3% KD ratio on specific map (min 100 rounds)",
+            UIDescription = "Rank in top 3% on a map (100+ rounds)",
             Tier = BadgeTiers.Gold,
             Category = BadgeCategories.MapMastery,
             Requirements = new Dictionary<string, object> 
@@ -172,6 +177,7 @@ public class BadgeDefinitionsService
             Id = "map_legend",
             Name = "Map Legend",
             Description = "Top 1% KD ratio on specific map (min 200 rounds)",
+            UIDescription = "Rank in top 1% on a map (200+ rounds)",
             Tier = BadgeTiers.Legend,
             Category = BadgeCategories.MapMastery,
             Requirements = new Dictionary<string, object> 
@@ -189,6 +195,7 @@ public class BadgeDefinitionsService
             Id = "consistent_killer",
             Name = "Consistent Killer",
             Description = "Positive KD in 80% of last 50 rounds",
+            UIDescription = "Stay positive K/D in 80% of your last 50 rounds",
             Tier = BadgeTiers.Silver,
             Category = BadgeCategories.Consistency,
             Requirements = new Dictionary<string, object> 
@@ -203,6 +210,7 @@ public class BadgeDefinitionsService
             Id = "comeback_king",
             Name = "Comeback King",
             Description = "Most improved player (30-day KD trend)",
+            UIDescription = "Show the biggest improvement in K/D over 30 days",
             Tier = BadgeTiers.Gold,
             Category = BadgeCategories.Consistency,
             Requirements = new Dictionary<string, object> 
@@ -217,6 +225,7 @@ public class BadgeDefinitionsService
             Id = "rock_solid",
             Name = "Rock Solid",
             Description = "Low variance in KD ratio over 100 rounds",
+            UIDescription = "Keep consistent K/D performance over 100 rounds",
             Tier = BadgeTiers.Gold,
             Category = BadgeCategories.Consistency,
             Requirements = new Dictionary<string, object> 
@@ -248,6 +257,7 @@ public class BadgeDefinitionsService
                 Id = $"total_kills_{kills}",
                 Name = $"{name} ({kills:N0} Kills)",
                 Description = $"Achieve {kills:N0} total kills",
+                UIDescription = $"Reach {kills:N0} total kills",
                 Tier = tier,
                 Category = BadgeCategories.Milestone,
                 Requirements = new Dictionary<string, object> { ["total_kills"] = kills }
@@ -270,6 +280,7 @@ public class BadgeDefinitionsService
                 Id = $"playtime_{hours}h",
                 Name = $"{name} ({hours}h Played)",
                 Description = $"Play for {hours} hours total",
+                UIDescription = $"Play for {hours} hours total",
                 Tier = tier,
                 Category = BadgeCategories.Milestone,
                 Requirements = new Dictionary<string, object> { ["playtime_hours"] = hours }
@@ -284,6 +295,7 @@ public class BadgeDefinitionsService
             Id = "server_regular",
             Name = "Server Regular",
             Description = "Top 10 playtime on specific server",
+            UIDescription = "Be in top 10 most active players on a server",
             Tier = BadgeTiers.Silver,
             Category = BadgeCategories.Social,
             Requirements = new Dictionary<string, object> { ["server_rank_threshold"] = 10 }
@@ -294,6 +306,7 @@ public class BadgeDefinitionsService
             Id = "night_owl",
             Name = "Night Owl",
             Description = "Most active 10pm-6am player",
+            UIDescription = "Be most active player during night hours (10pm-6am)",
             Tier = BadgeTiers.Bronze,
             Category = BadgeCategories.Social,
             Requirements = new Dictionary<string, object> 
@@ -309,6 +322,7 @@ public class BadgeDefinitionsService
             Id = "early_bird",
             Name = "Early Bird",
             Description = "Most active 6am-10am player",
+            UIDescription = "Be most active player during morning hours (6am-10am)",
             Tier = BadgeTiers.Bronze,
             Category = BadgeCategories.Social,
             Requirements = new Dictionary<string, object> 
@@ -324,6 +338,7 @@ public class BadgeDefinitionsService
             Id = "marathon_warrior",
             Name = "Marathon Warrior",
             Description = "Play for 6+ consecutive hours",
+            UIDescription = "Play for 6+ hours in a single session",
             Tier = BadgeTiers.Gold,
             Category = BadgeCategories.Social,
             Requirements = new Dictionary<string, object> { ["consecutive_hours"] = 6 }
