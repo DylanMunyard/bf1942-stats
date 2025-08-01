@@ -176,7 +176,6 @@ public class GamificationController : ControllerBase
     }
 
 
-/* 
     /// <summary>
     /// Trigger historical data processing (admin only)
     /// </summary>
@@ -210,6 +209,7 @@ public class GamificationController : ControllerBase
         }
     }
     
+/* 
     /// <summary>
     /// Trigger incremental processing (admin only)
     /// </summary>
@@ -242,7 +242,7 @@ public class GamificationController : ControllerBase
     [HttpGet("achievements")]
     public async Task<ActionResult<AchievementResponse>> GetAllAchievements(
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 50,
+        [FromQuery] int pageSize = 200,
         [FromQuery] string sortBy = "AchievedAt",
         [FromQuery] string sortOrder = "desc",
         [FromQuery] string? playerName = null,
