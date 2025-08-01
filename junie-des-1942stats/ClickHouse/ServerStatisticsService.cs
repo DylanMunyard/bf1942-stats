@@ -69,8 +69,8 @@ SELECT
     COUNT(*) AS sessions_played,
     SUM(play_time_minutes) AS total_play_time_minutes
 FROM player_rounds
-WHERE player_name = '{playerName.Replace("'", "''")}'
-AND server_guid = '{serverGuid}'
+WHERE player_name = '{EscapeClickHouseString(playerName)}'
+AND server_guid = '{EscapeClickHouseString(serverGuid)}'
 {timePeriodCondition.Replace("timestamp", "round_start_time")}
 GROUP BY map_name
 ORDER BY total_kills DESC";
@@ -119,5 +119,18 @@ ORDER BY total_kills DESC";
             }
             _disposed = true;
         }
+    }
+
+    private string EscapeClickHouseString(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return "";
+        
+        return input
+            .Replace("\\", "\\\\")  // Escape backslashes first
+            .Replace("'", "''")     // Escape single quotes
+            .Replace("\0", "\\0")   // Escape null bytes
+            .Replace("\n", "\\n")   // Escape newlines
+            .Replace("\r", "\\r")   // Escape carriage returns
+            .Replace("\t", "\\t");  // Escape tabs
     }
 } 

@@ -514,7 +514,15 @@ public class ClickHouseGamificationService : BaseClickHouseService
 
     private string EscapeString(string input)
     {
-        return input?.Replace("'", "''") ?? "";
+        if (string.IsNullOrEmpty(input)) return "";
+        
+        return input
+            .Replace("\\", "\\\\")  // Escape backslashes first
+            .Replace("'", "''")     // Escape single quotes
+            .Replace("\0", "\\0")   // Escape null bytes
+            .Replace("\n", "\\n")   // Escape newlines
+            .Replace("\r", "\\r")   // Escape carriage returns
+            .Replace("\t", "\\t");  // Escape tabs
     }
 
     private List<Achievement> ParseAchievements(string result)
