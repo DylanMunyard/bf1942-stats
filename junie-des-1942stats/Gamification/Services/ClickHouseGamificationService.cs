@@ -426,7 +426,7 @@ public class ClickHouseGamificationService : IDisposable
                 FROM player_achievements
                 {whereClause}
                 ORDER BY {sortField} {orderDirection}
-                LIMIT {pageSize:UInt32} OFFSET {offset:UInt32}";
+                LIMIT {{pageSize:UInt32}} OFFSET {{offset:UInt32}}";
 
             var results = new List<Achievement>();
             await using (var command = _connection.CreateCommand())
