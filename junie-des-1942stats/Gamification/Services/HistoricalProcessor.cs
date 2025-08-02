@@ -1,5 +1,6 @@
 using junie_des_1942stats.Gamification.Models;
 using junie_des_1942stats.ClickHouse.Models;
+using junie_des_1942stats.ClickHouse.Interfaces;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -11,9 +12,9 @@ namespace junie_des_1942stats.Gamification.Services;
 /// </summary>
 public class HistoricalProcessor
 {
-    private readonly ClickHouseGamificationService _readService;
-    private readonly ClickHouseGamificationService _writeService;
+    private readonly ClickHouseGamificationService _gamificationService;
     private readonly BadgeDefinitionsService _badgeDefinitionsService;
+    private readonly IClickHouseReader _clickHouseReader;
     private readonly ILogger<HistoricalProcessor> _logger;
 
     // Milestone thresholds
@@ -22,14 +23,14 @@ public class HistoricalProcessor
     private readonly int[] _scoreMilestones = { 10000, 50000, 100000, 500000, 1000000 };
 
     public HistoricalProcessor(
-        [FromKeyedServices("read")] ClickHouseGamificationService readService,
-        [FromKeyedServices("write")] ClickHouseGamificationService writeService,
+        ClickHouseGamificationService gamificationService,
         BadgeDefinitionsService badgeDefinitionsService,
+        IClickHouseReader clickHouseReader,
         ILogger<HistoricalProcessor> logger)
     {
-        _readService = readService;
-        _writeService = writeService;
+        _gamificationService = gamificationService;
         _badgeDefinitionsService = badgeDefinitionsService;
+        _clickHouseReader = clickHouseReader;
         _logger = logger;
     }
 
@@ -87,7 +88,7 @@ public class HistoricalProcessor
 
         if (achievements.Any())
         {
-            await _writeService.InsertAchievementsBatchAsync(achievements);
+            await _gamificationService.InsertAchievementsBatchAsync(achievements);
             _logger.LogInformation("Created {AchievementCount} milestone achievements with accurate dates", 
                 achievements.Count);
         }
@@ -131,7 +132,7 @@ public class HistoricalProcessor
 
             if (newAchievements.Any())
             {
-                await _writeService.InsertAchievementsBatchAsync(newAchievements);
+                await _gamificationService.InsertAchievementsBatchAsync(newAchievements);
                 _logger.LogInformation("Found {AchievementCount} new kill streak achievements for {Month:yyyy-MM}", 
                     newAchievements.Count, currentMonth);
             }
@@ -794,39 +795,19 @@ ORDER BY player_name, threshold";
     }
 
     /// <summary>
-    /// Query player_metrics table using ClickHouse service
+    /// Query player_metrics table using ClickHouse reader service
     /// </summary>
     private async Task<string> QueryPlayerMetricsAsync(string query)
     {
-        // Use reflection to access the protected QueryAsync method
-        var method = _readService.GetType().GetMethod("QueryAsync", 
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        
-        if (method != null)
-        {
-            var task = (Task<string>)method.Invoke(_readService, new object[] { query })!;
-            return await task;
-        }
-        
-        throw new InvalidOperationException("Could not access QueryAsync method");
+        return await _clickHouseReader.ExecuteQueryAsync(query);
     }
 
     /// <summary>
-    /// Query player_rounds table using ClickHouse service
+    /// Query player_rounds table using ClickHouse reader service
     /// </summary>
     private async Task<string> QueryPlayerRoundsAsync(string query)
     {
-        // Use reflection to access the protected QueryAsync method
-        var method = _readService.GetType().GetMethod("QueryAsync", 
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        
-        if (method != null)
-        {
-            var task = (Task<string>)method.Invoke(_readService, new object[] { query })!;
-            return await task;
-        }
-        
-        throw new InvalidOperationException("Could not access QueryAsync method");
+        return await _clickHouseReader.ExecuteQueryAsync(query);
     }
 }
 

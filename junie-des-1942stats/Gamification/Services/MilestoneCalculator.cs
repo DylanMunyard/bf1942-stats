@@ -17,7 +17,7 @@ public class MilestoneCalculator
     private readonly int[] _scoreMilestones = { 10000, 50000, 100000, 500000, 1000000 };
 
     public MilestoneCalculator(
-        [FromKeyedServices("read")] ClickHouseGamificationService readService,
+        ClickHouseGamificationService readService,
         BadgeDefinitionsService badgeService,
         ILogger<MilestoneCalculator> logger)
     {

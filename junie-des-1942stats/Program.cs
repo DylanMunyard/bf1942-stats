@@ -321,29 +321,19 @@ try
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.BadgeDefinitionsService>();
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.AchievementLabelingService>();
     
-    // Register ClickHouse Gamification Services - separate read and write instances
-    builder.Services.AddKeyedScoped<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>("read", (sp, key) =>
+    // Register HttpClient for ClickHouse Gamification Service
+    builder.Services.AddHttpClient<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>(client => 
     {
-        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
-        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
-        var logger = sp.GetRequiredService<ILogger<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>>();
-        
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouseGamificationService (Read) URL: {clickHouseReadUrl}");
-        
-        return new junie_des_1942stats.Gamification.Services.ClickHouseGamificationService(httpClient, clickHouseReadUrl, logger);
+        client.Timeout = TimeSpan.FromSeconds(10); // Longer timeout for bulk operations
+        client.DefaultRequestHeaders.Add("X-ClickHouse-User", "default");
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
     });
     
-    builder.Services.AddKeyedScoped<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>("write", (sp, key) =>
-    {
-        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
-        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
-        var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? clickHouseReadUrl;
-        var logger = sp.GetRequiredService<ILogger<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>>();
-        
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouseGamificationService (Write) URL: {clickHouseWriteUrl}");
-        
-        return new junie_des_1942stats.Gamification.Services.ClickHouseGamificationService(httpClient, clickHouseWriteUrl, logger);
-    });
+    // Register ClickHouse Gamification Service as Singleton to match other ClickHouse services
+    builder.Services.AddSingleton<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>();
     
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.HistoricalProcessor>();
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.KillStreakDetector>();

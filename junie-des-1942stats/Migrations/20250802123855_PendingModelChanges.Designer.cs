@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using junie_des_1942stats.PlayerTracking;
 
@@ -10,9 +11,11 @@ using junie_des_1942stats.PlayerTracking;
 namespace junie_des_1942stats.Migrations
 {
     [DbContext(typeof(PlayerTrackerDbContext))]
-    partial class PlayerTrackerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250802123855_PendingModelChanges")]
+    partial class PendingModelChanges
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.5");
@@ -49,7 +52,7 @@ namespace junie_des_1942stats.Migrations
                     b.Property<int>("TotalKills")
                         .HasColumnType("INTEGER");
 
-                    b.ToTable("ServerBestScoreRaw");
+                    b.ToTable("ServerBestScoreRaws");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.GameServer", b =>
@@ -310,7 +313,7 @@ namespace junie_des_1942stats.Migrations
                     b.Property<int>("TotalSessions")
                         .HasColumnType("INTEGER");
 
-                    b.ToTable("RoundListItem");
+                    b.ToTable("RoundListItems");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.PlayerObservation", b =>
