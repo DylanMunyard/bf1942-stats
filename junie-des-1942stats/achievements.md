@@ -157,6 +157,33 @@
 - **UI Description**: Reach 50,000 total kills
 - **DALL-E Prompt**: Create the ultimate legendary badge with war deity imagery, "50K" in divine script, surrounded by ultimate power symbols and godlike aura
 
+## Milestone Badges (Score Count)
+
+### Bronze Scorer (10,000 Score) - Bronze - ID: total_score_10000
+- **Description**: Achieve 10,000 total score
+- **UI Description**: Reach 10,000 total score
+- **DALL-E Prompt**: Design a bronze badge with score counter display, "10K" prominently shown, and basic achievement symbols in military medal style
+
+### Silver Scorer (50,000 Score) - Silver - ID: total_score_50000
+- **Description**: Achieve 50,000 total score
+- **UI Description**: Reach 50,000 total score
+- **DALL-E Prompt**: Create a silver badge featuring a scoreboard with "50K" display, silver medal elements, and intermediate achievement imagery
+
+### Gold Scorer (100,000 Score) - Silver - ID: total_score_100000
+- **Description**: Achieve 100,000 total score
+- **UI Description**: Reach 100,000 total score
+- **DALL-E Prompt**: Design a silver badge with golden score elements, "100K" in bold display, and advanced scoring achievement symbols
+
+### Master Scorer (500,000 Score) - Gold - ID: total_score_500000
+- **Description**: Achieve 500,000 total score
+- **UI Description**: Reach 500,000 total score
+- **DALL-E Prompt**: Create a gold badge showing a master scorekeeper figure, "500K" in prestigious font, with golden achievement elements and mastery symbols
+
+### Legendary Scorer (1,000,000 Score) - Legend - ID: total_score_1000000
+- **Description**: Achieve 1,000,000 total score
+- **UI Description**: Reach 1,000,000 total score
+- **DALL-E Prompt**: Design a legendary badge with mythical scoring deity, "1M" in divine script, surrounded by ultimate achievement symbols and legendary radiance
+
 ## Milestone Badges (Playtime)
 
 ### Recruit (10h Played) - Bronze - ID: playtime_10h
