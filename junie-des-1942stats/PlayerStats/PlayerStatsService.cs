@@ -153,7 +153,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         };
     }
 
-    public async Task<PlayerTimeStatistics> GetPlayerStatistics(string playerName, bool showAllServers = false)
+    public async Task<PlayerTimeStatistics> GetPlayerStatistics(string playerName)
     {
         // First check if the player exists
         var player = await _dbContext.Players
