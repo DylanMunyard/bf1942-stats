@@ -275,9 +275,9 @@ public class BadgeDefinitionsService
 
         foreach (var (hours, name, tier) in playtimeMilestones)
         {
-            badges[$"playtime_{hours}h"] = new BadgeDefinition
+            badges[$"milestone_playtime_{hours}h"] = new BadgeDefinition
             {
-                Id = $"playtime_{hours}h",
+                Id = $"milestone_playtime_{hours}h",
                 Name = $"{name} ({hours}h Played)",
                 Description = $"Play for {hours} hours total",
                 UIDescription = $"Play for {hours} hours total",

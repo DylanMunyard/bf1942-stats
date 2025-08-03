@@ -220,7 +220,7 @@ public class AchievementLabelingService
 
         for (int i = 0; i < playtimeMilestones.Length; i++)
         {
-            var id = $"playtime_{playtimeMilestones[i]}h";
+            var id = $"milestone_playtime_{playtimeMilestones[i]}h";
             labels[id] = new AchievementLabel
             {
                 AchievementId = id,
@@ -277,7 +277,7 @@ public class AchievementLabelingService
     {
         if (achievementId.StartsWith("kill_streak_"))
             return AchievementTypes.KillStreak;
-        if (achievementId.StartsWith("total_kills_") || achievementId.StartsWith("playtime_") || achievementId.StartsWith("total_score_"))
+        if (achievementId.StartsWith("total_kills_") || achievementId.StartsWith("milestone_playtime_") || achievementId.StartsWith("total_score_"))
             return AchievementTypes.Milestone;
         return AchievementTypes.Badge;
     }
@@ -303,7 +303,7 @@ public class AchievementLabelingService
     {
         if (achievementId.StartsWith("kill_streak_"))
             return BadgeCategories.Performance;
-        if (achievementId.StartsWith("total_kills_") || achievementId.StartsWith("playtime_") || achievementId.StartsWith("total_score_"))
+        if (achievementId.StartsWith("total_kills_") || achievementId.StartsWith("milestone_playtime_") || achievementId.StartsWith("total_score_"))
             return BadgeCategories.Milestone;
         if (achievementId.StartsWith("map_"))
             return BadgeCategories.MapMastery;

@@ -117,14 +117,14 @@ public class MilestoneCalculator
                 newStats.TotalPlayTimeMinutes >= milestoneMinutes)
             {
                 // Player crossed this playtime milestone
-                var badgeDefinition = _badgeService.GetBadgeDefinition($"playtime_{milestoneHours}h");
+                var badgeDefinition = _badgeService.GetBadgeDefinition($"milestone_playtime_{milestoneHours}h");
                 if (badgeDefinition != null)
                 {
                     achievements.Add(new Achievement
                     {
                         PlayerName = round.PlayerName,
                         AchievementType = AchievementTypes.Milestone,
-                        AchievementId = $"playtime_{milestoneHours}h",
+                        AchievementId = $"milestone_playtime_{milestoneHours}h",
                         AchievementName = badgeDefinition.Name,
                         Tier = badgeDefinition.Tier,
                         Value = (uint)milestoneHours,

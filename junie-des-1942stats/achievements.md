@@ -186,27 +186,27 @@
 
 ## Milestone Badges (Playtime)
 
-### Recruit (10h Played) - Bronze - ID: playtime_10h
+### Recruit (10h Played) - Bronze - ID: milestone_playtime_10h
 - **Description**: Play for 10 hours total
 - **UI Description**: Play for 10 hours total
 - **DALL-E Prompt**: Design a bronze badge with new recruit imagery, "10H" time display, and basic training symbols in military boot camp style
 
-### Soldier (50h Played) - Bronze - ID: playtime_50h
+### Soldier (50h Played) - Bronze - ID: milestone_playtime_50h
 - **Description**: Play for 50 hours total
 - **UI Description**: Play for 50 hours total
 - **DALL-E Prompt**: Create a bronze badge featuring standard soldier gear, "50H" marker, and regular service member insignia
 
-### Veteran (100h Played) - Silver - ID: playtime_100h
+### Veteran (100h Played) - Silver - ID: milestone_playtime_100h
 - **Description**: Play for 100 hours total
 - **UI Description**: Play for 100 hours total
 - **DALL-E Prompt**: Design a silver badge with experienced soldier silhouette, "100H" display, and veteran service ribbons and medals
 
-### Elite (500h Played) - Gold - ID: playtime_500h
+### Elite (500h Played) - Gold - ID: milestone_playtime_500h
 - **Description**: Play for 500 hours total
 - **UI Description**: Play for 500 hours total
 - **DALL-E Prompt**: Create a gold badge showing elite unit member, "500H" in prominent display, with specialized forces insignia
 
-### Legend (1000h Played) - Legend - ID: playtime_1000h
+### Legend (1000h Played) - Legend - ID: milestone_playtime_1000h
 - **Description**: Play for 1000 hours total
 - **UI Description**: Play for 1000 hours total
 - **DALL-E Prompt**: Design a legendary badge with mythical dedication imagery, "1000H" in epic font, and ultimate commitment symbols with golden radiance

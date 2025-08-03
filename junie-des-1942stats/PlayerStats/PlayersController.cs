@@ -105,7 +105,7 @@ public class PlayersController : ControllerBase
         string playerName,
         [FromQuery] string? show = null)
     {
-        if (string.IsNullOrWhiteSpace(playerName))
+            if (string.IsNullOrWhiteSpace(playerName))
             return BadRequest("Player name cannot be empty");
 
         // Validate show parameter
@@ -118,9 +118,6 @@ public class PlayersController : ControllerBase
         }
             
         var stats = await _playerStatsService.GetPlayerStatistics(playerName, showAllServers);
-        
-        if (stats.TotalKills == 0 && stats.TotalPlayTimeMinutes == 0)
-            return NotFound($"Player '{playerName}' not found");
             
         return Ok(stats);
     }
