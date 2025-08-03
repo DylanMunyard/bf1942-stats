@@ -286,6 +286,30 @@ public class BadgeDefinitionsService
                 Requirements = new Dictionary<string, object> { ["playtime_hours"] = hours }
             };
         }
+
+        // Add score milestones
+        var scoreMilestones = new[]
+        {
+            (10000, "Bronze Scorer", BadgeTiers.Bronze),
+            (50000, "Silver Scorer", BadgeTiers.Silver),
+            (100000, "Gold Scorer", BadgeTiers.Silver),
+            (500000, "Master Scorer", BadgeTiers.Gold),
+            (1000000, "Legendary Scorer", BadgeTiers.Legend)
+        };
+
+        foreach (var (score, name, tier) in scoreMilestones)
+        {
+            badges[$"total_score_{score}"] = new BadgeDefinition
+            {
+                Id = $"total_score_{score}",
+                Name = $"{name} ({score:N0} Score)",
+                Description = $"Achieve {score:N0} total score",
+                UIDescription = $"Reach {score:N0} total score",
+                Tier = tier,
+                Category = BadgeCategories.Milestone,
+                Requirements = new Dictionary<string, object> { ["total_score"] = score }
+            };
+        }
     }
 
     private void AddSocialBadges(Dictionary<string, BadgeDefinition> badges)

@@ -155,40 +155,35 @@ public class MilestoneCalculator
             if (previousStats.TotalScore < milestone && newStats.TotalScore >= milestone)
             {
                 // Player crossed this score milestone
-                achievements.Add(new Achievement
+                var badgeDefinition = _badgeService.GetBadgeDefinition($"total_score_{milestone}");
+                if (badgeDefinition != null)
                 {
-                    PlayerName = round.PlayerName,
-                    AchievementType = AchievementTypes.Milestone,
-                    AchievementId = $"total_score_{milestone}",
-                    AchievementName = $"{milestone:N0} Total Score",
-                    Tier = GetScoreMilestoneTier(milestone),
-                    Value = (uint)milestone,
-                    AchievedAt = round.RoundEndTime,
-                    ProcessedAt = DateTime.UtcNow,
-                    ServerGuid = round.ServerGuid,
-                    MapName = round.MapName,
-                    RoundId = round.RoundId,
-                    Metadata = $"{{\"previous_score\":{previousStats.TotalScore},\"new_score\":{newStats.TotalScore}}}"
-                });
+                    achievements.Add(new Achievement
+                    {
+                        PlayerName = round.PlayerName,
+                        AchievementType = AchievementTypes.Milestone,
+                        AchievementId = $"total_score_{milestone}",
+                        AchievementName = badgeDefinition.Name,
+                        Tier = badgeDefinition.Tier,
+                        Value = (uint)milestone,
+                        AchievedAt = round.RoundEndTime,
+                        ProcessedAt = DateTime.UtcNow,
+                        ServerGuid = round.ServerGuid,
+                        MapName = round.MapName,
+                        RoundId = round.RoundId,
+                        Metadata = $"{{\"previous_score\":{previousStats.TotalScore},\"new_score\":{newStats.TotalScore}}}"
+                    });
 
-                _logger.LogInformation("Score milestone achieved: {PlayerName} reached {Milestone:N0} total score",
-                    round.PlayerName, milestone);
+                    _logger.LogInformation("Score milestone achieved: {PlayerName} reached {Milestone:N0} total score",
+                        round.PlayerName, milestone);
+                }
             }
         }
 
         return Task.FromResult(achievements);
     }
 
-    private string GetScoreMilestoneTier(int scoreThreshold)
-    {
-        return scoreThreshold switch
-        {
-            <= 50000 => BadgeTiers.Bronze,
-            <= 100000 => BadgeTiers.Silver,
-            <= 500000 => BadgeTiers.Gold,
-            _ => BadgeTiers.Legend
-        };
-    }
+
 
     public async Task<List<Achievement>> GetPlayerMilestonesAsync(string playerName)
     {
