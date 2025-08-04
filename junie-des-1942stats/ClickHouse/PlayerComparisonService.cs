@@ -416,7 +416,7 @@ ORDER BY hour_of_day";
         return hourlyActivity.OrderByDescending(ha => ha.MinutesActive).ToList();
     }
 
-    public async Task<SimilarPlayersResult> FindSimilarPlayersAsync(string targetPlayer, int limit = 10, bool filterBySimilarOnlineTime = true)
+    public async Task<SimilarPlayersResult> FindSimilarPlayersAsync(string targetPlayer, int limit = 10, bool filterBySimilarOnlineTime = true, SimilarityMode mode = SimilarityMode.Default)
     {
         await EnsureConnectionOpenAsync();
 
@@ -444,12 +444,13 @@ ORDER BY hour_of_day";
         }
 
         // Find similar players based on multiple criteria
-        var similarPlayers = await FindPlayersBySimilarity(targetPlayer, targetStats, limit * 3, targetOnlineHours); // Get more candidates
+        var similarPlayers = await FindPlayersBySimilarity(targetPlayer, targetStats, limit * 3, targetOnlineHours, mode); // Get more candidates
 
         // Calculate similarity scores and rank them
+        var minThreshold = mode == SimilarityMode.AliasDetection ? 0.3 : 0.1; // Higher threshold for alias detection
         var rankedPlayers = similarPlayers
-            .Select(p => CalculateSimilarityScore(targetStats, p))
-            .Where(p => p.SimilarityScore > 0.1) // Minimum similarity threshold
+            .Select(p => CalculateSimilarityScore(targetStats, p, mode))
+            .Where(p => p.SimilarityScore > minThreshold)
             .OrderByDescending(p => p.SimilarityScore)
             .Take(limit)
             .ToList();
@@ -523,19 +524,31 @@ GROUP BY t.total_kills, t.total_deaths, t.total_play_time_minutes, s.server_guid
             // Get player's typical online hours
             playerStats.TypicalOnlineHours = await GetPlayerTypicalOnlineHours(playerName);
             
+            // Get server-specific ping data for alias detection
+            playerStats.ServerPings = await GetPlayerServerPings(playerName);
+            
+            // Get map dominance scores for alias detection
+            playerStats.MapDominanceScores = await GetPlayerMapDominanceScores(playerName);
+            
             return playerStats;
         }
 
         return null;
     }
 
-    private async Task<List<PlayerSimilarityStats>> FindPlayersBySimilarity(string targetPlayer, PlayerSimilarityStats targetStats, int limit, List<int>? targetOnlineHours = null)
+    private async Task<List<PlayerSimilarityStats>> FindPlayersBySimilarity(string targetPlayer, PlayerSimilarityStats targetStats, int limit, List<int>? targetOnlineHours = null, SimilarityMode mode = SimilarityMode.Default)
     {
-        // Find players with similar stats, excluding the target player
-        var playTimeMin = targetStats.TotalPlayTimeMinutes * 0.7; // ±30% play time range
-        var playTimeMax = targetStats.TotalPlayTimeMinutes * 1.3;
-        var kdrMin = Math.Max(0, targetStats.KillDeathRatio - 0.4); // ±0.4 KDR range
-        var kdrMax = targetStats.KillDeathRatio + 0.4;
+        // Adjust search criteria based on similarity mode
+        var playTimeMin = mode == SimilarityMode.AliasDetection 
+            ? targetStats.TotalPlayTimeMinutes * 0.5  // Wider play time range for aliases
+            : targetStats.TotalPlayTimeMinutes * 0.7; // ±30% play time range for default
+        var playTimeMax = mode == SimilarityMode.AliasDetection 
+            ? targetStats.TotalPlayTimeMinutes * 1.5
+            : targetStats.TotalPlayTimeMinutes * 1.3;
+        
+        var kdrTolerance = mode == SimilarityMode.AliasDetection ? 0.2 : 0.4; // Tighter KDR tolerance for aliases
+        var kdrMin = Math.Max(0, targetStats.KillDeathRatio - kdrTolerance);
+        var kdrMax = targetStats.KillDeathRatio + kdrTolerance;
 
         // Create game_id filter - only include players who have played the same games
         var gameIdFilter = "";
@@ -654,13 +667,20 @@ LIMIT {limit}";
                 playerStats.TypicalOnlineHours = await GetPlayerTypicalOnlineHours(playerName);
             }
 
+            // For alias detection mode, also get ping and dominance data
+            if (mode == SimilarityMode.AliasDetection)
+            {
+                playerStats.ServerPings = await GetPlayerServerPings(playerName);
+                playerStats.MapDominanceScores = await GetPlayerMapDominanceScores(playerName);
+            }
+
             players.Add(playerStats);
         }
 
         return players;
     }
 
-    private SimilarPlayer CalculateSimilarityScore(PlayerSimilarityStats target, PlayerSimilarityStats candidate)
+    private SimilarPlayer CalculateSimilarityScore(PlayerSimilarityStats target, PlayerSimilarityStats candidate, SimilarityMode mode = SimilarityMode.Default)
     {
         double score = 0;
         var reasons = new List<string>();
@@ -668,11 +688,29 @@ LIMIT {limit}";
         // Determine if temporal similarity is available
         var hasTemporalData = target.TypicalOnlineHours.Any() && candidate.TypicalOnlineHours.Any();
         
-        // Adjust weights based on whether temporal data is available
-        var playTimeWeight = hasTemporalData ? 0.2 : 0.3;
-        var kdrWeight = hasTemporalData ? 0.35 : 0.4;
-        var serverWeight = hasTemporalData ? 0.2 : 0.3;
-        var temporalWeight = hasTemporalData ? 0.25 : 0.0;
+        // Adjust weights based on similarity mode and temporal data availability
+        double playTimeWeight, kdrWeight, serverWeight, temporalWeight, pingWeight, mapDominanceWeight;
+        
+        if (mode == SimilarityMode.AliasDetection)
+        {
+            // For alias detection, prioritize ping similarity and behavioral patterns
+            playTimeWeight = hasTemporalData ? 0.1 : 0.15;
+            kdrWeight = hasTemporalData ? 0.25 : 0.3;      // Important but not primary
+            serverWeight = hasTemporalData ? 0.15 : 0.2;   // Server affinity important
+            temporalWeight = hasTemporalData ? 0.2 : 0.0;  // Online patterns
+            pingWeight = 0.25;                             // PRIMARY: ping similarity for aliases
+            mapDominanceWeight = 0.15;                     // Map performance patterns
+        }
+        else
+        {
+            // Default algorithm weights (no ping/dominance analysis)
+            playTimeWeight = hasTemporalData ? 0.2 : 0.3;
+            kdrWeight = hasTemporalData ? 0.35 : 0.4;
+            serverWeight = hasTemporalData ? 0.2 : 0.3;
+            temporalWeight = hasTemporalData ? 0.25 : 0.0;
+            pingWeight = 0.0;
+            mapDominanceWeight = 0.0;
+        }
 
         // Play time similarity
         var playTimeDiff = Math.Abs(target.TotalPlayTimeMinutes - candidate.TotalPlayTimeMinutes);
@@ -711,6 +749,32 @@ LIMIT {limit}";
                 var overlapHours = target.TypicalOnlineHours.Intersect(candidate.TypicalOnlineHours).OrderBy(h => h).ToList();
                 var hoursText = string.Join(", ", overlapHours.Select(h => $"{h:D2}:00"));
                 reasons.Add($"Similar online times ({overlapHours.Count} overlapping hours: {hoursText})");
+            }
+        }
+
+        // Ping similarity (for alias detection)
+        if (mode == SimilarityMode.AliasDetection && pingWeight > 0)
+        {
+            var pingScore = CalculatePingSimilarity(target.ServerPings, candidate.ServerPings);
+            score += pingScore * pingWeight;
+            
+            if (pingScore > 0.7)
+            {
+                var commonServers = target.ServerPings.Keys.Intersect(candidate.ServerPings.Keys).Count();
+                reasons.Add($"Very similar ping patterns ({commonServers} common servers, score: {pingScore:F2})");
+            }
+        }
+
+        // Map dominance similarity (for alias detection)
+        if (mode == SimilarityMode.AliasDetection && mapDominanceWeight > 0)
+        {
+            var dominanceScore = CalculateMapDominanceSimilarity(target.MapDominanceScores, candidate.MapDominanceScores);
+            score += dominanceScore * mapDominanceWeight;
+            
+            if (dominanceScore > 0.6)
+            {
+                var commonMaps = target.MapDominanceScores.Keys.Intersect(candidate.MapDominanceScores.Keys).Count();
+                reasons.Add($"Similar map performance patterns ({commonMaps} common maps, score: {dominanceScore:F2})");
             }
         }
 
@@ -762,6 +826,150 @@ ORDER BY hour_of_day";
         return activeHours;
     }
 
+    private async Task<Dictionary<string, double>> GetPlayerServerPings(string playerName)
+    {
+        var query = $@"
+SELECT 
+    server_guid,
+    avg(ping) as avg_ping
+FROM player_metrics
+WHERE player_name = {Quote(playerName)} 
+  AND ping > 0 
+  AND ping < 1000  -- Filter out unrealistic ping values
+  AND timestamp >= now() - INTERVAL 30 DAY  -- Recent ping data for accuracy
+GROUP BY server_guid
+HAVING count(*) >= 10  -- Require at least 10 measurements for reliability";
+
+        var serverPings = new Dictionary<string, double>();
+        await using var cmd = _connection.CreateCommand();
+        cmd.CommandText = query;
+        await using var reader = await cmd.ExecuteReaderAsync();
+        
+        while (await reader.ReadAsync())
+        {
+            var serverGuid = reader.GetString(0);
+            var avgPing = reader.IsDBNull(1) ? 0 : Convert.ToDouble(reader.GetValue(1));
+            serverPings[serverGuid] = avgPing;
+        }
+
+        return serverPings;
+    }
+
+    private async Task<Dictionary<string, double>> GetPlayerMapDominanceScores(string playerName)
+    {
+        // Calculate dominance as the ratio of player's performance vs average performance on each map
+        var query = $@"
+WITH player_map_stats AS (
+    SELECT 
+        map_name,
+        AVG(final_kills / nullIf(play_time_minutes, 0)) as player_kill_rate,
+        AVG(final_score / nullIf(play_time_minutes, 0)) as player_score_rate,
+        SUM(play_time_minutes) as total_play_time
+    FROM player_rounds
+    WHERE player_name = {Quote(playerName)} 
+      AND round_start_time >= now() - INTERVAL 6 MONTH
+      AND play_time_minutes > 5  -- Exclude very short sessions
+    GROUP BY map_name
+    HAVING total_play_time >= 60  -- At least 1 hour on the map
+),
+map_averages AS (
+    SELECT 
+        map_name,
+        AVG(final_kills / nullIf(play_time_minutes, 0)) as avg_kill_rate,
+        AVG(final_score / nullIf(play_time_minutes, 0)) as avg_score_rate
+    FROM player_rounds
+    WHERE round_start_time >= now() - INTERVAL 6 MONTH
+      AND play_time_minutes > 5
+    GROUP BY map_name
+)
+SELECT 
+    p.map_name,
+    CASE 
+        WHEN a.avg_kill_rate > 0 AND a.avg_score_rate > 0 THEN
+            (p.player_kill_rate / a.avg_kill_rate + p.player_score_rate / a.avg_score_rate) / 2
+        ELSE 1.0 
+    END as dominance_score
+FROM player_map_stats p
+JOIN map_averages a ON p.map_name = a.map_name";
+
+        var mapDominance = new Dictionary<string, double>();
+        await using var cmd = _connection.CreateCommand();
+        cmd.CommandText = query;
+        await using var reader = await cmd.ExecuteReaderAsync();
+        
+        while (await reader.ReadAsync())
+        {
+            var mapName = reader.GetString(0);
+            var dominanceScore = reader.IsDBNull(1) ? 1.0 : Convert.ToDouble(reader.GetValue(1));
+            mapDominance[mapName] = dominanceScore;
+        }
+
+        return mapDominance;
+    }
+
+    private static double CalculatePingSimilarity(Dictionary<string, double> targetPings, Dictionary<string, double> candidatePings)
+    {
+        var commonServers = targetPings.Keys.Intersect(candidatePings.Keys).ToList();
+        
+        if (!commonServers.Any())
+            return 0.0; // No common servers
+        
+        double totalSimilarity = 0;
+        int validComparisons = 0;
+
+        foreach (var server in commonServers)
+        {
+            var targetPing = targetPings[server];
+            var candidatePing = candidatePings[server];
+            
+            // Calculate similarity based on ping difference (2-3ms variance for aliases)
+            var pingDiff = Math.Abs(targetPing - candidatePing);
+            
+            // High similarity if within 3ms, decreasing to 0 at 20ms difference
+            var similarity = Math.Max(0, 1.0 - (pingDiff / 20.0));
+            
+            // Bonus for very close pings (within 3ms - likely same physical location)
+            if (pingDiff <= 3.0)
+                similarity = Math.Min(1.0, similarity + 0.2); // Boost for alias-like ping similarity
+            
+            totalSimilarity += similarity;
+            validComparisons++;
+        }
+
+        return validComparisons > 0 ? totalSimilarity / validComparisons : 0.0;
+    }
+
+    private static double CalculateMapDominanceSimilarity(Dictionary<string, double> targetDominance, Dictionary<string, double> candidateDominance)
+    {
+        var commonMaps = targetDominance.Keys.Intersect(candidateDominance.Keys).ToList();
+        
+        if (!commonMaps.Any())
+            return 0.0; // No common maps
+        
+        double totalSimilarity = 0;
+        int validComparisons = 0;
+
+        foreach (var map in commonMaps)
+        {
+            var targetScore = targetDominance[map];  
+            var candidateScore = candidateDominance[map];
+            
+            // Calculate similarity based on performance ratio difference
+            var scoreDiff = Math.Abs(targetScore - candidateScore);
+            
+            // High similarity if performance ratios are close
+            var similarity = Math.Max(0, 1.0 - scoreDiff);
+            
+            // Weight by dominance level (more weight for maps where both players perform well)
+            var avgDominance = (targetScore + candidateScore) / 2.0;
+            var weight = Math.Min(2.0, Math.Max(0.5, avgDominance)); // Weight between 0.5-2.0
+            
+            totalSimilarity += similarity * weight;
+            validComparisons++;
+        }
+
+        return validComparisons > 0 ? totalSimilarity / validComparisons : 0.0;
+    }
 
     private static string Quote(string s) => $"'{s.Replace("'", "''")}'";
 }
@@ -864,6 +1072,8 @@ public class PlayerSimilarityStats
     public List<string> GameIds { get; set; } = new();
     public double TemporalOverlapMinutes { get; set; }
     public List<int> TypicalOnlineHours { get; set; } = new();
+    public Dictionary<string, double> ServerPings { get; set; } = new(); // server_guid -> average_ping
+    public Dictionary<string, double> MapDominanceScores { get; set; } = new(); // map_name -> dominance_score
 }
 
 public class SimilarPlayer
@@ -884,4 +1094,11 @@ public class PlayerActivityHoursComparison
     public string Player2 { get; set; } = "";
     public List<HourlyActivity> Player1ActivityHours { get; set; } = new();
     public List<HourlyActivity> Player2ActivityHours { get; set; } = new();
+}
+
+// Similarity algorithm modes
+public enum SimilarityMode
+{
+    Default,        // General similarity based on play patterns and skills
+    AliasDetection  // Focused on detecting same player using different aliases
 } 
