@@ -1,11 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using ClickHouse.Client;
 using ClickHouse.Client.ADO;
-using junie_des_1942stats.ClickHouse.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using junie_des_1942stats.ClickHouse.Models;
 
 namespace junie_des_1942stats.ClickHouse;
 
@@ -56,7 +55,7 @@ public class ServerStatisticsService : IDisposable
                 await _connection.OpenAsync();
             }
 
-            var serverFilter = string.IsNullOrEmpty(serverGuid) ? "" : $"";
+            var serverFilter = string.IsNullOrEmpty(serverGuid) ? "" : $" AND server_guid = {Quote(serverGuid)}";
             var timePeriodCondition = GetTimePeriodCondition(period);
 
             // Optimized query using player_rounds table - much simpler and faster
@@ -69,8 +68,7 @@ SELECT
     COUNT(*) AS sessions_played,
     SUM(play_time_minutes) AS total_play_time_minutes
 FROM player_rounds
-WHERE player_name = @playerName
-AND server_guid = @serverGuid
+WHERE player_name = {Quote(playerName)}{serverFilter}
 {timePeriodCondition.Replace("timestamp", "round_start_time")}
 GROUP BY map_name
 ORDER BY total_kills DESC";
@@ -79,10 +77,6 @@ ORDER BY total_kills DESC";
             
             await using var command = _connection.CreateCommand();
             command.CommandText = query;
-            
-            // Add parameters to prevent SQL injection
-            command.Parameters.Add(CreateParameter("@playerName", playerName));
-            command.Parameters.Add(CreateParameter("@serverGuid", serverGuid));
             
             await using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
@@ -107,14 +101,8 @@ ORDER BY total_kills DESC";
         }
     }
 
-    // Helper method to create parameters
-    private System.Data.Common.DbParameter CreateParameter(string name, object value)
-    {
-        var param = _connection.CreateCommand().CreateParameter();
-        param.ParameterName = name;
-        param.Value = value ?? DBNull.Value;
-        return param;
-    }
+    // Helper method to properly quote strings for ClickHouse
+    private static string Quote(string s) => $"'{s.Replace("'", "''")}'";
 
     public void Dispose()
     {

@@ -12,6 +12,11 @@ using Microsoft.Extensions.Logging;
 
 namespace junie_des_1942stats.ClickHouse;
 
+/// <summary>
+/// Service for comparing players and finding similar players.
+/// Optimized to use post-processing for server GUID to name conversion
+/// to avoid multiple individual database queries during player comparison operations.
+/// </summary>
 public class PlayerComparisonService
 {
     private readonly ClickHouseConnection _connection;
@@ -57,27 +62,13 @@ public class PlayerComparisonService
             Player2 = player2
         };
 
-        // If serverGuid is provided, look up server details
+        // Collect all server GUIDs we'll need during processing
+        var serverGuidsToConvert = new HashSet<string>();
+
+        // If serverGuid is provided, add it to our collection
         if (!string.IsNullOrEmpty(serverGuid))
         {
-            var server = await _dbContext.Servers
-                .Where(s => s.Guid == serverGuid)
-                .Select(s => new ServerDetails
-                {
-                    Guid = s.Guid,
-                    Name = s.Name,
-                    Ip = s.Ip,
-                    Port = s.Port,
-                    GameId = s.GameId,
-                    Country = s.Country,
-                    Region = s.Region,
-                    City = s.City,
-                    Timezone = s.Timezone,
-                    Org = s.Org
-                })
-                .FirstOrDefaultAsync();
-
-            result.ServerDetails = server;
+            serverGuidsToConvert.Add(serverGuid);
         }
 
         await EnsureConnectionOpenAsync();
@@ -94,11 +85,13 @@ public class PlayerComparisonService
         // 4. Map Performance
         result.MapPerformance = await GetMapPerformance(player1, player2, serverGuid);
 
-        // 5. Overlapping Sessions (Head-to-Head)
-        result.HeadToHead = await GetHeadToHead(player1, player2, serverGuid);
+        // 5. Overlapping Sessions (Head-to-Head) - collect server GUIDs
+        var headToHeadData = await GetHeadToHeadData(player1, player2, serverGuid);
+        serverGuidsToConvert.UnionWith(headToHeadData.serverGuids);
 
-        // 6. Common Servers (servers where both players have played)
-        result.CommonServers = await GetCommonServers(player1, player2);
+        // 6. Common Servers (servers where both players have played) - collect server GUIDs
+        var commonServersData = await GetCommonServersData(player1, player2);
+        serverGuidsToConvert.UnionWith(commonServersData.serverGuids);
 
         // 7. Kill Milestones for both players
         var killMilestones = await _playerInsightsService.GetPlayersKillMilestonesAsync(new List<string> { player1, player2 });
@@ -120,6 +113,36 @@ public class PlayerComparisonService
         // 8. Milestone Achievements for both players (excluding kill streaks)
         result.Player1MilestoneAchievements = await GetPlayerMilestoneAchievements(player1);
         result.Player2MilestoneAchievements = await GetPlayerMilestoneAchievements(player2);
+
+        // POST-PROCESSING: Convert all collected server GUIDs to names in a single query
+        var serverGuidToNameMapping = await GetServerGuidToNameMappingAsync(serverGuidsToConvert.ToList());
+
+        // Apply the mapping to our results
+        result.HeadToHead = ConvertHeadToHeadData(headToHeadData.sessions, serverGuidToNameMapping);
+        result.CommonServers = ConvertCommonServersData(commonServersData.servers, serverGuidToNameMapping);
+
+        // If serverGuid was provided, look up server details
+        if (!string.IsNullOrEmpty(serverGuid))
+        {
+            var server = await _dbContext.Servers
+                .Where(s => s.Guid == serverGuid)
+                .Select(s => new ServerDetails
+                {
+                    Guid = s.Guid,
+                    Name = s.Name,
+                    Ip = s.Ip,
+                    Port = s.Port,
+                    GameId = s.GameId,
+                    Country = s.Country,
+                    Region = s.Region,
+                    City = s.City,
+                    Timezone = s.Timezone,
+                    Org = s.Org
+                })
+                .FirstOrDefaultAsync();
+
+            result.ServerDetails = server;
+        }
 
         // Cache the result for 45 minutes
         await _cacheService.SetAsync(cacheKey, result, TimeSpan.FromMinutes(45));
@@ -274,7 +297,7 @@ GROUP BY map_name, player_name";
         return mapStats.Values.ToList();
     }
 
-    private async Task<List<HeadToHeadSession>> GetHeadToHead(string player1, string player2, string? serverGuid = null)
+    private async Task<(List<HeadToHeadSession> sessions, HashSet<string> serverGuids)> GetHeadToHeadData(string player1, string player2, string? serverGuid = null)
     {
         // Find overlapping rounds using the player_rounds table
         var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND p1.server_guid = {Quote(serverGuid)}" : "";
@@ -318,17 +341,13 @@ LIMIT 50";
             ));
         }
 
-        // Convert GUIDs to names
-        var guidToNameMapping = await GetServerGuidToNameMappingAsync(serverGuids.ToList());
-
+        // Create sessions with server GUIDs (will be converted to names later)
         foreach (var data in sessionData)
         {
-            var serverName = guidToNameMapping.GetValueOrDefault(data.Item2, data.Item2);
-
             sessions.Add(new HeadToHeadSession
             {
                 Timestamp = data.Item1,
-                ServerName = serverName,
+                ServerName = data.Item2, // This will be the GUID, converted later
                 MapName = data.Item3,
                 Player1Score = data.Item4 ?? 0,
                 Player1Kills = data.Item5 ?? 0,
@@ -340,10 +359,10 @@ LIMIT 50";
             });
         }
 
-        return sessions;
+        return (sessions, serverGuids);
     }
 
-    private async Task<List<ServerDetails>> GetCommonServers(string player1, string player2)
+    private async Task<(List<ServerDetails> servers, HashSet<string> serverGuids)> GetCommonServersData(string player1, string player2)
     {
         // Get servers where both players have played in the last 6 months
         var query = $@"
@@ -355,7 +374,7 @@ SELECT DISTINCT server_guid
 FROM player_rounds
 WHERE player_name = {Quote(player2)} AND round_start_time >= now() - INTERVAL 6 MONTH";
 
-        var serverGuids = new List<string>();
+        var serverGuids = new HashSet<string>();
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
@@ -364,30 +383,26 @@ WHERE player_name = {Quote(player2)} AND round_start_time >= now() - INTERVAL 6 
             serverGuids.Add(reader.GetString(0));
         }
 
-        // Get server details from the database
-        if (serverGuids.Any())
+        // Create server details with GUIDs (will be converted to names later)
+        var servers = new List<ServerDetails>();
+        foreach (var guid in serverGuids)
         {
-            var servers = await _dbContext.Servers
-                .Where(s => serverGuids.Contains(s.Guid))
-                .Select(s => new ServerDetails
-                {
-                    Guid = s.Guid,
-                    Name = s.Name,
-                    Ip = s.Ip,
-                    Port = s.Port,
-                    GameId = s.GameId,
-                    Country = s.Country,
-                    Region = s.Region,
-                    City = s.City,
-                    Timezone = s.Timezone,
-                    Org = s.Org
-                })
-                .ToListAsync();
-
-            return servers;
+            servers.Add(new ServerDetails
+            {
+                Guid = guid,
+                Name = guid, // This will be converted to the actual name later
+                Ip = "",
+                Port = 0,
+                GameId = "",
+                Country = null,
+                Region = null,
+                City = null,
+                Timezone = null,
+                Org = null
+            });
         }
 
-        return new List<ServerDetails>();
+        return (servers, serverGuids);
     }
 
     public async Task<PlayerActivityHoursComparison> ComparePlayersActivityHoursAsync(string player1, string player2)
@@ -470,18 +485,35 @@ ORDER BY hour_of_day";
             SimilarPlayers = new List<SimilarPlayer>()
         };
 
+        // Collect all server GUIDs we'll need during processing
+        var serverGuidsToConvert = new HashSet<string>();
+
         // First, get the target player's stats to compare against
-        var targetStats = await GetPlayerStatsForSimilarity(targetPlayer);
+        var (targetStats, targetServerGuids) = await GetPlayerStatsForSimilarityWithGuids(targetPlayer);
         if (targetStats == null)
         {
             _logger.LogWarning("Target player {PlayerName} not found", targetPlayer);
             return result;
         }
 
+        serverGuidsToConvert.UnionWith(targetServerGuids);
         result.TargetPlayerStats = targetStats;
 
         // Find similar players based on multiple criteria
-        var similarPlayers = await FindPlayersBySimilarity(targetPlayer, targetStats, limit * 3, null, mode); // Get more candidates
+        var (similarPlayers, candidateServerGuids) = await FindPlayersBySimilarityWithGuids(targetPlayer, targetStats, limit * 3, null, mode); // Get more candidates
+        serverGuidsToConvert.UnionWith(candidateServerGuids);
+
+        // POST-PROCESSING: Convert all collected server GUIDs to names in a single query
+        var serverGuidToNameMapping = await GetServerGuidToNameMappingAsync(serverGuidsToConvert.ToList());
+
+        // Apply the mapping to target stats
+        ApplyServerGuidToNameMapping(targetStats, serverGuidToNameMapping);
+
+        // Apply the mapping to similar players
+        foreach (var player in similarPlayers)
+        {
+            ApplyServerGuidToNameMapping(player, serverGuidToNameMapping);
+        }
 
         // Calculate similarity scores and rank them
         var minThreshold = mode == SimilarityMode.AliasDetection ? 0.3 : 0.1; // Higher threshold for alias detection
@@ -508,7 +540,7 @@ ORDER BY hour_of_day";
         return result;
     }
 
-    private async Task<PlayerSimilarityStats?> GetPlayerStatsForSimilarity(string playerName)
+    private async Task<(PlayerSimilarityStats? stats, HashSet<string> serverGuids)> GetPlayerStatsForSimilarityWithGuids(string playerName)
     {
         var query = $@"
 WITH total_stats AS (
@@ -557,12 +589,11 @@ GROUP BY t.total_kills, t.total_deaths, t.total_play_time_minutes, s.server_guid
             var favoriteServerMinutes = reader.IsDBNull(4) ? 0.0 : Convert.ToDouble(reader.GetValue(4));
             var gameIds = reader.IsDBNull(5) ? "" : reader.GetString(5);
 
-            // Convert favorite server GUID to name
-            var favoriteServerName = favoriteServerGuid;
+            // Collect server GUIDs (will be converted to names later)
+            var serverGuidsToCollect = new HashSet<string>();
             if (!string.IsNullOrEmpty(favoriteServerGuid))
             {
-                var guidToNameMapping = await GetServerGuidToNameMappingAsync(new List<string> { favoriteServerGuid });
-                favoriteServerName = guidToNameMapping.GetValueOrDefault(favoriteServerGuid, favoriteServerGuid);
+                serverGuidsToCollect.Add(favoriteServerGuid);
             }
 
             var playerStats = new PlayerSimilarityStats
@@ -572,28 +603,44 @@ GROUP BY t.total_kills, t.total_deaths, t.total_play_time_minutes, s.server_guid
                 TotalDeaths = totalDeaths,
                 TotalPlayTimeMinutes = totalPlayTime,
                 KillDeathRatio = totalDeaths > 0 ? (double)totalKills / totalDeaths : totalKills,
-                FavoriteServerName = favoriteServerName,
+                FavoriteServerName = favoriteServerGuid, // This will be converted to name later
                 FavoriteServerPlayTimeMinutes = favoriteServerMinutes,
                 GameIds = gameIds.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList()
             };
 
             // Get player's active servers first to scope all other queries
             var activeServers = await GetPlayerActiveServers(playerName);
+            serverGuidsToCollect.UnionWith(activeServers);
 
             // Get player's typical online hours (for UI display)
             playerStats.TypicalOnlineHours = await GetPlayerTypicalOnlineHours(playerName, activeServers);
 
-            // Get server-specific ping data (for comparison)
-            playerStats.ServerPings = await GetPlayerServerPings(playerName, activeServers);
+            // Get server-specific ping data (for comparison) - collect GUIDs only
+            var (serverPingsWithGuids, serverPingGuids) = await GetPlayerServerPingsWithGuids(playerName, activeServers);
+            playerStats.ServerPings = serverPingsWithGuids;
+            serverGuidsToCollect.UnionWith(serverPingGuids);
 
             // Get map dominance scores (for comparison)
             playerStats.MapDominanceScores = await GetPlayerMapDominanceScores(playerName, activeServers);
 
-
-            return playerStats;
+            return (playerStats, serverGuidsToCollect);
         }
 
-        return null;
+        return (null, new HashSet<string>());
+    }
+
+    // Original method preserved for backward compatibility
+    private async Task<PlayerSimilarityStats?> GetPlayerStatsForSimilarity(string playerName)
+    {
+        var (stats, serverGuids) = await GetPlayerStatsForSimilarityWithGuids(playerName);
+        
+        if (stats != null && serverGuids.Any())
+        {
+            var serverGuidToNameMapping = await GetServerGuidToNameMappingAsync(serverGuids.ToList());
+            ApplyServerGuidToNameMapping(stats, serverGuidToNameMapping);
+        }
+        
+        return stats;
     }
 
     private async Task<List<string>> GetPlayerActiveServers(string playerName)
@@ -618,12 +665,6 @@ WHERE player_name = {Quote(playerName)}
         return serverGuids;
     }
 
-    private async Task<Dictionary<string, string>> GetServerGuidToNameMappingAsync()
-    {
-        return await _dbContext.Servers
-            .ToDictionaryAsync(s => s.Guid, s => s.Name);
-    }
-
     private async Task<Dictionary<string, string>> GetServerGuidToNameMappingAsync(List<string> serverGuids)
     {
         return await _dbContext.Servers
@@ -631,13 +672,13 @@ WHERE player_name = {Quote(playerName)}
             .ToDictionaryAsync(s => s.Guid, s => s.Name);
     }
 
-    private async Task<List<PlayerSimilarityStats>> FindPlayersBySimilarity(string targetPlayer, PlayerSimilarityStats targetStats, int limit, List<int>? targetOnlineHours = null, SimilarityMode mode = SimilarityMode.Default)
+    private async Task<(List<PlayerSimilarityStats> players, HashSet<string> serverGuids)> FindPlayersBySimilarityWithGuids(string targetPlayer, PlayerSimilarityStats targetStats, int limit, List<int>? targetOnlineHours = null, SimilarityMode mode = SimilarityMode.Default)
     {
         // Get target player's active servers to scope the comparison
         var targetActiveServers = await GetPlayerActiveServers(targetPlayer);
         if (!targetActiveServers.Any())
         {
-            return new List<PlayerSimilarityStats>(); // No servers to compare against
+            return (new List<PlayerSimilarityStats>(), new HashSet<string>()); // No servers to compare against
         }
 
         // Adjust search criteria based on similarity mode
@@ -713,6 +754,7 @@ ORDER BY abs(p.total_play_time_minutes - {targetStats.TotalPlayTimeMinutes}) +
 LIMIT {limit}";
 
         var players = new List<PlayerSimilarityStats>();
+        var allServerGuids = new HashSet<string>();
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
@@ -728,12 +770,10 @@ LIMIT {limit}";
             var favoriteServerMinutes = reader.IsDBNull(6) ? 0.0 : Convert.ToDouble(reader.GetValue(6));
             var gameIds = reader.IsDBNull(7) ? "" : reader.GetString(7);
 
-            // Convert favorite server GUID to name
-            var favoriteServerName = favoriteServerGuid;
+            // Collect favorite server GUID (will be converted to name later)
             if (!string.IsNullOrEmpty(favoriteServerGuid))
             {
-                var guidToNameMapping = await GetServerGuidToNameMappingAsync(new List<string> { favoriteServerGuid });
-                favoriteServerName = guidToNameMapping.GetValueOrDefault(favoriteServerGuid, favoriteServerGuid);
+                allServerGuids.Add(favoriteServerGuid);
             }
 
             var playerStats = new PlayerSimilarityStats
@@ -743,7 +783,7 @@ LIMIT {limit}";
                 TotalDeaths = totalDeaths,
                 TotalPlayTimeMinutes = totalPlayTime,
                 KillDeathRatio = kdr,
-                FavoriteServerName = favoriteServerName,
+                FavoriteServerName = favoriteServerGuid, // Will be converted to name later
                 FavoriteServerPlayTimeMinutes = favoriteServerMinutes,
                 GameIds = gameIds.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList()
             };
@@ -762,7 +802,9 @@ LIMIT {limit}";
             // For alias detection mode, also get additional behavioral data
             if (mode == SimilarityMode.AliasDetection)
             {
-                playerStats.ServerPings = await GetPlayerServerPings(playerName, serversToUse);
+                var (serverPings, pingServerGuids) = await GetPlayerServerPingsWithGuids(playerName, serversToUse);
+                playerStats.ServerPings = serverPings;
+                allServerGuids.UnionWith(pingServerGuids);
                 playerStats.MapDominanceScores = await GetPlayerMapDominanceScores(playerName, serversToUse);
 
                 // Pre-calculate temporal non-overlap score against target player
@@ -771,16 +813,18 @@ LIMIT {limit}";
             else
             {
                 // For default mode, still get basic comparison data
-                playerStats.ServerPings = await GetPlayerServerPings(playerName, serversToUse);
+                var (serverPings, pingServerGuids) = await GetPlayerServerPingsWithGuids(playerName, serversToUse);
+                playerStats.ServerPings = serverPings;
+                allServerGuids.UnionWith(pingServerGuids);
                 playerStats.MapDominanceScores = await GetPlayerMapDominanceScores(playerName, serversToUse);
             }
 
             players.Add(playerStats);
         }
 
-        return players;
+        return (players, allServerGuids);
     }
-
+    
     private async Task<SimilarPlayer> CalculateSimilarityScoreAsync(PlayerSimilarityStats target, PlayerSimilarityStats candidate, SimilarityMode mode = SimilarityMode.Default)
     {
         double score = 0;
@@ -1073,6 +1117,44 @@ HAVING count(*) >= 10  -- Require at least 10 measurements for reliability";
         }
 
         return serverPingsWithGuids;
+    }
+
+    private async Task<(Dictionary<string, double> pings, HashSet<string> serverGuids)> GetPlayerServerPingsWithGuids(string playerName, List<string>? serverGuids = null)
+    {
+        var serverFilter = "";
+        if (serverGuids != null && serverGuids.Any())
+        {
+            var serverList = string.Join(", ", serverGuids.Select(Quote));
+            serverFilter = $" AND server_guid IN ({serverList})";
+        }
+
+        var query = $@"
+SELECT 
+    server_guid,
+    avg(ping) as avg_ping
+FROM player_metrics
+WHERE player_name = {Quote(playerName)} 
+  AND ping > 0 
+  AND ping < 1000{serverFilter}
+  AND timestamp >= now() - INTERVAL 30 DAY  -- Recent ping data for accuracy
+GROUP BY server_guid
+HAVING count(*) >= 10  -- Require at least 10 measurements for reliability";
+
+        var serverPingsWithGuids = new Dictionary<string, double>();
+        var collectedServerGuids = new HashSet<string>();
+        await using var cmd = _connection.CreateCommand();
+        cmd.CommandText = query;
+        await using var reader = await cmd.ExecuteReaderAsync();
+
+        while (await reader.ReadAsync())
+        {
+            var serverGuid = reader.GetString(0);
+            var avgPing = reader.IsDBNull(1) ? 0 : Convert.ToDouble(reader.GetValue(1));
+            serverPingsWithGuids[serverGuid] = avgPing; // Use GUID as key for now
+            collectedServerGuids.Add(serverGuid);
+        }
+
+        return (serverPingsWithGuids, collectedServerGuids);
     }
 
     private async Task<double> CalculateActualTemporalOverlap(string player1, string player2)
@@ -1382,6 +1464,54 @@ ORDER BY achieved_at DESC";
     }
 
     private static string Quote(string s) => $"'{s.Replace("'", "''")}'";
+
+    /// <summary>
+    /// Converts HeadToHeadSession data by replacing server GUIDs with server names
+    /// </summary>
+    private static List<HeadToHeadSession> ConvertHeadToHeadData(List<HeadToHeadSession> sessions, Dictionary<string, string> serverGuidToNameMapping)
+    {
+        foreach (var session in sessions)
+        {
+            session.ServerName = serverGuidToNameMapping.GetValueOrDefault(session.ServerName, session.ServerName);
+        }
+        return sessions;
+    }
+
+    /// <summary>
+    /// Converts ServerDetails data by replacing server GUIDs with server names
+    /// </summary>
+    private static List<ServerDetails> ConvertCommonServersData(List<ServerDetails> servers, Dictionary<string, string> serverGuidToNameMapping)
+    {
+        foreach (var server in servers)
+        {
+            server.Name = serverGuidToNameMapping.GetValueOrDefault(server.Guid, server.Guid);
+        }
+        return servers;
+    }
+
+    /// <summary>
+    /// Applies server GUID to name mapping to PlayerSimilarityStats
+    /// </summary>
+    private static void ApplyServerGuidToNameMapping(PlayerSimilarityStats playerStats, Dictionary<string, string> serverGuidToNameMapping)
+    {
+        // Convert favorite server GUID to name
+        if (!string.IsNullOrEmpty(playerStats.FavoriteServerName))
+        {
+            playerStats.FavoriteServerName = serverGuidToNameMapping.GetValueOrDefault(playerStats.FavoriteServerName, playerStats.FavoriteServerName);
+        }
+
+        // Convert server ping GUIDs to names
+        if (playerStats.ServerPings.Any())
+        {
+            var updatedServerPings = new Dictionary<string, double>();
+            foreach (var kvp in playerStats.ServerPings)
+            {
+                var serverName = serverGuidToNameMapping.GetValueOrDefault(kvp.Key, kvp.Key);
+                updatedServerPings[serverName] = kvp.Value;
+            }
+            playerStats.ServerPings = updatedServerPings;
+        }
+    }
 }
 
 // Result Models
