@@ -3,6 +3,7 @@ using junie_des_1942stats.ClickHouse.Models;
 using junie_des_1942stats.PlayerStats.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
+using System.Linq;
 
 namespace junie_des_1942stats.Gamification.Services;
 
@@ -134,10 +135,13 @@ public class GamificationService
             }
         }
 
-        _logger.LogInformation("Processed {RoundCount} rounds individually, generated {AchievementCount} achievements",
-            rounds.Count, allAchievements.Count);
+        // Deduplicate achievements generated in this batch (same player + id + achieved_at)
+        var distinctAchievements = DeduplicateAchievements(allAchievements);
 
-        return allAchievements;
+        _logger.LogInformation("Processed {RoundCount} rounds individually, generated {AchievementCount} achievements (after dedup: {DistinctCount})",
+            rounds.Count, allAchievements.Count, distinctAchievements.Count);
+
+        return distinctAchievements;
     }
 
     /// <summary>
@@ -210,7 +214,9 @@ public class GamificationService
             throw;
         }
 
-        return allAchievements;
+        // Deduplicate before returning to avoid inserting duplicates in the same batch
+        var distinctAchievements = DeduplicateAchievements(allAchievements);
+        return distinctAchievements;
     }
 
     /// <summary>
@@ -341,6 +347,14 @@ public class GamificationService
     /// <summary>
     /// Get all achievements with pagination, filtering, and player achievement IDs
     /// </summary>
+    private static List<Achievement> DeduplicateAchievements(IEnumerable<Achievement> achievements)
+    {
+        return achievements
+            .GroupBy(a => new { a.PlayerName, a.AchievementId, a.AchievedAt })
+            .Select(g => g.First())
+            .ToList();
+    }
+
     public async Task<AchievementResponse> GetAllAchievementsWithPlayerIdsAsync(
         int page,
         int pageSize,
