@@ -339,7 +339,7 @@ public class PlayersController : ControllerBase
     }
 
     [HttpGet("{playerName}/similar")]
-    public async Task<IActionResult> GetSimilarPlayers(string playerName, [FromQuery] int limit = 10)
+    public async Task<IActionResult> GetSimilarPlayers(string playerName, [FromQuery] int limit = 10, [FromQuery] string mode = "default")
     {
         if (string.IsNullOrWhiteSpace(playerName))
             return BadRequest("Player name cannot be empty");
@@ -347,9 +347,13 @@ public class PlayersController : ControllerBase
         if (limit < 1 || limit > 50)
             return BadRequest("Limit must be between 1 and 50");
 
+        // Parse similarity mode
+        if (!Enum.TryParse<SimilarityMode>(mode, true, out var similarityMode))
+            return BadRequest($"Invalid mode. Valid options: {string.Join(", ", Enum.GetNames<SimilarityMode>())}");
+
         try
         {
-            var result = await _playerComparisonService.FindSimilarPlayersAsync(playerName, limit);
+            var result = await _playerComparisonService.FindSimilarPlayersAsync(playerName, limit, true, similarityMode);
             
             if (result.TargetPlayerStats == null)
                 return NotFound($"Player '{playerName}' not found or has insufficient data");
@@ -358,7 +362,7 @@ public class PlayersController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error finding similar players for {PlayerName}", playerName);
+            _logger.LogError(ex, "Error finding similar players for {PlayerName} with mode {Mode}", playerName, mode);
             return StatusCode(500, "An internal server error occurred while finding similar players.");
         }
     }
