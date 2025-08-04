@@ -18,7 +18,7 @@ public class ServerStatisticsService : IDisposable
     public ServerStatisticsService(IConfiguration configuration, ILogger<ServerStatisticsService> logger)
     {
         _logger = logger;
-        var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
         
         try
         {

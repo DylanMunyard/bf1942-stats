@@ -276,7 +276,7 @@ Set the `CLICKHOUSE_URL` environment variable to override the default ClickHouse
 export CLICKHOUSE_URL="http://your-clickhouse-server:8123"
 ```
 
-Default: `http://clickhouse.home.net`
+Required: Must be set to a valid ClickHouse server URL
 
 ## Collection Behavior
 

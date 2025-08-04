@@ -19,7 +19,7 @@ public class RealTimeAnalyticsService : IDisposable
     public RealTimeAnalyticsService(IConfiguration configuration, ILogger<RealTimeAnalyticsService> logger)
     {
         _logger = logger;
-        var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
         
         try
         {

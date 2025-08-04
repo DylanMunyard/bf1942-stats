@@ -25,7 +25,7 @@ public class ClickHouseGamificationService : IDisposable
     {
         _logger = logger;
         _httpClient = httpClient;
-        var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
         
         try
         {
@@ -876,7 +876,7 @@ public class ClickHouseGamificationService : IDisposable
     // HTTP-based methods for bulk CSV operations only (not for user input queries)
     private async Task ExecuteQueryAsync(string query)
     {
-        var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? "http://clickhouse.home.net";
+        var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
         
         var content = new StringContent(query, Encoding.UTF8, "text/plain");
         var response = await _httpClient.PostAsync($"{clickHouseUrl.TrimEnd('/')}/", content);
