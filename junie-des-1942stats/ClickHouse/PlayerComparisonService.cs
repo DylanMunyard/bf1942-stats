@@ -22,8 +22,8 @@ public class PlayerComparisonService
     private readonly PlayerInsightsService _playerInsightsService;
 
     public PlayerComparisonService(
-        ClickHouseConnection connection, 
-        ILogger<PlayerComparisonService> logger, 
+        ClickHouseConnection connection,
+        ILogger<PlayerComparisonService> logger,
         PlayerTrackerDbContext dbContext,
         ICacheService cacheService,
         ICacheKeyService cacheKeyService,
@@ -42,7 +42,7 @@ public class PlayerComparisonService
         // Check cache first
         var cacheKey = _cacheKeyService.GetPlayerComparisonKey(player1, player2, serverGuid);
         var cachedResult = await _cacheService.GetAsync<PlayerComparisonResult>(cacheKey);
-        
+
         if (cachedResult != null)
         {
             _logger.LogDebug("Cache hit for player comparison: {Player1} vs {Player2}", player1, player2);
@@ -76,7 +76,7 @@ public class PlayerComparisonService
                     Org = s.Org
                 })
                 .FirstOrDefaultAsync();
-            
+
             result.ServerDetails = server;
         }
 
@@ -116,6 +116,10 @@ public class PlayerComparisonService
             TotalKillsAtMilestone = m.TotalKillsAtMilestone,
             DaysToAchieve = m.DaysToAchieve
         }).ToList();
+
+        // 8. Milestone Achievements for both players (excluding kill streaks)
+        result.Player1MilestoneAchievements = await GetPlayerMilestoneAchievements(player1);
+        result.Player2MilestoneAchievements = await GetPlayerMilestoneAchievements(player2);
 
         // Cache the result for 45 minutes
         await _cacheService.SetAsync(cacheKey, result, TimeSpan.FromMinutes(45));
@@ -170,7 +174,7 @@ GROUP BY player_name";
         };
         var results = new List<BucketTotalsComparison>();
         var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
-        
+
         foreach (var (label, condition) in buckets)
         {
             var query = $@"
@@ -208,7 +212,7 @@ GROUP BY player_name";
     private async Task<List<PingComparison>> GetAveragePing(string player1, string player2, string? serverGuid = null)
     {
         var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
-        
+
         // Optimized ping query - get recent pings more efficiently
         var query = $@"
 SELECT player_name, avg(ping) as avg_ping
@@ -291,7 +295,7 @@ LIMIT 50";
         var sessions = new List<HeadToHeadSession>();
         var serverGuids = new HashSet<string>();
         var sessionData = new List<(DateTime, string, string, int?, int?, int?, int?, int?, int?, DateTime?)>();
-        
+
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
@@ -299,7 +303,7 @@ LIMIT 50";
         {
             var currentServerGuid = reader.GetString(2);
             serverGuids.Add(currentServerGuid);
-            
+
             sessionData.Add((
                 reader.GetDateTime(0),
                 currentServerGuid,
@@ -316,11 +320,11 @@ LIMIT 50";
 
         // Convert GUIDs to names
         var guidToNameMapping = await GetServerGuidToNameMappingAsync(serverGuids.ToList());
-        
+
         foreach (var data in sessionData)
         {
             var serverName = guidToNameMapping.GetValueOrDefault(data.Item2, data.Item2);
-            
+
             sessions.Add(new HeadToHeadSession
             {
                 Timestamp = data.Item1,
@@ -335,7 +339,7 @@ LIMIT 50";
                 Player2Timestamp = data.Item10 ?? DateTime.MinValue
             });
         }
-        
+
         return sessions;
     }
 
@@ -379,7 +383,7 @@ WHERE player_name = {Quote(player2)} AND round_start_time >= now() - INTERVAL 6 
                     Org = s.Org
                 })
                 .ToListAsync();
-            
+
             return servers;
         }
 
@@ -429,7 +433,7 @@ GROUP BY hour_of_day
 ORDER BY hour_of_day";
 
         var hourlyActivity = new List<HourlyActivity>();
-        
+
         // Initialize all hours with 0 minutes
         for (int hour = 0; hour < 24; hour++)
         {
@@ -439,12 +443,12 @@ ORDER BY hour_of_day";
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
-        
+
         while (await reader.ReadAsync())
         {
             var hour = Convert.ToInt32(reader.GetValue(0));
             var minutes = reader.IsDBNull(1) ? 0 : Convert.ToInt32(reader.GetValue(1));
-            
+
             // Update the existing hour entry
             var hourEntry = hourlyActivity.FirstOrDefault(h => h.Hour == hour);
             if (hourEntry != null)
@@ -482,7 +486,7 @@ ORDER BY hour_of_day";
         // Calculate similarity scores and rank them
         var minThreshold = mode == SimilarityMode.AliasDetection ? 0.3 : 0.1; // Higher threshold for alias detection
         var rankedPlayers = new List<SimilarPlayer>();
-        
+
         foreach (var candidate in similarPlayers)
         {
             var similarPlayer = await CalculateSimilarityScoreAsync(targetStats, candidate, mode);
@@ -491,7 +495,7 @@ ORDER BY hour_of_day";
                 rankedPlayers.Add(similarPlayer);
             }
         }
-        
+
         rankedPlayers = rankedPlayers
             .OrderByDescending(p => p.SimilarityScore)
             .Take(limit)
@@ -541,7 +545,7 @@ GROUP BY t.total_kills, t.total_deaths, t.total_play_time_minutes, s.server_guid
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
-        
+
         if (await reader.ReadAsync())
         {
             var totalKills = reader.IsDBNull(0) ? 0u : Convert.ToUInt32(reader.GetValue(0));
@@ -573,17 +577,17 @@ GROUP BY t.total_kills, t.total_deaths, t.total_play_time_minutes, s.server_guid
 
             // Get player's active servers first to scope all other queries
             var activeServers = await GetPlayerActiveServers(playerName);
-            
+
             // Get player's typical online hours (for UI display)
             playerStats.TypicalOnlineHours = await GetPlayerTypicalOnlineHours(playerName, activeServers);
-            
+
             // Get server-specific ping data (for comparison)
             playerStats.ServerPings = await GetPlayerServerPings(playerName, activeServers);
-            
+
             // Get map dominance scores (for comparison)
             playerStats.MapDominanceScores = await GetPlayerMapDominanceScores(playerName, activeServers);
-            
-            
+
+
             return playerStats;
         }
 
@@ -603,7 +607,7 @@ WHERE player_name = {Quote(playerName)}
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
-        
+
         while (await reader.ReadAsync())
         {
             serverGuids.Add(reader.GetString(0));
@@ -648,7 +652,7 @@ WHERE player_name = {Quote(playerName)}
             var playTimeMax = targetStats.TotalPlayTimeMinutes * 1.3;
             playTimeFilter = $"total_play_time_minutes BETWEEN {playTimeMin} AND {playTimeMax}";
         }
-        
+
         var kdrTolerance = mode == SimilarityMode.AliasDetection ? 0.2 : 0.4; // Tighter KDR tolerance for aliases
         var kdrMin = Math.Max(0, targetStats.KillDeathRatio - kdrTolerance);
         var kdrMax = targetStats.KillDeathRatio + kdrTolerance;
@@ -710,7 +714,7 @@ LIMIT {limit}";
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
-        
+
         while (await reader.ReadAsync())
         {
             var playerName = reader.GetString(0);
@@ -746,7 +750,7 @@ LIMIT {limit}";
             var candidateActiveServers = await GetPlayerActiveServers(playerName);
             var targetPlayerActiveServers = await GetPlayerActiveServers(targetPlayer);
             var commonServers = candidateActiveServers.Intersect(targetPlayerActiveServers).ToList();
-            
+
             // Use common servers for more focused comparison, fall back to candidate's servers if no overlap
             var serversToUse = commonServers.Any() ? commonServers : candidateActiveServers;
 
@@ -758,7 +762,7 @@ LIMIT {limit}";
             {
                 playerStats.ServerPings = await GetPlayerServerPings(playerName, serversToUse);
                 playerStats.MapDominanceScores = await GetPlayerMapDominanceScores(playerName, serversToUse);
-                
+
                 // Pre-calculate temporal non-overlap score against target player
                 playerStats.TemporalNonOverlapScore = await CalculateTemporalNonOverlap(targetPlayer, playerName);
             }
@@ -779,14 +783,14 @@ LIMIT {limit}";
     {
         double score = 0;
         var reasons = new List<string>();
-        
+
         // Determine if temporal similarity is available
         var hasTemporalData = target.TypicalOnlineHours.Any() && candidate.TypicalOnlineHours.Any();
-        
+
         // Adjust weights based on similarity mode and temporal data availability
-        double playTimeWeight, kdrWeight, serverWeight, temporalWeight, pingWeight, mapDominanceWeight, 
+        double playTimeWeight, kdrWeight, serverWeight, temporalWeight, pingWeight, mapDominanceWeight,
                temporalNonOverlapWeight;
-        
+
         if (mode == SimilarityMode.AliasDetection)
         {
             // For alias detection, prioritize ping similarity and non-overlapping play times
@@ -815,7 +819,7 @@ LIMIT {limit}";
         var playTimeRatio = Math.Max(target.TotalPlayTimeMinutes, candidate.TotalPlayTimeMinutes);
         var playTimeScore = playTimeRatio > 0 ? Math.Max(0, 1 - (playTimeDiff / playTimeRatio)) : 1;
         score += playTimeScore * playTimeWeight;
-        
+
         if (playTimeScore > 0.8)
             reasons.Add($"Similar play time ({candidate.TotalPlayTimeMinutes:F0} vs {target.TotalPlayTimeMinutes:F0} minutes)");
 
@@ -823,14 +827,14 @@ LIMIT {limit}";
         var kdrDiff = Math.Abs(target.KillDeathRatio - candidate.KillDeathRatio);
         var kdrScore = Math.Max(0, Math.Min(1, 1 - (kdrDiff / 2.0))); // Normalize KDR diff
         score += kdrScore * kdrWeight;
-        
+
         if (kdrScore > 0.7)
             reasons.Add($"Similar KDR ({candidate.KillDeathRatio:F2} vs {target.KillDeathRatio:F2})");
 
         // Server affinity
         var serverScore = target.FavoriteServerName == candidate.FavoriteServerName ? 1.0 : 0.0;
         score += serverScore * serverWeight;
-        
+
         if (serverScore > 0)
             reasons.Add("Plays on same favorite server");
 
@@ -841,7 +845,7 @@ LIMIT {limit}";
             var totalUniqueHours = target.TypicalOnlineHours.Union(candidate.TypicalOnlineHours).Count();
             var temporalScore = totalUniqueHours > 0 ? (double)commonHours / totalUniqueHours : 0;
             score += temporalScore * temporalWeight;
-            
+
             if (temporalScore > 0.5)
             {
                 var overlapHours = target.TypicalOnlineHours.Intersect(candidate.TypicalOnlineHours).OrderBy(h => h).ToList();
@@ -855,7 +859,7 @@ LIMIT {limit}";
         {
             var nonOverlapScore = candidate.TemporalNonOverlapScore;
             score += nonOverlapScore * temporalNonOverlapWeight;
-            
+
             if (nonOverlapScore > 0.8)
             {
                 reasons.Add($"Never seen online simultaneously (non-overlap score: {nonOverlapScore:F2})");
@@ -867,7 +871,7 @@ LIMIT {limit}";
         {
             var pingScore = CalculatePingSimilarity(target.ServerPings, candidate.ServerPings);
             score += pingScore * pingWeight;
-            
+
             if (pingScore > 0.7)
             {
                 var commonServers = target.ServerPings.Keys.Intersect(candidate.ServerPings.Keys).Count();
@@ -880,7 +884,7 @@ LIMIT {limit}";
         {
             var dominanceScore = CalculateMapDominanceSimilarity(target.MapDominanceScores, candidate.MapDominanceScores);
             score += dominanceScore * mapDominanceWeight;
-            
+
             if (dominanceScore > 0.6)
             {
                 var commonMaps = target.MapDominanceScores.Keys.Intersect(candidate.MapDominanceScores.Keys).Count();
@@ -945,7 +949,7 @@ ORDER BY hour_of_day";
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
-        
+
         while (await reader.ReadAsync())
         {
             activeHours.Add(Convert.ToInt32(reader.GetValue(0)));
@@ -979,7 +983,7 @@ HAVING count(*) >= 10  -- Require at least 10 measurements for reliability";
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
-        
+
         while (await reader.ReadAsync())
         {
             var serverGuid = reader.GetString(0);
@@ -992,13 +996,13 @@ HAVING count(*) >= 10  -- Require at least 10 measurements for reliability";
         {
             var guidToNameMapping = await GetServerGuidToNameMappingAsync(serverPingsWithGuids.Keys.ToList());
             var serverPingsWithNames = new Dictionary<string, double>();
-            
+
             foreach (var kvp in serverPingsWithGuids)
             {
                 var serverName = guidToNameMapping.GetValueOrDefault(kvp.Key, kvp.Key); // Fall back to GUID if name not found
                 serverPingsWithNames[serverName] = kvp.Value;
             }
-            
+
             return serverPingsWithNames;
         }
 
@@ -1049,12 +1053,12 @@ FROM overlapping_sessions";
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
-        
+
         if (await reader.ReadAsync())
         {
             return reader.IsDBNull(0) ? 0.0 : Convert.ToDouble(reader.GetValue(0));
         }
-        
+
         return 0.0;
     }
 
@@ -1120,22 +1124,22 @@ FROM overlapping_sessions";
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
-        
+
         if (await reader.ReadAsync())
         {
             var totalOverlapMinutes = reader.IsDBNull(0) ? 0.0 : Convert.ToDouble(reader.GetValue(0));
             var combinedPlayTime = reader.IsDBNull(1) ? 0.0 : Convert.ToDouble(reader.GetValue(1));
-            
+
             if (combinedPlayTime == 0) return 0.0;
-            
+
             // Calculate non-overlap score: perfect 1.0 for zero overlap, decreases with more overlap
             var overlapRatio = totalOverlapMinutes / combinedPlayTime;
-            
+
             // For aliases, even 1% overlap should be heavily penalized
             // Score: 1.0 = no overlap, 0.8 = 1% overlap, 0.0 = 10%+ overlap
             return Math.Max(0.0, 1.0 - (overlapRatio * 10.0));
         }
-        
+
         return 0.0;
     }
 
@@ -1190,7 +1194,7 @@ JOIN map_averages a ON p.map_name = a.map_name";
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
-        
+
         while (await reader.ReadAsync())
         {
             var mapName = reader.GetString(0);
@@ -1204,10 +1208,10 @@ JOIN map_averages a ON p.map_name = a.map_name";
     private static double CalculatePingSimilarity(Dictionary<string, double> targetPings, Dictionary<string, double> candidatePings)
     {
         var commonServers = targetPings.Keys.Intersect(candidatePings.Keys).ToList();
-        
+
         if (!commonServers.Any())
             return 0.0; // No common servers
-        
+
         double totalSimilarity = 0;
         int validComparisons = 0;
 
@@ -1215,10 +1219,10 @@ JOIN map_averages a ON p.map_name = a.map_name";
         {
             var targetPing = targetPings[server];
             var candidatePing = candidatePings[server];
-            
+
             // Calculate similarity based on ping difference - STRICTER for alias detection
             var pingDiff = Math.Abs(targetPing - candidatePing);
-            
+
             // For aliases, ping should be nearly identical (within 1-2ms for same physical location)
             var similarity = 0.0;
             if (pingDiff <= 1.0)
@@ -1231,8 +1235,8 @@ JOIN map_averages a ON p.map_name = a.map_name";
                 similarity = 0.4; // Less likely but possible
             else if (pingDiff <= 10.0)
                 similarity = 0.1; // Unlikely to be same location
-            // else similarity remains 0.0
-            
+                                  // else similarity remains 0.0
+
             totalSimilarity += similarity;
             validComparisons++;
         }
@@ -1244,33 +1248,71 @@ JOIN map_averages a ON p.map_name = a.map_name";
     private static double CalculateMapDominanceSimilarity(Dictionary<string, double> targetDominance, Dictionary<string, double> candidateDominance)
     {
         var commonMaps = targetDominance.Keys.Intersect(candidateDominance.Keys).ToList();
-        
+
         if (!commonMaps.Any())
             return 0.0; // No common maps
-        
+
         double totalSimilarity = 0;
         int validComparisons = 0;
 
         foreach (var map in commonMaps)
         {
-            var targetScore = targetDominance[map];  
+            var targetScore = targetDominance[map];
             var candidateScore = candidateDominance[map];
-            
+
             // Calculate similarity based on performance ratio difference
             var scoreDiff = Math.Abs(targetScore - candidateScore);
-            
+
             // High similarity if performance ratios are close
             var similarity = Math.Max(0, 1.0 - scoreDiff);
-            
+
             // Weight by dominance level (more weight for maps where both players perform well)
             var avgDominance = (targetScore + candidateScore) / 2.0;
             var weight = Math.Min(2.0, Math.Max(0.5, avgDominance)); // Weight between 0.5-2.0
-            
+
             totalSimilarity += similarity * weight;
             validComparisons++;
         }
 
         return validComparisons > 0 ? totalSimilarity / validComparisons : 0.0;
+    }
+
+    private async Task<List<MilestoneAchievement>> GetPlayerMilestoneAchievements(string playerName)
+    {
+        await EnsureConnectionOpenAsync();
+
+        // Get milestone achievements (excluding kill streaks as they are temporal)
+        var query = $@"
+SELECT 
+    achievement_id,
+    achievement_name,
+    tier,
+    value,
+    achieved_at
+FROM player_achievements
+WHERE player_name = {Quote(playerName)} 
+  AND achievement_type IN ('milestone', 'badge')
+  AND achievement_id NOT LIKE 'kill_streak_%'
+ORDER BY achieved_at DESC";
+
+        var achievements = new List<MilestoneAchievement>();
+        await using var cmd = _connection.CreateCommand();
+        cmd.CommandText = query;
+        await using var reader = await cmd.ExecuteReaderAsync();
+
+        while (await reader.ReadAsync())
+        {
+            achievements.Add(new MilestoneAchievement
+            {
+                AchievementId = reader.GetString(0),
+                AchievementName = reader.GetString(1),
+                Tier = reader.GetString(2),
+                Value = reader.IsDBNull(3) ? 0 : Convert.ToUInt32(reader.GetValue(3)),
+                AchievedAt = reader.GetDateTime(4)
+            });
+        }
+
+        return achievements;
     }
 
     private static string Quote(string s) => $"'{s.Replace("'", "''")}'";
@@ -1290,6 +1332,8 @@ public class PlayerComparisonResult
     public List<ServerDetails> CommonServers { get; set; } = new();
     public List<KillMilestone> Player1KillMilestones { get; set; } = new();
     public List<KillMilestone> Player2KillMilestones { get; set; } = new();
+    public List<MilestoneAchievement> Player1MilestoneAchievements { get; set; } = new();
+    public List<MilestoneAchievement> Player2MilestoneAchievements { get; set; } = new();
 }
 
 public class KillRateComparison
@@ -1354,6 +1398,15 @@ public class ServerDetails
     public string? Org { get; set; }
 }
 
+public class MilestoneAchievement
+{
+    public string AchievementId { get; set; } = string.Empty;
+    public string AchievementName { get; set; } = string.Empty;
+    public string Tier { get; set; } = string.Empty;
+    public uint Value { get; set; }
+    public DateTime AchievedAt { get; set; }
+}
+
 // Similar Players Feature Models
 public class SimilarPlayersResult
 {
@@ -1413,4 +1466,4 @@ public enum SimilarityMode
 {
     Default,        // General similarity based on play patterns and skills
     AliasDetection  // Focused on detecting same player using different aliases
-} 
+}
