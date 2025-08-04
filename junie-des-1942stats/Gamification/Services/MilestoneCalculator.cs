@@ -2,6 +2,7 @@ using junie_des_1942stats.Gamification.Models;
 using junie_des_1942stats.ClickHouse.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
+using System.Linq;
 
 namespace junie_des_1942stats.Gamification.Services;
 
@@ -28,18 +29,19 @@ public class MilestoneCalculator
 
     public async Task<List<Achievement>> CheckMilestoneCrossedAsync(PlayerRound round)
     {
-        var achievements = new List<Achievement>();
+        var candidateAchievements = new List<Achievement>();
 
         try
         {
+            // Pull the set of milestone IDs the player already owns so we do not recreate them
+            var existingMilestoneIds = (await _readService.GetPlayerAchievementsByTypeAsync(
+                    round.PlayerName, AchievementTypes.Milestone))
+                .Select(a => a.AchievementId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
             // Get player's totals before this round
             var previousStats = await _readService.GetPlayerStatsBeforeTimestampAsync(
-                round.PlayerName, round.RoundEndTime);
-
-            if (previousStats == null)
-            {
-                previousStats = new PlayerGameStats { PlayerName = round.PlayerName };
-            }
+                round.PlayerName, round.RoundEndTime) ?? new PlayerGameStats { PlayerName = round.PlayerName };
 
             // Calculate new totals after this round
             var newStats = new PlayerGameStats
@@ -52,18 +54,30 @@ public class MilestoneCalculator
                 LastUpdated = DateTime.UtcNow
             };
 
-            // Check each milestone type
-            achievements.AddRange(await CheckKillMilestones(previousStats, newStats, round));
-            achievements.AddRange(await CheckPlaytimeMilestones(previousStats, newStats, round));
-            achievements.AddRange(await CheckScoreMilestones(previousStats, newStats, round));
+            // Collect candidate milestones
+            candidateAchievements.AddRange(await CheckKillMilestones(previousStats, newStats, round));
+            candidateAchievements.AddRange(await CheckPlaytimeMilestones(previousStats, newStats, round));
+            candidateAchievements.AddRange(await CheckScoreMilestones(previousStats, newStats, round));
+
+            // 1. Remove duplicates generated within this processing batch
+            var distinctById = candidateAchievements
+                .GroupBy(a => a.AchievementId, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .ToList();
+
+            // 2. Filter out milestones the player already possesses in ClickHouse
+            var newUniqueAchievements = distinctById
+                .Where(a => !existingMilestoneIds.Contains(a.AchievementId))
+                .ToList();
+
+            return newUniqueAchievements;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error checking milestones for player {PlayerName}, round {RoundId}",
                 round.PlayerName, round.RoundId);
+            return new List<Achievement>();
         }
-
-        return achievements;
     }
 
     private Task<List<Achievement>> CheckKillMilestones(
