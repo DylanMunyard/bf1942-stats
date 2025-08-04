@@ -490,7 +490,9 @@ ORDER BY hour_of_day";
         foreach (var candidate in similarPlayers)
         {
             var similarPlayer = await CalculateSimilarityScoreAsync(targetStats, candidate, mode);
-            if (similarPlayer.SimilarityScore > minThreshold)
+            // For alias detection, also exclude players with zero scores (filtered out by overlap/ping criteria)
+            if (similarPlayer.SimilarityScore > minThreshold && 
+                (mode != SimilarityMode.AliasDetection || similarPlayer.SimilarityScore > 0))
             {
                 rankedPlayers.Add(similarPlayer);
             }
@@ -786,6 +788,70 @@ LIMIT {limit}";
 
         // Determine if temporal similarity is available
         var hasTemporalData = target.TypicalOnlineHours.Any() && candidate.TypicalOnlineHours.Any();
+
+        // For alias detection mode, apply strict filtering criteria
+        if (mode == SimilarityMode.AliasDetection)
+        {
+            // Check temporal overlap - if more than 30 minutes, ignore this candidate
+            var temporalOverlapMinutes = await CalculateActualTemporalOverlap(target.PlayerName, candidate.PlayerName);
+            if (temporalOverlapMinutes > 30.0)
+            {
+                return new SimilarPlayer
+                {
+                    PlayerName = candidate.PlayerName,
+                    TotalKills = candidate.TotalKills,
+                    TotalDeaths = candidate.TotalDeaths,
+                    TotalPlayTimeMinutes = candidate.TotalPlayTimeMinutes,
+                    KillDeathRatio = candidate.KillDeathRatio,
+                    KillsPerMinute = candidate.TotalPlayTimeMinutes > 0 ? candidate.TotalKills / candidate.TotalPlayTimeMinutes : 0,
+                    FavoriteServerName = candidate.FavoriteServerName,
+                    FavoriteServerPlayTimeMinutes = candidate.FavoriteServerPlayTimeMinutes,
+                    GameIds = candidate.GameIds,
+                    TypicalOnlineHours = candidate.TypicalOnlineHours,
+                    ServerPings = candidate.ServerPings,
+                    MapDominanceScores = candidate.MapDominanceScores,
+                    TemporalNonOverlapScore = candidate.TemporalNonOverlapScore,
+                    TemporalOverlapMinutes = temporalOverlapMinutes,
+                    SimilarityScore = 0.0, // Zero score due to excessive overlap
+                    SimilarityReasons = new List<string> { $"Excluded: {temporalOverlapMinutes:F0} minutes overlap exceeds 30-minute limit" }
+                };
+            }
+
+            // Check ping differences on common servers - if any server has >30ms difference, ignore
+            var commonServers = target.ServerPings.Keys.Intersect(candidate.ServerPings.Keys).ToList();
+            if (commonServers.Any())
+            {
+                foreach (var server in commonServers)
+                {
+                    var targetPing = target.ServerPings[server];
+                    var candidatePing = candidate.ServerPings[server];
+                    var pingDiff = Math.Abs(targetPing - candidatePing);
+                    
+                    if (pingDiff > 30.0)
+                    {
+                        return new SimilarPlayer
+                        {
+                            PlayerName = candidate.PlayerName,
+                            TotalKills = candidate.TotalKills,
+                            TotalDeaths = candidate.TotalDeaths,
+                            TotalPlayTimeMinutes = candidate.TotalPlayTimeMinutes,
+                            KillDeathRatio = candidate.KillDeathRatio,
+                            KillsPerMinute = candidate.TotalPlayTimeMinutes > 0 ? candidate.TotalKills / candidate.TotalPlayTimeMinutes : 0,
+                            FavoriteServerName = candidate.FavoriteServerName,
+                            FavoriteServerPlayTimeMinutes = candidate.FavoriteServerPlayTimeMinutes,
+                            GameIds = candidate.GameIds,
+                            TypicalOnlineHours = candidate.TypicalOnlineHours,
+                            ServerPings = candidate.ServerPings,
+                            MapDominanceScores = candidate.MapDominanceScores,
+                            TemporalNonOverlapScore = candidate.TemporalNonOverlapScore,
+                            TemporalOverlapMinutes = temporalOverlapMinutes,
+                            SimilarityScore = 0.0, // Zero score due to ping difference
+                            SimilarityReasons = new List<string> { $"Excluded: Ping difference on {server} ({pingDiff:F0}ms) exceeds 30ms limit" }
+                        };
+                    }
+                }
+            }
+        }
 
         // Adjust weights based on similarity mode and temporal data availability
         double playTimeWeight, kdrWeight, serverWeight, temporalWeight, pingWeight, mapDominanceWeight,
