@@ -627,6 +627,13 @@ WHERE player_name = {Quote(playerName)}
 
     private async Task<List<PlayerSimilarityStats>> FindPlayersBySimilarity(string targetPlayer, PlayerSimilarityStats targetStats, int limit, List<int>? targetOnlineHours = null, SimilarityMode mode = SimilarityMode.Default)
     {
+        // Get target player's active servers to scope the comparison
+        var targetActiveServers = await GetPlayerActiveServers(targetPlayer);
+        if (!targetActiveServers.Any())
+        {
+            return new List<PlayerSimilarityStats>(); // No servers to compare against
+        }
+
         // Adjust search criteria based on similarity mode
         string playTimeFilter;
         if (mode == SimilarityMode.AliasDetection)
@@ -646,13 +653,9 @@ WHERE player_name = {Quote(playerName)}
         var kdrMin = Math.Max(0, targetStats.KillDeathRatio - kdrTolerance);
         var kdrMax = targetStats.KillDeathRatio + kdrTolerance;
 
-        // Create game_id filter - only include players who have played the same games
-        var gameIdFilter = "";
-        if (targetStats.GameIds.Any())
-        {
-            var gameIdList = string.Join(", ", targetStats.GameIds.Select(Quote));
-            gameIdFilter = $" AND game_id IN ({gameIdList})";
-        }
+        // Create server filter - only include players who have played on the same servers as target player
+        var serverList = string.Join(", ", targetActiveServers.Select(Quote));
+        var serverFilter = $" AND server_guid IN ({serverList})";
 
         // No temporal filtering needed - we calculate actual session overlap instead
 
@@ -665,7 +668,7 @@ WITH player_stats AS (
         SUM(play_time_minutes) AS total_play_time_minutes,
         CASE WHEN SUM(final_deaths) > 0 THEN SUM(final_kills) / SUM(final_deaths) ELSE toFloat64(SUM(final_kills)) END AS kdr
     FROM player_rounds
-    WHERE player_name != {Quote(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH{gameIdFilter}
+    WHERE player_name != {Quote(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH{serverFilter}
     GROUP BY player_name
     HAVING {playTimeFilter}
        AND kdr BETWEEN {kdrMin} AND {kdrMax}
@@ -673,7 +676,7 @@ WITH player_stats AS (
 server_playtime AS (
     SELECT player_name, server_guid, SUM(play_time_minutes) AS total_minutes
     FROM player_rounds
-    WHERE player_name != {Quote(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH{gameIdFilter}
+    WHERE player_name != {Quote(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH{serverFilter}
     GROUP BY player_name, server_guid
 ),
 favorite_servers AS (
@@ -684,7 +687,7 @@ favorite_servers AS (
 player_game_ids AS (
     SELECT player_name, arrayStringConcat(groupArray(DISTINCT game_id), ',') as game_ids
     FROM player_rounds
-    WHERE player_name != {Quote(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH{gameIdFilter}
+    WHERE player_name != {Quote(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH{serverFilter}
     GROUP BY player_name
 )
 SELECT 
@@ -741,8 +744,8 @@ LIMIT {limit}";
 
             // Get candidate player's active servers and find common servers with target
             var candidateActiveServers = await GetPlayerActiveServers(playerName);
-            var targetActiveServers = await GetPlayerActiveServers(targetPlayer);
-            var commonServers = candidateActiveServers.Intersect(targetActiveServers).ToList();
+            var targetPlayerActiveServers = await GetPlayerActiveServers(targetPlayer);
+            var commonServers = candidateActiveServers.Intersect(targetPlayerActiveServers).ToList();
             
             // Use common servers for more focused comparison, fall back to candidate's servers if no overlap
             var serversToUse = commonServers.Any() ? commonServers : candidateActiveServers;
