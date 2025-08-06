@@ -51,7 +51,7 @@ spec:
               value: "true"
             - name: ENABLE_GAMIFICATION_PROCESSING
               value: "true"
-            - name: JWT_AUDIENCE
+            - name: JWT__AUDIENCE
               value: "468014767883-2gsdumjjgpgm2fp1qgic82i45k03tj7e.apps.googleusercontent.com"
           volumeMounts:
             - name: stats-data
