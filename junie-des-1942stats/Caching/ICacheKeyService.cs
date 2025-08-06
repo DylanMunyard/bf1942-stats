@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 
 namespace junie_des_1942stats.Caching;
 
@@ -10,6 +11,7 @@ public interface ICacheKeyService
     string GetServerRankingsKey(string serverName, int? year, int page, int pageSize, string? playerName, int? minScore, int? minKills, int? minDeaths, double? minKdRatio, int? minPlayTimeMinutes, string? orderBy, string? orderDirection);
     string GetServerInsightsKey(string serverName, int daysToAnalyze);
     string GetServerInsightsKey(string serverName, string period);
+    string GetServersPageKey(int page, int pageSize, string sortBy, string sortOrder, object? filters);
 }
 
 public class CacheKeyService : ICacheKeyService
@@ -57,7 +59,20 @@ public class CacheKeyService : ICacheKeyService
         return $"server_insights:{serverName}:{period}";
     }
 
-
+    public string GetServersPageKey(int page, int pageSize, string sortBy, string sortOrder, object? filters)
+    {
+        var parameters = new[]
+        {
+            page.ToString(),
+            pageSize.ToString(),
+            sortBy ?? "null",
+            sortOrder ?? "null",
+            JsonSerializer.Serialize(filters) ?? "null"
+        };
+        
+        var parametersHash = ComputeHash(string.Join("|", parameters));
+        return $"servers_page:{parametersHash}";
+    }
 
     private static string ComputeHash(string input)
     {

@@ -152,3 +152,37 @@ public class RoundParticipant
     public double KillDeathRatio { get; set; }
     public bool IsActive { get; set; }
 }
+
+// Server search models
+public class ServerBasicInfo
+{
+    public string ServerGuid { get; set; } = "";
+    public string ServerName { get; set; } = "";
+    public string GameId { get; set; } = "";
+    public string ServerIp { get; set; } = "";
+    public int ServerPort { get; set; }
+    public string? Country { get; set; }
+    public string? Region { get; set; }
+    public string? City { get; set; }
+    public string? Timezone { get; set; }
+    public int TotalActivePlayersLast24h { get; set; }
+    public int TotalPlayersAllTime { get; set; }
+    public string? CurrentMap { get; set; }
+    public bool HasActivePlayers { get; set; }
+    public DateTime? LastActivity { get; set; }
+}
+
+public class ServerFilters
+{
+    public string? ServerName { get; set; }
+    public string? GameId { get; set; }
+    public string? Country { get; set; }
+    public string? Region { get; set; }
+    public bool? HasActivePlayers { get; set; }
+    public DateTime? LastActivityFrom { get; set; }
+    public DateTime? LastActivityTo { get; set; }
+    public int? MinTotalPlayers { get; set; }
+    public int? MaxTotalPlayers { get; set; }
+    public int? MinActivePlayersLast24h { get; set; }
+    public int? MaxActivePlayersLast24h { get; set; }
+}

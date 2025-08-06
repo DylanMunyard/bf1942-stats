@@ -851,6 +851,188 @@ FORMAT TabSeparated";
         };
     }
 
+    public async Task<PagedResult<ServerBasicInfo>> GetAllServersWithPaging(
+        int page = 1, 
+        int pageSize = 50, 
+        string sortBy = "ServerName", 
+        string sortOrder = "asc", 
+        ServerFilters? filters = null)
+    {
+        // Check cache first
+        var cacheKey = _cacheKeyService.GetServersPageKey(page, pageSize, sortBy, sortOrder, filters);
+        var cachedResult = await _cacheService.GetAsync<PagedResult<ServerBasicInfo>>(cacheKey);
+        
+        if (cachedResult != null)
+        {
+            _logger.LogDebug("Cache hit for server search: page {Page}, pageSize {PageSize}", page, pageSize);
+            return cachedResult;
+        }
+
+        _logger.LogDebug("Cache miss for server search: page {Page}, pageSize {PageSize}", page, pageSize);
+
+        if (page < 1)
+            throw new ArgumentException("Page number must be at least 1");
+        
+        if (pageSize < 1 || pageSize > 500)
+            throw new ArgumentException("Page size must be between 1 and 500");
+
+        // Validate sortBy parameter
+        var validSortFields = new[] { "ServerName", "GameId", "Country", "Region", "TotalPlayersAllTime", "TotalActivePlayersLast24h", "LastActivity" };
+        if (!validSortFields.Contains(sortBy, StringComparer.OrdinalIgnoreCase))
+            throw new ArgumentException($"Invalid sortBy field. Valid options: {string.Join(", ", validSortFields)}");
+
+        // Validate sortOrder parameter
+        var validDirections = new[] { "asc", "desc" };
+        if (!validDirections.Contains(sortOrder, StringComparer.OrdinalIgnoreCase))
+            throw new ArgumentException("Sort order must be 'asc' or 'desc'");
+
+        filters ??= new ServerFilters();
+
+        // Base query for servers
+        IQueryable<GameServer> baseQuery = _dbContext.Servers.AsNoTracking();
+
+        // Apply filters
+        if (!string.IsNullOrWhiteSpace(filters.ServerName))
+        {
+            baseQuery = baseQuery.Where(s => s.Name.ToLower().Contains(filters.ServerName.ToLower()));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filters.GameId))
+        {
+            baseQuery = baseQuery.Where(s => s.GameId == filters.GameId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filters.Country))
+        {
+            baseQuery = baseQuery.Where(s => s.Country != null && s.Country.ToLower().Contains(filters.Country.ToLower()));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filters.Region))
+        {
+            baseQuery = baseQuery.Where(s => s.Region != null && s.Region.ToLower().Contains(filters.Region.ToLower()));
+        }
+
+        // Calculate last activity and player counts
+        var now = DateTime.UtcNow;
+        var last24Hours = now.AddHours(-24);
+
+        var serversWithStats = baseQuery.Select(s => new
+        {
+            Server = s,
+            LastActivity = s.Sessions
+                .Where(session => !session.IsActive)
+                .Max(session => (DateTime?)session.LastSeenTime) ?? 
+                s.Sessions
+                .Where(session => session.IsActive)
+                .Max(session => (DateTime?)session.StartTime),
+            HasActivePlayers = s.Sessions.Any(session => session.IsActive),
+            CurrentMap = s.Sessions
+                .Where(session => session.IsActive)
+                .Select(session => session.MapName)
+                .FirstOrDefault(),
+            TotalPlayersAllTime = s.Sessions.Select(session => session.PlayerName).Distinct().Count(),
+            TotalActivePlayersLast24h = s.Sessions
+                .Where(session => session.LastSeenTime >= last24Hours)
+                .Select(session => session.PlayerName)
+                .Distinct()
+                .Count()
+        });
+
+        // Apply additional filters based on calculated fields
+        if (filters.HasActivePlayers.HasValue)
+        {
+            serversWithStats = serversWithStats.Where(s => s.HasActivePlayers == filters.HasActivePlayers.Value);
+        }
+
+        if (filters.LastActivityFrom.HasValue)
+        {
+            serversWithStats = serversWithStats.Where(s => s.LastActivity >= filters.LastActivityFrom.Value);
+        }
+
+        if (filters.LastActivityTo.HasValue)
+        {
+            serversWithStats = serversWithStats.Where(s => s.LastActivity <= filters.LastActivityTo.Value);
+        }
+
+        if (filters.MinTotalPlayers.HasValue)
+        {
+            serversWithStats = serversWithStats.Where(s => s.TotalPlayersAllTime >= filters.MinTotalPlayers.Value);
+        }
+
+        if (filters.MaxTotalPlayers.HasValue)
+        {
+            serversWithStats = serversWithStats.Where(s => s.TotalPlayersAllTime <= filters.MaxTotalPlayers.Value);
+        }
+
+        if (filters.MinActivePlayersLast24h.HasValue)
+        {
+            serversWithStats = serversWithStats.Where(s => s.TotalActivePlayersLast24h >= filters.MinActivePlayersLast24h.Value);
+        }
+
+        if (filters.MaxActivePlayersLast24h.HasValue)
+        {
+            serversWithStats = serversWithStats.Where(s => s.TotalActivePlayersLast24h <= filters.MaxActivePlayersLast24h.Value);
+        }
+
+        // Get total count for pagination
+        var totalItems = await serversWithStats.CountAsync();
+
+        // Apply sorting
+        var isDescending = sortOrder.Equals("desc", StringComparison.OrdinalIgnoreCase);
+        var orderedQuery = sortBy.ToLowerInvariant() switch
+        {
+            "servername" => isDescending ? serversWithStats.OrderByDescending(s => s.Server.Name) : serversWithStats.OrderBy(s => s.Server.Name),
+            "gameid" => isDescending ? serversWithStats.OrderByDescending(s => s.Server.GameId) : serversWithStats.OrderBy(s => s.Server.GameId),
+            "country" => isDescending ? serversWithStats.OrderByDescending(s => s.Server.Country) : serversWithStats.OrderBy(s => s.Server.Country),
+            "region" => isDescending ? serversWithStats.OrderByDescending(s => s.Server.Region) : serversWithStats.OrderBy(s => s.Server.Region),
+            "totalplayersalltime" => isDescending ? serversWithStats.OrderByDescending(s => s.TotalPlayersAllTime) : serversWithStats.OrderBy(s => s.TotalPlayersAllTime),
+            "totalactiveplayerslast24h" => isDescending ? serversWithStats.OrderByDescending(s => s.TotalActivePlayersLast24h) : serversWithStats.OrderBy(s => s.TotalActivePlayersLast24h),
+            "lastactivity" => isDescending ? serversWithStats.OrderByDescending(s => s.LastActivity) : serversWithStats.OrderBy(s => s.LastActivity),
+            _ => serversWithStats.OrderBy(s => s.Server.Name) // Default fallback
+        };
+
+        // Apply pagination
+        var pagedQuery = orderedQuery
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize);
+
+        // Execute query and materialize results
+        var serverData = await pagedQuery.ToListAsync();
+
+        // Map to ServerBasicInfo
+        var items = serverData.Select(s => new ServerBasicInfo
+        {
+            ServerGuid = s.Server.Guid,
+            ServerName = s.Server.Name,
+            GameId = s.Server.GameId,
+            ServerIp = s.Server.Ip,
+            ServerPort = s.Server.Port,
+            Country = s.Server.Country,
+            Region = s.Server.Region,
+            City = s.Server.City,
+            Timezone = s.Server.Timezone,
+            TotalActivePlayersLast24h = s.TotalActivePlayersLast24h,
+            TotalPlayersAllTime = s.TotalPlayersAllTime,
+            CurrentMap = s.CurrentMap,
+            HasActivePlayers = s.HasActivePlayers,
+            LastActivity = s.LastActivity
+        }).ToList();
+
+        var result = new PagedResult<ServerBasicInfo>
+        {
+            CurrentPage = page,
+            TotalPages = (int)Math.Ceiling(totalItems / (double)pageSize),
+            Items = items,
+            TotalItems = totalItems
+        };
+
+        // Cache the result for 5 minutes (servers change less frequently than players)
+        await _cacheService.SetAsync(cacheKey, result, TimeSpan.FromMinutes(5));
+        _logger.LogDebug("Cached server search results: page {Page}, pageSize {PageSize}", page, pageSize);
+
+        return result;
+    }
+
 }
 
 public enum TimeGranularity
