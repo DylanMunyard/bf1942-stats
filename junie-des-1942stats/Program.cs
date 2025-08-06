@@ -10,9 +10,13 @@ using junie_des_1942stats.ClickHouse;
 using junie_des_1942stats.ClickHouse.Interfaces;
 using junie_des_1942stats.ClickHouse.Base;
 using junie_des_1942stats.Caching;
+using junie_des_1942stats.Services;
 using Prometheus;
 using Serilog;
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 // Configure Serilog
 var seqUrl = Environment.GetEnvironmentVariable("SEQ_URL") ?? "http://192.168.1.230:5341";
@@ -63,6 +67,34 @@ try
     // Add services to the container
     builder.Services.AddControllers();
     
+    // Configure Google JWT Authentication
+    var googleClientId = builder.Configuration["Jwt:Audience"] ?? throw new InvalidOperationException("Jwt:Audience (Google Client ID) must be configured");
+    
+    builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.Authority = "https://accounts.google.com";
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuers = new[] { "https://accounts.google.com", "accounts.google.com" },
+            ValidateAudience = true,
+            ValidAudience = googleClientId,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromMinutes(5),
+            ValidateIssuerSigningKey = true
+        };
+    });
+
+    builder.Services.AddAuthorization();
+
+    // Register JWT service
+    builder.Services.AddScoped<IJwtService, JwtService>();
+    
     // Add Swagger/OpenAPI
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(c =>
@@ -72,6 +104,31 @@ try
             Title = "BF1942 Stats API", 
             Version = "v1",
             Description = "API for Battlefield 1942 player and server statistics"
+        });
+        
+        // Add JWT Authentication to Swagger
+        c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+        {
+            Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token in the text input below.",
+            Name = "Authorization",
+            In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+            Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+            Scheme = "Bearer"
+        });
+
+        c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+        {
+            {
+                new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                {
+                    Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                    {
+                        Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                        Id = "Bearer"
+                    }
+                },
+                Array.Empty<string>()
+            }
         });
         
         // Custom schema ID resolver to handle conflicting class names and generic types
@@ -378,6 +435,8 @@ try
 
     // Enable routing and controllers
     host.UseRouting();
+    host.UseAuthentication();
+    host.UseAuthorization();
     host.MapControllers();
 
     // Ensure databases are created and migrated

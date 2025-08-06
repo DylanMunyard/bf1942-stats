@@ -11,6 +11,7 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<PlayerSession> PlayerSessions { get; set; }
     public DbSet<PlayerObservation> PlayerObservations { get; set; }
     public DbSet<ServerPlayerRanking> ServerPlayerRankings { get; set; }
+    public DbSet<User> Users { get; set; }
 
     public PlayerTrackerDbContext(DbContextOptions<PlayerTrackerDbContext> options)
         : base(options)
@@ -95,6 +96,14 @@ public class PlayerTrackerDbContext : DbContext
             .HasOne(sr => sr.Server)
             .WithMany(s => s.PlayerRankings)
             .HasForeignKey(sr => sr.ServerGuid);
+
+        // Configure User entity
+        modelBuilder.Entity<User>()
+            .HasKey(u => u.Id);
+
+        modelBuilder.Entity<User>()
+            .HasIndex(u => u.Email)
+            .IsUnique();
 
         // Configure RoundListItem as keyless entity (for query results only)
         modelBuilder.Entity<RoundListItem>()
@@ -199,4 +208,13 @@ public class ServerPlayerRanking
     // Navigation properties
     public GameServer Server { get; set; } = null!;
     public Player Player { get; set; } = null!;
+}
+
+public class User
+{
+    public int Id { get; set; }
+    public string Email { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    public DateTime LastLoggedIn { get; set; }
+    public bool IsActive { get; set; } = true;
 }
