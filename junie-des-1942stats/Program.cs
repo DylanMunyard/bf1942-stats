@@ -86,8 +86,12 @@ try
             ValidAudience = googleClientId,
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromMinutes(5),
-            ValidateIssuerSigningKey = true
+            ValidateIssuerSigningKey = true,
+            NameClaimType = "email" // Map the name claim to email for Google JWTs
         };
+        
+        // Clear default claim type mappings to preserve original JWT claims
+        options.MapInboundClaims = false;
     });
 
     builder.Services.AddAuthorization();
