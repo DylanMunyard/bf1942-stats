@@ -140,9 +140,11 @@ public class AuthController : ControllerBase
 
             var user = await _context.Users
                 .Include(u => u.PlayerNames)
+                    .ThenInclude(pn => pn.Player)
                 .Include(u => u.FavoriteServers)
                     .ThenInclude(fs => fs.Server)
                 .Include(u => u.Buddies)
+                    .ThenInclude(b => b.Player)
                 .FirstOrDefaultAsync(u => u.Email == userEmail);
             
             if (user == null)
@@ -157,34 +159,27 @@ public class AuthController : ControllerBase
                 CreatedAt = user.CreatedAt,
                 LastLoggedIn = user.LastLoggedIn,
                 IsActive = user.IsActive,
-                PlayerNames = user.PlayerNames
+                PlayerNames = (await Task.WhenAll(user.PlayerNames
                     .OrderBy(pn => pn.CreatedAt)
-                    .Select(pn => new UserPlayerNameResponse
+                    .Select(async pn => new UserPlayerNameResponse
                     {
                         Id = pn.Id,
                         PlayerName = pn.PlayerName,
-                        CreatedAt = pn.CreatedAt
-                    })
-                    .ToList(),
-                FavoriteServers = user.FavoriteServers
+                        CreatedAt = pn.CreatedAt,
+                        Player = pn.Player != null ? await EnrichPlayerInfoAsync(pn.Player) : null
+                    }))).ToList(),
+                FavoriteServers = (await Task.WhenAll(user.FavoriteServers
                     .OrderBy(fs => fs.CreatedAt)
-                    .Select(fs => new UserFavoriteServerResponse
-                    {
-                        Id = fs.Id,
-                        ServerGuid = fs.ServerGuid,
-                        ServerName = fs.Server.Name,
-                        CreatedAt = fs.CreatedAt
-                    })
-                    .ToList(),
-                Buddies = user.Buddies
+                    .Select(async fs => await EnrichFavoriteServerInfoAsync(fs)))).ToList(),
+                Buddies = (await Task.WhenAll(user.Buddies
                     .OrderBy(b => b.CreatedAt)
-                    .Select(b => new UserBuddyResponse
+                    .Select(async b => new UserBuddyResponse
                     {
                         Id = b.Id,
                         BuddyPlayerName = b.BuddyPlayerName,
-                        CreatedAt = b.CreatedAt
-                    })
-                    .ToList()
+                        CreatedAt = b.CreatedAt,
+                        Player = b.Player != null ? await EnrichPlayerInfoAsync(b.Player) : null
+                    }))).ToList()
             });
         }
         catch (Exception ex)
@@ -203,19 +198,22 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = await GetCurrentUserId();
             if (userId == null) return BadRequest("Invalid token - no user ID found");
 
-            var playerNames = await _context.UserPlayerNames
+            var userPlayerNames = await _context.UserPlayerNames
+                .Include(upn => upn.Player)
                 .Where(upn => upn.UserId == userId.Value)
                 .OrderBy(upn => upn.CreatedAt)
-                .Select(upn => new UserPlayerNameResponse
-                {
-                    Id = upn.Id,
-                    PlayerName = upn.PlayerName,
-                    CreatedAt = upn.CreatedAt
-                })
                 .ToListAsync();
+
+            var playerNames = (await Task.WhenAll(userPlayerNames.Select(async upn => new UserPlayerNameResponse
+            {
+                Id = upn.Id,
+                PlayerName = upn.PlayerName,
+                CreatedAt = upn.CreatedAt,
+                Player = upn.Player != null ? await EnrichPlayerInfoAsync(upn.Player) : null
+            }))).ToList();
 
             return Ok(playerNames);
         }
@@ -235,7 +233,7 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = await GetCurrentUserId();
             if (userId == null) return BadRequest("Invalid token - no user ID found");
 
             if (string.IsNullOrWhiteSpace(request.PlayerName))
@@ -289,7 +287,7 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = await GetCurrentUserId();
             if (userId == null) return BadRequest("Invalid token - no user ID found");
 
             var playerName = await _context.UserPlayerNames
@@ -319,23 +317,19 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = await GetCurrentUserId();
             if (userId == null) return BadRequest("Invalid token - no user ID found");
 
             var favoriteServers = await _context.UserFavoriteServers
                 .Include(ufs => ufs.Server)
                 .Where(ufs => ufs.UserId == userId.Value)
                 .OrderBy(ufs => ufs.CreatedAt)
-                .Select(ufs => new UserFavoriteServerResponse
-                {
-                    Id = ufs.Id,
-                    ServerGuid = ufs.ServerGuid,
-                    ServerName = ufs.Server.Name,
-                    CreatedAt = ufs.CreatedAt
-                })
                 .ToListAsync();
 
-            return Ok(favoriteServers);
+            var enrichedFavoriteServers = await Task.WhenAll(favoriteServers
+                .Select(async fs => await EnrichFavoriteServerInfoAsync(fs)));
+
+            return Ok(enrichedFavoriteServers.ToList());
         }
         catch (Exception ex)
         {
@@ -353,7 +347,7 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = await GetCurrentUserId();
             if (userId == null) return BadRequest("Invalid token - no user ID found");
 
             if (string.IsNullOrWhiteSpace(request.ServerGuid))
@@ -372,13 +366,7 @@ public class AuthController : ControllerBase
             if (existing != null)
             {
                 // Return the existing favorite server instead of an error
-                return Ok(new UserFavoriteServerResponse
-                {
-                    Id = existing.Id,
-                    ServerGuid = existing.ServerGuid,
-                    ServerName = existing.Server.Name,
-                    CreatedAt = existing.CreatedAt
-                });
+                return Ok(await EnrichFavoriteServerInfoAsync(existing));
             }
 
             var userFavoriteServer = new UserFavoriteServer
@@ -391,13 +379,10 @@ public class AuthController : ControllerBase
             _context.UserFavoriteServers.Add(userFavoriteServer);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(GetFavoriteServers), new UserFavoriteServerResponse
-            {
-                Id = userFavoriteServer.Id,
-                ServerGuid = userFavoriteServer.ServerGuid,
-                ServerName = server.Name,
-                CreatedAt = userFavoriteServer.CreatedAt
-            });
+            // Load the server relationship for the new favorite server
+            userFavoriteServer.Server = server;
+            
+            return CreatedAtAction(nameof(GetFavoriteServers), await EnrichFavoriteServerInfoAsync(userFavoriteServer));
         }
         catch (Exception ex)
         {
@@ -415,7 +400,7 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = await GetCurrentUserId();
             if (userId == null) return BadRequest("Invalid token - no user ID found");
 
             var favoriteServer = await _context.UserFavoriteServers
@@ -445,19 +430,22 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = await GetCurrentUserId();
             if (userId == null) return BadRequest("Invalid token - no user ID found");
 
-            var buddies = await _context.UserBuddies
+            var userBuddies = await _context.UserBuddies
+                .Include(ub => ub.Player)
                 .Where(ub => ub.UserId == userId.Value)
                 .OrderBy(ub => ub.CreatedAt)
-                .Select(ub => new UserBuddyResponse
-                {
-                    Id = ub.Id,
-                    BuddyPlayerName = ub.BuddyPlayerName,
-                    CreatedAt = ub.CreatedAt
-                })
                 .ToListAsync();
+
+            var buddies = (await Task.WhenAll(userBuddies.Select(async ub => new UserBuddyResponse
+            {
+                Id = ub.Id,
+                BuddyPlayerName = ub.BuddyPlayerName,
+                CreatedAt = ub.CreatedAt,
+                Player = ub.Player != null ? await EnrichPlayerInfoAsync(ub.Player) : null
+            }))).ToList();
 
             return Ok(buddies);
         }
@@ -477,7 +465,7 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = await GetCurrentUserId();
             if (userId == null) return BadRequest("Invalid token - no user ID found");
 
             if (string.IsNullOrWhiteSpace(request.BuddyPlayerName))
@@ -531,7 +519,7 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = await GetCurrentUserId();
             if (userId == null) return BadRequest("Invalid token - no user ID found");
 
             var buddy = await _context.UserBuddies
@@ -553,10 +541,77 @@ public class AuthController : ControllerBase
     }
 
 
-    private int? GetCurrentUserId()
+    private async Task<int?> GetCurrentUserId()
     {
-        var userIdClaim = User.FindFirst("id")?.Value ?? User.FindFirst("sub")?.Value;
-        return int.TryParse(userIdClaim, out var userId) ? userId : null;
+        var userEmail = User.FindFirst("email")?.Value;
+        if (string.IsNullOrEmpty(userEmail))
+        {
+            return null;
+        }
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
+        return user?.Id;
+    }
+
+    private async Task<PlayerInfoResponse> EnrichPlayerInfoAsync(Player player)
+    {
+        var now = DateTime.UtcNow;
+        var activeThreshold = now.AddMinutes(-5); // Calculate cutoff time
+
+        // Check if player is currently online (has active session within last 5 minutes)
+        var activeSession = await _context.PlayerSessions
+            .Include(ps => ps.Server)
+            .Where(ps => ps.PlayerName == player.Name && 
+                         ps.IsActive && 
+                         ps.LastSeenTime >= activeThreshold)
+            .OrderByDescending(ps => ps.LastSeenTime)
+            .FirstOrDefaultAsync();
+
+        var isOnline = activeSession != null;
+        var currentServer = isOnline ? activeSession!.Server.Name : null;
+
+        return new PlayerInfoResponse
+        {
+            Name = player.Name,
+            FirstSeen = player.FirstSeen,
+            LastSeen = player.LastSeen,
+            TotalPlayTimeMinutes = player.TotalPlayTimeMinutes,
+            AiBot = player.AiBot,
+            IsOnline = isOnline,
+            LastSeenIso = player.LastSeen.ToString("O"), // ISO 8601 format
+            CurrentServer = currentServer,
+            CurrentMap = isOnline ? activeSession!.MapName : null,
+            CurrentSessionScore = isOnline ? activeSession!.TotalScore : null,
+            CurrentSessionKills = isOnline ? activeSession!.TotalKills : null,
+            CurrentSessionDeaths = isOnline ? activeSession!.TotalDeaths : null
+        };
+    }
+
+    private async Task<UserFavoriteServerResponse> EnrichFavoriteServerInfoAsync(UserFavoriteServer favoriteServer)
+    {
+        var now = DateTime.UtcNow;
+        var activeThreshold = now.AddMinutes(-5); // Calculate cutoff time
+
+        // Count active sessions on this server
+        var activeSessions = await _context.PlayerSessions
+            .Where(ps => ps.ServerGuid == favoriteServer.ServerGuid && 
+                         ps.IsActive && 
+                         ps.LastSeenTime >= activeThreshold)
+            .OrderByDescending(ps => ps.LastSeenTime)
+            .ToListAsync();
+
+        var activeSessionsCount = activeSessions.Count;
+        var currentMap = activeSessions.FirstOrDefault()?.MapName;
+
+        return new UserFavoriteServerResponse
+        {
+            Id = favoriteServer.Id,
+            ServerGuid = favoriteServer.ServerGuid,
+            ServerName = favoriteServer.Server.Name,
+            CreatedAt = favoriteServer.CreatedAt,
+            ActiveSessions = activeSessionsCount,
+            CurrentMap = currentMap
+        };
     }
 }
 
@@ -614,6 +669,7 @@ public class UserPlayerNameResponse
     public int Id { get; set; }
     public string PlayerName { get; set; } = "";
     public DateTime CreatedAt { get; set; }
+    public PlayerInfoResponse? Player { get; set; }
 }
 
 /// <summary>
@@ -633,6 +689,8 @@ public class UserFavoriteServerResponse
     public string ServerGuid { get; set; } = "";
     public string ServerName { get; set; } = "";
     public DateTime CreatedAt { get; set; }
+    public int ActiveSessions { get; set; }
+    public string? CurrentMap { get; set; }
 }
 
 /// <summary>
@@ -651,4 +709,24 @@ public class UserBuddyResponse
     public int Id { get; set; }
     public string BuddyPlayerName { get; set; } = "";
     public DateTime CreatedAt { get; set; }
+    public PlayerInfoResponse? Player { get; set; }
+}
+
+/// <summary>
+/// Response model for player information
+/// </summary>
+public class PlayerInfoResponse
+{
+    public string Name { get; set; } = "";
+    public DateTime FirstSeen { get; set; }
+    public DateTime LastSeen { get; set; }
+    public int TotalPlayTimeMinutes { get; set; }
+    public bool AiBot { get; set; }
+    public bool IsOnline { get; set; }
+    public string LastSeenIso { get; set; } = "";
+    public string? CurrentServer { get; set; }
+    public string? CurrentMap { get; set; }
+    public int? CurrentSessionScore { get; set; }
+    public int? CurrentSessionKills { get; set; }
+    public int? CurrentSessionDeaths { get; set; }
 }
