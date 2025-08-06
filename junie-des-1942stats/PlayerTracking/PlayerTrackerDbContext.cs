@@ -12,6 +12,9 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<PlayerObservation> PlayerObservations { get; set; }
     public DbSet<ServerPlayerRanking> ServerPlayerRankings { get; set; }
     public DbSet<User> Users { get; set; }
+    public DbSet<UserPlayerName> UserPlayerNames { get; set; }
+    public DbSet<UserFavoriteServer> UserFavoriteServers { get; set; }
+    public DbSet<UserBuddy> UserBuddies { get; set; }
 
     public PlayerTrackerDbContext(DbContextOptions<PlayerTrackerDbContext> options)
         : base(options)
@@ -104,6 +107,61 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<User>()
             .HasIndex(u => u.Email)
             .IsUnique();
+
+        // Configure UserPlayerName entity
+        modelBuilder.Entity<UserPlayerName>()
+            .HasKey(upn => upn.Id);
+
+        modelBuilder.Entity<UserPlayerName>()
+            .HasIndex(upn => new { upn.UserId, upn.PlayerName })
+            .IsUnique();
+
+        // Configure UserFavoriteServer entity
+        modelBuilder.Entity<UserFavoriteServer>()
+            .HasKey(ufs => ufs.Id);
+
+        modelBuilder.Entity<UserFavoriteServer>()
+            .HasIndex(ufs => new { ufs.UserId, ufs.ServerGuid })
+            .IsUnique();
+
+        // Configure UserBuddy entity
+        modelBuilder.Entity<UserBuddy>()
+            .HasKey(ub => ub.Id);
+
+        modelBuilder.Entity<UserBuddy>()
+            .HasIndex(ub => new { ub.UserId, ub.BuddyPlayerName })
+            .IsUnique();
+
+        // Configure relationships for dashboard settings
+        modelBuilder.Entity<UserPlayerName>()
+            .HasOne(upn => upn.User)
+            .WithMany(u => u.PlayerNames)
+            .HasForeignKey(upn => upn.UserId);
+
+        modelBuilder.Entity<UserPlayerName>()
+            .HasOne(upn => upn.Player)
+            .WithMany()
+            .HasForeignKey(upn => upn.PlayerName);
+
+        modelBuilder.Entity<UserFavoriteServer>()
+            .HasOne(ufs => ufs.User)
+            .WithMany(u => u.FavoriteServers)
+            .HasForeignKey(ufs => ufs.UserId);
+
+        modelBuilder.Entity<UserFavoriteServer>()
+            .HasOne(ufs => ufs.Server)
+            .WithMany()
+            .HasForeignKey(ufs => ufs.ServerGuid);
+
+        modelBuilder.Entity<UserBuddy>()
+            .HasOne(ub => ub.User)
+            .WithMany(u => u.Buddies)
+            .HasForeignKey(ub => ub.UserId);
+
+        modelBuilder.Entity<UserBuddy>()
+            .HasOne(ub => ub.Player)
+            .WithMany()
+            .HasForeignKey(ub => ub.BuddyPlayerName);
 
         // Configure RoundListItem as keyless entity (for query results only)
         modelBuilder.Entity<RoundListItem>()
@@ -217,4 +275,45 @@ public class User
     public DateTime CreatedAt { get; set; }
     public DateTime LastLoggedIn { get; set; }
     public bool IsActive { get; set; } = true;
+    
+    // Navigation properties for dashboard settings
+    public List<UserPlayerName> PlayerNames { get; set; } = [];
+    public List<UserFavoriteServer> FavoriteServers { get; set; } = [];
+    public List<UserBuddy> Buddies { get; set; } = [];
+}
+
+public class UserPlayerName
+{
+    public int Id { get; set; }
+    public int UserId { get; set; }
+    public string PlayerName { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    
+    // Navigation properties
+    public User User { get; set; } = null!;
+    public Player Player { get; set; } = null!;
+}
+
+public class UserFavoriteServer
+{
+    public int Id { get; set; }
+    public int UserId { get; set; }
+    public string ServerGuid { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    
+    // Navigation properties
+    public User User { get; set; } = null!;
+    public GameServer Server { get; set; } = null!;
+}
+
+public class UserBuddy
+{
+    public int Id { get; set; }
+    public int UserId { get; set; }
+    public string BuddyPlayerName { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    
+    // Navigation properties
+    public User User { get; set; } = null!;
+    public Player Player { get; set; } = null!;
 }

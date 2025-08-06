@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using junie_des_1942stats.PlayerTracking;
 
@@ -10,9 +11,11 @@ using junie_des_1942stats.PlayerTracking;
 namespace junie_des_1942stats.Migrations
 {
     [DbContext(typeof(PlayerTrackerDbContext))]
-    partial class PlayerTrackerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250806141209_AddDashboardSettings")]
+    partial class AddDashboardSettings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.5");
@@ -311,12 +314,13 @@ namespace junie_des_1942stats.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("DisplayName")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("UserId")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("BuddyPlayerName");
 
                     b.HasIndex("UserId", "BuddyPlayerName")
                         .IsUnique();
@@ -367,8 +371,6 @@ namespace junie_des_1942stats.Migrations
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("PlayerName");
 
                     b.HasIndex("UserId", "PlayerName")
                         .IsUnique();
@@ -469,19 +471,11 @@ namespace junie_des_1942stats.Migrations
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.UserBuddy", b =>
                 {
-                    b.HasOne("junie_des_1942stats.PlayerTracking.Player", "Player")
-                        .WithMany()
-                        .HasForeignKey("BuddyPlayerName")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("junie_des_1942stats.PlayerTracking.User", "User")
                         .WithMany("Buddies")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("Player");
 
                     b.Navigation("User");
                 });
@@ -507,19 +501,11 @@ namespace junie_des_1942stats.Migrations
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.UserPlayerName", b =>
                 {
-                    b.HasOne("junie_des_1942stats.PlayerTracking.Player", "Player")
-                        .WithMany()
-                        .HasForeignKey("PlayerName")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("junie_des_1942stats.PlayerTracking.User", "User")
                         .WithMany("PlayerNames")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("Player");
 
                     b.Navigation("User");
                 });
