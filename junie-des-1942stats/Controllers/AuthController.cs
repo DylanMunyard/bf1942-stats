@@ -541,7 +541,7 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Get dashboard data - online status of user's buddies and favorite servers
+    /// Get dashboard data - online and offline status of user's buddies and favorite servers
     /// </summary>
     [HttpGet("dashboard")]
     [Authorize]
@@ -591,6 +591,25 @@ public class AuthController : ControllerBase
                 JoinedAt = session.StartTime
             }).ToList();
 
+            // Get offline buddies (all buddies that are not currently online)
+            var onlineBuddyNames = onlineBuddies.Select(session => session.PlayerName).ToHashSet();
+            var offlineBuddies = await _context.UserBuddies
+                .Include(ub => ub.Player)
+                .Where(ub => ub.UserId == userId.Value && !onlineBuddyNames.Contains(ub.BuddyPlayerName))
+                .OrderBy(ub => ub.BuddyPlayerName)
+                .ToListAsync();
+
+            var offlineBuddyResponses = offlineBuddies
+                .Where(ub => ub.Player != null) // Only include buddies with valid player records
+                .Select(ub => new OfflineBuddyResponse
+                {
+                    PlayerName = ub.BuddyPlayerName,
+                    LastSeen = ub.Player.LastSeen,
+                    LastSeenIso = ub.Player.LastSeen.ToString("O"), // ISO 8601 format
+                    TotalPlayTimeMinutes = ub.Player.TotalPlayTimeMinutes,
+                    AddedAt = ub.CreatedAt
+                }).ToList();
+
             // Get favorite servers with current status
             var favoriteServerGuids = user.FavoriteServers.Select(fs => fs.ServerGuid).ToList();
             var favoriteServerStatuses = new List<FavoriteServerStatusResponse>();
@@ -621,6 +640,7 @@ public class AuthController : ControllerBase
             return Ok(new DashboardResponse
             {
                 OnlineBuddies = onlineBuddyResponses,
+                OfflineBuddies = offlineBuddyResponses,
                 FavoriteServers = favoriteServerStatuses
             });
         }
@@ -833,6 +853,7 @@ public class PlayerInfoResponse
 public class DashboardResponse
 {
     public List<OnlineBuddyResponse> OnlineBuddies { get; set; } = [];
+    public List<OfflineBuddyResponse> OfflineBuddies { get; set; } = [];
     public List<FavoriteServerStatusResponse> FavoriteServers { get; set; } = [];
 }
 
@@ -851,6 +872,18 @@ public class OnlineBuddyResponse
     public int CurrentKills { get; set; }
     public int CurrentDeaths { get; set; }
     public DateTime JoinedAt { get; set; }
+}
+
+/// <summary>
+/// Response model for offline buddy information
+/// </summary>
+public class OfflineBuddyResponse
+{
+    public string PlayerName { get; set; } = "";
+    public DateTime LastSeen { get; set; }
+    public string LastSeenIso { get; set; } = "";
+    public int TotalPlayTimeMinutes { get; set; }
+    public DateTime AddedAt { get; set; }
 }
 
 /// <summary>
