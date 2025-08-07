@@ -594,14 +594,15 @@ public class AuthController : ControllerBase
 
         // Count active sessions on this server
         var activeSessions = await _context.PlayerSessions
+            .Include(ps => ps.Player)
             .Where(ps => ps.ServerGuid == favoriteServer.ServerGuid && 
                          ps.IsActive && 
+                         ps.Player.AiBot == false &&
                          ps.LastSeenTime >= activeThreshold)
             .OrderByDescending(ps => ps.LastSeenTime)
             .ToListAsync();
 
         var activeSessionsCount = activeSessions.Count;
-        var currentMap = activeSessions.FirstOrDefault()?.MapName;
 
         return new UserFavoriteServerResponse
         {
@@ -610,7 +611,9 @@ public class AuthController : ControllerBase
             ServerName = favoriteServer.Server.Name,
             CreatedAt = favoriteServer.CreatedAt,
             ActiveSessions = activeSessionsCount,
-            CurrentMap = currentMap
+            CurrentMap = favoriteServer.Server.MapName,
+            MaxPlayers = favoriteServer.Server.MaxPlayers,
+            JoinLink = favoriteServer.Server.JoinLink
         };
     }
 }
@@ -691,6 +694,8 @@ public class UserFavoriteServerResponse
     public DateTime CreatedAt { get; set; }
     public int ActiveSessions { get; set; }
     public string? CurrentMap { get; set; }
+    public int? MaxPlayers { get; set; }
+    public string? JoinLink { get; set; }
 }
 
 /// <summary>
