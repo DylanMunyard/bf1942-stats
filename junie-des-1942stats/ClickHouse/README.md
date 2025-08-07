@@ -282,12 +282,12 @@ Required: Must be set to a valid ClickHouse server URL
 
 - **Collection Interval**: 30 seconds (changed from 60 seconds)
 - **ClickHouse Storage**: Every cycle (30s)
-- **SQLite Storage**: Every 2nd cycle (60s) - for backward compatibility
+- **SQLite Storage**: Every cycle (30s)
 
 ## Data Flow
 
 1. **Every 30 seconds**: Collect server data from BFList API
-2. **Always**: Store player metrics to ClickHouse
-3. **Every 60 seconds**: Store session tracking data to SQLite
+2. **Every 30 seconds**: Store player metrics to ClickHouse
+3. **Every 30 seconds**: Store session tracking data to SQLite
 
-This approach allows for high-frequency data collection while maintaining the existing session tracking functionality. 
+This approach provides consistent data collection across all storage systems. 

@@ -11,6 +11,8 @@ namespace junie_des_1942stats.PlayerTracking
         string GameId { get; }
         string MapName { get; }
         string GameType { get; }
+        int? MaxPlayers { get; }
+        string? JoinLink { get; }
         IEnumerable<PlayerInfo> Players { get; }
         IEnumerable<TeamInfo> Teams { get; }
     }
@@ -24,6 +26,8 @@ namespace junie_des_1942stats.PlayerTracking
         public string GameId => serverInfo.GameId;
         public string MapName => serverInfo.MapName;
         public string GameType => serverInfo.GameType;
+        public int? MaxPlayers => serverInfo.MaxPlayers;
+        public string? JoinLink => serverInfo.JoinLink;
         
         public IEnumerable<PlayerInfo> Players => serverInfo.Players;
         public IEnumerable<TeamInfo> Teams => serverInfo.Teams;
@@ -38,6 +42,8 @@ namespace junie_des_1942stats.PlayerTracking
         public string GameId => "fh2";
         public string MapName => serverInfo.MapName;
         public string GameType => serverInfo.GameType;
+        public int? MaxPlayers => serverInfo.MaxPlayers;
+        public string? JoinLink => null; // FH2 doesn't have JoinLink field
         public IEnumerable<PlayerInfo> Players => serverInfo.Players;
         public IEnumerable<TeamInfo> Teams => serverInfo.Teams;
     }
@@ -51,8 +57,10 @@ namespace junie_des_1942stats.PlayerTracking
         public int Port => _serverInfo.Port;
         public string GameId => "bfvietnam";
         public string GameType => _serverInfo.GameType;
+        public string MapName => _serverInfo.MapName;
+        public int? MaxPlayers => _serverInfo.MaxPlayers;
+        public string? JoinLink => _serverInfo.JoinLink;
         public IEnumerable<PlayerInfo> Players => _serverInfo.Players;
         public IEnumerable<TeamInfo> Teams => _serverInfo.Teams;
-        public string MapName => _serverInfo.MapName;
     }
 }

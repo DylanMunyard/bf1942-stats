@@ -196,6 +196,11 @@ public class GameServer
     public int Port { get; set; }
     public string GameId { get; set; } = "";
 
+    // Server info fields from bflist API
+    public int? MaxPlayers { get; set; }
+    public string? MapName { get; set; }
+    public string? JoinLink { get; set; }
+
     // GeoLocation fields (populated via ipinfo.io lookup when IP changes or no geolocation is stored)
     public string? Country { get; set; }
     public string? Region { get; set; }

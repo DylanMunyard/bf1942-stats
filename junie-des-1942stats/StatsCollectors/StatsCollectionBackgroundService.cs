@@ -14,7 +14,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
-    private readonly TimeSpan _collectionInterval = TimeSpan.FromSeconds(15);
+    private readonly TimeSpan _collectionInterval = TimeSpan.FromSeconds(30);
     private Timer? _timer;
     private int _isRunning = 0;
     private int _cycleCount = 0;
@@ -44,9 +44,9 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Stats collection service starting (15s intervals)...");
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Stats collection service starting (30s intervals)...");
         
-        // Initialize timer to run immediately (dueTime: 0) and then every 15 seconds
+        // Initialize timer to run immediately (dueTime: 0) and then every 30 seconds
         _timer = new Timer(
             callback: ExecuteCollectionCycle,
             state: null,
@@ -65,10 +65,9 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         }
 
         var currentCycle = Interlocked.Increment(ref _cycleCount);
-        var isEvenCycle = currentCycle % 2 == 0; // Every 2nd cycle (60s) for SQLite
         
         var cycleStopwatch = Stopwatch.StartNew();
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Starting stats collection cycle #{currentCycle} (ClickHouse: Always, SQLite: {(isEvenCycle ? "Yes" : "No")})...");
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Starting stats collection cycle #{currentCycle}...");
 
         try
         {
@@ -83,19 +82,16 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
                 var playerRoundsService = scope.ServiceProvider.GetRequiredService<PlayerRoundsWriteService>();
                 var bfListApiService = scope.ServiceProvider.GetRequiredService<IBfListApiService>();
                 
-                // 1. Global timeout cleanup (only on every 2nd cycle to avoid too frequent DB operations)
-                if (isEvenCycle)
-                {
-                    var timeoutStopwatch = Stopwatch.StartNew();
-                    await playerTrackingService.CloseAllTimedOutSessionsAsync(DateTime.UtcNow);
-                    timeoutStopwatch.Stop();
-                    Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Session cleanup: {timeoutStopwatch.ElapsedMilliseconds}ms");
-                }
+                // 1. Global timeout cleanup
+                var timeoutStopwatch = Stopwatch.StartNew();
+                await playerTrackingService.CloseAllTimedOutSessionsAsync(DateTime.UtcNow);
+                timeoutStopwatch.Stop();
+                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Session cleanup: {timeoutStopwatch.ElapsedMilliseconds}ms");
 
                 // 2. BF1942 stats
                 var bf1942Stopwatch = Stopwatch.StartNew();
                 var bf1942ServersStopwatch = Stopwatch.StartNew();
-                var bf1942Servers = await CollectServerStatsAsync(bfListApiService, playerTrackingService, "bf1942", isEvenCycle, CancellationToken.None);
+                var bf1942Servers = await CollectServerStatsAsync(bfListApiService, playerTrackingService, "bf1942", CancellationToken.None);
                 bf1942ServersStopwatch.Stop();
                 bf1942Stopwatch.Stop();
                 Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] BF1942 stats: {bf1942Stopwatch.ElapsedMilliseconds}ms (Servers: {bf1942ServersStopwatch.ElapsedMilliseconds}ms)");
@@ -103,7 +99,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
                 // 3. FH2 stats
                 var fh2Stopwatch = Stopwatch.StartNew();
                 var fh2ServersStopwatch = Stopwatch.StartNew();
-                var fh2Servers = await CollectFh2ServerStatsAsync(bfListApiService, playerTrackingService, isEvenCycle, CancellationToken.None);
+                var fh2Servers = await CollectFh2ServerStatsAsync(bfListApiService, playerTrackingService, CancellationToken.None);
                 fh2ServersStopwatch.Stop();
                 fh2Stopwatch.Stop();
                 Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] FH2 stats: {fh2Stopwatch.ElapsedMilliseconds}ms (Servers: {fh2ServersStopwatch.ElapsedMilliseconds}ms)");
@@ -111,7 +107,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
                 // BFV stats
                 var bfvietnamStopwatch = Stopwatch.StartNew();
                 var bfvietnamServersStopwatch = Stopwatch.StartNew();
-                var bfvietnamServers = await CollectBfvietnamServerStatsAsync(bfListApiService, playerTrackingService, isEvenCycle, CancellationToken.None);
+                var bfvietnamServers = await CollectBfvietnamServerStatsAsync(bfListApiService, playerTrackingService, CancellationToken.None);
                 bfvietnamServersStopwatch.Stop();
                 bfvietnamStopwatch.Stop();
                 Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] BFV stats: {bfvietnamStopwatch.ElapsedMilliseconds}ms (Servers: {bfvietnamServersStopwatch.ElapsedMilliseconds}ms)");
@@ -127,8 +123,8 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
                 clickHouseStopwatch.Stop();
                 Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse batch storage: {clickHouseStopwatch.ElapsedMilliseconds}ms ({allServers.Count} servers)");
 
-                // 5. Sync completed PlayerSessions to ClickHouse player_rounds (every 2nd cycle)
-                if (isEvenCycle && _enableRoundSyncing)
+                // 5. Sync completed PlayerSessions to ClickHouse player_rounds
+                if (_enableRoundSyncing)
                 {
                     var roundsSyncStopwatch = Stopwatch.StartNew();
                     try
@@ -146,7 +142,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
                         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRounds sync failed: {ex.Message} ({roundsSyncStopwatch.ElapsedMilliseconds}ms)");
                     }
                 }
-                else if (isEvenCycle && !_enableRoundSyncing)
+                else
                 {
                     Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRounds sync: SKIPPED (disabled by configuration)");
                 }
@@ -164,7 +160,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         }
     }
 
-    private async Task<List<IGameServer>> CollectServerStatsAsync(IBfListApiService bfListApiService, PlayerTrackingService playerTrackingService, string game, bool enableSqliteStorage, CancellationToken stoppingToken)
+    private async Task<List<IGameServer>> CollectServerStatsAsync(IBfListApiService bfListApiService, PlayerTrackingService playerTrackingService, string game, CancellationToken stoppingToken)
     {
         var allServersObjects = await bfListApiService.FetchAllServersAsync(game);
         var allServers = allServersObjects.Cast<Bf1942ServerInfo>().ToList();
@@ -178,17 +174,14 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             var adapter = new Bf1942ServerAdapter(server);
             gameServerAdapters.Add(adapter);
             
-            // Only store to SQLite on every 2nd cycle (every 60s)
-            if (enableSqliteStorage)
-            {
-                await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp);
-            }
+            // Store to SQLite every cycle
+            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp);
         }
 
         return gameServerAdapters;
     }
 
-    private async Task<List<IGameServer>> CollectBfvietnamServerStatsAsync(IBfListApiService bfListApiService, PlayerTrackingService playerTrackingService, bool enableSqliteStorage, CancellationToken stoppingToken)
+    private async Task<List<IGameServer>> CollectBfvietnamServerStatsAsync(IBfListApiService bfListApiService, PlayerTrackingService playerTrackingService, CancellationToken stoppingToken)
     {
         var allServersObjects = await bfListApiService.FetchAllServersAsync("bfvietnam");
         var allServers = allServersObjects.Cast<BfvietnamServerInfo>().ToList();
@@ -202,17 +195,14 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             var adapter = new BfvietnamServerAdapter(server);
             gameServerAdapters.Add(adapter);
 
-            // Only store to SQLite on every 2nd cycle (every 60s)
-            if (enableSqliteStorage)
-            {
-                await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp);
-            }
+            // Store to SQLite every cycle
+            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp);
         }
 
         return gameServerAdapters;
     }
 
-    private async Task<List<IGameServer>> CollectFh2ServerStatsAsync(IBfListApiService bfListApiService, PlayerTrackingService playerTrackingService, bool enableSqliteStorage, CancellationToken stoppingToken)
+    private async Task<List<IGameServer>> CollectFh2ServerStatsAsync(IBfListApiService bfListApiService, PlayerTrackingService playerTrackingService, CancellationToken stoppingToken)
     {
         var allServersObjects = await bfListApiService.FetchAllServersAsync("fh2");
         var allServers = allServersObjects.Cast<Fh2ServerInfo>().ToList();
@@ -226,11 +216,8 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             var adapter = new Fh2ServerAdapter(server);
             gameServerAdapters.Add(adapter);
             
-            // Only store to SQLite on every 2nd cycle (every 60s)
-            if (enableSqliteStorage)
-            {
-                await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp);
-            }
+            // Store to SQLite every cycle
+            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp);
         }
 
         return gameServerAdapters;

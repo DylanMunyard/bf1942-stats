@@ -224,7 +224,10 @@ public class PlayerTrackingService
                 Name = serverInfo.Name,
                 Ip = serverInfo.Ip,
                 Port = serverInfo.Port,
-                GameId = serverInfo.GameId
+                GameId = serverInfo.GameId,
+                MaxPlayers = serverInfo.MaxPlayers,
+                MapName = serverInfo.MapName,
+                JoinLink = serverInfo.JoinLink
             };
             _dbContext.Servers.Add(server);
             ipChanged = true;
@@ -241,6 +244,11 @@ public class PlayerTrackingService
                 server.Name = serverInfo.Name;
                 server.GameId = serverInfo.GameId;
             }
+            
+            // Update server info fields
+            server.MaxPlayers = serverInfo.MaxPlayers;
+            server.MapName = serverInfo.MapName;
+            server.JoinLink = serverInfo.JoinLink;
         }
 
         // Geo lookup if IP changed or no geolocation stored
