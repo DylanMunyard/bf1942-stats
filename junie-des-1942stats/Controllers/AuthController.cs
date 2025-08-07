@@ -540,6 +540,97 @@ public class AuthController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Get dashboard data - online status of user's buddies and favorite servers
+    /// </summary>
+    [HttpGet("dashboard")]
+    [Authorize]
+    public async Task<ActionResult<DashboardResponse>> GetDashboard()
+    {
+        try
+        {
+            var userId = await GetCurrentUserId();
+            if (userId == null) return BadRequest("Invalid token - no user ID found");
+
+            var now = DateTime.UtcNow;
+            var activeThreshold = now.AddMinutes(-1); // Calculate cutoff time
+
+            // Get user with buddies and favorite servers
+            var user = await _context.Users
+                .Include(u => u.Buddies)
+                    .ThenInclude(b => b.Player)
+                .Include(u => u.FavoriteServers)
+                    .ThenInclude(fs => fs.Server)
+                .FirstOrDefaultAsync(u => u.Id == userId.Value);
+
+            if (user == null)
+                return NotFound("User not found");
+
+            // Get online buddies using proper EF Core joins
+            var onlineBuddies = await _context.UserBuddies
+                .Where(ub => ub.UserId == userId.Value)
+                .Join(_context.PlayerSessions.Include(ps => ps.Server),
+                      ub => ub.BuddyPlayerName,
+                      ps => ps.PlayerName,
+                      (ub, ps) => ps)
+                .Where(ps => ps.IsActive && ps.LastSeenTime >= activeThreshold)
+                .OrderByDescending(ps => ps.LastSeenTime)
+                .ToListAsync();
+
+            var onlineBuddyResponses = onlineBuddies.Select(session => new OnlineBuddyResponse
+            {
+                PlayerName = session.PlayerName,
+                ServerName = session.Server.Name,
+                ServerGuid = session.ServerGuid,
+                CurrentMap = session.MapName,
+                JoinLink = session.Server.JoinLink,
+                SessionDurationMinutes = (int)(now - session.StartTime).TotalMinutes,
+                CurrentScore = session.TotalScore,
+                CurrentKills = session.TotalKills,
+                CurrentDeaths = session.TotalDeaths,
+                JoinedAt = session.StartTime
+            }).ToList();
+
+            // Get favorite servers with current status
+            var favoriteServerGuids = user.FavoriteServers.Select(fs => fs.ServerGuid).ToList();
+            var favoriteServerStatuses = new List<FavoriteServerStatusResponse>();
+
+            foreach (var favoriteServer in user.FavoriteServers)
+            {
+                // Count active sessions on this server
+                var activeSessions = await _context.PlayerSessions
+                    .Include(ps => ps.Player)
+                    .Where(ps => ps.ServerGuid == favoriteServer.ServerGuid && 
+                                 ps.IsActive && 
+                                 ps.Player.AiBot == false &&
+                                 ps.LastSeenTime >= activeThreshold)
+                    .CountAsync();
+
+                favoriteServerStatuses.Add(new FavoriteServerStatusResponse
+                {
+                    Id = favoriteServer.Id,
+                    ServerGuid = favoriteServer.ServerGuid,
+                    ServerName = favoriteServer.Server.Name,
+                    CurrentPlayers = activeSessions,
+                    MaxPlayers = favoriteServer.Server.MaxPlayers,
+                    CurrentMap = favoriteServer.Server.MapName,
+                    JoinLink = favoriteServer.Server.JoinLink
+                });
+            }
+
+            return Ok(new DashboardResponse
+            {
+                OnlineBuddies = onlineBuddyResponses,
+                FavoriteServers = favoriteServerStatuses
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving dashboard data");
+            return StatusCode(500, "An error occurred retrieving dashboard data");
+        }
+    }
+
 
     private async Task<int?> GetCurrentUserId()
     {
@@ -734,4 +825,44 @@ public class PlayerInfoResponse
     public int? CurrentSessionScore { get; set; }
     public int? CurrentSessionKills { get; set; }
     public int? CurrentSessionDeaths { get; set; }
+}
+
+/// <summary>
+/// Response model for dashboard data
+/// </summary>
+public class DashboardResponse
+{
+    public List<OnlineBuddyResponse> OnlineBuddies { get; set; } = [];
+    public List<FavoriteServerStatusResponse> FavoriteServers { get; set; } = [];
+}
+
+/// <summary>
+/// Response model for online buddy information
+/// </summary>
+public class OnlineBuddyResponse
+{
+    public string PlayerName { get; set; } = "";
+    public string ServerName { get; set; } = "";
+    public string ServerGuid { get; set; } = "";
+    public string? CurrentMap { get; set; }
+    public string? JoinLink { get; set; }
+    public int SessionDurationMinutes { get; set; }
+    public int CurrentScore { get; set; }
+    public int CurrentKills { get; set; }
+    public int CurrentDeaths { get; set; }
+    public DateTime JoinedAt { get; set; }
+}
+
+/// <summary>
+/// Response model for favorite server status
+/// </summary>
+public class FavoriteServerStatusResponse
+{
+    public int Id { get; set; }
+    public string ServerGuid { get; set; } = "";
+    public string ServerName { get; set; } = "";
+    public int CurrentPlayers { get; set; }
+    public int? MaxPlayers { get; set; }
+    public string? CurrentMap { get; set; }
+    public string? JoinLink { get; set; }
 }
