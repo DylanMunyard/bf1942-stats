@@ -17,7 +17,7 @@ spec:
         kubernetes.io/hostname: bethany
       containers:
         - name: notifications
-          image: container-registry-service.container-registry:5000/bf42-notifications:latest
+          image: localhost:30500/bf42-notifications:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
