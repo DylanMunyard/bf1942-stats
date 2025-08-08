@@ -13,6 +13,8 @@ spec:
       labels:
         app: bf42-notifications
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: bethany
       containers:
         - name: notifications
           image: container-registry-service.container-registry:5000/bf42-notifications:latest
