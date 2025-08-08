@@ -28,6 +28,7 @@ public class PlayerEventConsumer : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Player event consumer starting (Pub/Sub)...");
+        Console.WriteLine($"Player event consumer subscribing to Redis channel '{ChannelName}'");
 
         ChannelMessageQueue? channelQueue = null;
         var subscriber = _connectionMultiplexer.GetSubscriber();
@@ -35,6 +36,7 @@ public class PlayerEventConsumer : BackgroundService
         try
         {
             channelQueue = await subscriber.SubscribeAsync(RedisChannel.Literal(ChannelName));
+            Console.WriteLine($"Successfully subscribed to Redis channel '{ChannelName}'");
 
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -87,11 +89,13 @@ public class PlayerEventConsumer : BackgroundService
             }
             else
             {
+                Console.WriteLine($"WARNING: Failed to parse event from Redis message: {jsonMessage}");
                 _logger.LogWarning("Unknown event type in message: {Message}", jsonMessage.ToString());
             }
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"ERROR: Failed to process player event: {ex.Message}");
             _logger.LogError(ex, "Error processing Pub/Sub message");
         }
     }

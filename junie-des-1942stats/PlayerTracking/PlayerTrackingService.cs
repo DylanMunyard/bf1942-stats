@@ -1,13 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using junie_des_1942stats.Bflist;
 using junie_des_1942stats.Services;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using System.Net.Http;
 using System.Text.Json;
-using System.Threading;
 
 namespace junie_des_1942stats.PlayerTracking;
 

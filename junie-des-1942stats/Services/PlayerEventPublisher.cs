@@ -35,6 +35,10 @@ public class PlayerEventPublisher : IPlayerEventPublisher
             var subscriber = _connectionMultiplexer.GetSubscriber();
             var receivers = await subscriber.PublishAsync(RedisChannel.Literal(ChannelName), payload);
 
+            if (receivers == 0)
+            {
+                Console.WriteLine($"WARNING: Published player online event for {playerName} but no subscribers are listening to channel '{ChannelName}'");
+            }
             _logger.LogDebug("Published player online event for {PlayerName} on {ServerName} to {Receivers} subscribers", 
                 playerName, serverName, receivers);
         }
