@@ -47,4 +47,8 @@
       <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="8.0.0" />
     </ItemGroup>
 
+    <ItemGroup>
+      <ProjectReference Include="..\junie-des-1942stats.Notifications\junie-des-1942stats.Notifications.csproj" />
+    </ItemGroup>
+
 </Project>

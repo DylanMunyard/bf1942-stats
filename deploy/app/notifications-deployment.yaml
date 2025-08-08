@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bf42-notifications
+  namespace: bf42-stats
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bf42-notifications
+  template:
+    metadata:
+      labels:
+        app: bf42-notifications
+    spec:
+      containers:
+        - name: notifications
+          image: container-registry-service.container-registry:5000/bf42-notifications:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ASPNETCORE_URLS
+              value: "http://+:8080"
+            - name: ConnectionStrings__Redis
+              value: "redis-service.bf42-stats:6379"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bf42-notifications-service
+  namespace: bf42-stats
+  labels:
+    app: bf42-notifications
+spec:
+  selector:
+    app: bf42-notifications
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: api
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bf42-notifications-ingress
+  namespace: bf42-stats
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /notifications(/|$)(.*)
+            pathType: Prefix
+            backend:
+              service:
+                name: bf42-notifications-service
+                port:
+                  number: 8080

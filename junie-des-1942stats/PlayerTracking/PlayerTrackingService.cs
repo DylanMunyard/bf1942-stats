@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using junie_des_1942stats.Bflist;
+using junie_des_1942stats.Notifications.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,14 +14,16 @@ namespace junie_des_1942stats.PlayerTracking;
 public class PlayerTrackingService
 {
     private readonly PlayerTrackerDbContext _dbContext;
+    private readonly IPlayerEventPublisher? _eventPublisher;
     private readonly TimeSpan _sessionTimeout = TimeSpan.FromMinutes(5);
     private static readonly SemaphoreSlim IpInfoSemaphore = new SemaphoreSlim(10); // max 10 concurrent
     private static DateTime _lastIpInfoRequest = DateTime.MinValue;
     private static readonly object IpInfoLock = new object();
 
-    public PlayerTrackingService(PlayerTrackerDbContext dbContext)
+    public PlayerTrackingService(PlayerTrackerDbContext dbContext, IPlayerEventPublisher? eventPublisher = null)
     {
         _dbContext = dbContext;
+        _eventPublisher = eventPublisher;
     }
 
     // Method to track players from Bf1942ServerInfo
@@ -76,6 +79,9 @@ public class PlayerTrackingService
         var sessionsToUpdate = new List<PlayerSession>();
         var sessionsToCreate = new List<PlayerSession>();
         var pendingObservations = new List<(PlayerInfo Info, PlayerSession Session)>();
+        
+        // Track events to publish after successful database operations
+        var eventsToPublish = new List<(string EventType, PlayerInfo PlayerInfo, PlayerSession Session, string? OldMapName)>();
 
         foreach (var playerInfo in server.Players)
         {
@@ -119,6 +125,7 @@ public class PlayerTrackingService
                 else
                 {
                     // Close all existing sessions (map changed)
+                    var oldMapName = playerSessions.FirstOrDefault()?.MapName ?? "";
                     foreach (var session in playerSessions)
                     {
                         session.IsActive = false;
@@ -129,14 +136,22 @@ public class PlayerTrackingService
                     var newSession = CreateNewSession(playerInfo, server, timestamp);
                     sessionsToCreate.Add(newSession);
                     pendingObservations.Add((playerInfo, newSession));
+                    
+                    // Track map change event (only if player had active sessions before)
+                    eventsToPublish.Add(("map_change", playerInfo, newSession, oldMapName));
+                    Console.WriteLine($"Queued map_change event for player {playerInfo.Name} (Old Map: {oldMapName}, New Map: {server.MapName})");
                 }
             }
             else
             {
-                // No existing sessions - create new one
+                // No existing sessions - create new one (player coming online)
                 var newSession = CreateNewSession(playerInfo, server, timestamp);
                 sessionsToCreate.Add(newSession);
                 pendingObservations.Add((playerInfo, newSession));
+                
+                // Track player online event (true first time online)
+                eventsToPublish.Add(("player_online", playerInfo, newSession, null));
+                Console.WriteLine($"Queued player_online event for player {playerInfo.Name} on server {server.Name}");
             }
         }
 
@@ -200,6 +215,9 @@ public class PlayerTrackingService
 
                 await transaction.CommitAsync();
                 Console.WriteLine($"Successfully tracked {server.Players.Count()} players with {observations.Count} observations");
+                
+                // Publish events after successful database operations
+                await PublishPlayerEvents(eventsToPublish, server);
             }
             catch (Exception ex)
             {
@@ -402,6 +420,65 @@ public class PlayerTrackingService
         finally
         {
             IpInfoSemaphore.Release();
+        }
+    }
+
+    private async Task PublishPlayerEvents(List<(string EventType, PlayerInfo PlayerInfo, PlayerSession Session, string? OldMapName)> eventsToPublish, IGameServer server)
+    {
+        if (_eventPublisher == null)
+        {
+            Console.WriteLine("No event publisher configured - skipping event publishing");
+            return;
+        }
+
+        if (!eventsToPublish.Any())
+        {
+            Console.WriteLine("No events to publish");
+            return;
+        }
+
+        var eventCounts = eventsToPublish
+            .GroupBy(e => e.EventType)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        Console.WriteLine($"Publishing {eventsToPublish.Count} events: {string.Join(", ", eventCounts.Select(kvp => $"{kvp.Key}: {kvp.Value}"))}");
+
+        foreach (var eventData in eventsToPublish)
+        {
+            try
+            {
+                Console.WriteLine($"Publishing {eventData.EventType} event for player {eventData.PlayerInfo.Name} on server {server.Name} (ID: {server.Guid})");
+                
+                switch (eventData.EventType)
+                {
+                    case "player_online":
+                        await _eventPublisher.PublishPlayerOnlineEvent(
+                            eventData.PlayerInfo.Name,
+                            server.Guid,
+                            server.Name,
+                            server.MapName ?? "",
+                            server.GameId ?? "",
+                            eventData.Session.SessionId);
+                        Console.WriteLine($"Successfully published player_online event for {eventData.PlayerInfo.Name} (Session: {eventData.Session.SessionId})");
+                        break;
+
+                    case "map_change":
+                        await _eventPublisher.PublishMapChangeEvent(
+                            eventData.PlayerInfo.Name,
+                            server.Guid,
+                            server.Name,
+                            eventData.OldMapName ?? "",
+                            server.MapName ?? "",
+                            eventData.Session.SessionId);
+                        Console.WriteLine($"Successfully published map_change event for {eventData.PlayerInfo.Name} (Session: {eventData.Session.SessionId}, Old Map: {eventData.OldMapName}, New Map: {server.MapName})");
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error publishing {eventData.EventType} event for {eventData.PlayerInfo.Name}: {ex.Message}");
+                Console.WriteLine($"Exception details: {ex}");
+            }
         }
     }
 }

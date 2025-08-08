@@ -17,6 +17,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using StackExchange.Redis;
+using junie_des_1942stats.Notifications.Services;
 
 // Configure Serilog
 var seqUrl = Environment.GetEnvironmentVariable("SEQ_URL") ?? "http://192.168.1.230:5341";
@@ -346,6 +348,11 @@ try
         options.Configuration = $"{redisConnectionString},connectTimeout=1000,syncTimeout=1000,connectRetry=1,abortConnect=false";
         options.InstanceName = serviceName;
     });
+
+    // Configure Redis for event publishing
+    builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnectionString));
+    builder.Services.AddSingleton<IDatabase>(sp => sp.GetRequiredService<IConnectionMultiplexer>().GetDatabase());
+    builder.Services.AddSingleton<IPlayerEventPublisher, PlayerEventPublisher>();
 
     // Register caching services
     builder.Services.AddScoped<ICacheService, CacheService>();

@@ -4,18 +4,22 @@ WORKDIR /app
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 ARG BUILD_CONFIGURATION=Release
+ARG PROJECT_PATH
+ARG PROJECT_NAME
 WORKDIR /src
-COPY ["junie-des-1942stats/junie-des-1942stats.csproj", "junie-des-1942stats/"]
-RUN dotnet restore "junie-des-1942stats/junie-des-1942stats.csproj"
+COPY ["${PROJECT_PATH}/${PROJECT_NAME}.csproj", "${PROJECT_PATH}/"]
+RUN dotnet restore "${PROJECT_PATH}/${PROJECT_NAME}.csproj"
 COPY . .
-WORKDIR "/src/junie-des-1942stats"
-RUN dotnet build "./junie-des-1942stats.csproj" -c $BUILD_CONFIGURATION -o /app/build
+WORKDIR "/src/${PROJECT_PATH}"
+RUN dotnet build "${PROJECT_NAME}.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./junie-des-1942stats.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+ARG PROJECT_NAME
+RUN dotnet publish "${PROJECT_NAME}.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
+ARG PROJECT_NAME
 WORKDIR /app
 COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "junie-des-1942stats.dll"]
+ENTRYPOINT ["dotnet", "/app/${PROJECT_NAME}.dll"]
