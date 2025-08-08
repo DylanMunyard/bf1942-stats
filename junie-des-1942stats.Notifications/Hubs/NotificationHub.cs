@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using junie_des_1942stats.Notifications.Services;
@@ -5,6 +6,7 @@ using System.Security.Claims;
 
 namespace junie_des_1942stats.Notifications.Hubs;
 
+[Authorize]
 public class NotificationHub : Hub
 {
     private readonly IBuddyNotificationService _buddyNotificationService;
