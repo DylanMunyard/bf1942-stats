@@ -22,4 +22,4 @@ FROM base AS final
 ARG PROJECT_NAME
 WORKDIR /app
 COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "/app/${PROJECT_NAME}.dll"]
+ENTRYPOINT dotnet /app/${PROJECT_NAME}.dll
