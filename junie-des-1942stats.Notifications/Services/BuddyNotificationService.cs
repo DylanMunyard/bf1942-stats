@@ -17,50 +17,50 @@ public class BuddyNotificationService : IBuddyNotificationService
         _logger = logger;
     }
 
-    public async Task<IEnumerable<string>> GetUserConnectionIds(int userId)
+    public async Task<IEnumerable<string>> GetUserConnectionIds(string userEmail)
     {
         try
         {
-            var key = UserConnectionsKeyPrefix + userId;
+            var key = UserConnectionsKeyPrefix + userEmail;
             var connectionIds = await _redis.SetMembersAsync(key);
             return connectionIds.Select(c => c.ToString());
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting connection IDs for user {UserId}", userId);
+            _logger.LogError(ex, "Error getting connection IDs for user {UserEmail}", userEmail);
             return Enumerable.Empty<string>();
         }
     }
 
-    public async Task AddUserConnection(int userId, string connectionId)
+    public async Task AddUserConnection(string userEmail, string connectionId)
     {
         try
         {
-            var key = UserConnectionsKeyPrefix + userId;
+            var key = UserConnectionsKeyPrefix + userEmail;
             await _redis.SetAddAsync(key, connectionId);
             // Set expiry to 24 hours to clean up stale connections
             await _redis.KeyExpireAsync(key, TimeSpan.FromHours(24));
             
-            _logger.LogDebug("Added connection {ConnectionId} for user {UserId}", connectionId, userId);
+            _logger.LogDebug("Added connection {ConnectionId} for user {UserEmail}", connectionId, userEmail);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error adding connection {ConnectionId} for user {UserId}", connectionId, userId);
+            _logger.LogError(ex, "Error adding connection {ConnectionId} for user {UserEmail}", connectionId, userEmail);
         }
     }
 
-    public async Task RemoveUserConnection(int userId, string connectionId)
+    public async Task RemoveUserConnection(string userEmail, string connectionId)
     {
         try
         {
-            var key = UserConnectionsKeyPrefix + userId;
+            var key = UserConnectionsKeyPrefix + userEmail;
             await _redis.SetRemoveAsync(key, connectionId);
             
-            _logger.LogDebug("Removed connection {ConnectionId} for user {UserId}", connectionId, userId);
+            _logger.LogDebug("Removed connection {ConnectionId} for user {UserEmail}", connectionId, userEmail);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error removing connection {ConnectionId} for user {UserId}", connectionId, userId);
+            _logger.LogError(ex, "Error removing connection {ConnectionId} for user {UserEmail}", connectionId, userEmail);
         }
     }
 }

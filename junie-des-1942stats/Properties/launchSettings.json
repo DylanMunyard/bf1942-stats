@@ -7,11 +7,12 @@
       "applicationUrl": "http://localhost:9222",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "REDIS_CONNECTION_STRING": "42redis.home.net:6379",
+        "REDIS_CONNECTION_STRING": "100.96.7.8:6379",
         "ENABLE_ROUND_SYNCING": "false",
         "ENABLE_GAMIFICATION_PROCESSING": "false",
         "CLICKHOUSE_URL": "http://clickhouse.home.net",
-        "CLICKHOUSE_WRITE_URL": ""
+        "CLICKHOUSE_WRITE_URL": "",
+        "JWT_AUDIENCE": "468014767883-2gsdumjjgpgm2fp1qgic82i45k03tj7e.apps.googleusercontent.com"
       }
     }
   }

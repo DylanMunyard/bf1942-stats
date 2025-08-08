@@ -52,9 +52,9 @@ public class PlayerOnlineNotificationHandler
             };
 
             // Send notifications to all connected users who have this buddy
-            foreach (var userId in usersToNotify)
+            foreach (var userEmail in usersToNotify)
             {
-                var connectionIds = await _buddyNotificationService.GetUserConnectionIds(userId);
+                var connectionIds = await _buddyNotificationService.GetUserConnectionIds(userEmail);
                 foreach (var connectionId in connectionIds)
                 {
                     await _hubContext.Clients.Client(connectionId).SendAsync("BuddyOnline", message, cancellationToken);

@@ -20,15 +20,15 @@ public class NotificationHub : Hub
 
     public override async Task OnConnectedAsync()
     {
-        var userId = GetUserId();
-        if (userId.HasValue)
+        var userEmail = GetUserEmail();
+        if (!string.IsNullOrEmpty(userEmail))
         {
-            await _buddyNotificationService.AddUserConnection(userId.Value, Context.ConnectionId);
-            _logger.LogInformation("User {UserId} connected with connection {ConnectionId}", userId.Value, Context.ConnectionId);
+            await _buddyNotificationService.AddUserConnection(userEmail, Context.ConnectionId);
+            _logger.LogInformation("User {UserEmail} connected with connection {ConnectionId}", userEmail, Context.ConnectionId);
         }
         else
         {
-            _logger.LogWarning("User connected without valid user ID: {ConnectionId}", Context.ConnectionId);
+            _logger.LogWarning("User connected without valid email: {ConnectionId}", Context.ConnectionId);
         }
 
         await base.OnConnectedAsync();
@@ -36,11 +36,11 @@ public class NotificationHub : Hub
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        var userId = GetUserId();
-        if (userId.HasValue)
+        var userEmail = GetUserEmail();
+        if (!string.IsNullOrEmpty(userEmail))
         {
-            await _buddyNotificationService.RemoveUserConnection(userId.Value, Context.ConnectionId);
-            _logger.LogInformation("User {UserId} disconnected from connection {ConnectionId}", userId.Value, Context.ConnectionId);
+            await _buddyNotificationService.RemoveUserConnection(userEmail, Context.ConnectionId);
+            _logger.LogInformation("User {UserEmail} disconnected from connection {ConnectionId}", userEmail, Context.ConnectionId);
         }
 
         if (exception != null)
@@ -51,13 +51,8 @@ public class NotificationHub : Hub
         await base.OnDisconnectedAsync(exception);
     }
 
-    private int? GetUserId()
+    private string? GetUserEmail()
     {
-        var userIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (int.TryParse(userIdClaim, out var userId))
-        {
-            return userId;
-        }
-        return null;
+        return Context.User?.FindFirst("email")?.Value;
     }
 }

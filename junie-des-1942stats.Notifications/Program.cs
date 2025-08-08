@@ -4,8 +4,54 @@ using junie_des_1942stats.Notifications.Hubs;
 using junie_des_1942stats.Notifications.Models;
 using junie_des_1942stats.Notifications.Services;
 using StackExchange.Redis;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure Google JWT Authentication
+var googleClientId = builder.Configuration["Jwt:Audience"] ?? throw new InvalidOperationException("Jwt:Audience (Google Client ID) must be configured");
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.Authority = "https://accounts.google.com";
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidIssuers = new[] { "https://accounts.google.com", "accounts.google.com" },
+        ValidateAudience = true,
+        ValidAudience = googleClientId,
+        ValidateLifetime = true,
+        ClockSkew = TimeSpan.FromMinutes(5),
+        ValidateIssuerSigningKey = true,
+        NameClaimType = "email"
+    };
+    
+    // Clear default claim type mappings to preserve original JWT claims
+    options.MapInboundClaims = false;
+    
+    // Configure SignalR token handling
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hub"))
+            {
+                context.Token = accessToken;
+            }
+            return Task.CompletedTask;
+        }
+    };
+});
+
+builder.Services.AddAuthorization();
 
 // Add services to the container
 builder.Services.AddSignalR();
@@ -47,9 +93,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseRouting();
+app.UseAuthentication();
+app.UseAuthorization();
 
 // Map SignalR hub
-app.MapHub<NotificationHub>("/notificationHub");
+app.MapHub<NotificationHub>("/hub");
 
 // Health check endpoint
 app.MapGet("/health", () => Results.Ok("Healthy"));

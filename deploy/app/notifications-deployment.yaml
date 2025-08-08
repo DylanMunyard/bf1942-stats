@@ -24,6 +24,8 @@ spec:
               value: "http://+:8080"
             - name: ConnectionStrings__Redis
               value: "redis-service.bf42-stats:6379"
+            - name: JWT__AUDIENCE
+              value: "468014767883-2gsdumjjgpgm2fp1qgic82i45k03tj7e.apps.googleusercontent.com"
           livenessProbe:
             httpGet:
               path: /health

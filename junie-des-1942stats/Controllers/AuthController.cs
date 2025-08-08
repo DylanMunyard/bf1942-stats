@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using junie_des_1942stats.PlayerTracking;
-using junie_des_1942stats.Services;
 
 using Microsoft.Extensions.Logging;
 
@@ -13,16 +12,13 @@ namespace junie_des_1942stats.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly PlayerTrackerDbContext _context;
-    private readonly IJwtService _jwtService;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         PlayerTrackerDbContext context,
-        IJwtService jwtService,
         ILogger<AuthController> logger)
     {
         _context = context;
-        _jwtService = jwtService;
         _logger = logger;
     }
 
@@ -69,19 +65,13 @@ public class AuthController : ControllerBase
 
             await _context.SaveChangesAsync();
 
-            var token = _jwtService.GenerateToken(user.Id, user.Email);
-
-            return Ok(new LoginResponse
+            return Ok(new UserResponse
             {
-                Token = token,
-                User = new UserResponse
-                {
-                    Id = user.Id,
-                    Email = user.Email,
-                    CreatedAt = user.CreatedAt,
-                    LastLoggedIn = user.LastLoggedIn,
-                    IsActive = user.IsActive
-                }
+                Id = user.Id,
+                Email = user.Email,
+                CreatedAt = user.CreatedAt,
+                LastLoggedIn = user.LastLoggedIn,
+                IsActive = user.IsActive
             });
         }
         catch (Exception ex)
@@ -731,14 +721,6 @@ public class AuthController : ControllerBase
 
 
 
-/// <summary>
-/// Response model for user login including JWT token
-/// </summary>
-public class LoginResponse
-{
-    public string Token { get; set; } = "";
-    public UserResponse User { get; set; } = new();
-}
 
 /// <summary>
 /// Response model for user data

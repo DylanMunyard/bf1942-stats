@@ -97,8 +97,6 @@ try
 
     builder.Services.AddAuthorization();
 
-    // Register JWT service
-    builder.Services.AddScoped<IJwtService, JwtService>();
     
     // Add Swagger/OpenAPI
     builder.Services.AddEndpointsApiExplorer();
