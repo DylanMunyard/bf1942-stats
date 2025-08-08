@@ -1,15 +1,16 @@
 using junie_des_1942stats.Notifications.Consumers;
 using junie_des_1942stats.Notifications.Handlers;
 using junie_des_1942stats.Notifications.Hubs;
+using junie_des_1942stats.Notifications.Models;
 using junie_des_1942stats.Notifications.Services;
-using MediatR;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container
 builder.Services.AddSignalR();
-builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
+// Register EventAggregator
+builder.Services.AddSingleton<IEventAggregator, EventAggregator>();
 
 // Configure Redis
 var redisConnection = builder.Configuration.GetConnectionString("Redis") ?? "42redis.home.net:6379";
@@ -27,6 +28,17 @@ builder.Services.AddScoped<MapChangeNotificationHandler>();
 builder.Services.AddScoped<PlayerOnlineNotificationHandler>();
 
 var app = builder.Build();
+
+// Subscribe handlers to event aggregator
+using (var scope = app.Services.CreateScope())
+{
+    var eventAggregator = scope.ServiceProvider.GetRequiredService<IEventAggregator>();
+    var mapChangeHandler = scope.ServiceProvider.GetRequiredService<MapChangeNotificationHandler>();
+    var playerOnlineHandler = scope.ServiceProvider.GetRequiredService<PlayerOnlineNotificationHandler>();
+
+    eventAggregator.Subscribe<MapChangeNotification>((notification, ct) => mapChangeHandler.Handle(notification, ct));
+    eventAggregator.Subscribe<PlayerOnlineNotification>((notification, ct) => playerOnlineHandler.Handle(notification, ct));
+}
 
 // Configure middleware
 if (app.Environment.IsDevelopment())

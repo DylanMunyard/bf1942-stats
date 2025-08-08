@@ -1,4 +1,3 @@
-using MediatR;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using junie_des_1942stats.Notifications.Models;
@@ -7,7 +6,7 @@ using junie_des_1942stats.Notifications.Services;
 
 namespace junie_des_1942stats.Notifications.Handlers;
 
-public class PlayerOnlineNotificationHandler : INotificationHandler<PlayerOnlineNotification>
+public class PlayerOnlineNotificationHandler
 {
     private readonly IBuddyNotificationService _buddyNotificationService;
     private readonly IBuddyApiService _buddyApiService;

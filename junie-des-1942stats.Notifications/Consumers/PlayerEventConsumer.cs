@@ -2,7 +2,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
-using MediatR;
+using junie_des_1942stats.Notifications.Services;
 using junie_des_1942stats.Notifications.Models;
 
 namespace junie_des_1942stats.Notifications.Consumers;
@@ -85,13 +85,13 @@ public class PlayerEventConsumer : BackgroundService
         try
         {
             using var scope = _scopeFactory.CreateScope();
-            var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+            var eventAggregator = scope.ServiceProvider.GetRequiredService<IEventAggregator>();
 
             var notification = CreateNotification(entry);
             if (notification != null)
             {
                 _logger.LogDebug("Processing event {EventId} of type {EventType}", entry.Id, notification.GetType().Name);
-                await mediator.Publish(notification);
+                await eventAggregator.PublishAsync(notification);
             }
             else
             {

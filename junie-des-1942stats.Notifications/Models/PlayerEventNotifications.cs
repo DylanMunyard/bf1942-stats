@@ -1,8 +1,6 @@
-using MediatR;
-
 namespace junie_des_1942stats.Notifications.Models;
 
-public abstract record PlayerEventNotification : INotification
+public abstract record PlayerEventNotification
 {
     public string PlayerName { get; init; } = "";
     public string ServerGuid { get; init; } = "";
