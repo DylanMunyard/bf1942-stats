@@ -22,4 +22,7 @@ FROM base AS final
 ARG PROJECT_NAME
 WORKDIR /app
 COPY --from=publish /app/publish .
-ENTRYPOINT dotnet /app/${PROJECT_NAME}.dll
+RUN echo "#!/bin/sh" > /entrypoint.sh && \
+    echo "exec dotnet /app/${PROJECT_NAME}.dll \"\$@\"" >> /entrypoint.sh && \
+    chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
