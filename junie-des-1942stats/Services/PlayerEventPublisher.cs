@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 using System.Text.Json;
 
-namespace junie_des_1942stats.Notifications.Services;
+namespace junie_des_1942stats.Services;
 
 public class PlayerEventPublisher : IPlayerEventPublisher
 {

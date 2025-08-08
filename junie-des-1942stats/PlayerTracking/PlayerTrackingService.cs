@@ -1,6 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using junie_des_1942stats.Bflist;
-using junie_des_1942stats.Notifications.Services;
+using junie_des_1942stats.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;

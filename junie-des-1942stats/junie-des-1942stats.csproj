@@ -45,10 +45,8 @@
       <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
       <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="9.0.5" />
       <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="8.0.0" />
+      <PackageReference Include="StackExchange.Redis" Version="2.8.58" />
     </ItemGroup>
 
-    <ItemGroup>
-      <ProjectReference Include="..\junie-des-1942stats.Notifications\junie-des-1942stats.Notifications.csproj" />
-    </ItemGroup>
 
 </Project>
