@@ -22,10 +22,10 @@ public class BuddyApiService : IBuddyApiService
     {
         try
         {
+            // TEMPORARY: For testing, always return dmunyard@gmail.com
             // TODO: Implement API call to main service
-            // For now, return empty list
-            _logger.LogInformation("Getting users with buddy {BuddyName} - API call not yet implemented", buddyPlayerName);
-            return Enumerable.Empty<string>();
+            _logger.LogInformation("TESTING: Returning dmunyard@gmail.com for buddy {BuddyName}", buddyPlayerName);
+            return new[] { "dmunyard@gmail.com" };
         }
         catch (Exception ex)
         {

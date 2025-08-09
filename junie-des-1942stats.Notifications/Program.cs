@@ -66,7 +66,6 @@ builder.Services.AddSingleton<IDatabase>(sp => sp.GetRequiredService<IConnection
 // Register services
 builder.Services.AddHttpClient<IBuddyApiService, BuddyApiService>();
 builder.Services.AddSingleton<IBuddyNotificationService, BuddyNotificationService>();
-builder.Services.AddSingleton<IPlayerEventPublisher, PlayerEventPublisher>();
 builder.Services.AddHostedService<PlayerEventConsumer>();
 
 // Register notification handlers

@@ -29,6 +29,19 @@ public class PlayerEventConsumer : BackgroundService
     {
         _logger.LogInformation("Player event consumer starting (Pub/Sub)...");
         Console.WriteLine($"Player event consumer subscribing to Redis channel '{ChannelName}'");
+        
+        // Log Redis connection diagnostics
+        var database = _connectionMultiplexer.GetDatabase();
+        var server = _connectionMultiplexer.GetServers().FirstOrDefault();
+        if (server != null)
+        {
+            _logger.LogInformation("Redis connection status: Connected={Connected}, Server={Server}, ClientName={ClientName}", 
+                _connectionMultiplexer.IsConnected, server.EndPoint, _connectionMultiplexer.ClientName);
+        }
+        else
+        {
+            _logger.LogWarning("No Redis servers found in connection multiplexer");
+        }
 
         ChannelMessageQueue? channelQueue = null;
         var subscriber = _connectionMultiplexer.GetSubscriber();
@@ -37,13 +50,41 @@ public class PlayerEventConsumer : BackgroundService
         {
             channelQueue = await subscriber.SubscribeAsync(RedisChannel.Literal(ChannelName));
             Console.WriteLine($"Successfully subscribed to Redis channel '{ChannelName}'");
+            _logger.LogInformation("Successfully subscribed to Redis channel '{ChannelName}' - waiting for messages...", ChannelName);
+            
+            // Log current subscription count
+            var redisServer = _connectionMultiplexer.GetServers().FirstOrDefault();
+            if (redisServer != null)
+            {
+                var subscriptionCount = await redisServer.SubscriptionSubscriberCountAsync(RedisChannel.Literal(ChannelName));
+                _logger.LogInformation("Current subscriber count for channel '{ChannelName}': {Count}", ChannelName, subscriptionCount);
+            }
 
+            var lastHeartbeat = DateTime.UtcNow;
+            var messageCount = 0;
+            
             while (!stoppingToken.IsCancellationRequested)
             {
+                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
                 try
                 {
-                    var message = await channelQueue.ReadAsync(stoppingToken);
+                    // Add timeout to ReadAsync to allow periodic heartbeat logging
+                    using var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, timeoutCts.Token);
+                    
+                    var message = await channelQueue.ReadAsync(combinedCts.Token);
+                    messageCount++;
+                    _logger.LogInformation("Received Redis message #{MessageCount}", messageCount);
+                    _logger.LogDebug("Message content: {RawMessage}", message.Message.ToString());
                     await ProcessPlayerEvent(message.Message);
+                    lastHeartbeat = DateTime.UtcNow;
+                }
+                catch (OperationCanceledException) when (timeoutCts.Token.IsCancellationRequested && !stoppingToken.IsCancellationRequested)
+                {
+                    // Timeout occurred - log heartbeat
+                    var elapsed = DateTime.UtcNow - lastHeartbeat;
+                    _logger.LogInformation("Consumer heartbeat - still listening on '{ChannelName}', last message: {ElapsedSeconds}s ago, total messages: {MessageCount}", 
+                        ChannelName, elapsed.TotalSeconds, messageCount);
+                    continue;
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
@@ -85,17 +126,24 @@ public class PlayerEventConsumer : BackgroundService
             if (notification != null)
             {
                 _logger.LogDebug("Processing event of type {EventType}", notification.GetType().Name);
-                await eventAggregator.PublishAsync(notification);
+                
+                // Publish using the concrete type to ensure proper handler resolution
+                await (notification switch
+                {
+                    PlayerOnlineNotification playerOnlineNotification => eventAggregator.PublishAsync(playerOnlineNotification),
+                    MapChangeNotification mapChangeNotification => eventAggregator.PublishAsync(mapChangeNotification),
+                    _ => Task.CompletedTask
+                });
+                
+                _logger.LogDebug("Successfully processed {EventType}", notification.GetType().Name);
             }
             else
             {
-                Console.WriteLine($"WARNING: Failed to parse event from Redis message: {jsonMessage}");
-                _logger.LogWarning("Unknown event type in message: {Message}", jsonMessage.ToString());
+                _logger.LogWarning("Failed to parse event from Redis message: {Message}", jsonMessage.ToString());
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"ERROR: Failed to process player event: {ex.Message}");
             _logger.LogError(ex, "Error processing Pub/Sub message");
         }
     }

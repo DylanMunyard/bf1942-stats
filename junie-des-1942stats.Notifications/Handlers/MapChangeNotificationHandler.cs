@@ -57,7 +57,17 @@ public class MapChangeNotificationHandler
                 var connectionIds = await _buddyNotificationService.GetUserConnectionIds(userId);
                 foreach (var connectionId in connectionIds)
                 {
-                    await _hubContext.Clients.Client(connectionId).SendAsync("BuddyMapChange", message, cancellationToken);
+                    const string eventName = "BuddyMapChange";
+                    _logger.LogInformation("Sending SignalR event {EventName} to connection {ConnectionId} for user {UserId}", eventName, connectionId, userId);
+                    try
+                    {
+                        await _hubContext.Clients.Client(connectionId).SendAsync(eventName, message, cancellationToken);
+                        _logger.LogInformation("Sent SignalR event {EventName} to connection {ConnectionId}", eventName, connectionId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to send SignalR event {EventName} to connection {ConnectionId}", eventName, connectionId);
+                    }
                 }
             }
 

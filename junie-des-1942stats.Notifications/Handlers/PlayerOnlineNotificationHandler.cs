@@ -57,7 +57,17 @@ public class PlayerOnlineNotificationHandler
                 var connectionIds = await _buddyNotificationService.GetUserConnectionIds(userEmail);
                 foreach (var connectionId in connectionIds)
                 {
-                    await _hubContext.Clients.Client(connectionId).SendAsync("BuddyOnline", message, cancellationToken);
+                    const string eventName = "BuddyOnline";
+                    _logger.LogInformation("Sending SignalR event {EventName} to connection {ConnectionId} for user {UserEmail}", eventName, connectionId, userEmail);
+                    try
+                    {
+                        await _hubContext.Clients.Client(connectionId).SendAsync(eventName, message, cancellationToken);
+                        _logger.LogInformation("Sent SignalR event {EventName} to connection {ConnectionId}", eventName, connectionId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to send SignalR event {EventName} to connection {ConnectionId}", eventName, connectionId);
+                    }
                 }
             }
 

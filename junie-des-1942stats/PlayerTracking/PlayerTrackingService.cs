@@ -133,7 +133,6 @@ public class PlayerTrackingService
                     
                     // Track map change event (only if player had active sessions before)
                     eventsToPublish.Add(("map_change", playerInfo, newSession, oldMapName));
-                    Console.WriteLine($"Queued map_change event for player {playerInfo.Name} (Old Map: {oldMapName}, New Map: {server.MapName})");
                 }
             }
             else
@@ -145,7 +144,6 @@ public class PlayerTrackingService
                 
                 // Track player online event (true first time online)
                 eventsToPublish.Add(("player_online", playerInfo, newSession, null));
-                Console.WriteLine($"Queued player_online event for player {playerInfo.Name} on server {server.Name}");
             }
         }
 
@@ -208,7 +206,6 @@ public class PlayerTrackingService
                 }
 
                 await transaction.CommitAsync();
-                Console.WriteLine($"Successfully tracked {server.Players.Count()} players with {observations.Count} observations");
                 
                 // Publish events after successful database operations
                 await PublishPlayerEvents(eventsToPublish, server);
@@ -216,7 +213,6 @@ public class PlayerTrackingService
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
-                Console.WriteLine($"Error tracking players: {ex.Message}");
                 throw;
             }
         }
@@ -314,12 +310,11 @@ public class PlayerTrackingService
             if (timedOutSessions.Any())
             {
                 await _dbContext.SaveChangesAsync();
-                Console.WriteLine($"Closed {timedOutSessions.Count} timed-out sessions");
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error closing timed-out sessions: {ex.Message}");
+            // Log error if needed
         }
     }
 
@@ -419,30 +414,15 @@ public class PlayerTrackingService
 
     private async Task PublishPlayerEvents(List<(string EventType, PlayerInfo PlayerInfo, PlayerSession Session, string? OldMapName)> eventsToPublish, IGameServer server)
     {
-        if (_eventPublisher == null)
+        if (_eventPublisher == null || !eventsToPublish.Any())
         {
-            Console.WriteLine("No event publisher configured - skipping event publishing");
             return;
         }
-
-        if (!eventsToPublish.Any())
-        {
-            Console.WriteLine("No events to publish");
-            return;
-        }
-
-        var eventCounts = eventsToPublish
-            .GroupBy(e => e.EventType)
-            .ToDictionary(g => g.Key, g => g.Count());
-
-        Console.WriteLine($"Publishing {eventsToPublish.Count} events: {string.Join(", ", eventCounts.Select(kvp => $"{kvp.Key}: {kvp.Value}"))}");
 
         foreach (var eventData in eventsToPublish)
         {
             try
             {
-                Console.WriteLine($"Publishing {eventData.EventType} event for player {eventData.PlayerInfo.Name} on server {server.Name} (ID: {server.Guid})");
-                
                 switch (eventData.EventType)
                 {
                     case "player_online":
@@ -453,7 +433,6 @@ public class PlayerTrackingService
                             server.MapName ?? "",
                             server.GameId ?? "",
                             eventData.Session.SessionId);
-                        Console.WriteLine($"Successfully published player_online event for {eventData.PlayerInfo.Name} (Session: {eventData.Session.SessionId})");
                         break;
 
                     case "map_change":
@@ -464,14 +443,13 @@ public class PlayerTrackingService
                             eventData.OldMapName ?? "",
                             server.MapName ?? "",
                             eventData.Session.SessionId);
-                        Console.WriteLine($"Successfully published map_change event for {eventData.PlayerInfo.Name} (Session: {eventData.Session.SessionId}, Old Map: {eventData.OldMapName}, New Map: {server.MapName})");
                         break;
+
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error publishing {eventData.EventType} event for {eventData.PlayerInfo.Name}: {ex.Message}");
-                Console.WriteLine($"Exception details: {ex}");
+                // Log error if needed
             }
         }
     }
