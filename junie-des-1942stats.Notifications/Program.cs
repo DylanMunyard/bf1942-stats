@@ -69,8 +69,8 @@ builder.Services.AddSingleton<IBuddyNotificationService, BuddyNotificationServic
 builder.Services.AddHostedService<PlayerEventConsumer>();
 
 // Register notification handlers
-builder.Services.AddScoped<ServerMapChangeNotificationHandler>();
-builder.Services.AddScoped<PlayerOnlineNotificationHandler>();
+builder.Services.AddSingleton<ServerMapChangeNotificationHandler>();
+builder.Services.AddSingleton<PlayerOnlineNotificationHandler>();
 
 var app = builder.Build();
 

@@ -142,6 +142,8 @@ public class PlayerTrackingService
                 pendingObservations.Add((playerInfo, newSession));
 
                 // Track player online event (true first time online)
+                _logger.LogInformation("TRACKING: Detected player online for {ServerGuid} / {ServerName}: {PlayerName}",
+                    server.Guid, server.Name, playerInfo.Name);
                 eventsToPublish.Add(("player_online", playerInfo, newSession, null));
             }
         }
@@ -212,6 +214,8 @@ public class PlayerTrackingService
                 // Publish server map change event if detected
                 if (!string.IsNullOrEmpty(serverMapChangeOldMap))
                 {
+                    _logger.LogInformation("TRACKING: Detected map change for {ServerGuid} / {ServerName}: {OldMap} -> {NewMap}", 
+                        server.Guid, server.Name, serverMapChangeOldMap, server.MapName);
                     await PublishServerMapChangeEvent(server, serverMapChangeOldMap);
                 }
             }
