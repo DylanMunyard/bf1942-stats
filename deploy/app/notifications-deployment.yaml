@@ -28,6 +28,8 @@ spec:
               value: "redis-service.bf42-stats:6379"
             - name: JWT__AUDIENCE
               value: "468014767883-2gsdumjjgpgm2fp1qgic82i45k03tj7e.apps.googleusercontent.com"
+            - name: ApiBaseUrl
+              value: "http://bf42-stats-service.bf42-stats:8080"
           livenessProbe:
             httpGet:
               path: /health

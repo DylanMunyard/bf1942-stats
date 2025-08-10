@@ -1,0 +1,16 @@
+﻿{
+  "profiles": {
+    "junie-des-1942stats.Notifications": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:9223",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ConnectionStrings__Redis": "100.96.7.8:6379",
+        "Jwt__Audience": "468014767883-2gsdumjjgpgm2fp1qgic82i45k03tj7e.apps.googleusercontent.com",
+        "ApiBaseUrl": "http://localhost:9222"
+      }
+    }
+  }
+}

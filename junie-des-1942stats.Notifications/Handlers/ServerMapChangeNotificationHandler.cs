@@ -9,15 +9,18 @@ namespace junie_des_1942stats.Notifications.Handlers;
 public class ServerMapChangeNotificationHandler
 {
     private readonly IBuddyNotificationService _buddyNotificationService;
+    private readonly IBuddyApiService _buddyApiService;
     private readonly IHubContext<NotificationHub> _hubContext;
     private readonly ILogger<ServerMapChangeNotificationHandler> _logger;
 
     public ServerMapChangeNotificationHandler(
         IBuddyNotificationService buddyNotificationService,
+        IBuddyApiService buddyApiService,
         IHubContext<NotificationHub> hubContext,
         ILogger<ServerMapChangeNotificationHandler> logger)
     {
         _buddyNotificationService = buddyNotificationService;
+        _buddyApiService = buddyApiService;
         _hubContext = hubContext;
         _logger = logger;
     }
@@ -29,6 +32,15 @@ public class ServerMapChangeNotificationHandler
             _logger.LogInformation("Processing server map change notification for {ServerName}: {OldMap} -> {NewMap}",
                 notification.ServerName, notification.OldMapName, notification.NewMapName);
 
+            // Get users who have this server as a favourite
+            var usersToNotify = await _buddyApiService.GetUsersWithFavouriteServer(notification.ServerGuid);
+
+            if (!usersToNotify.Any())
+            {
+                _logger.LogDebug("No users found with server {ServerGuid} as favourite", notification.ServerGuid);
+                return;
+            }
+
             var message = new BuddyNotificationMessage
             {
                 Type = "server_map_change",
@@ -39,20 +51,28 @@ public class ServerMapChangeNotificationHandler
                 Message = $"Server {notification.ServerName} changed map from {notification.OldMapName} to {notification.NewMapName}"
             };
 
-            // Send notification to all connected users
-            const string eventName = "ServerMapChange";
-            _logger.LogInformation("Broadcasting SignalR event {EventName} to all clients", eventName);
-            try
+            // Send notifications to all connected users who have this server as favourite
+            foreach (var userEmail in usersToNotify)
             {
-                await _hubContext.Clients.All.SendAsync(eventName, message, cancellationToken);
-                _logger.LogInformation("Broadcasted SignalR event {EventName} to all clients", eventName);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to broadcast SignalR event {EventName}", eventName);
+                var connectionIds = await _buddyNotificationService.GetUserConnectionIds(userEmail);
+                foreach (var connectionId in connectionIds)
+                {
+                    const string eventName = "ServerMapChange";
+                    _logger.LogInformation("Sending SignalR event {EventName} to connection {ConnectionId} for user {UserEmail}", eventName, connectionId, userEmail);
+                    try
+                    {
+                        await _hubContext.Clients.Client(connectionId).SendAsync(eventName, message, cancellationToken);
+                        _logger.LogInformation("Sent SignalR event {EventName} to connection {ConnectionId}", eventName, connectionId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to send SignalR event {EventName} to connection {ConnectionId}", eventName, connectionId);
+                    }
+                }
             }
 
-            _logger.LogInformation("Sent server map change notification for {ServerName}", notification.ServerName);
+            _logger.LogInformation("Sent server map change notifications to {UserCount} users for {ServerName}",
+                usersToNotify.Count(), notification.ServerName);
         }
         catch (Exception ex)
         {

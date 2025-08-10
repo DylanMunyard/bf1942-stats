@@ -124,6 +124,10 @@ public class PlayerTrackerDbContext : DbContext
             .HasIndex(ufs => new { ufs.UserId, ufs.ServerGuid })
             .IsUnique();
 
+        // Index for notification queries - find users by server
+        modelBuilder.Entity<UserFavoriteServer>()
+            .HasIndex(ufs => ufs.ServerGuid);
+
         // Configure UserBuddy entity
         modelBuilder.Entity<UserBuddy>()
             .HasKey(ub => ub.Id);
@@ -131,6 +135,10 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<UserBuddy>()
             .HasIndex(ub => new { ub.UserId, ub.BuddyPlayerName })
             .IsUnique();
+
+        // Index for notification queries - find users by buddy player name
+        modelBuilder.Entity<UserBuddy>()
+            .HasIndex(ub => ub.BuddyPlayerName);
 
         // Configure relationships for dashboard settings
         modelBuilder.Entity<UserPlayerName>()
