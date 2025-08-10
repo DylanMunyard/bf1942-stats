@@ -59,23 +59,3 @@ spec:
     - port: 8080
       targetPort: 8080
       name: api
-
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: bf42-notifications-ingress
-  namespace: bf42-stats
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
-spec:
-  rules:
-    - http:
-        paths:
-          - path: /notifications(/|$)(.*)
-            pathType: Prefix
-            backend:
-              service:
-                name: bf42-notifications-service
-                port:
-                  number: 8080
