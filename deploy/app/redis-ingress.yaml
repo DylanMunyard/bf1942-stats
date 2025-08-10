@@ -7,10 +7,25 @@ spec:
   entryPoints:
     - redis
   routes:
-  - match: HostSNI(`*`)
-    services:
-    - name: redis-service
-      port: 6379
+    - match: HostSNI(`*`)
+      services:
+        - name: redis-service
+          port: 6379
+
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRouteTCP
+metadata:
+  name: redis-dev
+  namespace: bf42-stats
+spec:
+  entryPoints:
+    - redis-dev
+  routes:
+    - match: HostSNI(`*`)
+      services:
+        - name: redis-dev-service
+          port: 6380
 
 ---
 apiVersion: traefik.containo.us/v1alpha1
