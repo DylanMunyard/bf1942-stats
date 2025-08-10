@@ -174,3 +174,54 @@ spec:
     - port: 80
       targetPort: 80
       name: web
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-dev
+  namespace: bf42-stats
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-dev
+  template:
+    metadata:
+      labels:
+        app: redis-dev
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          args:
+            - redis-server
+            - --appendonly
+            - "yes"
+          volumeMounts:
+            - name: redis-dev-data
+              mountPath: /data
+      volumes:
+        - name: redis-dev-data
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-dev-service
+  namespace: bf42-stats
+  labels:
+    app: redis-dev
+spec:
+  selector:
+    app: redis-dev
+  type: ClusterIP
+  ports:
+    - port: 6380
+      targetPort: 6379
+      name: redis
