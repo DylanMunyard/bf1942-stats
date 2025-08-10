@@ -20,7 +20,7 @@ public class RealTimeAnalyticsService : IDisposable
     {
         _logger = logger;
         var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
-        
+
         try
         {
             var uri = new Uri(clickHouseUrl);
@@ -212,10 +212,10 @@ WHERE team_killer_likelihood > 0.6 OR unexplained_drops_last_10min > 0
 ORDER BY total_penalties_last_10min DESC, unexplained_drops_last_10min DESC";
 
             var results = new List<TeamKillerMetrics>();
-            
+
             await using var command = _connection.CreateCommand();
             command.CommandText = query;
-            
+
             await using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
@@ -262,4 +262,4 @@ ORDER BY total_penalties_last_10min DESC, unexplained_drops_last_10min DESC";
             _disposed = true;
         }
     }
-} 
+}

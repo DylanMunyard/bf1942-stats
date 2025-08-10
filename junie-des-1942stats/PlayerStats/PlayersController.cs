@@ -25,7 +25,7 @@ public class PlayersController : ControllerBase
         _playerRoundsService = playerRoundsService;
         _logger = logger;
     }
-    
+
     // Get all players with basic info - enhanced with paging and sorting
     [HttpGet]
     public async Task<ActionResult<PagedResult<PlayerBasicInfo>>> GetAllPlayers(
@@ -46,7 +46,7 @@ public class PlayersController : ControllerBase
         // Validate parameters
         if (page < 1)
             return BadRequest("Page number must be at least 1");
-        
+
         if (pageSize < 1 || pageSize > 500)
             return BadRequest("Page size must be between 1 and 500");
 
@@ -65,13 +65,13 @@ public class PlayersController : ControllerBase
         // Validate filter parameters
         if (minPlayTime.HasValue && minPlayTime < 0)
             return BadRequest("Minimum play time cannot be negative");
-        
+
         if (maxPlayTime.HasValue && maxPlayTime < 0)
             return BadRequest("Maximum play time cannot be negative");
-        
+
         if (minPlayTime.HasValue && maxPlayTime.HasValue && minPlayTime > maxPlayTime)
             return BadRequest("Minimum play time cannot be greater than maximum play time");
-        
+
         if (lastSeenFrom.HasValue && lastSeenTo.HasValue && lastSeenFrom > lastSeenTo)
             return BadRequest("LastSeenFrom cannot be greater than LastSeenTo");
 
@@ -98,16 +98,16 @@ public class PlayersController : ControllerBase
             return BadRequest(ex.Message);
         }
     }
-    
+
     // Get detailed player statistics
     [HttpGet("{playerName}")]
     public async Task<ActionResult<PlayerTimeStatistics>> GetPlayerStats(string playerName)
     {
         if (string.IsNullOrWhiteSpace(playerName))
-        return BadRequest("Player name cannot be empty");
-            
+            return BadRequest("Player name cannot be empty");
+
         var stats = await _playerStatsService.GetPlayerStatistics(playerName);
-            
+
         return Ok(stats);
     }
 
@@ -140,17 +140,17 @@ public class PlayersController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(playerName))
             return BadRequest("Player name cannot be empty");
-        
+
         if (page < 1)
             return BadRequest("Page number must be at least 1");
-        
+
         if (pageSize < 1 || pageSize > 100)
             return BadRequest("Page size must be between 1 and 100");
 
         // Valid sort fields for sessions
         var validSortFields = new[]
         {
-            "SessionId", "ServerName", "MapName", "GameType", "StartTime", "EndTime", 
+            "SessionId", "ServerName", "MapName", "GameType", "StartTime", "EndTime",
             "DurationMinutes", "Score", "Kills", "Deaths", "IsActive"
         };
 
@@ -163,43 +163,43 @@ public class PlayersController : ControllerBase
         // Validate filter parameters
         if (minPlayTime.HasValue && minPlayTime < 0)
             return BadRequest("Minimum play time cannot be negative");
-        
+
         if (maxPlayTime.HasValue && maxPlayTime < 0)
             return BadRequest("Maximum play time cannot be negative");
-        
+
         if (minPlayTime.HasValue && maxPlayTime.HasValue && minPlayTime > maxPlayTime)
             return BadRequest("Minimum play time cannot be greater than maximum play time");
 
         if (minScore.HasValue && minScore < 0)
             return BadRequest("Minimum score cannot be negative");
-        
+
         if (maxScore.HasValue && maxScore < 0)
             return BadRequest("Maximum score cannot be negative");
-        
+
         if (minScore.HasValue && maxScore.HasValue && minScore > maxScore)
             return BadRequest("Minimum score cannot be greater than maximum score");
 
         if (minKills.HasValue && minKills < 0)
             return BadRequest("Minimum kills cannot be negative");
-        
+
         if (maxKills.HasValue && maxKills < 0)
             return BadRequest("Maximum kills cannot be negative");
-        
+
         if (minKills.HasValue && maxKills.HasValue && minKills > maxKills)
             return BadRequest("Minimum kills cannot be greater than maximum kills");
 
         if (minDeaths.HasValue && minDeaths < 0)
             return BadRequest("Minimum deaths cannot be negative");
-        
+
         if (maxDeaths.HasValue && maxDeaths < 0)
             return BadRequest("Maximum deaths cannot be negative");
-        
+
         if (minDeaths.HasValue && maxDeaths.HasValue && minDeaths > maxDeaths)
             return BadRequest("Minimum deaths cannot be greater than maximum deaths");
-        
+
         if (startTimeFrom.HasValue && startTimeTo.HasValue && startTimeFrom > startTimeTo)
             return BadRequest("StartTimeFrom cannot be greater than StartTimeTo");
-        
+
         if (lastSeenFrom.HasValue && lastSeenTo.HasValue && lastSeenFrom > lastSeenTo)
             return BadRequest("LastSeenFrom cannot be greater than LastSeenTo");
 
@@ -228,10 +228,10 @@ public class PlayersController : ControllerBase
             };
 
             var result = await _playerStatsService.GetPlayerSessions(playerName, page, pageSize, sortBy, sortOrder, filters);
-            
+
             if (result.TotalItems == 0)
                 return NotFound($"No sessions found for player '{playerName}' with the specified filters");
-            
+
             return Ok(result);
         }
         catch (ArgumentException ex)
@@ -239,7 +239,7 @@ public class PlayersController : ControllerBase
             return BadRequest(ex.Message);
         }
     }
-    
+
     // Get session details
     [HttpGet("{playerName}/sessions/{sessionId}")]
     public async Task<ActionResult<SessionDetail>> GetPlayerStats(string playerName, int sessionId)
@@ -250,7 +250,7 @@ public class PlayersController : ControllerBase
         {
             return NotFound($"Session '{sessionId}' not found");
         }
-        
+
         return Ok(stats);
     }
 
@@ -273,10 +273,10 @@ public class PlayersController : ControllerBase
         try
         {
             var stats = await _serverStatisticsService.GetServerStats(playerName, period, serverGuid);
-            
+
             if (!stats.Any())
                 return NotFound($"No statistics found for player '{playerName}' on server '{serverGuid}' for the specified period");
-                
+
             return Ok(stats);
         }
         catch (Exception ex)
@@ -296,7 +296,7 @@ public class PlayersController : ControllerBase
 
         if (page < 1)
             return BadRequest("Page number must be at least 1");
-        
+
         if (pageSize < 1 || pageSize > 100)
             return BadRequest("Page size must be between 1 and 100");
 
@@ -309,7 +309,7 @@ public class PlayersController : ControllerBase
 
             var result = await _playerStatsService.GetAllPlayersWithPaging(
                 page, pageSize, "PlayerName", "asc", filters);
-            
+
             return Ok(result);
         }
         catch (ArgumentException ex)
@@ -354,10 +354,10 @@ public class PlayersController : ControllerBase
         try
         {
             var result = await _playerComparisonService.FindSimilarPlayersAsync(playerName, limit, true, similarityMode);
-            
+
             if (result.TargetPlayerStats == null)
                 return NotFound($"Player '{playerName}' not found or has insufficient data");
-            
+
             return Ok(result);
         }
         catch (Exception ex)
@@ -384,7 +384,7 @@ public class PlayersController : ControllerBase
             }
 
             var result = await _playerRoundsService.GetPlayerStatsAsync(playerName, fromDate, toDate);
-            
+
             // Return raw TSV data with proper content type for demonstration
             // In production, you'd probably parse this into a proper model
             return Content(result, "text/tab-separated-values");

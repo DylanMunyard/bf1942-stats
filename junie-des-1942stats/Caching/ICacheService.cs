@@ -33,7 +33,7 @@ public class CacheService : ICacheService
         try
         {
             var cachedValue = await _distributedCache.GetStringAsync(key, cancellationToken);
-            
+
             if (string.IsNullOrEmpty(cachedValue))
             {
                 return null;

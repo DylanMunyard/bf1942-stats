@@ -523,7 +523,7 @@ ORDER BY hour_of_day";
         {
             var similarPlayer = await CalculateSimilarityScoreAsync(targetStats, candidate, mode);
             // For alias detection, also exclude players with zero scores (filtered out by overlap/ping criteria)
-            if (similarPlayer.SimilarityScore > minThreshold && 
+            if (similarPlayer.SimilarityScore > minThreshold &&
                 (mode != SimilarityMode.AliasDetection || similarPlayer.SimilarityScore > 0))
             {
                 rankedPlayers.Add(similarPlayer);
@@ -633,13 +633,13 @@ GROUP BY t.total_kills, t.total_deaths, t.total_play_time_minutes, s.server_guid
     private async Task<PlayerSimilarityStats?> GetPlayerStatsForSimilarity(string playerName)
     {
         var (stats, serverGuids) = await GetPlayerStatsForSimilarityWithGuids(playerName);
-        
+
         if (stats != null && serverGuids.Any())
         {
             var serverGuidToNameMapping = await GetServerGuidToNameMappingAsync(serverGuids.ToList());
             ApplyServerGuidToNameMapping(stats, serverGuidToNameMapping);
         }
-        
+
         return stats;
     }
 
@@ -824,7 +824,7 @@ LIMIT {limit}";
 
         return (players, allServerGuids);
     }
-    
+
     private async Task<SimilarPlayer> CalculateSimilarityScoreAsync(PlayerSimilarityStats target, PlayerSimilarityStats candidate, SimilarityMode mode = SimilarityMode.Default)
     {
         double score = 0;
@@ -870,7 +870,7 @@ LIMIT {limit}";
                     var targetPing = target.ServerPings[server];
                     var candidatePing = candidate.ServerPings[server];
                     var pingDiff = Math.Abs(targetPing - candidatePing);
-                    
+
                     if (pingDiff > 30.0)
                     {
                         return new SimilarPlayer

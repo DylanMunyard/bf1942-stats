@@ -9,7 +9,7 @@ public class PlayerInsightsService : BaseClickHouseService, IClickHouseReader
 {
     private readonly ILogger<PlayerInsightsService> _logger;
 
-    public PlayerInsightsService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerInsightsService> logger) 
+    public PlayerInsightsService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerInsightsService> logger)
         : base(httpClient, clickHouseUrl)
     {
         _logger = logger;
@@ -26,9 +26,9 @@ public class PlayerInsightsService : BaseClickHouseService, IClickHouseReader
     public async Task<List<PlayerKillMilestone>> GetPlayersKillMilestonesAsync(List<string> playerNames)
     {
         if (!playerNames.Any()) return new List<PlayerKillMilestone>();
-        
+
         var playerNamesQuoted = string.Join(", ", playerNames.Select(p => $"'{p.Replace("'", "''")}'"));
-        
+
         var query = $@"
 WITH PlayerRoundsCumulative AS (
     SELECT 
@@ -193,7 +193,7 @@ FORMAT TabSeparated";
 
         return insights;
     }
-    
+
     /// <summary>
     /// Get kill milestones for a single player (convenience method)
     /// </summary>

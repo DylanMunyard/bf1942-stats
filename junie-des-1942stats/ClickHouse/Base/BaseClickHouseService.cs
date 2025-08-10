@@ -44,7 +44,7 @@ public abstract class BaseClickHouseService
 
 public class ClickHouseReader : BaseClickHouseService, IClickHouseReader
 {
-    public ClickHouseReader(HttpClient httpClient, string clickHouseUrl) 
+    public ClickHouseReader(HttpClient httpClient, string clickHouseUrl)
         : base(httpClient, clickHouseUrl)
     {
     }
@@ -57,7 +57,7 @@ public class ClickHouseReader : BaseClickHouseService, IClickHouseReader
 
 public class ClickHouseWriter : BaseClickHouseService, IClickHouseWriter
 {
-    public ClickHouseWriter(HttpClient httpClient, string clickHouseUrl) 
+    public ClickHouseWriter(HttpClient httpClient, string clickHouseUrl)
         : base(httpClient, clickHouseUrl)
     {
     }

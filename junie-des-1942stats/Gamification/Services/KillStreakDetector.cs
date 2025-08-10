@@ -104,32 +104,32 @@ public class KillStreakDetector
         {
             // Get player metrics for the round timeframe
             var playerMetrics = await GetPlayerMetricsForRoundAsync(round);
-            
-            if (playerMetrics.Count < 2) 
+
+            if (playerMetrics.Count < 2)
             {
-                _logger.LogDebug("Insufficient player_metrics data for {PlayerName} round {RoundId} - found {Count} metrics", 
+                _logger.LogDebug("Insufficient player_metrics data for {PlayerName} round {RoundId} - found {Count} metrics",
                     round.PlayerName, round.RoundId, playerMetrics.Count);
                 return achievements; // Need at least 2 metrics to detect streaks
             }
 
             // Calculate streaks from the more granular player_metrics data
             var streakInstances = CalculateAllStreakInstancesFromMetrics(playerMetrics);
-            
+
             if (!streakInstances.Any()) return achievements; // No streaks of 5+ kills
 
             // Get existing achievements to avoid duplicates
             var existingAchievements = await _readService.GetPlayerAchievementsByTypeAsync(round.PlayerName, AchievementTypes.KillStreak);
             var existingRoundAchievements = existingAchievements.Where(a => a.RoundId == round.RoundId).ToList();
-            
+
             foreach (var streakInstance in streakInstances)
             {
                 var achievementId = $"kill_streak_{streakInstance.Threshold}";
-                
+
                 // Check if player already has this specific achievement instance
-                var hasAchievementForThisInstance = existingRoundAchievements.Any(a => 
-                    a.AchievementId == achievementId && 
+                var hasAchievementForThisInstance = existingRoundAchievements.Any(a =>
+                    a.AchievementId == achievementId &&
                     Math.Abs((a.AchievedAt - streakInstance.AchievedAt).TotalMinutes) < 2); // Allow 2-minute tolerance
-                
+
                 if (!hasAchievementForThisInstance)
                 {
                     var badgeDefinition = _badgeService.GetBadgeDefinition(achievementId);
@@ -176,7 +176,7 @@ public class KillStreakDetector
         {
             var roundStartTime = round.RoundStartTime;
             var roundEndTime = round.RoundEndTime;
-            
+
             // Add some buffer to account for timing differences
             var bufferMinutes = 2;
             var searchStartTime = roundStartTime.AddMinutes(-bufferMinutes);
@@ -185,10 +185,10 @@ public class KillStreakDetector
             // Use the existing ClickHouseGamificationService to get the player metrics
             // This ensures we use ADO.NET with proper parameterized queries
             var playerMetricPoints = await _readService.GetPlayerMetricsForRoundAsync(
-                round.PlayerName, 
-                round.ServerGuid, 
-                round.MapName, 
-                searchStartTime, 
+                round.PlayerName,
+                round.ServerGuid,
+                round.MapName,
+                searchStartTime,
                 searchEndTime);
 
             var results = playerMetricPoints.Select(p => new PlayerMetric
@@ -199,7 +199,7 @@ public class KillStreakDetector
                 PlayerName = round.PlayerName
             }).ToList();
 
-            _logger.LogDebug("Retrieved {Count} player metrics for {PlayerName} round {RoundId}", 
+            _logger.LogDebug("Retrieved {Count} player metrics for {PlayerName} round {RoundId}",
                 results.Count, round.PlayerName, round.RoundId);
 
             return results;
@@ -220,7 +220,7 @@ public class KillStreakDetector
     {
         var streakInstances = new List<StreakInstance>();
         var thresholdValues = new[] { 5, 10, 15, 20, 25, 30, 50 };
-        
+
         if (metrics.Count < 2) return streakInstances;
 
         int currentStreak = 0;
@@ -237,7 +237,7 @@ public class KillStreakDetector
             {
                 // Player got kills without dying - continue/start streak
                 currentStreak += killsDiff;
-                
+
                 // Check if any thresholds were reached during this metric
                 foreach (var threshold in thresholdValues)
                 {
@@ -286,4 +286,4 @@ public class KillStreakDetector
         public int Threshold { get; set; }
         public DateTime AchievedAt { get; set; }
     }
-} 
+}

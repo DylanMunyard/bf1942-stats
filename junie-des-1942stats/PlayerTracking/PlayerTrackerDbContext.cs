@@ -37,18 +37,18 @@ public class PlayerTrackerDbContext : DbContext
 
         modelBuilder.Entity<PlayerSession>()
             .HasIndex(ps => new { ps.PlayerName, ps.ServerGuid, ps.IsActive });
-            
+
         // Add composite index for efficient lastRounds query performance
         modelBuilder.Entity<PlayerSession>()
             .HasIndex(ps => new { ps.ServerGuid, ps.StartTime, ps.MapName });
-            
+
         modelBuilder.Entity<PlayerSession>()
             .HasIndex(ps => new { ps.ServerGuid, ps.LastSeenTime });
-            
+
         // Add index optimized for online players query (IsActive + LastSeenTime)
         modelBuilder.Entity<PlayerSession>()
             .HasIndex(ps => new { ps.IsActive, ps.LastSeenTime });
-            
+
         // Configure PlayerObservation entity
         modelBuilder.Entity<PlayerObservation>()
             .HasKey(po => po.ObservationId);
@@ -58,7 +58,7 @@ public class PlayerTrackerDbContext : DbContext
 
         modelBuilder.Entity<PlayerObservation>()
             .HasIndex(po => po.Timestamp);
-            
+
         // Composite index to optimize queries that filter by SessionId and Timestamp
         modelBuilder.Entity<PlayerObservation>()
             .HasIndex(po => new { po.SessionId, po.Timestamp });
@@ -73,18 +73,18 @@ public class PlayerTrackerDbContext : DbContext
 
         modelBuilder.Entity<ServerPlayerRanking>()
             .HasIndex(r => new { r.ServerGuid, r.Rank });
-            
+
         // Configure relationships
         modelBuilder.Entity<PlayerSession>()
             .HasOne(ps => ps.Player)
             .WithMany(p => p.Sessions)
             .HasForeignKey(ps => ps.PlayerName);
-            
+
         modelBuilder.Entity<PlayerSession>()
             .HasOne(ps => ps.Server)
             .WithMany(s => s.Sessions)
             .HasForeignKey(ps => ps.ServerGuid);
-            
+
         modelBuilder.Entity<PlayerObservation>()
             .HasOne(po => po.Session)
             .WithMany(ps => ps.Observations)
@@ -166,7 +166,7 @@ public class PlayerTrackerDbContext : DbContext
         // Configure RoundListItem as keyless entity (for query results only)
         modelBuilder.Entity<RoundListItem>()
             .HasNoKey();
-        
+
         // Configure ServerBestScoreRaw as keyless entity (for query results only)
         modelBuilder.Entity<ServerBestScoreRaw>()
             .HasNoKey();
@@ -178,11 +178,11 @@ public class Player
     public string Name { get; set; } = "";
     public DateTime FirstSeen { get; set; }
     public DateTime LastSeen { get; set; }
-    
+
     public int TotalPlayTimeMinutes { get; set; }
-    
+
     public bool AiBot { get; set; }
-    
+
     // Navigation property
     public List<PlayerSession> Sessions { get; set; } = [];
     public List<ServerPlayerRanking> PlayerRankings { get; set; } = [];
@@ -230,7 +230,7 @@ public class PlayerSession
     public int TotalDeaths { get; set; }
     public string MapName { get; set; } = "";
     public string GameType { get; set; } = "";
-    
+
     // Navigation properties
     public Player Player { get; set; } = null!;
     public GameServer Server { get; set; } = null!;
@@ -246,10 +246,10 @@ public class PlayerObservation
     public int Kills { get; set; }
     public int Deaths { get; set; }
     public int Ping { get; set; }
-    
+
     public int Team { get; set; }
     public string TeamLabel { get; set; } = "";
-    
+
     // Navigation property
     public PlayerSession Session { get; set; } = null!;
 }
@@ -267,7 +267,7 @@ public class ServerPlayerRanking
     public int TotalDeaths { get; set; }
     public double KDRatio { get; set; }
     public int TotalPlayTimeMinutes { get; set; }
-    
+
     // Navigation properties
     public GameServer Server { get; set; } = null!;
     public Player Player { get; set; } = null!;
@@ -280,7 +280,7 @@ public class User
     public DateTime CreatedAt { get; set; }
     public DateTime LastLoggedIn { get; set; }
     public bool IsActive { get; set; } = true;
-    
+
     // Navigation properties for dashboard settings
     public List<UserPlayerName> PlayerNames { get; set; } = [];
     public List<UserFavoriteServer> FavoriteServers { get; set; } = [];
@@ -293,7 +293,7 @@ public class UserPlayerName
     public int UserId { get; set; }
     public string PlayerName { get; set; } = "";
     public DateTime CreatedAt { get; set; }
-    
+
     // Navigation properties
     public User User { get; set; } = null!;
     public Player Player { get; set; } = null!;
@@ -305,7 +305,7 @@ public class UserFavoriteServer
     public int UserId { get; set; }
     public string ServerGuid { get; set; } = "";
     public DateTime CreatedAt { get; set; }
-    
+
     // Navigation properties
     public User User { get; set; } = null!;
     public GameServer Server { get; set; } = null!;
@@ -317,7 +317,7 @@ public class UserBuddy
     public int UserId { get; set; }
     public string BuddyPlayerName { get; set; } = "";
     public DateTime CreatedAt { get; set; }
-    
+
     // Navigation properties
     public User User { get; set; } = null!;
     public Player Player { get; set; } = null!;

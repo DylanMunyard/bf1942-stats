@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using junie_des_1942stats.Bflist;
 using junie_des_1942stats.Services;
 using System.Text.Json;
@@ -9,15 +10,17 @@ public class PlayerTrackingService
 {
     private readonly PlayerTrackerDbContext _dbContext;
     private readonly IPlayerEventPublisher? _eventPublisher;
+    private readonly ILogger<PlayerTrackingService> _logger;
     private readonly TimeSpan _sessionTimeout = TimeSpan.FromMinutes(5);
     private static readonly SemaphoreSlim IpInfoSemaphore = new SemaphoreSlim(10); // max 10 concurrent
     private static DateTime _lastIpInfoRequest = DateTime.MinValue;
     private static readonly object IpInfoLock = new object();
 
-    public PlayerTrackingService(PlayerTrackerDbContext dbContext, IPlayerEventPublisher? eventPublisher = null)
+    public PlayerTrackingService(PlayerTrackerDbContext dbContext, IPlayerEventPublisher? eventPublisher = null, ILogger<PlayerTrackingService>? logger = null)
     {
         _dbContext = dbContext;
         _eventPublisher = eventPublisher;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<PlayerTrackingService>.Instance;
     }
 
     // Method to track players from Bf1942ServerInfo
@@ -41,7 +44,7 @@ public class PlayerTrackingService
         var adapter = new BfvietnamServerAdapter(serverInfo);
         await TrackPlayersFromServer(adapter, timestamp);
     }
-    
+
     public async Task TrackPlayersFromServerInfo(IGameServer server, DateTime timestamp)
     {
         await TrackPlayersFromServer(server, timestamp);
@@ -50,13 +53,13 @@ public class PlayerTrackingService
     // Core method that works with the common interface
     private async Task TrackPlayersFromServer(IGameServer server, DateTime timestamp)
     {
-        await GetOrCreateServerAsync(server);
-        
+        var (gameServer, serverMapChangeOldMap) = await GetOrCreateServerAsync(server);
+
         if (!server.Players.Any())
             return;
 
         var playerNames = server.Players.Select(p => p.Name).ToList();
-        
+
         // Get players from database and attach to context
         var existingPlayers = await _dbContext.Players
             .Where(p => playerNames.Contains(p.Name))
@@ -73,7 +76,7 @@ public class PlayerTrackingService
         var sessionsToUpdate = new List<PlayerSession>();
         var sessionsToCreate = new List<PlayerSession>();
         var pendingObservations = new List<(PlayerInfo Info, PlayerSession Session)>();
-        
+
         // Track events to publish after successful database operations
         var eventsToPublish = new List<(string EventType, PlayerInfo PlayerInfo, PlayerSession Session, string? OldMapName)>();
 
@@ -102,8 +105,8 @@ public class PlayerTrackingService
             // Handle sessions
             if (sessionsByPlayer.TryGetValue(playerInfo.Name, out var playerSessions))
             {
-                var matchingSession = playerSessions.FirstOrDefault(s => 
-                    !string.IsNullOrEmpty(server.MapName) && 
+                var matchingSession = playerSessions.FirstOrDefault(s =>
+                    !string.IsNullOrEmpty(server.MapName) &&
                     s.MapName == server.MapName);
 
                 if (matchingSession != null)
@@ -112,27 +115,23 @@ public class PlayerTrackingService
                     UpdateSessionData(matchingSession, playerInfo, server, timestamp);
                     sessionsToUpdate.Add(matchingSession);
                     pendingObservations.Add((playerInfo, matchingSession));
-                    
+
                     // Update player playtime
                     player.TotalPlayTimeMinutes += CalculatePlayTime(matchingSession, timestamp);
                 }
                 else
                 {
                     // Close all existing sessions (map changed)
-                    var oldMapName = playerSessions.FirstOrDefault()?.MapName ?? "";
                     foreach (var session in playerSessions)
                     {
                         session.IsActive = false;
                         sessionsToUpdate.Add(session);
                     }
-                    
+
                     // Create new session for new map
                     var newSession = CreateNewSession(playerInfo, server, timestamp);
                     sessionsToCreate.Add(newSession);
                     pendingObservations.Add((playerInfo, newSession));
-                    
-                    // Track map change event (only if player had active sessions before)
-                    eventsToPublish.Add(("map_change", playerInfo, newSession, oldMapName));
                 }
             }
             else
@@ -141,7 +140,7 @@ public class PlayerTrackingService
                 var newSession = CreateNewSession(playerInfo, server, timestamp);
                 sessionsToCreate.Add(newSession);
                 pendingObservations.Add((playerInfo, newSession));
-                
+
                 // Track player online event (true first time online)
                 eventsToPublish.Add(("player_online", playerInfo, newSession, null));
             }
@@ -173,7 +172,7 @@ public class PlayerTrackingService
                 }
 
                 // 3. Save observations
-                var observations = pendingObservations.Select(x => 
+                var observations = pendingObservations.Select(x =>
                 {
                     if (x.Session.SessionId == 0)
                         throw new InvalidOperationException("Session not saved before creating observation");
@@ -206,9 +205,15 @@ public class PlayerTrackingService
                 }
 
                 await transaction.CommitAsync();
-                
+
                 // Publish events after successful database operations
                 await PublishPlayerEvents(eventsToPublish, server);
+
+                // Publish server map change event if detected
+                if (!string.IsNullOrEmpty(serverMapChangeOldMap))
+                {
+                    await PublishServerMapChangeEvent(server, serverMapChangeOldMap);
+                }
             }
             catch (Exception ex)
             {
@@ -218,12 +223,14 @@ public class PlayerTrackingService
         }
     }
 
-    private async Task<GameServer> GetOrCreateServerAsync(IGameServer serverInfo)
+    private async Task<(GameServer server, string? oldMapName)> GetOrCreateServerAsync(IGameServer serverInfo)
     {
         var server = await _dbContext.Servers
             .FirstOrDefaultAsync(s => s.Guid == serverInfo.Guid);
 
         bool ipChanged = false;
+        string? oldMapName = null;
+
         if (server == null)
         {
             server = new GameServer
@@ -252,7 +259,13 @@ public class PlayerTrackingService
                 server.Name = serverInfo.Name;
                 server.GameId = serverInfo.GameId;
             }
-            
+
+            // Check for map change before updating
+            if (server.MapName != serverInfo.MapName && !string.IsNullOrEmpty(server.MapName))
+            {
+                oldMapName = server.MapName;
+            }
+
             // Update server info fields
             server.MaxPlayers = serverInfo.MaxPlayers;
             server.MapName = serverInfo.MapName;
@@ -277,15 +290,15 @@ public class PlayerTrackingService
         }
 
         await _dbContext.SaveChangesAsync();
-        return server;
+        return (server, oldMapName);
     }
 
     private async Task<List<PlayerSession>> GetActiveSessionsAsync(
         IEnumerable<string> playerNames, string serverGuid)
     {
         return await _dbContext.PlayerSessions
-            .Where(s => s.IsActive && 
-                       playerNames.Contains(s.PlayerName) && 
+            .Where(s => s.IsActive &&
+                       playerNames.Contains(s.PlayerName) &&
                        s.ServerGuid == serverGuid)
             .OrderByDescending(s => s.LastSeenTime) // Most recent first
             .ToListAsync();
@@ -314,7 +327,7 @@ public class PlayerTrackingService
         }
         catch (Exception ex)
         {
-            // Log error if needed
+            _logger.LogError(ex, "Error closing timed out player sessions");
         }
     }
 
@@ -345,10 +358,10 @@ public class PlayerTrackingService
         session.TotalScore = Math.Max(session.TotalScore, playerInfo.Score);
         session.TotalKills = Math.Max(session.TotalKills, playerInfo.Kills);
         session.TotalDeaths = playerInfo.Deaths;
-        
+
         if (!string.IsNullOrEmpty(server.MapName))
             session.MapName = server.MapName;
-        
+
         if (!string.IsNullOrEmpty(server.GameType))
             session.GameType = server.GameType;
     }
@@ -369,7 +382,7 @@ public class PlayerTrackingService
         public string? Postal { get; set; }
     }
 
-    private static async Task<IpInfoGeoResult?> LookupGeoLocationAsync(string ip)
+    private async Task<IpInfoGeoResult?> LookupGeoLocationAsync(string ip)
     {
         if (string.IsNullOrWhiteSpace(ip)) return null;
         await IpInfoSemaphore.WaitAsync();
@@ -402,8 +415,9 @@ public class PlayerTrackingService
                 Postal = root.TryGetProperty("postal", out var p) ? p.GetString() : null
             };
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Failed to lookup geolocation for IP {IpAddress}", ip);
             return null;
         }
         finally
@@ -435,22 +449,36 @@ public class PlayerTrackingService
                             eventData.Session.SessionId);
                         break;
 
-                    case "map_change":
-                        await _eventPublisher.PublishMapChangeEvent(
-                            eventData.PlayerInfo.Name,
-                            server.Guid,
-                            server.Name,
-                            eventData.OldMapName ?? "",
-                            server.MapName ?? "",
-                            eventData.Session.SessionId);
-                        break;
 
                 }
             }
             catch (Exception ex)
             {
-                // Log error if needed
+                _logger.LogError(ex, "Error publishing player event for {PlayerName} on {ServerName}", eventData.PlayerInfo.Name, server.Name);
             }
+        }
+    }
+
+    private async Task PublishServerMapChangeEvent(IGameServer server, string oldMapName)
+    {
+        if (_eventPublisher == null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _eventPublisher.PublishServerMapChangeEvent(
+                server.Guid,
+                server.Name,
+                oldMapName,
+                server.MapName ?? "",
+                server.GameType ?? "",
+                server.JoinLink);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error publishing server map change event for {ServerName}: {OldMap} -> {NewMap}", server.Name, oldMapName, server.MapName);
         }
     }
 }

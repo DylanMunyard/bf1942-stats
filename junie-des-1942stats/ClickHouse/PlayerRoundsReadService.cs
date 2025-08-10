@@ -11,7 +11,7 @@ public class PlayerRoundsReadService : BaseClickHouseService, IClickHouseReader
 {
     private readonly ILogger<PlayerRoundsReadService> _logger;
 
-    public PlayerRoundsReadService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerRoundsReadService> logger) 
+    public PlayerRoundsReadService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerRoundsReadService> logger)
         : base(httpClient, clickHouseUrl)
     {
         _logger = logger;
@@ -28,13 +28,13 @@ public class PlayerRoundsReadService : BaseClickHouseService, IClickHouseReader
     public async Task<string> GetPlayerStatsAsync(string? playerName = null, DateTime? fromDate = null, DateTime? toDate = null)
     {
         var conditions = new List<string>();
-        
+
         if (!string.IsNullOrEmpty(playerName))
             conditions.Add($"player_name = '{playerName.Replace("'", "''")}'");
-            
+
         if (fromDate.HasValue)
             conditions.Add($"round_start_time >= '{fromDate.Value:yyyy-MM-dd HH:mm:ss}'");
-            
+
         if (toDate.HasValue)
             conditions.Add($"round_start_time <= '{toDate.Value:yyyy-MM-dd HH:mm:ss}'");
 
@@ -81,7 +81,7 @@ FORMAT TabSeparated";
 
         var result = await ExecuteQueryAsync(query);
         var players = new List<PlayerActivity>();
-        
+
         foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             var parts = line.Split('\t');
@@ -124,7 +124,7 @@ FORMAT TabSeparated";
 
         var result = await ExecuteQueryAsync(query);
         var topScores = new List<TopScore>();
-        
+
         foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             var parts = line.Split('\t');

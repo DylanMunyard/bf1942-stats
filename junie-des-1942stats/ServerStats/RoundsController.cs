@@ -41,13 +41,13 @@ public class RoundsController : ControllerBase
     {
         if (page < 1)
             return BadRequest("Page number must be at least 1");
-        
+
         if (pageSize < 1 || pageSize > 500)
             return BadRequest("Page size must be between 1 and 500");
 
         var validSortFields = new[]
         {
-            "StartTime", "EndTime", "DurationMinutes", "ParticipantCount", 
+            "StartTime", "EndTime", "DurationMinutes", "ParticipantCount",
             "ServerName", "MapName", "IsActive"
         };
 
@@ -59,25 +59,25 @@ public class RoundsController : ControllerBase
 
         if (minDuration.HasValue && minDuration < 0)
             return BadRequest("Minimum duration cannot be negative");
-        
+
         if (maxDuration.HasValue && maxDuration < 0)
             return BadRequest("Maximum duration cannot be negative");
-        
+
         if (minDuration.HasValue && maxDuration.HasValue && minDuration > maxDuration)
             return BadRequest("Minimum duration cannot be greater than maximum duration");
 
         if (minParticipants.HasValue && minParticipants < 0)
             return BadRequest("Minimum participants cannot be negative");
-        
+
         if (maxParticipants.HasValue && maxParticipants < 0)
             return BadRequest("Maximum participants cannot be negative");
-        
+
         if (minParticipants.HasValue && maxParticipants.HasValue && minParticipants > maxParticipants)
             return BadRequest("Minimum participants cannot be greater than maximum participants");
-        
+
         if (startTimeFrom.HasValue && startTimeTo.HasValue && startTimeFrom > startTimeTo)
             return BadRequest("StartTimeFrom cannot be greater than StartTimeTo");
-        
+
         if (endTimeFrom.HasValue && endTimeTo.HasValue && endTimeFrom > endTimeTo)
             return BadRequest("EndTimeFrom cannot be greater than EndTimeTo");
 

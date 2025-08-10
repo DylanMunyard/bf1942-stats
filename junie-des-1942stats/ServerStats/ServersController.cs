@@ -17,7 +17,7 @@ public class ServersController : ControllerBase
         _serverStatsService = serverStatsService;
         _logger = logger;
     }
-    
+
     // Get detailed server statistics with optional days parameter
     [HttpGet("{serverName}")]
     public async Task<ActionResult<ServerStatistics>> GetServerStats(
@@ -26,22 +26,22 @@ public class ServersController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(serverName))
             return BadRequest("Server name cannot be empty");
-            
+
         // Use modern URL decoding that preserves + signs
         serverName = Uri.UnescapeDataString(serverName);
-            
+
         _logger.LogInformation("Looking up server statistics for server name: '{ServerName}'", serverName);
-            
+
         var stats = await _serverStatsService.GetServerStatistics(
             serverName,
             days ?? 7); // Default to 7 days if not specified
-        
+
         if (string.IsNullOrEmpty(stats.ServerGuid))
         {
             _logger.LogWarning("Server not found in database: '{ServerName}'", serverName);
             return NotFound($"Server '{serverName}' not found");
         }
-            
+
         return Ok(stats);
     }
 
@@ -65,9 +65,9 @@ public class ServersController : ControllerBase
         {
             // Use modern URL decoding that preserves + signs
             serverName = Uri.UnescapeDataString(serverName);
-            
+
             var result = await _serverStatsService.GetServerRankings(
-                serverName, year, page, pageSize, playerName, 
+                serverName, year, page, pageSize, playerName,
                 minScore, minKills, minDeaths, minKdRatio, minPlayTimeMinutes,
                 orderBy, orderDirection);
             return Ok(result);
@@ -87,14 +87,14 @@ public class ServersController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(serverGuid))
             return BadRequest("Server GUID is required");
-        
+
         if (string.IsNullOrWhiteSpace(mapName))
             return BadRequest("Map name is required");
 
         try
         {
             var roundReport = await _serverStatsService.GetRoundReport(serverGuid, mapName, startTime);
-            
+
             if (roundReport == null)
                 return NotFound($"Round not found for server {serverGuid}, map {mapName} at {startTime}");
 
@@ -161,7 +161,7 @@ public class ServersController : ControllerBase
         // Validate parameters
         if (page < 1)
             return BadRequest("Page number must be at least 1");
-        
+
         if (pageSize < 1 || pageSize > 500)
             return BadRequest("Page size must be between 1 and 500");
 
@@ -180,22 +180,22 @@ public class ServersController : ControllerBase
         // Validate filter parameters
         if (minTotalPlayers.HasValue && minTotalPlayers < 0)
             return BadRequest("Minimum total players cannot be negative");
-        
+
         if (maxTotalPlayers.HasValue && maxTotalPlayers < 0)
             return BadRequest("Maximum total players cannot be negative");
-        
+
         if (minTotalPlayers.HasValue && maxTotalPlayers.HasValue && minTotalPlayers > maxTotalPlayers)
             return BadRequest("Minimum total players cannot be greater than maximum total players");
 
         if (minActivePlayersLast24h.HasValue && minActivePlayersLast24h < 0)
             return BadRequest("Minimum active players last 24h cannot be negative");
-        
+
         if (maxActivePlayersLast24h.HasValue && maxActivePlayersLast24h < 0)
             return BadRequest("Maximum active players last 24h cannot be negative");
-        
+
         if (minActivePlayersLast24h.HasValue && maxActivePlayersLast24h.HasValue && minActivePlayersLast24h > maxActivePlayersLast24h)
             return BadRequest("Minimum active players last 24h cannot be greater than maximum active players last 24h");
-        
+
         if (lastActivityFrom.HasValue && lastActivityTo.HasValue && lastActivityFrom > lastActivityTo)
             return BadRequest("LastActivityFrom cannot be greater than LastActivityTo");
 
@@ -237,7 +237,7 @@ public class ServersController : ControllerBase
 
         if (page < 1)
             return BadRequest("Page number must be at least 1");
-        
+
         if (pageSize < 1 || pageSize > 100)
             return BadRequest("Page size must be between 1 and 100");
 
@@ -250,7 +250,7 @@ public class ServersController : ControllerBase
 
             var result = await _serverStatsService.GetAllServersWithPaging(
                 page, pageSize, "ServerName", "asc", filters);
-            
+
             return Ok(result);
         }
         catch (ArgumentException ex)

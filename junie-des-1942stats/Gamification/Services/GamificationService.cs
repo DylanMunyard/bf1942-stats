@@ -48,13 +48,13 @@ public class GamificationService
             // Get the last time we processed achievements
             var lastProcessed = await _gamificationService.GetLastProcessedTimestampAsync();
             var now = DateTime.UtcNow;
-            
+
             _logger.LogInformation("Processing achievements since {LastProcessed}", lastProcessed);
 
             // Only process new player_rounds since last run
             var newRounds = await _gamificationService.GetPlayerRoundsSinceAsync(lastProcessed);
-            
-            if (!newRounds.Any()) 
+
+            if (!newRounds.Any())
             {
                 _logger.LogInformation("No new rounds to process");
                 return;
@@ -64,7 +64,7 @@ public class GamificationService
 
             // Calculate all achievements for these new rounds
             var allAchievements = await ProcessAchievementsForRounds(newRounds);
-            
+
             // Store achievements in batch for efficiency
             if (allAchievements.Any())
             {
@@ -228,7 +228,7 @@ public class GamificationService
         {
             // Get all achievements for the player
             var allAchievements = await _gamificationService.GetPlayerAchievementsAsync(playerName, 1000);
-            
+
             // Get kill streak stats
             var streakStats = await _killStreakDetector.GetPlayerKillStreakStatsAsync(playerName);
 
@@ -319,7 +319,7 @@ public class GamificationService
             throw;
         }
     }
-    
+
     /// <summary>
     /// Get available badge definitions
     /// </summary>
@@ -372,7 +372,7 @@ public class GamificationService
         try
         {
             var (achievements, totalCount) = await _gamificationService.GetAllAchievementsWithPagingAsync(
-                page, pageSize, sortBy, sortOrder, playerName, achievementType, 
+                page, pageSize, sortBy, sortOrder, playerName, achievementType,
                 achievementId, tier, achievedFrom, achievedTo, serverGuid, mapName);
 
             var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
@@ -404,4 +404,4 @@ public class GamificationService
             throw;
         }
     }
-} 
+}

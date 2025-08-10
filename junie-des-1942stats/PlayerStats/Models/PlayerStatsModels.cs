@@ -20,7 +20,7 @@ public class PlayerFilters
     public string? ServerName { get; set; }
     public string? GameId { get; set; }
     public string? MapName { get; set; }
-    
+
     // Additional session-specific filters
     public string? ServerGuid { get; set; }
     public string? GameType { get; set; }
@@ -42,13 +42,13 @@ public class PlayerTimeStatistics
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }
 
-// New properties
+    // New properties
     public bool IsActive { get; set; }
     public ServerInfo? CurrentServer { get; set; }
     public List<Session> RecentSessions { get; set; } = [];
-    
+
     public PlayerInsights Insights { get; set; } = new();
-    
+
     // Server-specific insights (replaces BestScores)
     public List<ServerInsight> Servers { get; set; } = new();
 }
@@ -93,7 +93,7 @@ public class SessionDetail
     public int TotalScore { get; set; }
     public bool IsActive { get; set; }
 
-// Related entity details
+    // Related entity details
     public PlayerDetailInfo PlayerDetails { get; set; } = new();
     public ServerDetailInfo? ServerDetails { get; set; }
     public List<ObservationInfo> Observations { get; set; } = new();
@@ -198,7 +198,7 @@ public class HourlyActivity
 public class ServerBestScore
 {
     public string ServerGuid { get; set; } = string.Empty;
-    public string ServerName { get; set; } = string.Empty; 
+    public string ServerName { get; set; } = string.Empty;
     public int BestScore { get; set; }
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }
@@ -211,7 +211,7 @@ public class ServerBestScore
 public class ServerBestScoreRaw
 {
     public string ServerGuid { get; set; } = string.Empty;
-    public string ServerName { get; set; } = string.Empty; 
+    public string ServerName { get; set; } = string.Empty;
     public int BestScore { get; set; }
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }
@@ -228,7 +228,7 @@ public class PagedResult<T>
     public int PageSize { get; set; }
     public int TotalItems { get; set; }
     public int TotalPages { get; set; }
-    
+
     // Add player context information
     public PlayerContextInfo? PlayerInfo { get; set; }
 }

@@ -124,12 +124,12 @@ public class AchievementResponse
     public int PageSize { get; set; }
     public int TotalItems { get; set; }
     public int TotalPages { get; set; }
-    
+
     /// <summary>
     /// Player name if filtering by specific player
     /// </summary>
     public string? PlayerName { get; set; }
-    
+
     /// <summary>
     /// Labeled achievement IDs with their type, tier, and category information
     /// </summary>
@@ -146,4 +146,4 @@ public class AchievementLabel
     public string Tier { get; set; } = "";
     public string Category { get; set; } = "";
     public string DisplayName { get; set; } = "";
-} 
+}

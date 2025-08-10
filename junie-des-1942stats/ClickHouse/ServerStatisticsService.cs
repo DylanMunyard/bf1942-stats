@@ -18,7 +18,7 @@ public class ServerStatisticsService : IDisposable
     {
         _logger = logger;
         var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
-        
+
         try
         {
             var uri = new Uri(clickHouseUrl);
@@ -74,10 +74,10 @@ GROUP BY map_name
 ORDER BY total_kills DESC";
 
             var results = new List<ServerStatistics>();
-            
+
             await using var command = _connection.CreateCommand();
             command.CommandText = query;
-            
+
             await using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
@@ -121,4 +121,4 @@ ORDER BY total_kills DESC";
             _disposed = true;
         }
     }
-} 
+}

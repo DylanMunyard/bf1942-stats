@@ -22,7 +22,7 @@ public class EventAggregator : IEventAggregator
     public async Task PublishAsync<TEvent>(TEvent @event, CancellationToken cancellationToken = default) where TEvent : class
     {
         if (@event == null) throw new ArgumentNullException(nameof(@event));
-        
+
         _logger.LogDebug("Received event of type {EventType} for processing", typeof(TEvent).Name);
 
         var eventType = typeof(TEvent);
@@ -31,7 +31,7 @@ public class EventAggregator : IEventAggregator
             _logger.LogWarning("No handlers registered for event type {EventType}", eventType.Name);
             return;
         }
-        
+
         _logger.LogDebug("Found {HandlerCount} handlers for event type {EventType}", handlers.Count, eventType.Name);
 
         var tasks = new List<Task>();

@@ -20,11 +20,11 @@ public class PlayerRoundsWriteService : BaseClickHouseService, IClickHouseWriter
     private readonly IClickHouseReader? _reader;
 
     public PlayerRoundsWriteService(
-        HttpClient httpClient, 
-        string clickHouseUrl, 
-        IServiceScopeFactory scopeFactory, 
+        HttpClient httpClient,
+        string clickHouseUrl,
+        IServiceScopeFactory scopeFactory,
         ILogger<PlayerRoundsWriteService> logger,
-        IClickHouseReader? reader = null) 
+        IClickHouseReader? reader = null)
         : base(httpClient, clickHouseUrl)
     {
         _scopeFactory = scopeFactory;
@@ -109,7 +109,7 @@ SETTINGS index_granularity = 8192";
             // Use last synced timestamp from ClickHouse for incremental sync (read operation)
             var lastSyncedTime = await GetLastSyncedTimestampAsync();
             var fromDate = lastSyncedTime ?? DateTime.UtcNow.AddDays(-365);
-            
+
             _logger.LogInformation("Starting incremental sync of completed player sessions from {FromDate}", fromDate);
 
             // Use scoped DbContext for database access
@@ -118,10 +118,10 @@ SETTINGS index_granularity = 8192";
 
             // Get completed sessions since last sync, ordered consistently
             // Use > instead of >= to avoid re-syncing the exact last record and prevent duplicates
-            var query = lastSyncedTime.HasValue 
+            var query = lastSyncedTime.HasValue
                 ? dbContext.PlayerSessions.Where(ps => !ps.IsActive && ps.LastSeenTime > fromDate)
                 : dbContext.PlayerSessions.Where(ps => !ps.IsActive && ps.LastSeenTime >= fromDate);
-                
+
             var completedSessions = await query
                 .OrderBy(ps => ps.SessionId)
                 .Take(batchSize)
@@ -140,9 +140,9 @@ SETTINGS index_granularity = 8192";
 
             var playerRounds = completedSessions.Select(ConvertToPlayerRound).ToList();
             await InsertPlayerRoundsAsync(playerRounds);
-            
+
             var duration = DateTime.UtcNow - startTime;
-            _logger.LogInformation("Successfully synced {Count} completed sessions to ClickHouse in {Duration}ms", 
+            _logger.LogInformation("Successfully synced {Count} completed sessions to ClickHouse in {Duration}ms",
                 playerRounds.Count, duration.TotalMilliseconds);
 
             return new SyncResult
@@ -169,7 +169,7 @@ SETTINGS index_granularity = 8192";
         try
         {
             var query = "SELECT MAX(round_end_time) FROM player_rounds";
-            
+
             // Use reader if available, otherwise use write connection for this read query
             string result;
             if (_reader != null)
@@ -180,7 +180,7 @@ SETTINGS index_granularity = 8192";
             {
                 result = await ExecuteQueryInternalAsync(query);
             }
-            
+
             if (DateTime.TryParse(result.Trim(), out var lastTime))
             {
                 return lastTime;
@@ -190,7 +190,7 @@ SETTINGS index_granularity = 8192";
         {
             _logger.LogWarning(ex, "Failed to get last synced timestamp, will sync from beginning");
         }
-        
+
         return null;
     }
 
@@ -198,13 +198,13 @@ SETTINGS index_granularity = 8192";
     {
         // Calculate play time in minutes
         var playTimeMinutes = (session.LastSeenTime - session.StartTime).TotalMinutes;
-        
+
         // Generate a unique round ID
         var roundId = GenerateRoundId(session);
-        
+
         // Get team label from the last observation if available
         var teamLabel = session.Observations?.LastOrDefault()?.TeamLabel ?? "";
-        
+
         return new PlayerRound
         {
             PlayerName = session.PlayerName,

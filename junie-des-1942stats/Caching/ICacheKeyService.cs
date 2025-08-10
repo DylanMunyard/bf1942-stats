@@ -44,7 +44,7 @@ public class CacheKeyService : ICacheKeyService
             orderBy ?? "null",
             orderDirection ?? "null"
         };
-        
+
         var parametersHash = ComputeHash(string.Join("|", parameters));
         return $"server_rankings:{serverName}:{parametersHash}";
     }
@@ -69,7 +69,7 @@ public class CacheKeyService : ICacheKeyService
             sortOrder ?? "null",
             JsonSerializer.Serialize(filters) ?? "null"
         };
-        
+
         var parametersHash = ComputeHash(string.Join("|", parameters));
         return $"servers_page:{parametersHash}";
     }

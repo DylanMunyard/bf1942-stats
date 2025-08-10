@@ -37,19 +37,19 @@ public class BadgeDefinitionsService
 
         // Kill Streak Achievements
         AddKillStreakBadges(badges);
-        
+
         // Performance Badges (KPM-based)
         AddPerformanceBadges(badges);
-        
+
         // Map Mastery Badges
         AddMapMasteryBadges(badges);
-        
+
         // Consistency Badges
         AddConsistencyBadges(badges);
-        
+
         // Milestone Badges
         AddMilestoneBadges(badges);
-        
+
         // Social Badges
         AddSocialBadges(badges);
 
@@ -104,8 +104,8 @@ public class BadgeDefinitionsService
                 UIDescription = uiDesc,
                 Tier = tier,
                 Category = BadgeCategories.Performance,
-                Requirements = new Dictionary<string, object> 
-                { 
+                Requirements = new Dictionary<string, object>
+                {
                     ["min_kpm"] = kpm,
                     ["min_rounds"] = rounds
                 }
@@ -131,8 +131,8 @@ public class BadgeDefinitionsService
                 UIDescription = uiDesc,
                 Tier = tier,
                 Category = BadgeCategories.Performance,
-                Requirements = new Dictionary<string, object> 
-                { 
+                Requirements = new Dictionary<string, object>
+                {
                     ["min_kd_ratio"] = kd,
                     ["min_rounds"] = rounds
                 }
@@ -150,8 +150,8 @@ public class BadgeDefinitionsService
             UIDescription = "Rank in top 10% on a map (50+ rounds)",
             Tier = BadgeTiers.Silver,
             Category = BadgeCategories.MapMastery,
-            Requirements = new Dictionary<string, object> 
-            { 
+            Requirements = new Dictionary<string, object>
+            {
                 ["min_percentile"] = 90,
                 ["min_rounds"] = 50
             }
@@ -165,8 +165,8 @@ public class BadgeDefinitionsService
             UIDescription = "Rank in top 3% on a map (100+ rounds)",
             Tier = BadgeTiers.Gold,
             Category = BadgeCategories.MapMastery,
-            Requirements = new Dictionary<string, object> 
-            { 
+            Requirements = new Dictionary<string, object>
+            {
                 ["min_percentile"] = 97,
                 ["min_rounds"] = 100
             }
@@ -180,8 +180,8 @@ public class BadgeDefinitionsService
             UIDescription = "Rank in top 1% on a map (200+ rounds)",
             Tier = BadgeTiers.Legend,
             Category = BadgeCategories.MapMastery,
-            Requirements = new Dictionary<string, object> 
-            { 
+            Requirements = new Dictionary<string, object>
+            {
                 ["min_percentile"] = 99,
                 ["min_rounds"] = 200
             }
@@ -198,8 +198,8 @@ public class BadgeDefinitionsService
             UIDescription = "Stay positive K/D in 80% of your last 50 rounds",
             Tier = BadgeTiers.Silver,
             Category = BadgeCategories.Consistency,
-            Requirements = new Dictionary<string, object> 
-            { 
+            Requirements = new Dictionary<string, object>
+            {
                 ["positive_kd_percentage"] = 80,
                 ["rounds_window"] = 50
             }
@@ -213,8 +213,8 @@ public class BadgeDefinitionsService
             UIDescription = "Show the biggest improvement in K/D over 30 days",
             Tier = BadgeTiers.Gold,
             Category = BadgeCategories.Consistency,
-            Requirements = new Dictionary<string, object> 
-            { 
+            Requirements = new Dictionary<string, object>
+            {
                 ["improvement_period_days"] = 30,
                 ["min_improvement_factor"] = 1.5
             }
@@ -228,8 +228,8 @@ public class BadgeDefinitionsService
             UIDescription = "Keep consistent K/D performance over 100 rounds",
             Tier = BadgeTiers.Gold,
             Category = BadgeCategories.Consistency,
-            Requirements = new Dictionary<string, object> 
-            { 
+            Requirements = new Dictionary<string, object>
+            {
                 ["max_kd_variance"] = 0.3,
                 ["min_rounds"] = 100
             }
@@ -333,8 +333,8 @@ public class BadgeDefinitionsService
             UIDescription = "Be most active player during night hours (10pm-6am)",
             Tier = BadgeTiers.Bronze,
             Category = BadgeCategories.Social,
-            Requirements = new Dictionary<string, object> 
-            { 
+            Requirements = new Dictionary<string, object>
+            {
                 ["time_start"] = 22,
                 ["time_end"] = 6,
                 ["min_hours"] = 50
@@ -349,8 +349,8 @@ public class BadgeDefinitionsService
             UIDescription = "Be most active player during morning hours (6am-10am)",
             Tier = BadgeTiers.Bronze,
             Category = BadgeCategories.Social,
-            Requirements = new Dictionary<string, object> 
-            { 
+            Requirements = new Dictionary<string, object>
+            {
                 ["time_start"] = 6,
                 ["time_end"] = 10,
                 ["min_hours"] = 50
@@ -368,4 +368,4 @@ public class BadgeDefinitionsService
             Requirements = new Dictionary<string, object> { ["consecutive_hours"] = 6 }
         };
     }
-} 
+}

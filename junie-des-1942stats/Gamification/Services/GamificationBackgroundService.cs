@@ -14,10 +14,10 @@ public class GamificationBackgroundService : BackgroundService
     {
         _services = services;
         _logger = logger;
-        
+
         // Check environment variable for gamification processing - default to false (disabled)
         _enableGamificationProcessing = Environment.GetEnvironmentVariable("ENABLE_GAMIFICATION_PROCESSING")?.ToLowerInvariant() == "true";
-        
+
         _logger.LogInformation("Gamification processing: {Status}", _enableGamificationProcessing ? "ENABLED" : "DISABLED");
         _logger.LogInformation("To enable gamification processing: Set ENABLE_GAMIFICATION_PROCESSING=true");
     }
@@ -29,7 +29,7 @@ public class GamificationBackgroundService : BackgroundService
         if (!_enableGamificationProcessing)
         {
             _logger.LogInformation("Gamification processing is disabled - service will remain idle");
-            
+
             // Keep the service running but idle
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -47,7 +47,7 @@ public class GamificationBackgroundService : BackgroundService
 
                 // Process new achievements every 5 minutes
                 await gamificationService.ProcessNewAchievementsAsync();
-                
+
                 _logger.LogDebug("Completed gamification processing cycle");
             }
             catch (Exception ex)
@@ -61,4 +61,4 @@ public class GamificationBackgroundService : BackgroundService
 
         _logger.LogInformation("Gamification background service stopped");
     }
-} 
+}

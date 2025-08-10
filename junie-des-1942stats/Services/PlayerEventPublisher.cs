@@ -39,42 +39,42 @@ public class PlayerEventPublisher : IPlayerEventPublisher
             {
                 Console.WriteLine($"WARNING: Published player online event for {playerName} but no subscribers are listening to channel '{ChannelName}'");
             }
-            _logger.LogDebug("Published player online event for {PlayerName} on {ServerName} to {Receivers} subscribers", 
+            _logger.LogDebug("Published player online event for {PlayerName} on {ServerName} to {Receivers} subscribers",
                 playerName, serverName, receivers);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error publishing player online event for {PlayerName} on {ServerName}", 
+            _logger.LogError(ex, "Error publishing player online event for {PlayerName} on {ServerName}",
                 playerName, serverName);
         }
     }
 
-    public async Task PublishMapChangeEvent(string playerName, string serverGuid, string serverName, string oldMapName, string newMapName, int sessionId)
+    public async Task PublishServerMapChangeEvent(string serverGuid, string serverName, string oldMapName, string newMapName, string gameType, string? joinLink)
     {
         try
         {
             var payload = JsonSerializer.Serialize(new
             {
-                event_type = "map_change",
-                player_name = playerName,
+                event_type = "server_map_change",
                 server_guid = serverGuid,
                 server_name = serverName,
                 old_map_name = oldMapName,
                 new_map_name = newMapName,
-                session_id = sessionId,
+                game_type = gameType,
+                join_link = joinLink,
                 timestamp = DateTime.UtcNow
             });
 
             var subscriber = _connectionMultiplexer.GetSubscriber();
             var receivers = await subscriber.PublishAsync(RedisChannel.Literal(ChannelName), payload);
-            
-            _logger.LogDebug("Published map change event for {PlayerName} on {ServerName}: {OldMap} -> {NewMap} to {Receivers} subscribers", 
-                playerName, serverName, oldMapName, newMapName, receivers);
+
+            _logger.LogDebug("Published server map change event for {ServerName}: {OldMap} -> {NewMap} to {Receivers} subscribers",
+                serverName, oldMapName, newMapName, receivers);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error publishing map change event for {PlayerName} on {ServerName}", 
-                playerName, serverName);
+            _logger.LogError(ex, "Error publishing server map change event for {ServerName}",
+                serverName);
         }
     }
 }

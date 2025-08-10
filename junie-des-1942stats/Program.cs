@@ -27,10 +27,10 @@ var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     // Filter to suppress EF Core SQL logs only during bulk operations
-    .Filter.ByExcluding(logEvent => 
+    .Filter.ByExcluding(logEvent =>
     {
         // Suppress EF Core SQL logs when they're part of bulk operations
-        if (logEvent.Properties.ContainsKey("bulk_operation") && 
+        if (logEvent.Properties.ContainsKey("bulk_operation") &&
             logEvent.Properties["bulk_operation"].ToString() == "True" &&
             logEvent.Properties.ContainsKey("SourceContext") &&
             (logEvent.Properties["SourceContext"].ToString().Contains("Microsoft.EntityFrameworkCore.Database.Command") ||
@@ -57,7 +57,7 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 
 try
-{    
+{
     Log.Information("Starting up junie-des-1942stats application");
 
     var builder = WebApplication.CreateBuilder(args);
@@ -67,10 +67,10 @@ try
 
     // Add services to the container
     builder.Services.AddControllers();
-    
+
     // Configure Google JWT Authentication
     var googleClientId = builder.Configuration["Jwt:Audience"] ?? throw new InvalidOperationException("Jwt:Audience (Google Client ID) must be configured");
-    
+
     builder.Services.AddAuthentication(options =>
     {
         options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -90,25 +90,25 @@ try
             ValidateIssuerSigningKey = true,
             NameClaimType = "email" // Map the name claim to email for Google JWTs
         };
-        
+
         // Clear default claim type mappings to preserve original JWT claims
         options.MapInboundClaims = false;
     });
 
     builder.Services.AddAuthorization();
 
-    
+
     // Add Swagger/OpenAPI
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(c =>
     {
-        c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo 
-        { 
-            Title = "BF1942 Stats API", 
+        c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+        {
+            Title = "BF1942 Stats API",
             Version = "v1",
             Description = "API for Battlefield 1942 player and server statistics"
         });
-        
+
         // Add JWT Authentication to Swagger
         c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
         {
@@ -133,9 +133,9 @@ try
                 Array.Empty<string>()
             }
         });
-        
+
         // Custom schema ID resolver to handle conflicting class names and generic types
-        c.CustomSchemaIds(type => 
+        c.CustomSchemaIds(type =>
         {
             // Generate unique schema IDs using full namespace and type information
             if (type.IsGenericType)
@@ -148,24 +148,24 @@ try
                 var namespacePart = GetNamespacePart(type.Namespace);
                 return $"{namespacePart}{genericTypeName}Of{string.Join("And", genericArguments)}";
             }
-            
+
             // Handle regular types with potential namespace conflicts
             return GetUniqueTypeName(type);
         });
-        
+
         // Helper function to get unique type name including namespace
         static string GetUniqueTypeName(Type type)
         {
             var namespacePart = GetNamespacePart(type.Namespace);
             return $"{namespacePart}{type.Name}";
         }
-        
+
         // Helper function to get a short namespace identifier
         static string GetNamespacePart(string? typeNamespace)
         {
             if (string.IsNullOrEmpty(typeNamespace))
                 return "";
-                
+
             // Create short namespace identifiers
             if (typeNamespace.Contains("PlayerStats"))
                 return "PlayerStats";
@@ -178,7 +178,7 @@ try
 
             if (typeNamespace.Contains("StatsCollectors"))
                 return "StatsCollectors";
-                
+
             // For other namespaces, use the last part
             var parts = typeNamespace.Split('.');
             return parts.Length > 0 ? parts[^1] : "";
@@ -214,7 +214,7 @@ try
 
     // Register the ServerStatsService
     builder.Services.AddScoped<ServerStatsService>();
-    
+
     // Register the HistoricalRoundsService
     builder.Services.AddScoped<HistoricalRoundsService>();
 
@@ -230,7 +230,7 @@ try
 
 
     // Add ClickHouse HTTP clients with 2 second timeout
-    builder.Services.AddHttpClient<PlayerMetricsWriteService>(client => 
+    builder.Services.AddHttpClient<PlayerMetricsWriteService>(client =>
     {
         client.Timeout = TimeSpan.FromSeconds(2);
         // Add ClickHouse authentication header
@@ -241,7 +241,7 @@ try
         ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
     });
 
-    builder.Services.AddHttpClient<PlayerRoundsWriteService>(client => 
+    builder.Services.AddHttpClient<PlayerRoundsWriteService>(client =>
     {
         client.Timeout = TimeSpan.FromSeconds(2);
         client.DefaultRequestHeaders.Add("X-ClickHouse-User", "default");
@@ -251,7 +251,7 @@ try
         ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
     });
 
-    builder.Services.AddHttpClient<PlayerRoundsReadService>(client => 
+    builder.Services.AddHttpClient<PlayerRoundsReadService>(client =>
     {
         client.Timeout = TimeSpan.FromSeconds(2);
         client.DefaultRequestHeaders.Add("X-ClickHouse-User", "default");
@@ -261,7 +261,7 @@ try
         ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
     });
 
-    builder.Services.AddHttpClient<PlayerInsightsService>(client => 
+    builder.Services.AddHttpClient<PlayerInsightsService>(client =>
     {
         client.Timeout = TimeSpan.FromSeconds(2);
         client.DefaultRequestHeaders.Add("X-ClickHouse-User", "default");
@@ -275,24 +275,24 @@ try
     builder.Services.AddSingleton<PlayerMetricsWriteService>(sp =>
     {
         var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(PlayerMetricsWriteService));
-        
+
         var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
         var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? clickHouseReadUrl;
-        
+
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerMetricsWriteService ClickHouse Write URL: {clickHouseWriteUrl}");
-        
+
         return new PlayerMetricsWriteService(httpClient, clickHouseWriteUrl);
     });
 
     builder.Services.AddSingleton<PlayerRoundsWriteService>(sp =>
     {
         var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(PlayerRoundsWriteService));
-        
+
         var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
         var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? clickHouseReadUrl;
-        
+
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRoundsWriteService ClickHouse Write URL: {clickHouseWriteUrl}");
-        
+
         var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
         var logger = sp.GetRequiredService<ILogger<PlayerRoundsWriteService>>();
         return new PlayerRoundsWriteService(httpClient, clickHouseWriteUrl, scopeFactory, logger);
@@ -302,11 +302,11 @@ try
     builder.Services.AddSingleton<PlayerRoundsReadService>(sp =>
     {
         var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(PlayerRoundsReadService));
-        
+
         var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
-        
+
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRoundsReadService ClickHouse Read URL: {clickHouseReadUrl}");
-        
+
         var logger = sp.GetRequiredService<ILogger<PlayerRoundsReadService>>();
         return new PlayerRoundsReadService(httpClient, clickHouseReadUrl, logger);
     });
@@ -314,11 +314,11 @@ try
     builder.Services.AddSingleton<PlayerInsightsService>(sp =>
     {
         var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(PlayerInsightsService));
-        
+
         var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
-        
+
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerInsightsService ClickHouse Read URL: {clickHouseReadUrl}");
-        
+
         var logger = sp.GetRequiredService<ILogger<PlayerInsightsService>>();
         return new PlayerInsightsService(httpClient, clickHouseReadUrl, logger);
     });
@@ -368,26 +368,26 @@ try
         options.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
         options.Retry.Delay = TimeSpan.FromSeconds(1);
         options.Retry.MaxDelay = TimeSpan.FromSeconds(10);
-        
+
         // Configure timeout policy
         options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(8);
         options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(30);
-        
+
         // Configure circuit breaker
         options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
         options.CircuitBreaker.FailureRatio = 0.5; // 50% failure rate
         options.CircuitBreaker.MinimumThroughput = 5;
         options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(15);
     });
-    
+
     builder.Services.AddScoped<junie_des_1942stats.Services.IBfListApiService, junie_des_1942stats.Services.BfListApiService>();
 
     // Register Gamification Services
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.BadgeDefinitionsService>();
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.AchievementLabelingService>();
-    
+
     // Register HttpClient for ClickHouse Gamification Service
-    builder.Services.AddHttpClient<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>(client => 
+    builder.Services.AddHttpClient<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>(client =>
     {
         client.Timeout = TimeSpan.FromSeconds(10); // Longer timeout for bulk operations
         client.DefaultRequestHeaders.Add("X-ClickHouse-User", "default");
@@ -396,16 +396,16 @@ try
     {
         ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
     });
-    
+
     // Register ClickHouse Gamification Service as Singleton to match other ClickHouse services
     builder.Services.AddSingleton<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>();
-    
+
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.HistoricalProcessor>();
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.KillStreakDetector>();
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.MilestoneCalculator>();
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.PerformanceBadgeCalculator>();
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.GamificationService>();
-    
+
     // Register Gamification Background Service
     builder.Services.AddHostedService<junie_des_1942stats.Gamification.Services.GamificationBackgroundService>();
 
@@ -414,9 +414,9 @@ try
     {
         // Use read URL for PlayerComparisonService
         var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
-        
+
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerComparisonService ClickHouse Read URL: {clickHouseReadUrl}");
-        
+
         var uri = new Uri(clickHouseReadUrl);
         var connectionString = $"Host={uri.Host};Port={uri.Port};Database=default;User=default;Password=;Protocol={uri.Scheme}";
         var connection = new ClickHouse.Client.ADO.ClickHouseConnection(connectionString);
@@ -453,11 +453,11 @@ try
         var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
         var playerMetricsService = scope.ServiceProvider.GetRequiredService<PlayerMetricsWriteService>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        
+
         var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
         var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? clickHouseReadUrl;
         var isWriteUrlSet = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") != null;
-        
+
         try
         {
             // Apply EF Core migrations for SQLite

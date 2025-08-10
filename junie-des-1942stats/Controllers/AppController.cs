@@ -31,7 +31,7 @@ public class AppController : ControllerBase
     public async Task<ActionResult<AppInitialData>> GetInitialData()
     {
         const string cacheKey = "app:initial:data:v1";
-        
+
         try
         {
             // Try to get from cache first
@@ -44,7 +44,7 @@ public class AppController : ControllerBase
 
             // Generate fresh data
             var badgeDefinitions = _badgeDefinitionsService.GetAllBadges();
-            
+
             var initialData = new AppInitialData
             {
                 BadgeDefinitions = badgeDefinitions.Select(b => new BadgeUIDefinition
@@ -58,7 +58,7 @@ public class AppController : ControllerBase
                 Categories = new[]
                 {
                     "performance",
-                    "milestone", 
+                    "milestone",
                     "social",
                     "map_mastery",
                     "consistency"
@@ -66,7 +66,7 @@ public class AppController : ControllerBase
                 Tiers = new[]
                 {
                     "bronze",
-                    "silver", 
+                    "silver",
                     "gold",
                     "legend"
                 },
@@ -77,7 +77,7 @@ public class AppController : ControllerBase
             await _cacheService.SetAsync(cacheKey, initialData, TimeSpan.FromHours(1));
 
             _logger.LogInformation("Generated and cached fresh initial data with {BadgeCount} badges", badgeDefinitions.Count);
-            
+
             return Ok(initialData);
         }
         catch (Exception ex)

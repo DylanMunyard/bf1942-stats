@@ -16,4 +16,4 @@ public class TeamKillerMetrics
     public int TotalPenaltiesLast10Min { get; set; }
     public double TkProbability { get; set; }
     public DateTime LastActivity { get; set; }
-} 
+}

@@ -7,7 +7,7 @@ namespace junie_des_1942stats.ServerStats.Models
         public DateTime StartPeriod { get; set; }
         public DateTime EndPeriod { get; set; }
         public PingByHourInsight? PingByHour { get; set; }
-        
+
         // New improved player count data structure
         public List<PlayerCountDataPoint> PlayerCountHistory { get; set; } = [];
         public PlayerCountSummary? PlayerCountSummary { get; set; }
@@ -40,8 +40,8 @@ namespace junie_des_1942stats.ServerStats.Models
         public double AveragePing { get; set; }
         public double MedianPing { get; set; }
         public double P95Ping { get; set; }
-        
+
         // Legacy property for backward compatibility
         public int Hour => TimePeriod.Hour;
     }
-} 
+}

@@ -18,7 +18,7 @@ public class PingTimestampData
 }
 
 public class ServerStatsService(
-    PlayerTrackerDbContext dbContext, 
+    PlayerTrackerDbContext dbContext,
     ILogger<ServerStatsService> logger,
     ICacheService cacheService,
     ICacheKeyService cacheKeyService,
@@ -41,7 +41,7 @@ public class ServerStatsService(
         // Check cache first
         var cacheKey = _cacheKeyService.GetServerStatisticsKey(serverName, daysToAnalyze);
         var cachedResult = await _cacheService.GetAsync<ServerStatistics>(cacheKey);
-        
+
         if (cachedResult != null)
         {
             _logger.LogDebug("Cache hit for server statistics: {ServerName}, {Days} days", serverName, daysToAnalyze);
@@ -130,13 +130,13 @@ public class ServerStatsService(
     }
 
     public async Task<PagedResult<ServerRanking>> GetServerRankings(string serverName, int? year = null, int page = 1, int pageSize = 100,
-        string? playerName = null, int? minScore = null, int? minKills = null, int? minDeaths = null, 
+        string? playerName = null, int? minScore = null, int? minKills = null, int? minDeaths = null,
         double? minKdRatio = null, int? minPlayTimeMinutes = null, string? orderBy = "TotalScore", string? orderDirection = "desc")
     {
         // Check cache first
         var cacheKey = _cacheKeyService.GetServerRankingsKey(serverName, year, page, pageSize, playerName, minScore, minKills, minDeaths, minKdRatio, minPlayTimeMinutes, orderBy, orderDirection);
         var cachedResult = await _cacheService.GetAsync<PagedResult<ServerRanking>>(cacheKey);
-        
+
         if (cachedResult != null)
         {
             _logger.LogDebug("Cache hit for server rankings: {ServerName}", serverName);
@@ -147,7 +147,7 @@ public class ServerStatsService(
 
         if (page < 1)
             throw new ArgumentException("Page number must be at least 1");
-        
+
         if (pageSize < 1 || pageSize > 100)
             throw new ArgumentException("Page size must be between 1 and 100");
 
@@ -211,7 +211,7 @@ public class ServerStatsService(
 
         if (minKdRatio.HasValue)
         {
-            playerStatsQuery = playerStatsQuery.Where(x => 
+            playerStatsQuery = playerStatsQuery.Where(x =>
                 x.TotalDeaths > 0 ? (double)x.TotalKills / x.TotalDeaths >= minKdRatio.Value : x.TotalKills >= minKdRatio.Value);
         }
 
@@ -230,7 +230,7 @@ public class ServerStatsService(
             "totalkills" => isDescending ? playerStatsQuery.OrderByDescending(x => x.TotalKills) : playerStatsQuery.OrderBy(x => x.TotalKills),
             "totaldeaths" => isDescending ? playerStatsQuery.OrderByDescending(x => x.TotalDeaths) : playerStatsQuery.OrderBy(x => x.TotalDeaths),
             "totalplaytimeminutes" => isDescending ? playerStatsQuery.OrderByDescending(x => x.TotalPlayTimeMinutes) : playerStatsQuery.OrderBy(x => x.TotalPlayTimeMinutes),
-            "kdratio" => isDescending 
+            "kdratio" => isDescending
                 ? playerStatsQuery.OrderByDescending(x => x.TotalDeaths > 0 ? (double)x.TotalKills / x.TotalDeaths : x.TotalKills)
                 : playerStatsQuery.OrderBy(x => x.TotalDeaths > 0 ? (double)x.TotalKills / x.TotalDeaths : x.TotalKills),
             _ => playerStatsQuery.OrderByDescending(x => x.TotalScore) // Default fallback
@@ -303,8 +303,8 @@ public class ServerStatsService(
         // Find a representative session for this round
         var representativeSession = await _dbContext.PlayerSessions
             .Include(s => s.Server)
-            .Where(s => s.ServerGuid == serverGuid && 
-                       s.MapName == mapName && 
+            .Where(s => s.ServerGuid == serverGuid &&
+                       s.MapName == mapName &&
                        s.StartTime <= startTime &&
                        s.LastSeenTime >= startTime)
             .FirstOrDefaultAsync();
@@ -359,7 +359,7 @@ public class ServerStatsService(
             .Include(o => o.Session)
             .Where(o => roundSessions.Select(s => s.SessionId).Contains(o.SessionId))
             .OrderBy(o => o.Timestamp)
-            .Select(o => new 
+            .Select(o => new
             {
                 o.Timestamp,
                 o.Score,
@@ -375,16 +375,17 @@ public class ServerStatsService(
         // Create leaderboard snapshots starting from actual round start
         var leaderboardSnapshots = new List<LeaderboardSnapshot>();
         var currentTime = actualRoundStart; // Start from earliest session time
-        
+
         while (currentTime <= actualRoundEnd)
         {
             // Get the latest score for each player at this time
             var playerScores = roundObservations
                 .Where(o => o.Timestamp <= currentTime)
                 .GroupBy(o => o.PlayerName)
-                .Select(g => {
+                .Select(g =>
+                {
                     var obs = g.OrderByDescending(x => x.Timestamp).First();
-                    return new 
+                    return new
                     {
                         PlayerName = g.Key,
                         Score = obs.Score,
@@ -410,16 +411,16 @@ public class ServerStatsService(
                     TeamLabel = x.TeamLabel
                 })
                 .ToList();
-                
+
             leaderboardSnapshots.Add(new LeaderboardSnapshot
             {
                 Timestamp = currentTime,
                 Entries = playerScores
             });
-            
+
             currentTime = currentTime.AddMinutes(1);
-        }        
-        
+        }
+
         // Filter out empty snapshots
         leaderboardSnapshots = leaderboardSnapshots
             .Where(snapshot => snapshot.Entries.Any())
@@ -457,11 +458,11 @@ public class ServerStatsService(
     {
         // Validate and parse period
         var (startPeriod, endPeriod, granularity) = ParsePeriod(period);
-        
+
         // Check cache first
         var cacheKey = _cacheKeyService.GetServerInsightsKey(serverName, period);
         var cachedResult = await _cacheService.GetAsync<ServerInsights>(cacheKey);
-        
+
         if (cachedResult != null)
         {
             _logger.LogDebug("Cache hit for server insights: {ServerName}, period: {Period}", serverName, period);
@@ -494,14 +495,14 @@ public class ServerStatsService(
         _logger.LogDebug("Start Period: {StartPeriod}", startPeriod);
         _logger.LogDebug("End Period: {EndPeriod}", endPeriod);
         _logger.LogDebug("Granularity: {Granularity}", granularity);
-        
+
         try
         {
             var playerCountData = await GetPlayerCountDataFromClickHouse(server.Guid, startPeriod, endPeriod, granularity);
-            _logger.LogDebug("Player count data retrieved - History: {HistoryCount}, Summary: {Summary}", 
-                playerCountData.History?.Count ?? 0, 
+            _logger.LogDebug("Player count data retrieved - History: {HistoryCount}, Summary: {Summary}",
+                playerCountData.History?.Count ?? 0,
                 playerCountData.Summary != null ? "Not null" : "NULL");
-            
+
             insights.PlayerCountHistory = playerCountData.History ?? new List<PlayerCountDataPoint>();
             insights.PlayerCountSummary = playerCountData.Summary;
         }
@@ -512,7 +513,7 @@ public class ServerStatsService(
             insights.PlayerCountHistory = [];
             insights.PlayerCountSummary = null;
         }
-        
+
         _logger.LogDebug("=== FINAL INSIGHT RESULTS ===");
         _logger.LogDebug("PlayerCountHistory count: {Count}", insights.PlayerCountHistory?.Count ?? 0);
         _logger.LogDebug("PlayerCountSummary: {Summary}", insights.PlayerCountSummary != null ? "Present" : "NULL");
@@ -662,12 +663,12 @@ FORMAT TabSeparated";
 
         _logger.LogDebug("=== DATA CHECK QUERY ===");
         _logger.LogDebug("QUERY:\n{Query}", dataCheckQuery);
-        
+
         var dataCheckResult = await _clickHouseReader.ExecuteQueryAsync(dataCheckQuery);
         _logger.LogDebug("DATA CHECK RESULT:\n{Result}", dataCheckResult);
 
         var timeGrouping = GetClickHouseTimeGrouping(granularity);
-        
+
         var query = $@"
 SELECT 
     {timeGrouping} as timestamp,
@@ -687,13 +688,13 @@ FORMAT TabSeparated";
         _logger.LogDebug("Granularity: {Granularity}", granularity);
         _logger.LogDebug("Time Grouping: {TimeGrouping}", timeGrouping);
         _logger.LogDebug("FULL QUERY:\n{Query}", query);
-        
+
         var result = await _clickHouseReader.ExecuteQueryAsync(query);
-        
+
         _logger.LogDebug("RAW RESULT:\n{Result}", result);
         _logger.LogDebug("Result length: {Length} characters", result?.Length ?? 0);
         _logger.LogDebug("Result lines: {Lines}", result?.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length ?? 0);
-        
+
         var history = new List<PlayerCountDataPoint>();
 
         var lineCount = 0;
@@ -701,12 +702,12 @@ FORMAT TabSeparated";
         {
             lineCount++;
             _logger.LogDebug("Processing line {LineNumber}: '{Line}'", lineCount, line);
-            
+
             var parts = line.Split('\t');
             _logger.LogDebug("Split into {PartCount} parts: [{Parts}]", parts.Length, string.Join(", ", parts));
-            
-            if (parts.Length >= 2 && 
-                DateTime.TryParse(parts[0], out var timestamp) && 
+
+            if (parts.Length >= 2 &&
+                DateTime.TryParse(parts[0], out var timestamp) &&
                 int.TryParse(parts[1], out var playersStarted))
             {
                 _logger.LogDebug("Successfully parsed: timestamp={Timestamp}, players={Players}", timestamp, playersStarted);
@@ -719,13 +720,13 @@ FORMAT TabSeparated";
             }
             else
             {
-                _logger.LogWarning("Failed to parse line: parts.Length={Length}, timestamp parse={TimestampParse}, players parse={PlayersStartedParse}", 
-                    parts.Length, 
+                _logger.LogWarning("Failed to parse line: parts.Length={Length}, timestamp parse={TimestampParse}, players parse={PlayersStartedParse}",
+                    parts.Length,
                     parts.Length > 0 ? DateTime.TryParse(parts[0], out _) : false,
                     parts.Length > 1 ? int.TryParse(parts[1], out _) : false);
             }
         }
-        
+
         _logger.LogDebug("Final history count: {Count}", history.Count);
 
         return history;
@@ -806,9 +807,9 @@ FORMAT TabSeparated";
         _logger.LogDebug("Granularity: {Granularity}", granularity);
         _logger.LogDebug("Time Grouping: {TimeGrouping}", timeGrouping);
         _logger.LogDebug("FULL QUERY:\n{Query}", query);
-        
+
         var result = await _clickHouseReader.ExecuteQueryAsync(query);
-        
+
         _logger.LogDebug("RAW RESULT:\n{Result}", result);
         _logger.LogDebug("Result length: {Length} characters", result?.Length ?? 0);
         _logger.LogDebug("Result lines: {Lines}", result?.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length ?? 0);
@@ -852,16 +853,16 @@ FORMAT TabSeparated";
     }
 
     public async Task<PagedResult<ServerBasicInfo>> GetAllServersWithPaging(
-        int page = 1, 
-        int pageSize = 50, 
-        string sortBy = "ServerName", 
-        string sortOrder = "asc", 
+        int page = 1,
+        int pageSize = 50,
+        string sortBy = "ServerName",
+        string sortOrder = "asc",
         ServerFilters? filters = null)
     {
         // Check cache first
         var cacheKey = _cacheKeyService.GetServersPageKey(page, pageSize, sortBy, sortOrder, filters);
         var cachedResult = await _cacheService.GetAsync<PagedResult<ServerBasicInfo>>(cacheKey);
-        
+
         if (cachedResult != null)
         {
             _logger.LogDebug("Cache hit for server search: page {Page}, pageSize {PageSize}", page, pageSize);
@@ -872,7 +873,7 @@ FORMAT TabSeparated";
 
         if (page < 1)
             throw new ArgumentException("Page number must be at least 1");
-        
+
         if (pageSize < 1 || pageSize > 500)
             throw new ArgumentException("Page size must be between 1 and 500");
 
@@ -921,7 +922,7 @@ FORMAT TabSeparated";
             Server = s,
             LastActivity = s.Sessions
                 .Where(session => !session.IsActive)
-                .Max(session => (DateTime?)session.LastSeenTime) ?? 
+                .Max(session => (DateTime?)session.LastSeenTime) ??
                 s.Sessions
                 .Where(session => session.IsActive)
                 .Max(session => (DateTime?)session.StartTime),

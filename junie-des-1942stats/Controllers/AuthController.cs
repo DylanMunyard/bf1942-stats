@@ -91,7 +91,7 @@ public class AuthController : ControllerBase
         try
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
-            
+
             if (user == null)
             {
                 return NotFound("User not found");
@@ -136,7 +136,7 @@ public class AuthController : ControllerBase
                 .Include(u => u.Buddies)
                     .ThenInclude(b => b.Player)
                 .FirstOrDefaultAsync(u => u.Email == userEmail);
-            
+
             if (user == null)
             {
                 return NotFound("User not found");
@@ -232,7 +232,7 @@ public class AuthController : ControllerBase
             // Check if player name already exists for this user
             var existing = await _context.UserPlayerNames
                 .FirstOrDefaultAsync(upn => upn.UserId == userId.Value && upn.PlayerName == request.PlayerName);
-            
+
             if (existing != null)
             {
                 // Return the existing player name instead of an error
@@ -352,7 +352,7 @@ public class AuthController : ControllerBase
             var existing = await _context.UserFavoriteServers
                 .Include(ufs => ufs.Server)
                 .FirstOrDefaultAsync(ufs => ufs.UserId == userId.Value && ufs.ServerGuid == request.ServerGuid);
-            
+
             if (existing != null)
             {
                 // Return the existing favorite server instead of an error
@@ -371,7 +371,7 @@ public class AuthController : ControllerBase
 
             // Load the server relationship for the new favorite server
             userFavoriteServer.Server = server;
-            
+
             return CreatedAtAction(nameof(GetFavoriteServers), await EnrichFavoriteServerInfoAsync(userFavoriteServer));
         }
         catch (Exception ex)
@@ -464,7 +464,7 @@ public class AuthController : ControllerBase
             // Check if buddy already exists for this user
             var existing = await _context.UserBuddies
                 .FirstOrDefaultAsync(ub => ub.UserId == userId.Value && ub.BuddyPlayerName == request.BuddyPlayerName);
-            
+
             if (existing != null)
             {
                 // Return the existing buddy instead of an error
@@ -609,8 +609,8 @@ public class AuthController : ControllerBase
                 // Count active sessions on this server
                 var activeSessions = await _context.PlayerSessions
                     .Include(ps => ps.Player)
-                    .Where(ps => ps.ServerGuid == favoriteServer.ServerGuid && 
-                                 ps.IsActive && 
+                    .Where(ps => ps.ServerGuid == favoriteServer.ServerGuid &&
+                                 ps.IsActive &&
                                  ps.Player.AiBot == false &&
                                  ps.LastSeenTime >= activeThreshold)
                     .CountAsync();
@@ -662,8 +662,8 @@ public class AuthController : ControllerBase
         // Check if player is currently online (has active session within last 5 minutes)
         var activeSession = await _context.PlayerSessions
             .Include(ps => ps.Server)
-            .Where(ps => ps.PlayerName == player.Name && 
-                         ps.IsActive && 
+            .Where(ps => ps.PlayerName == player.Name &&
+                         ps.IsActive &&
                          ps.LastSeenTime >= activeThreshold)
             .OrderByDescending(ps => ps.LastSeenTime)
             .FirstOrDefaultAsync();
@@ -696,8 +696,8 @@ public class AuthController : ControllerBase
         // Count active sessions on this server
         var activeSessions = await _context.PlayerSessions
             .Include(ps => ps.Player)
-            .Where(ps => ps.ServerGuid == favoriteServer.ServerGuid && 
-                         ps.IsActive && 
+            .Where(ps => ps.ServerGuid == favoriteServer.ServerGuid &&
+                         ps.IsActive &&
                          ps.Player.AiBot == false &&
                          ps.LastSeenTime >= activeThreshold)
             .OrderByDescending(ps => ps.LastSeenTime)

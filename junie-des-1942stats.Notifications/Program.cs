@@ -31,10 +31,10 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuerSigningKey = true,
         NameClaimType = "email"
     };
-    
+
     // Clear default claim type mappings to preserve original JWT claims
     options.MapInboundClaims = false;
-    
+
     // Configure SignalR token handling
     options.Events = new JwtBearerEvents
     {
@@ -69,7 +69,7 @@ builder.Services.AddSingleton<IBuddyNotificationService, BuddyNotificationServic
 builder.Services.AddHostedService<PlayerEventConsumer>();
 
 // Register notification handlers
-builder.Services.AddScoped<MapChangeNotificationHandler>();
+builder.Services.AddScoped<ServerMapChangeNotificationHandler>();
 builder.Services.AddScoped<PlayerOnlineNotificationHandler>();
 
 var app = builder.Build();
@@ -78,10 +78,10 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var eventAggregator = scope.ServiceProvider.GetRequiredService<IEventAggregator>();
-    var mapChangeHandler = scope.ServiceProvider.GetRequiredService<MapChangeNotificationHandler>();
+    var mapChangeHandler = scope.ServiceProvider.GetRequiredService<ServerMapChangeNotificationHandler>();
     var playerOnlineHandler = scope.ServiceProvider.GetRequiredService<PlayerOnlineNotificationHandler>();
 
-    eventAggregator.Subscribe<MapChangeNotification>((notification, ct) => mapChangeHandler.Handle(notification, ct));
+    eventAggregator.Subscribe<ServerMapChangeNotification>((notification, ct) => mapChangeHandler.Handle(notification, ct));
     eventAggregator.Subscribe<PlayerOnlineNotification>((notification, ct) => playerOnlineHandler.Handle(notification, ct));
 }
 

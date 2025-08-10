@@ -18,24 +18,24 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     private Timer? _timer;
     private int _isRunning = 0;
     private int _cycleCount = 0;
-    
+
     // Configuration setting for round syncing
     private readonly bool _enableRoundSyncing;
-    
+
 
 
     public StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory, IConfiguration configuration)
     {
         _scopeFactory = scopeFactory;
         _configuration = configuration;
-        
+
         // Check environment variable for round syncing - default to false (disabled)
         _enableRoundSyncing = Environment.GetEnvironmentVariable("ENABLE_ROUND_SYNCING")?.ToLowerInvariant() == "true";
-        
+
         var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
         var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? clickHouseReadUrl;
         var isWriteUrlSet = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") != null;
-        
+
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse Read URL: {clickHouseReadUrl}");
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse Write URL: {clickHouseWriteUrl} {(isWriteUrlSet ? "(custom)" : "(fallback to read URL)")}");
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Round syncing to ClickHouse: {(_enableRoundSyncing ? "ENABLED" : "DISABLED")}");
@@ -45,14 +45,14 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     public Task StartAsync(CancellationToken cancellationToken)
     {
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Stats collection service starting (30s intervals)...");
-        
+
         // Initialize timer to run immediately (dueTime: 0) and then every 30 seconds
         _timer = new Timer(
             callback: ExecuteCollectionCycle,
             state: null,
             dueTime: TimeSpan.Zero,  // Run immediately
             period: _collectionInterval);
-        
+
         return Task.CompletedTask;
     }
 
@@ -65,7 +65,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         }
 
         var currentCycle = Interlocked.Increment(ref _cycleCount);
-        
+
         var cycleStopwatch = Stopwatch.StartNew();
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Starting stats collection cycle #{currentCycle}...");
 
@@ -81,7 +81,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
                 var playerMetricsService = scope.ServiceProvider.GetRequiredService<PlayerMetricsWriteService>();
                 var playerRoundsService = scope.ServiceProvider.GetRequiredService<PlayerRoundsWriteService>();
                 var bfListApiService = scope.ServiceProvider.GetRequiredService<IBfListApiService>();
-                
+
                 // 1. Global timeout cleanup
                 var timeoutStopwatch = Stopwatch.StartNew();
                 await playerTrackingService.CloseAllTimedOutSessionsAsync(DateTime.UtcNow);
@@ -132,7 +132,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
                         // Use incremental sync based on last synced timestamp (no explicit paging needed)
                         // The method internally handles paging efficiently for the incremental data
                         var result = await playerRoundsService.SyncCompletedSessionsAsync();
-                        
+
                         roundsSyncStopwatch.Stop();
                         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRounds sync: {result.ProcessedCount} records ({roundsSyncStopwatch.ElapsedMilliseconds}ms)");
                     }
@@ -173,7 +173,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             // Create adapter for ClickHouse batching
             var adapter = new Bf1942ServerAdapter(server);
             gameServerAdapters.Add(adapter);
-            
+
             // Store to SQLite every cycle
             await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp);
         }
@@ -215,7 +215,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             // Create adapter for ClickHouse batching
             var adapter = new Fh2ServerAdapter(server);
             gameServerAdapters.Add(adapter);
-            
+
             // Store to SQLite every cycle
             await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp);
         }

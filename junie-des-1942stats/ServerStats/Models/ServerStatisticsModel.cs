@@ -8,7 +8,7 @@ public class ServerStatistics
 {
     public string ServerGuid { get; set; } = "";
     public string ServerName { get; set; } = "";
-    public string GameId {get;set;} = "";
+    public string GameId { get; set; } = "";
     public string Region { get; set; } = "";
     public string Country { get; set; } = "";
     public string Timezone { get; set; } = "";
@@ -16,22 +16,22 @@ public class ServerStatistics
     public DateTime EndPeriod { get; set; }
     public string ServerIp { get; set; } = "";
     public int ServerPort { get; set; }
-    
+
     // Most active players by time played (1 week)
     public List<PlayerActivity> MostActivePlayersByTimeWeek { get; set; } = new List<PlayerActivity>();
-    
+
     // Top 10 best scores in the period (1 week)
     public List<TopScore> TopScoresWeek { get; set; } = new List<TopScore>();
-    
+
     // Most active players by time played (1 month)
     public List<PlayerActivity> MostActivePlayersByTimeMonth { get; set; } = new List<PlayerActivity>();
-    
+
     // Top 10 best scores in the period (1 month)
     public List<TopScore> TopScoresMonth { get; set; } = new List<TopScore>();
-    
+
     // Last 5 rounds with session links
     public List<RoundInfo> LastRounds { get; set; } = new List<RoundInfo>();
-    
+
     // Current map being played (null if server has no active players)
     public string? CurrentMap { get; set; }
 }

@@ -11,4 +11,4 @@ public class ServerStatistics
     public int TotalDeaths { get; set; }
     public int SessionsPlayed { get; set; }
     public int TotalPlayTimeMinutes { get; set; }
-} 
+}

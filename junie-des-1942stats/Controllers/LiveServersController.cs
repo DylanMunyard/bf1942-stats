@@ -10,9 +10,9 @@ public class LiveServersController : ControllerBase
 {
     private readonly IBfListApiService _bfListApiService;
     private readonly ILogger<LiveServersController> _logger;
-    
+
     private static readonly string[] ValidGames = ["bf1942", "fh2", "bfvietnam"];
-    
+
     public LiveServersController(
         IBfListApiService bfListApiService,
         ILogger<LiveServersController> logger)
@@ -37,14 +37,14 @@ public class LiveServersController : ControllerBase
         try
         {
             var servers = await _bfListApiService.FetchAllServerSummariesAsync(game);
-            
+
             var response = new ServerListResponse
             {
                 Servers = servers,
                 LastUpdated = DateTime.UtcNow.ToString("O"),
                 CacheHit = false // This is now handled internally by the service
             };
-            
+
             return Ok(response);
         }
         catch (HttpRequestException ex)
@@ -80,7 +80,7 @@ public class LiveServersController : ControllerBase
         }
 
         var serverIdentifier = $"{ip}:{port}";
-        
+
         try
         {
             var server = await _bfListApiService.FetchSingleServerSummaryAsync(game, serverIdentifier);
@@ -88,18 +88,18 @@ public class LiveServersController : ControllerBase
             {
                 return NotFound($"Server {serverIdentifier} not found");
             }
-            
+
             return Ok(server);
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Failed to fetch server {ServerIdentifier} from BFList API for game {Game}", 
+            _logger.LogError(ex, "Failed to fetch server {ServerIdentifier} from BFList API for game {Game}",
                 serverIdentifier, game);
             return StatusCode(502, "Failed to fetch server data from upstream API");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error fetching server {ServerIdentifier} for game {Game}", 
+            _logger.LogError(ex, "Unexpected error fetching server {ServerIdentifier} for game {Game}",
                 serverIdentifier, game);
             return StatusCode(500, "Internal server error");
         }
@@ -107,8 +107,8 @@ public class LiveServersController : ControllerBase
 
     private static bool IsValidServerDetails(string ip, int port)
     {
-        return !string.IsNullOrEmpty(ip) && 
-               System.Net.IPAddress.TryParse(ip, out _) && 
+        return !string.IsNullOrEmpty(ip) &&
+               System.Net.IPAddress.TryParse(ip, out _) &&
                port > 0 && port <= 65535;
     }
 }

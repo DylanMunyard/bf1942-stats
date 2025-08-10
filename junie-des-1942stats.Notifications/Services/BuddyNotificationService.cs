@@ -40,7 +40,7 @@ public class BuddyNotificationService : IBuddyNotificationService
             await _redis.SetAddAsync(key, connectionId);
             // Set expiry to 24 hours to clean up stale connections
             await _redis.KeyExpireAsync(key, TimeSpan.FromHours(24));
-            
+
             _logger.LogDebug("Added connection {ConnectionId} for user {UserEmail}", connectionId, userEmail);
         }
         catch (Exception ex)
@@ -55,7 +55,7 @@ public class BuddyNotificationService : IBuddyNotificationService
         {
             var key = UserConnectionsKeyPrefix + userEmail;
             await _redis.SetRemoveAsync(key, connectionId);
-            
+
             _logger.LogDebug("Removed connection {ConnectionId} for user {UserEmail}", connectionId, userEmail);
         }
         catch (Exception ex)

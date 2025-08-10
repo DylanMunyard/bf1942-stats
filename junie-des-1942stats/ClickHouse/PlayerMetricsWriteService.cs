@@ -12,7 +12,7 @@ namespace junie_des_1942stats.ClickHouse;
 
 public class PlayerMetricsWriteService : BaseClickHouseService, IClickHouseWriter
 {
-    public PlayerMetricsWriteService(HttpClient httpClient, string clickHouseUrl) 
+    public PlayerMetricsWriteService(HttpClient httpClient, string clickHouseUrl)
         : base(httpClient, clickHouseUrl)
     {
     }

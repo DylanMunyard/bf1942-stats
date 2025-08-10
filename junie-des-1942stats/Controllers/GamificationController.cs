@@ -104,7 +104,7 @@ public class GamificationController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting leaderboard for category {Category}, period {Period}", 
+            _logger.LogError(ex, "Error getting leaderboard for category {Category}, period {Period}",
                 category, period);
             return StatusCode(500, "An internal server error occurred while retrieving leaderboard.");
         }
@@ -169,7 +169,7 @@ public class GamificationController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking achievement {AchievementId} for player {PlayerName}", 
+            _logger.LogError(ex, "Error checking achievement {AchievementId} for player {PlayerName}",
                 achievementId, playerName);
             return StatusCode(500, "An internal server error occurred while checking achievement.");
         }
@@ -208,25 +208,25 @@ public class GamificationController : ControllerBase
             return Task.FromResult<ActionResult>(StatusCode(500, "An internal server error occurred while starting historical processing."));
         }
     }
-    
-/* 
-    /// <summary>
-    /// Trigger incremental processing (admin only)
-    /// </summary>
-    [HttpPost("admin/process-incremental")]
-    public async Task<ActionResult> ProcessIncrementalData()
-    {
-        try
+
+    /* 
+        /// <summary>
+        /// Trigger incremental processing (admin only)
+        /// </summary>
+        [HttpPost("admin/process-incremental")]
+        public async Task<ActionResult> ProcessIncrementalData()
         {
-            await _gamificationService.ProcessNewAchievementsAsync();
-            return Ok("Incremental processing completed successfully.");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error during incremental processing");
-            return StatusCode(500, "An internal server error occurred during incremental processing.");
-        }
-    } */
+            try
+            {
+                await _gamificationService.ProcessNewAchievementsAsync();
+                return Ok("Incremental processing completed successfully.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during incremental processing");
+                return StatusCode(500, "An internal server error occurred during incremental processing.");
+            }
+        } */
 
     /// <summary>
     /// Get all achievements with pagination and filtering
@@ -257,14 +257,14 @@ public class GamificationController : ControllerBase
         // Validate parameters
         if (page < 1)
             return BadRequest("Page number must be at least 1");
-        
+
         if (pageSize < 1 || pageSize > 500)
             return BadRequest("Page size must be between 1 and 500");
 
         // Valid sort fields
         var validSortFields = new[]
         {
-            "PlayerName", "AchievementType", "AchievementId", "AchievementName", 
+            "PlayerName", "AchievementType", "AchievementId", "AchievementName",
             "Tier", "Value", "AchievedAt", "ProcessedAt", "ServerGuid", "MapName"
         };
 
@@ -319,4 +319,4 @@ public class GamificationController : ControllerBase
             return Task.FromResult<ActionResult>(StatusCode(500, "An internal server error occurred while retrieving stats."));
         }
     }
-} 
+}

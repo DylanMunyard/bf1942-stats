@@ -5,4 +5,4 @@ public enum TimePeriod
     Last30Days,
     ThisYear,
     LastYear
-} 
+}

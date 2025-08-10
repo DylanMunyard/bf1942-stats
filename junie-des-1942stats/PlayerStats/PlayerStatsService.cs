@@ -20,9 +20,9 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
     private readonly TimeSpan _activeThreshold = TimeSpan.FromMinutes(5);
 
     public async Task<PagedResult<PlayerBasicInfo>> GetAllPlayersWithPaging(
-        int page, 
-        int pageSize, 
-        string sortBy, 
+        int page,
+        int pageSize,
+        string sortBy,
         string sortOrder,
         PlayerFilters? filters = null)
     {
@@ -73,19 +73,19 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             // Server-related filters - filter by players who have active sessions matching criteria
             if (!string.IsNullOrEmpty(filters.ServerName))
             {
-                baseQuery = baseQuery.Where(p => p.Sessions.Any(s => s.IsActive && 
+                baseQuery = baseQuery.Where(p => p.Sessions.Any(s => s.IsActive &&
                     s.Server.Name.Contains(filters.ServerName)));
             }
 
             if (!string.IsNullOrEmpty(filters.GameId))
             {
-                baseQuery = baseQuery.Where(p => p.Sessions.Any(s => s.IsActive && 
+                baseQuery = baseQuery.Where(p => p.Sessions.Any(s => s.IsActive &&
                     s.Server.GameId == filters.GameId));
             }
 
             if (!string.IsNullOrEmpty(filters.MapName))
             {
-                baseQuery = baseQuery.Where(p => p.Sessions.Any(s => s.IsActive && 
+                baseQuery = baseQuery.Where(p => p.Sessions.Any(s => s.IsActive &&
                     s.MapName.Contains(filters.MapName)));
             }
         }
@@ -114,19 +114,19 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
 
         // Apply sorting
         var isDescending = sortOrder.ToLower() == "desc";
-        
+
         query = sortBy.ToLower() switch
         {
-            "playername" => isDescending 
+            "playername" => isDescending
                 ? query.OrderByDescending(p => p.PlayerName)
                 : query.OrderBy(p => p.PlayerName),
-            "totalplaytimeminutes" => isDescending 
+            "totalplaytimeminutes" => isDescending
                 ? query.OrderByDescending(p => p.TotalPlayTimeMinutes)
                 : query.OrderBy(p => p.TotalPlayTimeMinutes),
-            "lastseen" => isDescending 
+            "lastseen" => isDescending
                 ? query.OrderByDescending(p => p.LastSeen)
                 : query.OrderBy(p => p.LastSeen),
-            "isactive" => isDescending 
+            "isactive" => isDescending
                 ? query.OrderByDescending(p => p.IsActive).ThenByDescending(p => p.LastSeen)
                 : query.OrderBy(p => p.IsActive).ThenByDescending(p => p.LastSeen),
             _ => query.OrderByDescending(p => p.IsActive).ThenByDescending(p => p.LastSeen)
@@ -166,7 +166,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
 
         // Get aggregated stats from ClickHouse for better performance and accuracy
         var clickHouseStats = await GetPlayerStatsFromClickHouse(playerName);
-        
+
         // Get session-based stats for fields not available in ClickHouse
         var sessionStats = await _dbContext.PlayerSessions
             .Where(ps => ps.PlayerName == playerName)
@@ -224,7 +224,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                         (now - activeSession.LastSeenTime) <= _activeThreshold;
 
         var insights = await GetPlayerInsights(playerName);
-        
+
         List<ServerInsight> serverInsights;
         try
         {
@@ -367,13 +367,13 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             // Duration filters
             if (filters.MinPlayTime.HasValue)
             {
-                baseSessionQuery = baseSessionQuery.Where(s => 
+                baseSessionQuery = baseSessionQuery.Where(s =>
                     (s.LastSeenTime - s.StartTime).TotalMinutes >= filters.MinPlayTime.Value);
             }
 
             if (filters.MaxPlayTime.HasValue)
             {
-                baseSessionQuery = baseSessionQuery.Where(s => 
+                baseSessionQuery = baseSessionQuery.Where(s =>
                     (s.LastSeenTime - s.StartTime).TotalMinutes <= filters.MaxPlayTime.Value);
             }
 
@@ -427,40 +427,40 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
 
         // Apply sorting
         var isDescending = sortOrder.ToLower() == "desc";
-        
+
         var sortedQuery = sortBy.ToLower() switch
         {
-            "sessionid" => isDescending 
+            "sessionid" => isDescending
                 ? baseSessionQuery.OrderByDescending(s => s.SessionId)
                 : baseSessionQuery.OrderBy(s => s.SessionId),
-            "servername" => isDescending 
+            "servername" => isDescending
                 ? baseSessionQuery.OrderByDescending(s => s.Server.Name)
                 : baseSessionQuery.OrderBy(s => s.Server.Name),
-            "mapname" => isDescending 
+            "mapname" => isDescending
                 ? baseSessionQuery.OrderByDescending(s => s.MapName)
                 : baseSessionQuery.OrderBy(s => s.MapName),
-            "gametype" => isDescending 
+            "gametype" => isDescending
                 ? baseSessionQuery.OrderByDescending(s => s.GameType)
                 : baseSessionQuery.OrderBy(s => s.GameType),
-            "starttime" => isDescending 
+            "starttime" => isDescending
                 ? baseSessionQuery.OrderByDescending(s => s.StartTime)
                 : baseSessionQuery.OrderBy(s => s.StartTime),
-            "endtime" => isDescending 
+            "endtime" => isDescending
                 ? baseSessionQuery.OrderByDescending(s => s.LastSeenTime)
                 : baseSessionQuery.OrderBy(s => s.LastSeenTime),
-            "durationminutes" => isDescending 
+            "durationminutes" => isDescending
                 ? baseSessionQuery.OrderByDescending(s => (s.LastSeenTime - s.StartTime).TotalMinutes)
                 : baseSessionQuery.OrderBy(s => (s.LastSeenTime - s.StartTime).TotalMinutes),
-            "score" => isDescending 
+            "score" => isDescending
                 ? baseSessionQuery.OrderByDescending(s => s.TotalScore)
                 : baseSessionQuery.OrderBy(s => s.TotalScore),
-            "kills" => isDescending 
+            "kills" => isDescending
                 ? baseSessionQuery.OrderByDescending(s => s.TotalKills)
                 : baseSessionQuery.OrderBy(s => s.TotalKills),
-            "deaths" => isDescending 
+            "deaths" => isDescending
                 ? baseSessionQuery.OrderByDescending(s => s.TotalDeaths)
                 : baseSessionQuery.OrderBy(s => s.TotalDeaths),
-            "isactive" => isDescending 
+            "isactive" => isDescending
                 ? baseSessionQuery.OrderByDescending(s => s.IsActive).ThenByDescending(s => s.StartTime)
                 : baseSessionQuery.OrderBy(s => s.IsActive).ThenByDescending(s => s.StartTime),
             _ => baseSessionQuery.OrderByDescending(s => s.StartTime) // Default sorting
@@ -638,7 +638,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         var playerServerStats = await _dbContext.ServerPlayerRankings
             .Where(r => r.PlayerName == playerName)
             .GroupBy(r => new { r.ServerGuid, r.Server.Name })
-            .Select(g => new 
+            .Select(g => new
             {
                 g.Key.ServerGuid,
                 g.Key.Name,
@@ -651,21 +651,21 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         {
             // Get the player's total score for this server
             var playerScore = serverStat.TotalScore;
-            
+
             // Count how many players have a higher score on this server
             var higherScoringPlayers = await _dbContext.ServerPlayerRankings
                 .Where(r => r.ServerGuid == serverStat.ServerGuid)
                 .GroupBy(r => r.PlayerName)
                 .Select(g => new { TotalScore = g.Sum(x => x.TotalScore) })
                 .CountAsync(s => s.TotalScore > playerScore);
-                
+
             // Get total number of ranked players on this server
             var totalPlayers = await _dbContext.ServerPlayerRankings
                 .Where(r => r.ServerGuid == serverStat.ServerGuid)
                 .Select(r => r.PlayerName)
                 .Distinct()
                 .CountAsync();
-                
+
             // Calculate average ping from the most recent observations
             var averagePing = await _dbContext.PlayerObservations
                 .Include(o => o.Session)
@@ -674,10 +674,10 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                 .OrderByDescending(o => o.Timestamp)
                 .Take(50) // Sample size of 50 observations
                 .AverageAsync(o => o.Ping);
-                
+
             // The player's rank is the number of players with higher scores + 1
             var playerRank = higherScoringPlayers + 1;
-            
+
             return new ServerRanking
             {
                 ServerGuid = serverStat.ServerGuid,
@@ -688,7 +688,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                 AveragePing = Math.Round(averagePing)
             };
         });
-        
+
         // Wait for all server rankings to be processed
         var serverRankings = (await Task.WhenAll(serverRankingTasks))
             .OrderBy(r => r.Rank) // Order by rank (best rank first)
@@ -758,17 +758,17 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         try
         {
             var result = await _playerRoundsReadService.GetPlayerStatsAsync(playerName);
-            
+
             // Parse the tab-separated results
             // Expected format: player_name	total_rounds	total_kills	total_deaths	total_play_time_minutes	avg_score_per_round	kd_ratio
             var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            
+
             // Skip header row if it exists
             var dataLines = lines.Where(line => !line.StartsWith("player_name")).ToArray();
-            
+
             if (dataLines.Length == 0)
                 return null;
-                
+
             var parts = dataLines[0].Split('\t');
             if (parts.Length >= 5)
             {
@@ -787,7 +787,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             // Log error but don't fail the request
             // _logger?.LogError(ex, "Failed to get player stats from ClickHouse for player: {PlayerName}", playerName);
         }
-        
+
         return null;
     }
 

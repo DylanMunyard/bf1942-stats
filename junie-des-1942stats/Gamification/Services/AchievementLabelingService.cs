@@ -57,7 +57,7 @@ public class AchievementLabelingService
 
         // Get all badge definitions and convert them to achievement labels
         var allBadges = _badgeDefinitionsService.GetAllBadges();
-        
+
         foreach (var badge in allBadges)
         {
             labels[badge.Id] = new AchievementLabel
@@ -104,10 +104,10 @@ public class AchievementLabelingService
             return BadgeTiers.Gold;
         if (achievementId.Contains("_legend"))
             return BadgeTiers.Legend;
-        
+
         // Default tier based on achievement type
-        return DetermineAchievementType(achievementId) == AchievementTypes.KillStreak 
-            ? BadgeTiers.Silver 
+        return DetermineAchievementType(achievementId) == AchievementTypes.KillStreak
+            ? BadgeTiers.Silver
             : BadgeTiers.Bronze;
     }
 
@@ -125,7 +125,7 @@ public class AchievementLabelingService
             return BadgeCategories.Consistency;
         if (achievementId.StartsWith("server_") || achievementId.StartsWith("night_") || achievementId.StartsWith("early_") || achievementId.StartsWith("marathon_"))
             return BadgeCategories.Social;
-        
+
         return BadgeCategories.Performance; // Default
     }
 }
@@ -150,4 +150,4 @@ public static class StringExtensions
         }
         return string.Join(" ", words);
     }
-} 
+}

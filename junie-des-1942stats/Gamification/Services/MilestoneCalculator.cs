@@ -126,8 +126,8 @@ public class MilestoneCalculator
         foreach (var milestoneHours in _playtimeHourMilestones)
         {
             var milestoneMinutes = milestoneHours * 60;
-            
-            if (previousStats.TotalPlayTimeMinutes < milestoneMinutes && 
+
+            if (previousStats.TotalPlayTimeMinutes < milestoneMinutes &&
                 newStats.TotalPlayTimeMinutes >= milestoneMinutes)
             {
                 // Player crossed this playtime milestone
@@ -216,4 +216,4 @@ public class MilestoneCalculator
     {
         return _badgeService.GetBadgesByCategory(BadgeCategories.Milestone);
     }
-} 
+}

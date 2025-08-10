@@ -43,10 +43,10 @@ public class HistoricalProcessor
         // Ensure endDate includes the full day to avoid boundary issues
         var endDate = toDate ?? DateTime.UtcNow.Date.AddDays(1).AddSeconds(-1);
 
-        _logger.LogInformation("Starting historical processing from {StartDate} to {EndDate}", 
+        _logger.LogInformation("Starting historical processing from {StartDate} to {EndDate}",
             startDate, endDate);
-        
-        _logger.LogInformation("Date calculation details - Current time: {CurrentTime}, Start: {StartDate}, End: {EndDate}", 
+
+        _logger.LogInformation("Date calculation details - Current time: {CurrentTime}, Start: {StartDate}, End: {EndDate}",
             DateTime.UtcNow, startDate, endDate);
 
         try
@@ -80,7 +80,7 @@ public class HistoricalProcessor
 
         // Get existing achievements to avoid duplicates
         var existingAchievements = await GetExistingMilestoneAchievementsAsync();
-        
+
         // Process each milestone type separately for better performance
         achievements.AddRange(await ProcessKillMilestonesAsync(startDate, endDate, existingAchievements));
         achievements.AddRange(await ProcessScoreMilestonesAsync(startDate, endDate, existingAchievements));
@@ -89,7 +89,7 @@ public class HistoricalProcessor
         if (achievements.Any())
         {
             await _gamificationService.InsertAchievementsBatchAsync(achievements);
-            _logger.LogInformation("Created {AchievementCount} milestone achievements with accurate dates", 
+            _logger.LogInformation("Created {AchievementCount} milestone achievements with accurate dates",
                 achievements.Count);
         }
         else
@@ -110,21 +110,21 @@ public class HistoricalProcessor
 
         // Process in monthly chunks with overlap to handle boundary-crossing streaks
         var currentMonth = new DateTime(startDate.Year, startDate.Month, 1);
-        
+
         // Use <= to ensure we process the month containing endDate
         while (currentMonth <= endDate)
         {
             var monthEnd = currentMonth.AddMonths(1).AddDays(-1);
             if (monthEnd > endDate) monthEnd = endDate;
-            
+
             // Add overlap - look back 1 day to catch streaks that cross boundaries
             var overlapStart = currentMonth.AddDays(-1);
-            
-            _logger.LogInformation("Processing streaks for period {Start} to {End} (with overlap from {OverlapStart})", 
+
+            _logger.LogInformation("Processing streaks for period {Start} to {End} (with overlap from {OverlapStart})",
                 currentMonth, monthEnd, overlapStart);
 
             var streakAchievements = await DetectKillStreaksInPeriodAsync(overlapStart, monthEnd, existingKillStreakAchievements);
-            
+
             // Filter out achievements that are too old (from overlap period)
             var newAchievements = streakAchievements
                 .Where(a => a.AchievedAt >= currentMonth)
@@ -133,7 +133,7 @@ public class HistoricalProcessor
             if (newAchievements.Any())
             {
                 await _gamificationService.InsertAchievementsBatchAsync(newAchievements);
-                _logger.LogInformation("Found {AchievementCount} new kill streak achievements for {Month:yyyy-MM}", 
+                _logger.LogInformation("Found {AchievementCount} new kill streak achievements for {Month:yyyy-MM}",
                     newAchievements.Count, currentMonth);
             }
             else
@@ -142,7 +142,7 @@ public class HistoricalProcessor
             }
 
             currentMonth = currentMonth.AddMonths(1);
-            
+
             // Small delay to avoid overwhelming ClickHouse
             await Task.Delay(TimeSpan.FromSeconds(1));
         }
@@ -154,7 +154,7 @@ public class HistoricalProcessor
     private async Task<List<Achievement>> DetectKillStreaksInPeriodAsync(DateTime startDate, DateTime endDate, Dictionary<string, HashSet<string>> existingAchievements)
     {
         _logger.LogInformation("Detecting kill streaks from player_metrics snapshots...");
-        
+
         // Use ClickHouse window functions to detect kill streaks within single rounds
         // First identify round boundaries, then calculate streaks within each round
         var query = $@"
@@ -237,17 +237,17 @@ ORDER BY total_streak_kills DESC, player_name, streak_start";
         {
             var result = await QueryPlayerMetricsAsync(query);
             var streakData = ParseStreakData(result);
-            
+
             _logger.LogInformation("Found {StreakCount} potential kill streaks", streakData.Count);
-            
+
             var achievements = new List<Achievement>();
-            
+
             foreach (var streak in streakData)
             {
                 var streakAchievements = CreateStreakAchievementsForDetectedStreak(streak, existingAchievements);
                 achievements.AddRange(streakAchievements);
             }
-            
+
             return achievements;
         }
         catch (Exception ex)
@@ -263,17 +263,17 @@ ORDER BY total_streak_kills DESC, player_name, streak_start";
     private Task ProcessPerformanceBadgesAsync(DateTime startDate, DateTime endDate)
     {
         _logger.LogInformation("Processing performance badges...");
-        
+
         // This could include badges like:
         // - "Consistent Performer" (good K/D ratio over multiple rounds)
         // - "Map Master" (played X rounds on specific maps)
         // - "Server Regular" (played Y hours on specific servers)
-        
+
         // Implementation would use similar aggregation patterns as milestones
         // For now, logging placeholder
-        
+
         _logger.LogInformation("Performance badge processing completed (placeholder)");
-        
+
         return Task.CompletedTask;
     }
 
@@ -419,7 +419,7 @@ ORDER BY player_name, threshold";
     {
         var achievements = new List<Achievement>();
         var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        
+
         foreach (var line in lines)
         {
             var parts = line.Split('\t');
@@ -428,7 +428,7 @@ ORDER BY player_name, threshold";
                 var playerName = parts[0];
                 var threshold = int.Parse(parts[1]);
                 var achievementDate = DateTime.Parse(parts[2]);
-                
+
                 var achievementId = category switch
                 {
                     "playtime" => $"milestone_playtime_{threshold}h",
@@ -436,14 +436,14 @@ ORDER BY player_name, threshold";
                     "score" => $"total_score_{threshold}",
                     _ => $"milestone_{category}_{threshold}"
                 };
-                
+
                 // Check if player already has this achievement
-                if (existingAchievements.ContainsKey(playerName) && 
+                if (existingAchievements.ContainsKey(playerName) &&
                     existingAchievements[playerName].Contains(achievementId))
                 {
                     continue;
                 }
-                
+
                 var name = category switch
                 {
                     "kills" => $"Kill Master ({threshold:N0})",
@@ -451,12 +451,12 @@ ORDER BY player_name, threshold";
                     "playtime" => $"Time Warrior ({threshold}h)",
                     _ => $"Milestone ({threshold:N0})"
                 };
-                
+
                 achievements.Add(CreateMilestoneAchievement(
                     playerName, achievementId, name, threshold, achievementDate, category));
             }
         }
-        
+
         return achievements;
     }
 
@@ -467,25 +467,25 @@ ORDER BY player_name, threshold";
     {
         // Get player stats in single query
         var playerStats = await GetPlayerStatsInPeriodAsync(startDate, endDate);
-        
+
         // Get all existing milestone achievements in single query
         var existingAchievements = await GetExistingMilestoneAchievementsAsync();
-        
+
         // Combine the data
         var result = new List<PlayerStatsWithAchievements>();
         foreach (var stats in playerStats)
         {
-            var playerAchievements = existingAchievements.ContainsKey(stats.PlayerName) 
-                ? existingAchievements[stats.PlayerName] 
+            var playerAchievements = existingAchievements.ContainsKey(stats.PlayerName)
+                ? existingAchievements[stats.PlayerName]
                 : new HashSet<string>();
-                
+
             result.Add(new PlayerStatsWithAchievements
             {
                 Stats = stats,
                 ExistingAchievementIds = playerAchievements
             });
         }
-        
+
         return result;
     }
 
@@ -514,7 +514,7 @@ ORDER BY player_name, threshold";
     }
 
 
-    private Achievement CreateMilestoneAchievement(string playerName, string achievementId, 
+    private Achievement CreateMilestoneAchievement(string playerName, string achievementId,
         string name, int value, DateTime achievedAt, string category)
     {
         return new Achievement
@@ -538,20 +538,20 @@ ORDER BY player_name, threshold";
     {
         var achievements = new List<Achievement>();
         var thresholds = new[] { 5, 10, 15, 20, 25, 30, 50 };
-        
+
         // Calculate when each threshold was achieved during this streak
         var thresholdTimes = CalculateThresholdTimesForStreak(streak);
-        
+
         foreach (var threshold in thresholds)
         {
             if (thresholdTimes.TryGetValue(threshold, out var achievementTime))
             {
                 var achievementId = $"kill_streak_{threshold}";
-                
+
                 // Check if player already has this achievement using the batch-loaded data
-                var hasAchievement = existingAchievements.ContainsKey(streak.PlayerName) && 
+                var hasAchievement = existingAchievements.ContainsKey(streak.PlayerName) &&
                     existingAchievements[streak.PlayerName].Contains(achievementId);
-                
+
                 if (!hasAchievement)
                 {
                     var badgeDefinition = _badgeDefinitionsService.GetBadgeDefinition(achievementId);
@@ -581,7 +581,7 @@ ORDER BY player_name, threshold";
                 }
             }
         }
-        
+
         return achievements;
     }
 
@@ -593,11 +593,11 @@ ORDER BY player_name, threshold";
     {
         var thresholdTimes = new Dictionary<int, DateTime>();
         var thresholds = new[] { 5, 10, 15, 20, 25, 30, 50 };
-        
+
         if (streak.MaxStreak < 5) return thresholdTimes;
-        
+
         var streakDuration = streak.StreakEnd - streak.StreakStart;
-        
+
         // For historical data, we estimate when each threshold was achieved
         // We assume kills were distributed evenly across the streak duration
         foreach (var threshold in thresholds.Where(t => streak.MaxStreak >= t))
@@ -609,11 +609,11 @@ ORDER BY player_name, threshold";
                 var progressRatio = (double)threshold / streak.MaxStreak;
                 var estimatedTimeOffset = TimeSpan.FromSeconds(streakDuration.TotalSeconds * progressRatio);
                 var estimatedAchievementTime = streak.StreakStart.Add(estimatedTimeOffset);
-                
+
                 thresholdTimes[threshold] = estimatedAchievementTime;
             }
         }
-        
+
         return thresholdTimes;
     }
 
@@ -624,7 +624,7 @@ ORDER BY player_name, threshold";
             "kills" => value switch
             {
                 >= 50000 => "legendary",
-                >= 10000 => "epic", 
+                >= 10000 => "epic",
                 >= 2500 => "rare",
                 >= 500 => "uncommon",
                 _ => "common"
@@ -633,7 +633,7 @@ ORDER BY player_name, threshold";
             {
                 >= 1000000 => "legendary",
                 >= 500000 => "epic",
-                >= 100000 => "rare", 
+                >= 100000 => "rare",
                 >= 50000 => "uncommon",
                 _ => "common"
             },
@@ -642,7 +642,7 @@ ORDER BY player_name, threshold";
                 >= 1000 => "legendary",
                 >= 500 => "epic",
                 >= 100 => "rare",
-                >= 50 => "uncommon", 
+                >= 50 => "uncommon",
                 _ => "common"
             },
             _ => "common"
@@ -653,7 +653,7 @@ ORDER BY player_name, threshold";
     {
         var stats = new List<PlayerGameStats>();
         var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        
+
         foreach (var line in lines)
         {
             var parts = line.Split('\t');
@@ -670,7 +670,7 @@ ORDER BY player_name, threshold";
                 });
             }
         }
-        
+
         return stats;
     }
 
@@ -678,7 +678,7 @@ ORDER BY player_name, threshold";
     {
         var rounds = new List<PlayerRound>();
         var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        
+
         foreach (var line in lines)
         {
             var parts = line.Split('\t');
@@ -698,7 +698,7 @@ ORDER BY player_name, threshold";
                 });
             }
         }
-        
+
         return rounds;
     }
 
@@ -706,7 +706,7 @@ ORDER BY player_name, threshold";
     {
         var streaks = new List<StreakData>();
         var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        
+
         foreach (var line in lines)
         {
             var parts = line.Split('\t');
@@ -724,7 +724,7 @@ ORDER BY player_name, threshold";
                 });
             }
         }
-        
+
         return streaks;
     }
 
@@ -740,7 +740,7 @@ ORDER BY player_name, threshold";
 
         var result = await QueryPlayerRoundsAsync(query);
         var existingAchievements = new Dictionary<string, HashSet<string>>();
-        
+
         var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         foreach (var line in lines)
         {
@@ -749,7 +749,7 @@ ORDER BY player_name, threshold";
             {
                 var playerName = parts[0];
                 var achievementId = parts[1];
-                
+
                 if (!existingAchievements.ContainsKey(playerName))
                 {
                     existingAchievements[playerName] = new HashSet<string>();
@@ -757,7 +757,7 @@ ORDER BY player_name, threshold";
                 existingAchievements[playerName].Add(achievementId);
             }
         }
-        
+
         return existingAchievements;
     }
 
@@ -773,7 +773,7 @@ ORDER BY player_name, threshold";
 
         var result = await QueryPlayerRoundsAsync(query);
         var existingAchievements = new Dictionary<string, HashSet<string>>();
-        
+
         var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         foreach (var line in lines)
         {
@@ -782,7 +782,7 @@ ORDER BY player_name, threshold";
             {
                 var playerName = parts[0];
                 var achievementId = parts[1];
-                
+
                 if (!existingAchievements.ContainsKey(playerName))
                 {
                     existingAchievements[playerName] = new HashSet<string>();
@@ -790,7 +790,7 @@ ORDER BY player_name, threshold";
                 existingAchievements[playerName].Add(achievementId);
             }
         }
-        
+
         return existingAchievements;
     }
 

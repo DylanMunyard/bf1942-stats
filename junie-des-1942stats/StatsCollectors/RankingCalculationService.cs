@@ -75,7 +75,7 @@ public class RankingCalculationService(IServiceProvider services) : BackgroundSe
                     Rank = rank,
                     Year = currentYear,
                     Month = currentMonth,
-                    TotalScore = playerScore.TotalScore, 
+                    TotalScore = playerScore.TotalScore,
                     TotalKills = playerScore.TotalKills,
                     TotalDeaths = playerScore.TotalDeaths,
                     KDRatio = playerScore.TotalDeaths > 0

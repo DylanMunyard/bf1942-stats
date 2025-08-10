@@ -26,7 +26,7 @@ public class ClickHouseGamificationService : IDisposable
         _logger = logger;
         _httpClient = httpClient;
         var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
-        
+
         try
         {
             var uri = new Uri(clickHouseUrl);
@@ -107,10 +107,10 @@ public class ClickHouseGamificationService : IDisposable
             }
 
             var query = "SELECT MAX(processed_at) as last_processed FROM player_achievements";
-            
+
             await using var command = _connection.CreateCommand();
             command.CommandText = query;
-            
+
             var result = await command.ExecuteScalarAsync();
             if (result != null && result != DBNull.Value && DateTime.TryParse(result.ToString(), out var lastProcessed))
             {
@@ -143,13 +143,13 @@ public class ClickHouseGamificationService : IDisposable
                 LIMIT {limit:UInt32}";
 
             var results = new List<Achievement>();
-            
+
             await using var command = _connection.CreateCommand();
             command.CommandText = query;
-            
+
             command.Parameters.Add(CreateParameter("playerName", playerName));
             command.Parameters.Add(CreateParameter("limit", limit));
-            
+
             await using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
@@ -197,13 +197,13 @@ public class ClickHouseGamificationService : IDisposable
                 ORDER BY achieved_at DESC";
 
             var results = new List<Achievement>();
-            
+
             await using var command = _connection.CreateCommand();
             command.CommandText = query;
-            
+
             command.Parameters.Add(CreateParameter("playerName", playerName));
             command.Parameters.Add(CreateParameter("achievementType", achievementType));
-            
+
             await using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
@@ -250,10 +250,10 @@ public class ClickHouseGamificationService : IDisposable
 
             await using var command = _connection.CreateCommand();
             command.CommandText = query;
-            
+
             command.Parameters.Add(CreateParameter("playerName", playerName));
             command.Parameters.Add(CreateParameter("achievementId", achievementId));
-            
+
             var result = await command.ExecuteScalarAsync();
             return Convert.ToInt32(result) > 0;
         }
@@ -280,12 +280,12 @@ public class ClickHouseGamificationService : IDisposable
                 ORDER BY achievement_id";
 
             var results = new List<string>();
-            
+
             await using var command = _connection.CreateCommand();
             command.CommandText = query;
-            
+
             command.Parameters.Add(CreateParameter("playerName", playerName));
-            
+
             await using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
@@ -302,9 +302,9 @@ public class ClickHouseGamificationService : IDisposable
     }
 
     public async Task<(List<Achievement> Achievements, int TotalCount)> GetAllAchievementsWithPagingAsync(
-        int page, 
-        int pageSize, 
-        string sortBy = "AchievedAt", 
+        int page,
+        int pageSize,
+        string sortBy = "AchievedAt",
         string sortOrder = "desc",
         string? playerName = null,
         string? achievementType = null,
@@ -325,49 +325,49 @@ public class ClickHouseGamificationService : IDisposable
             // Build WHERE clause with parameters
             var whereConditions = new List<string>();
             var parameters = new List<System.Data.Common.DbParameter>();
-            
+
             if (!string.IsNullOrWhiteSpace(playerName))
             {
                 whereConditions.Add("player_name = {playerName:String}");
                 parameters.Add(CreateParameter("playerName", playerName));
             }
-            
+
             if (!string.IsNullOrWhiteSpace(achievementType))
             {
                 whereConditions.Add("achievement_type = {achievementType:String}");
                 parameters.Add(CreateParameter("achievementType", achievementType));
             }
-            
+
             if (!string.IsNullOrWhiteSpace(achievementId))
             {
                 whereConditions.Add("achievement_id = {achievementId:String}");
                 parameters.Add(CreateParameter("achievementId", achievementId));
             }
-            
+
             if (!string.IsNullOrWhiteSpace(tier))
             {
                 whereConditions.Add("tier = {tier:String}");
                 parameters.Add(CreateParameter("tier", tier));
             }
-            
+
             if (achievedFrom.HasValue)
             {
                 whereConditions.Add("achieved_at >= {achievedFrom:DateTime}");
                 parameters.Add(CreateParameter("achievedFrom", achievedFrom.Value));
             }
-            
+
             if (achievedTo.HasValue)
             {
                 whereConditions.Add("achieved_at <= {achievedTo:DateTime}");
                 parameters.Add(CreateParameter("achievedTo", achievedTo.Value));
             }
-            
+
             if (!string.IsNullOrWhiteSpace(serverGuid))
             {
                 whereConditions.Add("server_guid = {serverGuid:String}");
                 parameters.Add(CreateParameter("serverGuid", serverGuid));
             }
-            
+
             if (!string.IsNullOrWhiteSpace(mapName))
             {
                 whereConditions.Add("map_name = {mapName:String}");
@@ -411,7 +411,7 @@ public class ClickHouseGamificationService : IDisposable
                 {
                     countCommand.Parameters.Add(param);
                 }
-                
+
                 var countResult = await countCommand.ExecuteScalarAsync();
                 totalCount = Convert.ToInt32(countResult);
             }
@@ -438,7 +438,7 @@ public class ClickHouseGamificationService : IDisposable
                 }
                 command.Parameters.Add(CreateParameter("pageSize", pageSize));
                 command.Parameters.Add(CreateParameter("offset", offset));
-                
+
                 await using var reader = await command.ExecuteReaderAsync();
                 while (await reader.ReadAsync())
                 {
@@ -493,7 +493,7 @@ public class ClickHouseGamificationService : IDisposable
             await using var command = _connection.CreateCommand();
             command.CommandText = query;
             command.Parameters.Add(CreateParameter("playerName", playerName));
-            
+
             await using var reader = await command.ExecuteReaderAsync();
             if (await reader.ReadAsync())
             {
@@ -542,7 +542,7 @@ public class ClickHouseGamificationService : IDisposable
             command.CommandText = query;
             command.Parameters.Add(CreateParameter("playerName", playerName));
             command.Parameters.Add(CreateParameter("beforeTime", beforeTime));
-            
+
             await using var reader = await command.ExecuteReaderAsync();
             if (await reader.ReadAsync())
             {
@@ -583,11 +583,11 @@ public class ClickHouseGamificationService : IDisposable
                 ORDER BY round_end_time ASC";
 
             var results = new List<PlayerRound>();
-            
+
             await using var command = _connection.CreateCommand();
             command.CommandText = query;
             command.Parameters.Add(CreateParameter("sinceTime", sinceTime));
-            
+
             await using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
@@ -633,12 +633,12 @@ public class ClickHouseGamificationService : IDisposable
                 ORDER BY round_end_time ASC";
 
             var results = new List<PlayerRound>();
-            
+
             await using var command = _connection.CreateCommand();
             command.CommandText = query;
             command.Parameters.Add(CreateParameter("startTime", startTime));
             command.Parameters.Add(CreateParameter("endTime", endTime));
-            
+
             await using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
@@ -683,12 +683,12 @@ public class ClickHouseGamificationService : IDisposable
                 LIMIT {roundCount:UInt32}";
 
             var results = new List<PlayerRound>();
-            
+
             await using var command = _connection.CreateCommand();
             command.CommandText = query;
             command.Parameters.Add(CreateParameter("playerName", playerName));
             command.Parameters.Add(CreateParameter("roundCount", roundCount));
-            
+
             await using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
@@ -835,11 +835,11 @@ public class ClickHouseGamificationService : IDisposable
                 LIMIT {limit:UInt32}";
 
             var entries = new List<LeaderboardEntry>();
-            
+
             await using var command = _connection.CreateCommand();
             command.CommandText = query;
             command.Parameters.Add(CreateParameter("limit", limit));
-            
+
             await using var reader = await command.ExecuteReaderAsync();
             int rank = 1;
             while (await reader.ReadAsync())
@@ -877,7 +877,7 @@ public class ClickHouseGamificationService : IDisposable
     private async Task ExecuteQueryAsync(string query)
     {
         var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
-        
+
         var content = new StringContent(query, Encoding.UTF8, "text/plain");
         var response = await _httpClient.PostAsync($"{clickHouseUrl.TrimEnd('/')}/", content);
 
@@ -889,7 +889,7 @@ public class ClickHouseGamificationService : IDisposable
     }
 
     // Performance calculation methods using player_metrics
-    
+
     /// <summary>
     /// Get player's recent performance stats from player_metrics aggregated by round
     /// </summary>
@@ -934,13 +934,13 @@ public class ClickHouseGamificationService : IDisposable
                 LIMIT {roundCount:UInt32}";
 
             var results = new List<RoundPerformance>();
-            
+
             await using var command = _connection.CreateCommand();
             command.CommandText = query;
-            
+
             command.Parameters.Add(CreateParameter("playerName", playerName));
             command.Parameters.Add(CreateParameter("roundCount", roundCount));
-            
+
             await using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
@@ -968,10 +968,10 @@ public class ClickHouseGamificationService : IDisposable
     /// Get player metrics for a specific round timeframe
     /// </summary>
     public async Task<List<PlayerMetricPoint>> GetPlayerMetricsForRoundAsync(
-        string playerName, 
-        string serverGuid, 
-        string mapName, 
-        DateTime startTime, 
+        string playerName,
+        string serverGuid,
+        string mapName,
+        DateTime startTime,
         DateTime endTime)
     {
         try
@@ -992,16 +992,16 @@ public class ClickHouseGamificationService : IDisposable
                 ORDER BY timestamp ASC";
 
             var results = new List<PlayerMetricPoint>();
-            
+
             await using var command = _connection.CreateCommand();
             command.CommandText = query;
-            
+
             command.Parameters.Add(CreateParameter("playerName", playerName));
             command.Parameters.Add(CreateParameter("serverGuid", serverGuid));
             command.Parameters.Add(CreateParameter("mapName", mapName));
             command.Parameters.Add(CreateParameter("startTime", startTime));
             command.Parameters.Add(CreateParameter("endTime", endTime));
-            
+
             await using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
@@ -1031,7 +1031,7 @@ public class ClickHouseGamificationService : IDisposable
         try
         {
             var recentPerformance = await GetPlayerRecentPerformanceAsync(playerName, 100);
-            
+
             if (recentPerformance.Count < minRounds)
             {
                 return new PerformanceStats { PlayerName = playerName };
@@ -1117,4 +1117,4 @@ public class PerformanceStats
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }
     public double TotalMinutes { get; set; }
-} 
+}

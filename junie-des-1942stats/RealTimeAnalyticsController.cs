@@ -28,4 +28,4 @@ public class RealTimeAnalyticsController : ControllerBase
             return StatusCode(500, $"Error retrieving teamkiller data: {ex.Message}");
         }
     }
-} 
+}

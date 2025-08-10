@@ -55,7 +55,7 @@ public class PerformanceBadgeCalculator
         {
             // Use ClickHouse player_metrics for accurate calculation
             var performanceStats = await _readService.CalculatePlayerKPMStatsAsync(round.PlayerName, 10);
-            
+
             if (performanceStats.RoundsAnalyzed < 10)
             {
                 _logger.LogDebug("Insufficient data for KPM calculation for {PlayerName}: {Rounds} rounds",
@@ -67,7 +67,7 @@ public class PerformanceBadgeCalculator
             var roundsAnalyzed = performanceStats.RoundsAnalyzed;
             var totalKills = (uint)performanceStats.TotalKills;
             var totalMinutes = performanceStats.TotalMinutes;
-            
+
             _logger.LogDebug("ClickHouse KPM calculation for {PlayerName}: {KPM:F2} over {Rounds} rounds",
                 round.PlayerName, kmp, roundsAnalyzed);
 
@@ -110,7 +110,7 @@ public class PerformanceBadgeCalculator
                             _logger.LogInformation("KPM badge achieved: {PlayerName} earned {BadgeName} with {KPM:F2} KPM over {Rounds} rounds",
                                 round.PlayerName, badgeDefinition.Name, kmp, roundsAnalyzed);
                         }
-                        
+
                         // Only award the highest tier achieved
                         break;
                     }
@@ -133,7 +133,7 @@ public class PerformanceBadgeCalculator
         {
             // Use ClickHouse player_metrics for accurate calculation
             var performanceStats = await _readService.CalculatePlayerKPMStatsAsync(round.PlayerName, 25);
-            
+
             if (performanceStats.RoundsAnalyzed < 25)
             {
                 _logger.LogDebug("Insufficient data for KD calculation for {PlayerName}: {Rounds} rounds",
@@ -145,13 +145,13 @@ public class PerformanceBadgeCalculator
             var roundsAnalyzed = performanceStats.RoundsAnalyzed;
             var totalKills = performanceStats.TotalKills;
             var totalDeaths = performanceStats.TotalDeaths;
-            
+
             if (totalDeaths <= 0)
             {
                 _logger.LogDebug("No deaths recorded for {PlayerName}, skipping KD calculation", round.PlayerName);
                 return achievements;
             }
-            
+
             _logger.LogDebug("ClickHouse KD calculation for {PlayerName}: {KD:F2} over {Rounds} rounds",
                 round.PlayerName, kdRatio, roundsAnalyzed);
 
@@ -194,7 +194,7 @@ public class PerformanceBadgeCalculator
                             _logger.LogInformation("KD badge achieved: {PlayerName} earned {BadgeName} with {KDRatio:F2} KD over {Rounds} rounds",
                                 round.PlayerName, badgeDefinition.Name, kdRatio, roundsAnalyzed);
                         }
-                        
+
                         // Only award the highest tier achieved
                         break;
                     }
@@ -221,7 +221,7 @@ public class PerformanceBadgeCalculator
         {
             // Use ClickHouse player_metrics for accurate round detection
             var recentPerformance = await _readService.GetPlayerRecentPerformanceAsync(playerName, 50);
-            
+
             if (recentPerformance.Count < 50)
             {
                 _logger.LogDebug("Insufficient data for consistency calculation for {PlayerName}: {Rounds} rounds",
@@ -232,17 +232,17 @@ public class PerformanceBadgeCalculator
             var positiveKdRounds = recentPerformance.Count(r => r.Kills >= r.Deaths);
             var positivePercentage = (double)positiveKdRounds / recentPerformance.Count * 100;
             var totalRoundsAnalyzed = recentPerformance.Count;
-            
+
             // Get the latest PlayerRound for achievement context
             var recentPlayerRounds = await _readService.GetPlayerRecentRoundsAsync(playerName, 1);
-            if (!recentPlayerRounds.Any()) 
+            if (!recentPlayerRounds.Any())
             {
                 _logger.LogWarning("No PlayerRounds found for consistency badge context for {PlayerName}", playerName);
                 return achievements;
             }
-            
+
             var latestRound = recentPlayerRounds.First();
-            
+
             _logger.LogDebug("ClickHouse consistency calculation for {PlayerName}: {Percentage:F1}% over {Rounds} rounds",
                 playerName, positivePercentage, totalRoundsAnalyzed);
 
@@ -250,7 +250,7 @@ public class PerformanceBadgeCalculator
             {
                 var badgeId = "consistent_killer";
                 var hasBadge = await _readService.PlayerHasAchievementAsync(playerName, badgeId);
-                
+
                 if (!hasBadge)
                 {
                     var badgeDefinition = _badgeService.GetBadgeDefinition(badgeId);
@@ -298,7 +298,7 @@ public class PerformanceBadgeCalculator
             // This would require complex percentile calculations against all players
             // For now, this is a placeholder for the more complex calculation
             // that would typically be done in a background service
-            
+
             _logger.LogDebug("Map mastery badge calculation not yet implemented for {PlayerName} on {MapName}",
                 playerName, mapName);
         }
@@ -327,7 +327,7 @@ public class PerformanceBadgeCalculator
         {
             // Group rounds by player for efficient processing
             var roundsByPlayer = rounds.GroupBy(r => r.PlayerName).ToList();
-            
+
             _logger.LogDebug("Processing performance badges for {PlayerCount} players with {RoundCount} total rounds",
                 roundsByPlayer.Count, rounds.Count);
 
@@ -349,7 +349,7 @@ public class PerformanceBadgeCalculator
 
                     if (kmpAchievements.Any() || kdAchievements.Any())
                     {
-                        _logger.LogDebug("Player {PlayerName}: {KmpCount} KPM + {KdCount} KD achievements", 
+                        _logger.LogDebug("Player {PlayerName}: {KmpCount} KPM + {KdCount} KD achievements",
                             playerName, kmpAchievements.Count, kdAchievements.Count);
                     }
                 }
@@ -372,4 +372,4 @@ public class PerformanceBadgeCalculator
 
         return allAchievements;
     }
-} 
+}

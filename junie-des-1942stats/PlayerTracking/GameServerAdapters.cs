@@ -28,7 +28,7 @@ namespace junie_des_1942stats.PlayerTracking
         public string GameType => serverInfo.GameType;
         public int? MaxPlayers => serverInfo.MaxPlayers;
         public string? JoinLink => serverInfo.JoinLink;
-        
+
         public IEnumerable<PlayerInfo> Players => serverInfo.Players;
         public IEnumerable<TeamInfo> Teams => serverInfo.Teams;
     }
