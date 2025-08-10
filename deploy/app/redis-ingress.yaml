@@ -1,7 +1,7 @@
 apiVersion: traefik.containo.us/v1alpha1
 kind: IngressRouteTCP
 metadata:
-  name: redis
+  name: redis-dev
   namespace: bf42-stats
 spec:
   entryPoints:
@@ -9,8 +9,8 @@ spec:
   routes:
     - match: HostSNI(`*`)
       services:
-        - name: redis-service
-          port: 6379
+        - name: redis-dev-service
+          port: 6380
 ---
 apiVersion: traefik.containo.us/v1alpha1
 kind: IngressRoute
