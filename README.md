@@ -86,6 +86,12 @@ kubectl patch deployment traefik -n kube-system --type='json' -p='[
 
 Then deploy regular ClusterIP services for your Redis instances.
 
+**Add LoadBalancer Service Ports:**
+```bash
+# Add port 6380 to Traefik LoadBalancer service
+kubectl patch svc traefik -n kube-system --type='json' -p='[{"op": "add", "path": "/spec/ports/-", "value": {"name": "redis-dev", "port": 6380, "protocol": "TCP", "targetPort": "redis-dev"}}]'
+```
+
 ### Redis Ingress Configuration
 
 The Redis ingress must use `IngressRouteTCP` with wildcard HostSNI for raw TCP:

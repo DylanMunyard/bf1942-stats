@@ -103,7 +103,7 @@ try
     builder.Services.AddSingleton<IEventAggregator, EventAggregator>();
 
     // Configure Redis
-    var redisConnection = builder.Configuration.GetConnectionString("Redis") ?? "42redis.home.net:6379";
+    var redisConnection = builder.Configuration.GetConnectionString("Redis") ?? "42redis.home.net:6380";
     builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnection));
     builder.Services.AddSingleton<IDatabase>(sp => sp.GetRequiredService<IConnectionMultiplexer>().GetDatabase());
 
