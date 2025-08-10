@@ -44,19 +44,47 @@ spec:
 #### Via Manual Patching (Temporary)
 If you need to patch an existing Traefik deployment:
 
+**For production Redis (port 6379):**
 ```bash
-# Add TCP entrypoint
-kubectl patch deployment traefik -n kube-system --type='json' \
-  -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--entrypoints.redis.address=:6379/tcp"}]'
-
-# Add service port
-kubectl patch service traefik -n kube-system --type='merge' \
-  -p='{"spec":{"ports":[{"name":"web","port":80,"protocol":"TCP","targetPort":"web"},{"name":"websecure","port":443,"protocol":"TCP","targetPort":"websecure"},{"name":"redis","port":6379,"protocol":"TCP","targetPort":"redis"}]}}'
-
-# Add container port
-kubectl patch deployment traefik -n kube-system --type='json' \
-  -p='[{"op":"add","path":"/spec/template/spec/containers/0/ports/-","value":{"containerPort":6379,"name":"redis","protocol":"TCP"}}]'
+kubectl patch deployment traefik -n kube-system --type='json' -p='[
+  {
+    "op": "add",
+    "path": "/spec/template/spec/containers/0/args/-",
+    "value": "--entrypoints.redis.address=:6379/tcp"
+  },
+  {
+    "op": "add",
+    "path": "/spec/template/spec/containers/0/ports/-",
+    "value": {
+      "containerPort": 6379,
+      "name": "redis",
+      "protocol": "TCP"
+    }
+  }
+]'
 ```
+
+**For dev Redis (port 6380):**
+```bash
+kubectl patch deployment traefik -n kube-system --type='json' -p='[
+  {
+    "op": "add",
+    "path": "/spec/template/spec/containers/0/args/-",
+    "value": "--entrypoints.redis-dev.address=:6380/tcp"
+  },
+  {
+    "op": "add",
+    "path": "/spec/template/spec/containers/0/ports/-",
+    "value": {
+      "containerPort": 6380,
+      "name": "redis-dev",
+      "protocol": "TCP"
+    }
+  }
+]'
+```
+
+Then deploy regular ClusterIP services for your Redis instances.
 
 ### Redis Ingress Configuration
 
