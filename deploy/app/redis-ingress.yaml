@@ -5,7 +5,7 @@ metadata:
   namespace: bf42-stats
 spec:
   entryPoints:
-    - redis
+    - redis-dev
   routes:
     - match: HostSNI(`*`)
       services:
