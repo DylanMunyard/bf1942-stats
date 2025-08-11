@@ -14,10 +14,13 @@ using junie_des_1942stats.Services;
 using Prometheus;
 using Serilog;
 using Microsoft.Extensions.Logging;
+using StackExchange.Redis;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using System.Security.Cryptography;
 using System.Text;
-using StackExchange.Redis;
+using System.Text.Json;
+using junie_des_1942stats.Services.Auth;
 
 // Configure Serilog
 var seqUrl = Environment.GetEnvironmentVariable("SEQ_URL") ?? "http://192.168.1.230:5341";
@@ -66,10 +69,48 @@ try
     builder.Host.UseSerilog();
 
     // Add services to the container
-    builder.Services.AddControllers();
+    builder.Services.AddControllers().AddJsonOptions(o =>
+    {
+        o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    });
 
-    // Configure Google JWT Authentication
-    var googleClientId = builder.Configuration["Jwt:Audience"] ?? throw new InvalidOperationException("Jwt:Audience (Google Client ID) must be configured");
+    // Register OAuth services
+    builder.Services.AddScoped<junie_des_1942stats.Services.OAuth.IGoogleAuthService, junie_des_1942stats.Services.OAuth.GoogleAuthService>();
+    
+    // CORS
+    var allowedOrigin = builder.Configuration["Cors:AllowedOrigins"];
+    builder.Services.AddCors(options =>
+    {
+        options.AddPolicy("default", policy =>
+        {
+            if (!string.IsNullOrEmpty(allowedOrigin))
+            {
+                policy.WithOrigins(allowedOrigin)
+                      .AllowAnyHeader()
+                      .AllowAnyMethod()
+                      .WithExposedHeaders("WWW-Authenticate")
+                      .AllowCredentials();
+            }
+            else
+            {
+                policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+            }
+        });
+    });
+
+    // JWT Auth
+    var issuer = builder.Configuration["Jwt:Issuer"] ?? "";
+    var audience = builder.Configuration["Jwt:Audience"] ?? "";
+    string? ReadConfigStringOrFile(string valueKey, string pathKey)
+    {
+        var v = builder.Configuration[valueKey];
+        if (!string.IsNullOrWhiteSpace(v)) return v;
+        var p = builder.Configuration[pathKey];
+        if (!string.IsNullOrWhiteSpace(p) && File.Exists(p)) return File.ReadAllText(p);
+        return null;
+    }
+
+    var privateKeyPem = ReadConfigStringOrFile("Jwt:PrivateKey", "Jwt:PrivateKeyPath");
 
     builder.Services.AddAuthentication(options =>
     {
@@ -78,27 +119,23 @@ try
     })
     .AddJwtBearer(options =>
     {
-        options.Authority = "https://accounts.google.com";
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
-            ValidIssuers = new[] { "https://accounts.google.com", "accounts.google.com" },
+            ValidIssuer = issuer,
             ValidateAudience = true,
-            ValidAudience = googleClientId,
-            ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromMinutes(5),
+            ValidAudience = audience,
             ValidateIssuerSigningKey = true,
-            NameClaimType = "email" // Map the name claim to email for Google JWTs
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromSeconds(30),
+            IssuerSigningKey = CreateRsaKey(privateKeyPem ?? throw new InvalidOperationException("JWT private key not configured. Set Jwt:PrivateKey (inline PEM) or Jwt:PrivateKeyPath (file path)."))
         };
-
-        // Clear default claim type mappings to preserve original JWT claims
-        options.MapInboundClaims = false;
     });
-
     builder.Services.AddAuthorization();
 
-
-    // Add Swagger/OpenAPI
+    // DI for auth services
+    builder.Services.AddScoped<ITokenService, TokenService>();
+    builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(c =>
     {
@@ -443,8 +480,16 @@ try
 
     // Enable routing and controllers
     host.UseRouting();
+    host.UseCors("default");
     host.UseAuthentication();
     host.UseAuthorization();
+
+    static SecurityKey CreateRsaKey(string pem)
+    {
+        var rsa = RSA.Create();
+        rsa.ImportFromPem(pem);
+        return new Microsoft.IdentityModel.Tokens.RsaSecurityKey(rsa);
+    }
     host.MapControllers();
 
     // Ensure databases are created and migrated

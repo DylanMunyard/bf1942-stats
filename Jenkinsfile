@@ -26,6 +26,22 @@ pipeline {
               steps {
                 container('kubectl') {
                   withKubeConfig([namespace: "bf42-stats"]) {
+                     withCredentials([
+                       string(credentialsId: 'bf42-stats-secrets-jwt-private-key', variable: 'JWT_PRIVATE_KEY'),
+                       string(credentialsId: 'bf42-stats-secrets-refresh-token-secret', variable: 'REFRESH_TOKEN_SECRET')
+                     ]) {
+                       sh '''
+                         set -euo pipefail
+                         TMPDIR=$(mktemp -d)
+                         trap 'rm -rf "$TMPDIR"' EXIT
+                         printf "%s" "$JWT_PRIVATE_KEY" > "$TMPDIR/jwt-private.pem"
+                         # Create or update the bf42-stats-secrets secret with both keys
+                         kubectl create secret generic bf42-stats-secrets \
+                           --from-file=jwt-private-key="$TMPDIR/jwt-private.pem" \
+                           --from-literal=refresh-token-secret="$REFRESH_TOKEN_SECRET" \
+                           --dry-run=client -o yaml | kubectl apply -f -
+                       '''
+                     }
                     sh 'kubectl rollout restart deployment/bf42-stats'
                   }
                 }

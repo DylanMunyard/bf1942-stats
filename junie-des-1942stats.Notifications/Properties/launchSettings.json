@@ -8,7 +8,8 @@
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
         "ConnectionStrings__Redis": "42redis.home.net:6380",
-        "Jwt__Audience": "468014767883-2gsdumjjgpgm2fp1qgic82i45k03tj7e.apps.googleusercontent.com",
+        "Jwt:Issuer": "https://localhost:9222",
+        "Jwt:Audience": "http://localhost:5173",
         "ApiBaseUrl": "http://localhost:9222"
       }
     }

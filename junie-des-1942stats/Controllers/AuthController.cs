@@ -1,8 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
+using junie_des_1942stats.Services.Auth;
+using Microsoft.Extensions.Configuration;
 using junie_des_1942stats.PlayerTracking;
-
+using junie_des_1942stats.Services.OAuth;
 using Microsoft.Extensions.Logging;
 
 namespace junie_des_1942stats.Controllers;
@@ -12,144 +16,182 @@ namespace junie_des_1942stats.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly PlayerTrackerDbContext _context;
+    private readonly IGoogleAuthService _googleAuthService;
     private readonly ILogger<AuthController> _logger;
+    private readonly ITokenService _tokenService;
+    private readonly IRefreshTokenService _refreshTokenService;
+    private readonly IConfiguration _configuration;
 
     public AuthController(
         PlayerTrackerDbContext context,
-        ILogger<AuthController> logger)
+        IGoogleAuthService googleAuthService,
+        ILogger<AuthController> logger,
+        ITokenService tokenService,
+        IRefreshTokenService refreshTokenService,
+        IConfiguration configuration)
     {
         _context = context;
+        _googleAuthService = googleAuthService;
         _logger = logger;
+        _tokenService = tokenService;
+        _refreshTokenService = refreshTokenService;
+        _configuration = configuration;
     }
 
-    /// <summary>
-    /// UPSERT user on authenticated login - creates new user or updates last login time
-    /// Uses the authenticated user's email from JWT token
-    /// </summary>
     [HttpPost("login")]
-    [Authorize]
-    public async Task<ActionResult<UserResponse>> LoginUser()
+    public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         try
         {
-            var userEmail = User.FindFirst("email")?.Value;
-            if (string.IsNullOrEmpty(userEmail))
-            {
-                return BadRequest("Invalid token - no email claim found");
-            }
+            var ipAddress = GetClientIpAddress();
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
-            var now = DateTime.UtcNow;
+            var googlePayload = await _googleAuthService.ValidateGoogleTokenAsync(request.GoogleIdToken, ipAddress);
+            var user = await CreateOrUpdateUserAsync(googlePayload.Email, googlePayload.Name);
 
-            if (user == null)
+            var (accessToken, expiresAt) = _tokenService.CreateAccessToken(user);
+            var (rawRefresh, rtEntity) = await _refreshTokenService.CreateAsync(user, ipAddress, Request.Headers.UserAgent.ToString());
+            _refreshTokenService.SetCookie(Response, rawRefresh, rtEntity.ExpiresAt);
+
+            return Ok(new LoginResponse
             {
-                // Create new user
-                user = new User
+                User = new UserDto { Id = user.Id, Email = user.Email, Name = googlePayload.Name ?? user.Email },
+                AccessToken = accessToken,
+                ExpiresAt = expiresAt
+            });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Google token validation failed");
+            return Unauthorized(new { message = "Invalid Google token" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Login error");
+            return StatusCode(500, new { message = "Login failed" });
+        }
+    }
+
+    [HttpPost("refresh")]
+    public async Task<IActionResult> Refresh()
+    {
+        try
+        {
+            EnforceCsrfForCookieEndpoints();
+            var raw = Request.Cookies[_configuration["RefreshToken:CookieName"] ?? "rt"];
+            if (string.IsNullOrEmpty(raw)) return Unauthorized(new { message = "Missing refresh token" });
+
+            var (token, user) = await _refreshTokenService.ValidateAsync(raw);
+            var (newRaw, newEntity) = await _refreshTokenService.RotateAsync(token, GetClientIpAddress(), Request.Headers.UserAgent.ToString());
+            _refreshTokenService.SetCookie(Response, newRaw, newEntity.ExpiresAt);
+
+            var (accessToken, expiresAt) = _tokenService.CreateAccessToken(user);
+            return Ok(new { accessToken, expiresAt });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized(new { message = "Invalid refresh token" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Refresh error");
+            return StatusCode(500, new { message = "Refresh failed" });
+        }
+    }
+
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout()
+    {
+        try
+        {
+            EnforceCsrfForCookieEndpoints();
+            var raw = Request.Cookies[_configuration["RefreshToken:CookieName"] ?? "rt"];
+            if (!string.IsNullOrEmpty(raw))
+            {
+                try
                 {
-                    Email = userEmail,
-                    CreatedAt = now,
-                    LastLoggedIn = now,
-                    IsActive = true
-                };
-
-                _context.Users.Add(user);
-                _logger.LogInformation("Creating new user with email: {Email}", userEmail);
+                    var (token, _) = await _refreshTokenService.ValidateAsync(raw);
+                    await _refreshTokenService.RevokeFamilyAsync(token);
+                }
+                catch { /* ignore */ }
             }
-            else
-            {
-                // Update existing user's last login
-                user.LastLoggedIn = now;
-                user.IsActive = true; // Reactivate if previously deactivated
-                _logger.LogDebug("Updating last login for user: {Email}", userEmail);
-            }
-
-            await _context.SaveChangesAsync();
-
-            return Ok(new UserResponse
-            {
-                Id = user.Id,
-                Email = user.Email,
-                CreatedAt = user.CreatedAt,
-                LastLoggedIn = user.LastLoggedIn,
-                IsActive = user.IsActive
-            });
+            _refreshTokenService.ClearCookie(Response);
+            return NoContent();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during user login");
-            return StatusCode(500, "An error occurred during login");
+            _logger.LogError(ex, "Logout error");
+            return StatusCode(500);
         }
     }
 
-    /// <summary>
-    /// Get user by email (for authenticated requests)
-    /// </summary>
-    [HttpGet("user/{email}")]
+    [HttpGet("me")]
     [Authorize]
-    public async Task<ActionResult<UserResponse>> GetUser(string email)
+    public IActionResult Me()
     {
-        try
-        {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        var email = User.FindFirstValue(ClaimTypes.Email);
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+        var id = int.Parse(userId);
+        var user = _context.Users.FirstOrDefault(u => u.Id == id);
+        if (user == null) return NotFound();
+        return Ok(new { user = new UserDto { Id = user.Id, Email = user.Email, Name = email ?? user.Email } });
+    }
 
-            if (user == null)
+    // Helper method to get current user from JWT claims
+    private async Task<User?> GetCurrentUserAsync()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        if (string.IsNullOrEmpty(userId) || !int.TryParse(userId, out var id))
+            return null;
+
+        return await _context.Users.FirstOrDefaultAsync(u => u.Id == id);
+    }
+
+    private void EnforceCsrfForCookieEndpoints()
+    {
+        var origin = Request.Headers["Origin"].FirstOrDefault();
+        var referer = Request.Headers["Referer"].FirstOrDefault();
+        var allowedOrigin = _configuration["Cors:AllowedOrigins"];
+        if (!string.IsNullOrEmpty(allowedOrigin))
+        {
+            if (!string.Equals(origin, allowedOrigin, StringComparison.OrdinalIgnoreCase) &&
+                !(referer != null && referer.StartsWith(allowedOrigin, StringComparison.OrdinalIgnoreCase)))
             {
-                return NotFound("User not found");
+                throw new UnauthorizedAccessException("CSRF");
             }
-
-            return Ok(new UserResponse
-            {
-                Id = user.Id,
-                Email = user.Email,
-                CreatedAt = user.CreatedAt,
-                LastLoggedIn = user.LastLoggedIn,
-                IsActive = user.IsActive
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving user with email: {Email}", email);
-            return StatusCode(500, "An error occurred retrieving user");
         }
     }
 
-    /// <summary>
-    /// Get current authenticated user's profile including dashboard settings
-    /// </summary>
     [HttpGet("profile")]
     [Authorize]
-    public async Task<ActionResult<UserProfileResponse>> GetProfile()
+    public async Task<IActionResult> GetProfile()
     {
         try
         {
-            var userEmail = User.FindFirst("email")?.Value;
-            if (string.IsNullOrEmpty(userEmail))
-            {
-                return BadRequest("Invalid token - no email claim found");
-            }
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return StatusCode(500, new { message = "User not found" });
 
-            var user = await _context.Users
+            var userWithData = await _context.Users
                 .Include(u => u.PlayerNames)
                     .ThenInclude(pn => pn.Player)
                 .Include(u => u.FavoriteServers)
                     .ThenInclude(fs => fs.Server)
                 .Include(u => u.Buddies)
                     .ThenInclude(b => b.Player)
-                .FirstOrDefaultAsync(u => u.Email == userEmail);
+                .FirstOrDefaultAsync(u => u.Id == user.Id);
 
-            if (user == null)
-            {
-                return NotFound("User not found");
-            }
+            if (userWithData == null)
+                return NotFound(new { message = "User not found" });
 
             return Ok(new UserProfileResponse
             {
-                Id = user.Id,
-                Email = user.Email,
-                CreatedAt = user.CreatedAt,
-                LastLoggedIn = user.LastLoggedIn,
-                IsActive = user.IsActive,
-                PlayerNames = (await Task.WhenAll(user.PlayerNames
+                Id = userWithData.Id,
+                Email = userWithData.Email,
+                CreatedAt = userWithData.CreatedAt,
+                LastLoggedIn = userWithData.LastLoggedIn,
+                IsActive = userWithData.IsActive,
+                PlayerNames = (await Task.WhenAll(userWithData.PlayerNames
                     .OrderBy(pn => pn.CreatedAt)
                     .Select(async pn => new UserPlayerNameResponse
                     {
@@ -158,10 +200,10 @@ public class AuthController : ControllerBase
                         CreatedAt = pn.CreatedAt,
                         Player = pn.Player != null ? await EnrichPlayerInfoAsync(pn.Player) : null
                     }))).ToList(),
-                FavoriteServers = (await Task.WhenAll(user.FavoriteServers
+                FavoriteServers = (await Task.WhenAll(userWithData.FavoriteServers
                     .OrderBy(fs => fs.CreatedAt)
                     .Select(async fs => await EnrichFavoriteServerInfoAsync(fs)))).ToList(),
-                Buddies = (await Task.WhenAll(user.Buddies
+                Buddies = (await Task.WhenAll(userWithData.Buddies
                     .OrderBy(b => b.CreatedAt)
                     .Select(async b => new UserBuddyResponse
                     {
@@ -175,25 +217,24 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving user profile");
-            return StatusCode(500, "An error occurred retrieving user profile");
+            return StatusCode(500, new { message = "Error retrieving profile" });
         }
     }
 
-    /// <summary>
-    /// Get current user's player names
-    /// </summary>
+    // User Management Endpoints - all use Bearer token auth
     [HttpGet("player-names")]
     [Authorize]
-    public async Task<ActionResult<List<UserPlayerNameResponse>>> GetPlayerNames()
+    public async Task<IActionResult> GetPlayerNames()
     {
         try
         {
-            var userId = await GetCurrentUserId();
-            if (userId == null) return BadRequest("Invalid token - no user ID found");
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return StatusCode(500, new { message = "User not found" });
 
             var userPlayerNames = await _context.UserPlayerNames
                 .Include(upn => upn.Player)
-                .Where(upn => upn.UserId == userId.Value)
+                .Where(upn => upn.UserId == user.Id)
                 .OrderBy(upn => upn.CreatedAt)
                 .ToListAsync();
 
@@ -210,32 +251,28 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving player names");
-            return StatusCode(500, "An error occurred retrieving player names");
+            return StatusCode(500, new { message = "Error retrieving player names" });
         }
     }
 
-    /// <summary>
-    /// Add a player name to current user's profile
-    /// </summary>
     [HttpPost("player-names")]
     [Authorize]
-    public async Task<ActionResult<UserPlayerNameResponse>> AddPlayerName([FromBody] AddPlayerNameRequest request)
+    public async Task<IActionResult> AddPlayerName([FromBody] AddPlayerNameRequest request)
     {
         try
         {
-            var userId = await GetCurrentUserId();
-            if (userId == null) return BadRequest("Invalid token - no user ID found");
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return StatusCode(500, new { message = "User not found" });
 
             if (string.IsNullOrWhiteSpace(request.PlayerName))
-                return BadRequest("Player name is required");
+                return BadRequest(new { message = "Player name is required" });
 
-            // Check if player name already exists for this user
             var existing = await _context.UserPlayerNames
-                .FirstOrDefaultAsync(upn => upn.UserId == userId.Value && upn.PlayerName == request.PlayerName);
+                .FirstOrDefaultAsync(upn => upn.UserId == user.Id && upn.PlayerName == request.PlayerName);
 
             if (existing != null)
             {
-                // Return the existing player name instead of an error
                 return Ok(new UserPlayerNameResponse
                 {
                     Id = existing.Id,
@@ -246,7 +283,7 @@ public class AuthController : ControllerBase
 
             var userPlayerName = new UserPlayerName
             {
-                UserId = userId.Value,
+                UserId = user.Id,
                 PlayerName = request.PlayerName,
                 CreatedAt = DateTime.UtcNow
             };
@@ -264,27 +301,25 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error adding player name");
-            return StatusCode(500, "An error occurred adding player name");
+            return StatusCode(500, new { message = "Error adding player name" });
         }
     }
 
-    /// <summary>
-    /// Remove a player name from current user's profile
-    /// </summary>
     [HttpDelete("player-names/{id}")]
     [Authorize]
-    public async Task<ActionResult> RemovePlayerName(int id)
+    public async Task<IActionResult> RemovePlayerName(int id)
     {
         try
         {
-            var userId = await GetCurrentUserId();
-            if (userId == null) return BadRequest("Invalid token - no user ID found");
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return StatusCode(500, new { message = "User not found" });
 
             var playerName = await _context.UserPlayerNames
-                .FirstOrDefaultAsync(upn => upn.Id == id && upn.UserId == userId.Value);
+                .FirstOrDefaultAsync(upn => upn.Id == id && upn.UserId == user.Id);
 
             if (playerName == null)
-                return NotFound("Player name not found");
+                return NotFound(new { message = "Player name not found" });
 
             _context.UserPlayerNames.Remove(playerName);
             await _context.SaveChangesAsync();
@@ -294,25 +329,23 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error removing player name");
-            return StatusCode(500, "An error occurred removing player name");
+            return StatusCode(500, new { message = "Error removing player name" });
         }
     }
 
-    /// <summary>
-    /// Get current user's favorite servers
-    /// </summary>
     [HttpGet("favorite-servers")]
     [Authorize]
-    public async Task<ActionResult<List<UserFavoriteServerResponse>>> GetFavoriteServers()
+    public async Task<IActionResult> GetFavoriteServers()
     {
         try
         {
-            var userId = await GetCurrentUserId();
-            if (userId == null) return BadRequest("Invalid token - no user ID found");
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return StatusCode(500, new { message = "User not found" });
 
             var favoriteServers = await _context.UserFavoriteServers
                 .Include(ufs => ufs.Server)
-                .Where(ufs => ufs.UserId == userId.Value)
+                .Where(ufs => ufs.UserId == user.Id)
                 .OrderBy(ufs => ufs.CreatedAt)
                 .ToListAsync();
 
@@ -324,44 +357,39 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving favorite servers");
-            return StatusCode(500, "An error occurred retrieving favorite servers");
+            return StatusCode(500, new { message = "Error retrieving favorite servers" });
         }
     }
 
-    /// <summary>
-    /// Add a favorite server to current user's profile
-    /// </summary>
     [HttpPost("favorite-servers")]
     [Authorize]
-    public async Task<ActionResult<UserFavoriteServerResponse>> AddFavoriteServer([FromBody] AddFavoriteServerRequest request)
+    public async Task<IActionResult> AddFavoriteServer([FromBody] AddFavoriteServerRequest request)
     {
         try
         {
-            var userId = await GetCurrentUserId();
-            if (userId == null) return BadRequest("Invalid token - no user ID found");
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return StatusCode(500, new { message = "User not found" });
 
             if (string.IsNullOrWhiteSpace(request.ServerGuid))
-                return BadRequest("Server GUID is required");
+                return BadRequest(new { message = "Server GUID is required" });
 
-            // Check if server exists
             var server = await _context.Servers.FirstOrDefaultAsync(s => s.Guid == request.ServerGuid);
             if (server == null)
-                return BadRequest("Server not found");
+                return BadRequest(new { message = "Server not found" });
 
-            // Check if server is already in favorites
             var existing = await _context.UserFavoriteServers
                 .Include(ufs => ufs.Server)
-                .FirstOrDefaultAsync(ufs => ufs.UserId == userId.Value && ufs.ServerGuid == request.ServerGuid);
+                .FirstOrDefaultAsync(ufs => ufs.UserId == user.Id && ufs.ServerGuid == request.ServerGuid);
 
             if (existing != null)
             {
-                // Return the existing favorite server instead of an error
                 return Ok(await EnrichFavoriteServerInfoAsync(existing));
             }
 
             var userFavoriteServer = new UserFavoriteServer
             {
-                UserId = userId.Value,
+                UserId = user.Id,
                 ServerGuid = request.ServerGuid,
                 CreatedAt = DateTime.UtcNow
             };
@@ -369,35 +397,32 @@ public class AuthController : ControllerBase
             _context.UserFavoriteServers.Add(userFavoriteServer);
             await _context.SaveChangesAsync();
 
-            // Load the server relationship for the new favorite server
             userFavoriteServer.Server = server;
-
+            
             return CreatedAtAction(nameof(GetFavoriteServers), await EnrichFavoriteServerInfoAsync(userFavoriteServer));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error adding favorite server");
-            return StatusCode(500, "An error occurred adding favorite server");
+            return StatusCode(500, new { message = "Error adding favorite server" });
         }
     }
 
-    /// <summary>
-    /// Remove a favorite server from current user's profile
-    /// </summary>
     [HttpDelete("favorite-servers/{id}")]
     [Authorize]
-    public async Task<ActionResult> RemoveFavoriteServer(int id)
+    public async Task<IActionResult> RemoveFavoriteServer(int id)
     {
         try
         {
-            var userId = await GetCurrentUserId();
-            if (userId == null) return BadRequest("Invalid token - no user ID found");
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return StatusCode(500, new { message = "User not found" });
 
             var favoriteServer = await _context.UserFavoriteServers
-                .FirstOrDefaultAsync(ufs => ufs.Id == id && ufs.UserId == userId.Value);
+                .FirstOrDefaultAsync(ufs => ufs.Id == id && ufs.UserId == user.Id);
 
             if (favoriteServer == null)
-                return NotFound("Favorite server not found");
+                return NotFound(new { message = "Favorite server not found" });
 
             _context.UserFavoriteServers.Remove(favoriteServer);
             await _context.SaveChangesAsync();
@@ -407,25 +432,23 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error removing favorite server");
-            return StatusCode(500, "An error occurred removing favorite server");
+            return StatusCode(500, new { message = "Error removing favorite server" });
         }
     }
 
-    /// <summary>
-    /// Get current user's buddies
-    /// </summary>
     [HttpGet("buddies")]
     [Authorize]
-    public async Task<ActionResult<List<UserBuddyResponse>>> GetBuddies()
+    public async Task<IActionResult> GetBuddies()
     {
         try
         {
-            var userId = await GetCurrentUserId();
-            if (userId == null) return BadRequest("Invalid token - no user ID found");
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return StatusCode(500, new { message = "User not found" });
 
             var userBuddies = await _context.UserBuddies
                 .Include(ub => ub.Player)
-                .Where(ub => ub.UserId == userId.Value)
+                .Where(ub => ub.UserId == user.Id)
                 .OrderBy(ub => ub.CreatedAt)
                 .ToListAsync();
 
@@ -442,32 +465,28 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving buddies");
-            return StatusCode(500, "An error occurred retrieving buddies");
+            return StatusCode(500, new { message = "Error retrieving buddies" });
         }
     }
 
-    /// <summary>
-    /// Add a buddy to current user's profile
-    /// </summary>
     [HttpPost("buddies")]
     [Authorize]
-    public async Task<ActionResult<UserBuddyResponse>> AddBuddy([FromBody] AddBuddyRequest request)
+    public async Task<IActionResult> AddBuddy([FromBody] AddBuddyRequest request)
     {
         try
         {
-            var userId = await GetCurrentUserId();
-            if (userId == null) return BadRequest("Invalid token - no user ID found");
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return StatusCode(500, new { message = "User not found" });
 
             if (string.IsNullOrWhiteSpace(request.BuddyPlayerName))
-                return BadRequest("Buddy player name is required");
+                return BadRequest(new { message = "Buddy player name is required" });
 
-            // Check if buddy already exists for this user
             var existing = await _context.UserBuddies
-                .FirstOrDefaultAsync(ub => ub.UserId == userId.Value && ub.BuddyPlayerName == request.BuddyPlayerName);
+                .FirstOrDefaultAsync(ub => ub.UserId == user.Id && ub.BuddyPlayerName == request.BuddyPlayerName);
 
             if (existing != null)
             {
-                // Return the existing buddy instead of an error
                 return Ok(new UserBuddyResponse
                 {
                     Id = existing.Id,
@@ -478,7 +497,7 @@ public class AuthController : ControllerBase
 
             var userBuddy = new UserBuddy
             {
-                UserId = userId.Value,
+                UserId = user.Id,
                 BuddyPlayerName = request.BuddyPlayerName,
                 CreatedAt = DateTime.UtcNow
             };
@@ -496,27 +515,25 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error adding buddy");
-            return StatusCode(500, "An error occurred adding buddy");
+            return StatusCode(500, new { message = "Error adding buddy" });
         }
     }
 
-    /// <summary>
-    /// Remove a buddy from current user's profile
-    /// </summary>
     [HttpDelete("buddies/{id}")]
     [Authorize]
-    public async Task<ActionResult> RemoveBuddy(int id)
+    public async Task<IActionResult> RemoveBuddy(int id)
     {
         try
         {
-            var userId = await GetCurrentUserId();
-            if (userId == null) return BadRequest("Invalid token - no user ID found");
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return StatusCode(500, new { message = "User not found" });
 
             var buddy = await _context.UserBuddies
-                .FirstOrDefaultAsync(ub => ub.Id == id && ub.UserId == userId.Value);
+                .FirstOrDefaultAsync(ub => ub.Id == id && ub.UserId == user.Id);
 
             if (buddy == null)
-                return NotFound("Buddy not found");
+                return NotFound(new { message = "Buddy not found" });
 
             _context.UserBuddies.Remove(buddy);
             await _context.SaveChangesAsync();
@@ -526,140 +543,145 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error removing buddy");
-            return StatusCode(500, "An error occurred removing buddy");
+            return StatusCode(500, new { message = "Error removing buddy" });
         }
     }
 
-    /// <summary>
-    /// Get dashboard data - online and offline status of user's buddies and favorite servers
-    /// </summary>
     [HttpGet("dashboard")]
     [Authorize]
-    public async Task<ActionResult<DashboardResponse>> GetDashboard()
+    public async Task<IActionResult> GetDashboard()
     {
         try
         {
-            var userId = await GetCurrentUserId();
-            if (userId == null) return BadRequest("Invalid token - no user ID found");
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return StatusCode(500, new { message = "User not found" });
 
             var now = DateTime.UtcNow;
-            var activeThreshold = now.AddMinutes(-1); // Calculate cutoff time
+            var activeThreshold = now.AddMinutes(-5);
 
-            // Get user with buddies and favorite servers
-            var user = await _context.Users
-                .Include(u => u.Buddies)
-                    .ThenInclude(b => b.Player)
-                .Include(u => u.FavoriteServers)
-                    .ThenInclude(fs => fs.Server)
-                .FirstOrDefaultAsync(u => u.Id == userId.Value);
-
-            if (user == null)
-                return NotFound("User not found");
-
-            // Get online buddies using proper EF Core joins
+            // Get online buddies
             var onlineBuddies = await _context.UserBuddies
-                .Where(ub => ub.UserId == userId.Value)
+                .Where(ub => ub.UserId == user.Id)
                 .Join(_context.PlayerSessions.Include(ps => ps.Server),
                       ub => ub.BuddyPlayerName,
                       ps => ps.PlayerName,
                       (ub, ps) => ps)
                 .Where(ps => ps.IsActive && ps.LastSeenTime >= activeThreshold)
                 .OrderByDescending(ps => ps.LastSeenTime)
+                .Select(session => new OnlineBuddyResponse
+                {
+                    PlayerName = session.PlayerName,
+                    ServerName = session.Server.Name,
+                    ServerGuid = session.ServerGuid,
+                    CurrentMap = session.MapName,
+                    JoinLink = session.Server.JoinLink,
+                    SessionDurationMinutes = (int)(now - session.StartTime).TotalMinutes,
+                    CurrentScore = session.TotalScore,
+                    CurrentKills = session.TotalKills,
+                    CurrentDeaths = session.TotalDeaths,
+                    JoinedAt = session.StartTime
+                })
                 .ToListAsync();
 
-            var onlineBuddyResponses = onlineBuddies.Select(session => new OnlineBuddyResponse
-            {
-                PlayerName = session.PlayerName,
-                ServerName = session.Server.Name,
-                ServerGuid = session.ServerGuid,
-                CurrentMap = session.MapName,
-                JoinLink = session.Server.JoinLink,
-                SessionDurationMinutes = (int)(now - session.StartTime).TotalMinutes,
-                CurrentScore = session.TotalScore,
-                CurrentKills = session.TotalKills,
-                CurrentDeaths = session.TotalDeaths,
-                JoinedAt = session.StartTime
-            }).ToList();
-
-            // Get offline buddies (all buddies that are not currently online)
-            var onlineBuddyNames = onlineBuddies.Select(session => session.PlayerName).ToHashSet();
+            // Get offline buddies
+            var onlineBuddyNames = onlineBuddies.Select(ob => ob.PlayerName).ToHashSet();
             var offlineBuddies = await _context.UserBuddies
                 .Include(ub => ub.Player)
-                .Where(ub => ub.UserId == userId.Value && !onlineBuddyNames.Contains(ub.BuddyPlayerName))
+                .Where(ub => ub.UserId == user.Id && !onlineBuddyNames.Contains(ub.BuddyPlayerName))
+                .Where(ub => ub.Player != null)
                 .OrderBy(ub => ub.BuddyPlayerName)
-                .ToListAsync();
-
-            var offlineBuddyResponses = offlineBuddies
-                .Where(ub => ub.Player != null) // Only include buddies with valid player records
                 .Select(ub => new OfflineBuddyResponse
                 {
                     PlayerName = ub.BuddyPlayerName,
                     LastSeen = ub.Player.LastSeen,
-                    LastSeenIso = ub.Player.LastSeen.ToString("O"), // ISO 8601 format
+                    LastSeenIso = ub.Player.LastSeen.ToString("O"),
                     TotalPlayTimeMinutes = ub.Player.TotalPlayTimeMinutes,
                     AddedAt = ub.CreatedAt
-                }).ToList();
+                })
+                .ToListAsync();
 
-            // Get favorite servers with current status
-            var favoriteServerGuids = user.FavoriteServers.Select(fs => fs.ServerGuid).ToList();
-            var favoriteServerStatuses = new List<FavoriteServerStatusResponse>();
-
-            foreach (var favoriteServer in user.FavoriteServers)
-            {
-                // Count active sessions on this server
-                var activeSessions = await _context.PlayerSessions
-                    .Include(ps => ps.Player)
-                    .Where(ps => ps.ServerGuid == favoriteServer.ServerGuid &&
-                                 ps.IsActive &&
-                                 ps.Player.AiBot == false &&
-                                 ps.LastSeenTime >= activeThreshold)
-                    .CountAsync();
-
-                favoriteServerStatuses.Add(new FavoriteServerStatusResponse
+            // Get favorite server statuses
+            var favoriteServers = await _context.UserFavoriteServers
+                .Include(fs => fs.Server)
+                .Where(fs => fs.UserId == user.Id)
+                .Select(fs => new FavoriteServerStatusResponse
                 {
-                    Id = favoriteServer.Id,
-                    ServerGuid = favoriteServer.ServerGuid,
-                    ServerName = favoriteServer.Server.Name,
-                    CurrentPlayers = activeSessions,
-                    MaxPlayers = favoriteServer.Server.MaxPlayers,
-                    CurrentMap = favoriteServer.Server.MapName,
-                    JoinLink = favoriteServer.Server.JoinLink
-                });
-            }
+                    Id = fs.Id,
+                    ServerGuid = fs.ServerGuid,
+                    ServerName = fs.Server.Name,
+                    CurrentPlayers = _context.PlayerSessions
+                        .Count(ps => ps.ServerGuid == fs.ServerGuid && ps.IsActive && ps.LastSeenTime >= activeThreshold),
+                    MaxPlayers = fs.Server.MaxPlayers,
+                    CurrentMap = fs.Server.MapName,
+                    JoinLink = fs.Server.JoinLink
+                })
+                .ToListAsync();
 
             return Ok(new DashboardResponse
             {
-                OnlineBuddies = onlineBuddyResponses,
-                OfflineBuddies = offlineBuddyResponses,
-                FavoriteServers = favoriteServerStatuses
+                OnlineBuddies = onlineBuddies,
+                OfflineBuddies = offlineBuddies,
+                FavoriteServers = favoriteServers
             });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving dashboard data");
-            return StatusCode(500, "An error occurred retrieving dashboard data");
+            return StatusCode(500, new { message = "Error retrieving dashboard data" });
         }
     }
 
-
-    private async Task<int?> GetCurrentUserId()
+    private async Task<User> CreateOrUpdateUserAsync(string email, string name)
     {
-        var userEmail = User.FindFirst("email")?.Value;
-        if (string.IsNullOrEmpty(userEmail))
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+        var now = DateTime.UtcNow;
+
+        if (user == null)
         {
-            return null;
+            user = new User
+            {
+                Email = email,
+                CreatedAt = now,
+                LastLoggedIn = now,
+                IsActive = true
+            };
+            _context.Users.Add(user);
+            _logger.LogInformation("Creating new user with email: {Email}", email);
+        }
+        else
+        {
+            user.LastLoggedIn = now;
+            user.IsActive = true;
+            _logger.LogDebug("Updating last login for user: {Email}", email);
         }
 
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
-        return user?.Id;
+        await _context.SaveChangesAsync();
+        return user;
+    }
+
+    private string GetClientIpAddress()
+    {
+        var forwardedFor = Request.Headers["X-Forwarded-For"].FirstOrDefault();
+        if (!string.IsNullOrEmpty(forwardedFor))
+        {
+            return forwardedFor.Split(',')[0].Trim();
+        }
+
+        var realIp = Request.Headers["X-Real-IP"].FirstOrDefault();
+        if (!string.IsNullOrEmpty(realIp))
+        {
+            return realIp;
+        }
+
+        return Request.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     }
 
     private async Task<PlayerInfoResponse> EnrichPlayerInfoAsync(Player player)
     {
         var now = DateTime.UtcNow;
-        var activeThreshold = now.AddMinutes(-5); // Calculate cutoff time
+        var activeThreshold = now.AddMinutes(-5);
 
-        // Check if player is currently online (has active session within last 5 minutes)
         var activeSession = await _context.PlayerSessions
             .Include(ps => ps.Server)
             .Where(ps => ps.PlayerName == player.Name &&
@@ -679,7 +701,7 @@ public class AuthController : ControllerBase
             TotalPlayTimeMinutes = player.TotalPlayTimeMinutes,
             AiBot = player.AiBot,
             IsOnline = isOnline,
-            LastSeenIso = player.LastSeen.ToString("O"), // ISO 8601 format
+            LastSeenIso = player.LastSeen.ToString("O"),
             CurrentServer = currentServer,
             CurrentMap = isOnline ? activeSession!.MapName : null,
             CurrentSessionScore = isOnline ? activeSession!.TotalScore : null,
@@ -691,9 +713,8 @@ public class AuthController : ControllerBase
     private async Task<UserFavoriteServerResponse> EnrichFavoriteServerInfoAsync(UserFavoriteServer favoriteServer)
     {
         var now = DateTime.UtcNow;
-        var activeThreshold = now.AddMinutes(-5); // Calculate cutoff time
+        var activeThreshold = now.AddMinutes(-5);
 
-        // Count active sessions on this server
         var activeSessions = await _context.PlayerSessions
             .Include(ps => ps.Player)
             .Where(ps => ps.ServerGuid == favoriteServer.ServerGuid &&
@@ -719,24 +740,26 @@ public class AuthController : ControllerBase
     }
 }
 
+// Simple request/response models
+public class LoginRequest
+{
+    public string GoogleIdToken { get; set; } = "";
+}
 
+public class LoginResponse
+{
+    public UserDto User { get; set; } = new();
+    public string AccessToken { get; set; } = "";
+    public DateTime ExpiresAt { get; set; }
+}
 
-
-/// <summary>
-/// Response model for user data
-/// </summary>
-public class UserResponse
+public class UserDto
 {
     public int Id { get; set; }
     public string Email { get; set; } = "";
-    public DateTime CreatedAt { get; set; }
-    public DateTime LastLoggedIn { get; set; }
-    public bool IsActive { get; set; }
+    public string Name { get; set; } = "";
 }
 
-/// <summary>
-/// Extended response model for user profile including dashboard settings
-/// </summary>
 public class UserProfileResponse
 {
     public int Id { get; set; }
@@ -749,17 +772,12 @@ public class UserProfileResponse
     public List<UserBuddyResponse> Buddies { get; set; } = [];
 }
 
-/// <summary>
-/// Request model for adding a player name
-/// </summary>
+// Request/Response models for user management
 public class AddPlayerNameRequest
 {
     public string PlayerName { get; set; } = "";
 }
 
-/// <summary>
-/// Response model for user player name
-/// </summary>
 public class UserPlayerNameResponse
 {
     public int Id { get; set; }
@@ -768,17 +786,11 @@ public class UserPlayerNameResponse
     public PlayerInfoResponse? Player { get; set; }
 }
 
-/// <summary>
-/// Request model for adding a favorite server
-/// </summary>
 public class AddFavoriteServerRequest
 {
     public string ServerGuid { get; set; } = "";
 }
 
-/// <summary>
-/// Response model for user favorite server
-/// </summary>
 public class UserFavoriteServerResponse
 {
     public int Id { get; set; }
@@ -791,17 +803,11 @@ public class UserFavoriteServerResponse
     public string? JoinLink { get; set; }
 }
 
-/// <summary>
-/// Request model for adding a buddy
-/// </summary>
 public class AddBuddyRequest
 {
     public string BuddyPlayerName { get; set; } = "";
 }
 
-/// <summary>
-/// Response model for user buddy
-/// </summary>
 public class UserBuddyResponse
 {
     public int Id { get; set; }
@@ -810,9 +816,6 @@ public class UserBuddyResponse
     public PlayerInfoResponse? Player { get; set; }
 }
 
-/// <summary>
-/// Response model for player information
-/// </summary>
 public class PlayerInfoResponse
 {
     public string Name { get; set; } = "";
@@ -829,9 +832,6 @@ public class PlayerInfoResponse
     public int? CurrentSessionDeaths { get; set; }
 }
 
-/// <summary>
-/// Response model for dashboard data
-/// </summary>
 public class DashboardResponse
 {
     public List<OnlineBuddyResponse> OnlineBuddies { get; set; } = [];
@@ -839,9 +839,6 @@ public class DashboardResponse
     public List<FavoriteServerStatusResponse> FavoriteServers { get; set; } = [];
 }
 
-/// <summary>
-/// Response model for online buddy information
-/// </summary>
 public class OnlineBuddyResponse
 {
     public string PlayerName { get; set; } = "";
@@ -856,9 +853,6 @@ public class OnlineBuddyResponse
     public DateTime JoinedAt { get; set; }
 }
 
-/// <summary>
-/// Response model for offline buddy information
-/// </summary>
 public class OfflineBuddyResponse
 {
     public string PlayerName { get; set; } = "";
@@ -868,9 +862,6 @@ public class OfflineBuddyResponse
     public DateTime AddedAt { get; set; }
 }
 
-/// <summary>
-/// Response model for favorite server status
-/// </summary>
 public class FavoriteServerStatusResponse
 {
     public int Id { get; set; }

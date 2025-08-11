@@ -5,6 +5,7 @@
     <RootNamespace>junie_des_1942stats.Notifications</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <UserSecretsId>d2918d49-ba90-4dbb-a125-e53f51977d55</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

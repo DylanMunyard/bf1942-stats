@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using Microsoft.Extensions.Logging;
+using System.Security.Cryptography;
 
 // Configure Serilog
 var seqUrl = Environment.GetEnvironmentVariable("SEQ_URL") ?? "http://192.168.1.230:5341";
@@ -53,8 +54,20 @@ try
     // Add Serilog to the application
     builder.Host.UseSerilog();
 
-    // Configure Google JWT Authentication
-    var googleClientId = builder.Configuration["Jwt:Audience"] ?? throw new InvalidOperationException("Jwt:Audience (Google Client ID) must be configured");
+    // Configure JWT Authentication to validate self-minted tokens from main app
+    var issuer = builder.Configuration["Jwt:Issuer"] ?? "";
+    var audience = builder.Configuration["Jwt:Audience"] ?? "";
+    
+    string? ReadConfigStringOrFile(string valueKey, string pathKey)
+    {
+        var v = builder.Configuration[valueKey];
+        if (!string.IsNullOrWhiteSpace(v)) return v;
+        var p = builder.Configuration[pathKey];
+        if (!string.IsNullOrWhiteSpace(p) && File.Exists(p)) return File.ReadAllText(p);
+        return null;
+    }
+
+    var privateKeyPem = ReadConfigStringOrFile("Jwt:PrivateKey", "Jwt:PrivateKeyPath");
 
     builder.Services.AddAuthentication(options =>
     {
@@ -63,17 +76,16 @@ try
     })
     .AddJwtBearer(options =>
     {
-        options.Authority = "https://accounts.google.com";
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
-            ValidIssuers = new[] { "https://accounts.google.com", "accounts.google.com" },
+            ValidIssuer = issuer,
             ValidateAudience = true,
-            ValidAudience = googleClientId,
-            ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromMinutes(5),
+            ValidAudience = audience,
             ValidateIssuerSigningKey = true,
-            NameClaimType = "email"
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromSeconds(30),
+            IssuerSigningKey = CreateRsaKey(privateKeyPem ?? throw new InvalidOperationException("JWT private key not configured. Set Jwt:PrivateKey (inline PEM) or Jwt:PrivateKeyPath (file path)."))
         };
 
         // Clear default claim type mappings to preserve original JWT claims
@@ -138,6 +150,13 @@ try
     app.UseRouting();
     app.UseAuthentication();
     app.UseAuthorization();
+
+    static SecurityKey CreateRsaKey(string pem)
+    {
+        var rsa = RSA.Create();
+        rsa.ImportFromPem(pem);
+        return new RsaSecurityKey(rsa);
+    }
 
     // Map SignalR hub
     app.MapHub<NotificationHub>("/hub");
