@@ -21,6 +21,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using junie_des_1942stats.Services.Auth;
+using junie_des_1942stats.Neo4j.Services;
+using junie_des_1942stats.Neo4j.Interfaces;
+using Neo4j.Driver;
 
 // Configure Serilog
 var seqUrl = Environment.GetEnvironmentVariable("SEQ_URL") ?? "http://192.168.1.230:5341";
@@ -464,6 +467,34 @@ try
         var playerInsightsService = sp.GetRequiredService<PlayerInsightsService>();
         return new PlayerComparisonService(connection, logger, dbContext, cacheService, cacheKeyService, playerInsightsService);
     });
+
+    // Configure Neo4j services (conditionally enabled)
+    var neo4jConfiguration = builder.Configuration.GetSection(Neo4jConfiguration.SectionName).Get<Neo4jConfiguration>() 
+                              ?? new Neo4jConfiguration();
+                              
+    if (neo4jConfiguration.Enabled)
+    {
+        // Register Neo4j driver as singleton
+        builder.Services.AddSingleton<IDriver>(serviceProvider =>
+        {
+            var logger = serviceProvider.GetRequiredService<ILogger<Program>>();
+            logger.LogInformation("Initializing Neo4j driver with URI: {Uri}", neo4jConfiguration.Uri);
+            
+            return GraphDatabase.Driver(neo4jConfiguration.Uri, 
+                AuthTokens.Basic(neo4jConfiguration.Username, neo4jConfiguration.Password),
+                o => o.WithMaxConnectionPoolSize(neo4jConfiguration.MaxConnectionPoolSize)
+                      .WithConnectionTimeout(neo4jConfiguration.ConnectionTimeout)
+                      .WithMaxIdleConnectionPoolSize(10));
+        });
+
+        // Register Neo4j service
+        builder.Services.AddScoped<INeo4jService, Neo4jService>();
+        Log.Information("Neo4j services registered and enabled");
+    }
+    else
+    {
+        Log.Information("Neo4j services disabled by configuration");
+    }
 
     var host = builder.Build();
 
