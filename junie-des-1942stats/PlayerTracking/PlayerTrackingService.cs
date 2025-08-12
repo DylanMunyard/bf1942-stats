@@ -214,7 +214,7 @@ public class PlayerTrackingService
                 // Publish server map change event if detected
                 if (!string.IsNullOrEmpty(serverMapChangeOldMap))
                 {
-                    _logger.LogInformation("TRACKING: Detected map change for {ServerGuid} / {ServerName}: {OldMap} -> {NewMap}", 
+                    _logger.LogInformation("TRACKING: Detected map change for {ServerGuid} / {ServerName}: {OldMap} -> {NewMap}",
                         server.Guid, server.Name, serverMapChangeOldMap, server.MapName);
                     await PublishServerMapChangeEvent(server, serverMapChangeOldMap);
                 }

@@ -51,8 +51,32 @@ spec:
               value: "true"
             - name: ENABLE_GAMIFICATION_PROCESSING
               value: "true"
-            - name: JWT__AUDIENCE
-              value: "468014767883-2gsdumjjgpgm2fp1qgic82i45k03tj7e.apps.googleusercontent.com"
+            - name: Jwt__Issuer
+              value: "https://1942.munyard.dev"
+            - name: Jwt__Audience
+              value: "https://1942.munyard.dev"
+            - name: Cors__AllowedOrigins
+              value: "https://1942.munyard.dev"
+            # Refresh token cookie configuration (Secret provided via external secret manager)
+            - name: RefreshToken__CookieName
+              value: "rt"
+            - name: RefreshToken__CookieDomain
+              value: "1942.munyard.dev"
+            - name: RefreshToken__CookiePath
+              value: "/stats"
+            - name: RefreshToken__Days
+              value: "60"
+            # Secrets from Kubernetes Secret `bf42-stats-secrets`
+            - name: Jwt__PrivateKey
+              valueFrom:
+                secretKeyRef:
+                  name: bf42-stats-secrets
+                  key: jwt-private-key
+            - name: RefreshToken__Secret
+              valueFrom:
+                secretKeyRef:
+                  name: bf42-stats-secrets
+                  key: refresh-token-secret
           volumeMounts:
             - name: stats-data
               mountPath: /mnt/data

@@ -15,6 +15,7 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<UserPlayerName> UserPlayerNames { get; set; }
     public DbSet<UserFavoriteServer> UserFavoriteServers { get; set; }
     public DbSet<UserBuddy> UserBuddies { get; set; }
+        public DbSet<RefreshToken> RefreshTokens { get; set; }
 
     public PlayerTrackerDbContext(DbContextOptions<PlayerTrackerDbContext> options)
         : base(options)
@@ -178,6 +179,23 @@ public class PlayerTrackerDbContext : DbContext
         // Configure ServerBestScoreRaw as keyless entity (for query results only)
         modelBuilder.Entity<ServerBestScoreRaw>()
             .HasNoKey();
+
+        // Configure RefreshToken entity
+        modelBuilder.Entity<RefreshToken>()
+            .HasKey(rt => rt.Id);
+
+        modelBuilder.Entity<RefreshToken>()
+            .HasIndex(rt => rt.TokenHash)
+            .IsUnique();
+
+        modelBuilder.Entity<RefreshToken>()
+            .HasIndex(rt => rt.UserId);
+
+        modelBuilder.Entity<RefreshToken>()
+            .HasOne(rt => rt.User)
+            .WithMany()
+            .HasForeignKey(rt => rt.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }
 
@@ -293,6 +311,21 @@ public class User
     public List<UserPlayerName> PlayerNames { get; set; } = [];
     public List<UserFavoriteServer> FavoriteServers { get; set; } = [];
     public List<UserBuddy> Buddies { get; set; } = [];
+}
+
+public class RefreshToken
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public int UserId { get; set; }
+    public string TokenHash { get; set; } = "";
+    public DateTime ExpiresAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? RevokedAt { get; set; }
+    public string? ReplacedByTokenHash { get; set; }
+    public string? IpAddress { get; set; }
+    public string? UserAgent { get; set; }
+
+    public User User { get; set; } = null!;
 }
 
 public class UserPlayerName

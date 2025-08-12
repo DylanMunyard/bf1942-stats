@@ -26,10 +26,19 @@ spec:
               value: "http://+:8080"
             - name: ConnectionStrings__Redis
               value: "redis-service.bf42-stats:6379"
-            - name: JWT__AUDIENCE
-              value: "468014767883-2gsdumjjgpgm2fp1qgic82i45k03tj7e.apps.googleusercontent.com"
             - name: ApiBaseUrl
               value: "http://bf42-stats-service.bf42-stats:8080"
+            # JWT Configuration - same as main app
+            - name: Jwt__Issuer
+              value: "https://1942.munyard.dev"
+            - name: Jwt__Audience
+              value: "https://1942.munyard.dev"
+            # JWT Private Key from Kubernetes Secret (same as main app)
+            - name: Jwt__PrivateKey
+              valueFrom:
+                secretKeyRef:
+                  name: bf42-stats-secrets
+                  key: jwt-private-key
           livenessProbe:
             httpGet:
               path: /health
