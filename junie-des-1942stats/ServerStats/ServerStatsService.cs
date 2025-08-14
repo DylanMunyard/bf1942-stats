@@ -668,8 +668,14 @@ FORMAT TabSeparated";
         _logger.LogDebug("DATA CHECK RESULT:\n{Result}", dataCheckResult);
 
         var timeGrouping = GetClickHouseTimeGrouping(granularity);
-
-        var query = $@"
+        
+        // For 7 days and 1 month, use simple aggregation
+        // For 3+ months, use averaging approach to avoid inflating numbers
+        string query;
+        if (granularity <= TimeGranularity.FourHourly)
+        {
+            // For 7 days and 1 month - return data points as-is
+            query = $@"
 SELECT 
     {timeGrouping} as timestamp,
     COUNT(DISTINCT player_name) as unique_players_started
@@ -680,6 +686,30 @@ WHERE server_guid = '{serverGuid.Replace("'", "''")}'
 GROUP BY timestamp
 ORDER BY timestamp
 FORMAT TabSeparated";
+        }
+        else
+        {
+            // For 3+ months - use averaging approach to avoid inflating numbers
+            // Average hourly data into larger time buckets instead of aggregating unique players
+            query = $@"
+WITH hourly_data AS (
+    SELECT 
+        toStartOfHour(round_start_time) as hour_timestamp,
+        COUNT(DISTINCT player_name) as hourly_players
+    FROM player_rounds
+    WHERE server_guid = '{serverGuid.Replace("'", "''")}'
+        AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
+        AND round_start_time < '{endPeriod:yyyy-MM-dd HH:mm:ss}'
+    GROUP BY hour_timestamp
+)
+SELECT 
+    {timeGrouping.Replace("round_start_time", "hour_timestamp")} as timestamp,
+    ROUND(AVG(hourly_players)) as avg_players
+FROM hourly_data
+GROUP BY timestamp
+ORDER BY timestamp
+FORMAT TabSeparated";
+        }
 
         _logger.LogDebug("=== PLAYER COUNT HISTORY QUERY ===");
         _logger.LogDebug("Server GUID: {ServerGuid}", serverGuid);
@@ -740,7 +770,11 @@ FORMAT TabSeparated";
         var halfPeriodDays = totalDays / 2;
         var midPeriod = startPeriod.AddDays(halfPeriodDays);
 
-        var query = $@"
+        string query;
+        if (granularity <= TimeGranularity.FourHourly)
+        {
+            // For 7 days and 1 month - use simple aggregation 
+            query = $@"
 WITH time_buckets AS (
     SELECT 
         {timeGrouping} as time_bucket,
@@ -798,6 +832,73 @@ FROM summary s
 LEFT JOIN (SELECT avg_players FROM period_averages WHERE period_type = 'recent') recent ON 1=1
 LEFT JOIN (SELECT avg_players FROM period_averages WHERE period_type = 'older') older ON 1=1
 FORMAT TabSeparated";
+        }
+        else
+        {
+            // For 3+ months - use averaging approach to avoid inflated peaks
+            query = $@"
+WITH hourly_data AS (
+    SELECT 
+        toStartOfHour(round_start_time) as hour_timestamp,
+        COUNT(DISTINCT player_name) as hourly_players
+    FROM player_rounds
+    WHERE server_guid = '{serverGuid.Replace("'", "''")}'
+        AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
+        AND round_start_time < '{endPeriod:yyyy-MM-dd HH:mm:ss}'
+    GROUP BY hour_timestamp
+),
+time_buckets AS (
+    SELECT 
+        {timeGrouping.Replace("round_start_time", "hour_timestamp")} as time_bucket,
+        ROUND(AVG(hourly_players)) as avg_players_in_bucket,
+        MAX(hourly_players) as max_players_in_bucket
+    FROM hourly_data
+    GROUP BY time_bucket
+),
+period_comparison AS (
+    SELECT 
+        CASE 
+            WHEN hour_timestamp >= '{startPeriod:yyyy-MM-dd HH:mm:ss}' 
+                AND hour_timestamp < '{midPeriod:yyyy-MM-dd HH:mm:ss}' THEN 'older'
+            WHEN hour_timestamp >= '{midPeriod:yyyy-MM-dd HH:mm:ss}' 
+                AND hour_timestamp < '{endPeriod:yyyy-MM-dd HH:mm:ss}' THEN 'recent'
+        END as period_type,
+        hourly_players
+    FROM hourly_data
+),
+summary AS (
+    SELECT 
+        AVG(avg_players_in_bucket) as avg_players,
+        MAX(max_players_in_bucket) as peak_players,
+        argMax(time_bucket, max_players_in_bucket) as peak_timestamp,
+        (SELECT COUNT(DISTINCT player_name) FROM player_rounds 
+         WHERE server_guid = '{serverGuid.Replace("'", "''")}'
+           AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
+           AND round_start_time < '{endPeriod:yyyy-MM-dd HH:mm:ss}') as total_unique
+    FROM time_buckets
+),
+period_averages AS (
+    SELECT 
+        period_type,
+        AVG(hourly_players) as avg_players
+    FROM period_comparison
+    WHERE period_type IS NOT NULL
+    GROUP BY period_type
+)
+SELECT 
+    s.avg_players,
+    s.peak_players,
+    s.peak_timestamp,
+    s.total_unique,
+    COALESCE(
+        ROUND((recent.avg_players - older.avg_players) / NULLIF(older.avg_players, 0) * 100),
+        0
+    ) as change_percent
+FROM summary s
+LEFT JOIN (SELECT avg_players FROM period_averages WHERE period_type = 'recent') recent ON 1=1
+LEFT JOIN (SELECT avg_players FROM period_averages WHERE period_type = 'older') older ON 1=1
+FORMAT TabSeparated";
+        }
 
         _logger.LogDebug("=== PLAYER COUNT SUMMARY QUERY ===");
         _logger.LogDebug("Server GUID: {ServerGuid}", serverGuid);
