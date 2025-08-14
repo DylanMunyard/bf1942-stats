@@ -36,13 +36,13 @@ public class LiveServersController : ControllerBase
 
         try
         {
-            var servers = await _bfListApiService.FetchAllServerSummariesAsync(game);
+            var (servers, cacheHit) = await _bfListApiService.FetchAllServerSummariesWithCacheStatusAsync(game);
 
             var response = new ServerListResponse
             {
                 Servers = servers,
                 LastUpdated = DateTime.UtcNow.ToString("O"),
-                CacheHit = false // This is now handled internally by the service
+                CacheHit = cacheHit
             };
 
             return Ok(response);
