@@ -383,9 +383,31 @@ try
         options.InstanceName = serviceName;
     });
 
-    // Configure Redis for event publishing
-    builder.Services.AddSingleton<IConnectionMultiplexer>(ConnectionMultiplexer.Connect(redisConnectionString));
-    builder.Services.AddSingleton<IDatabase>(sp => sp.GetRequiredService<IConnectionMultiplexer>().GetDatabase());
+    // Configure Redis for event publishing with graceful failure handling
+    builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+    {
+        var logger = sp.GetRequiredService<ILogger<Program>>();
+        try
+        {
+            var connectionString = $"{redisConnectionString},abortConnect=false";
+            var connection = ConnectionMultiplexer.Connect(connectionString);
+            logger.LogInformation("Redis connection established successfully");
+            return connection;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Redis connection failed, continuing without Redis event publishing");
+            // Return a null multiplexer that will be handled gracefully
+            return null!;
+        }
+    });
+    
+    builder.Services.AddSingleton<IDatabase>(sp =>
+    {
+        var multiplexer = sp.GetRequiredService<IConnectionMultiplexer>();
+        return multiplexer?.GetDatabase()!;
+    });
+    
     builder.Services.AddSingleton<IPlayerEventPublisher, PlayerEventPublisher>();
 
     // Register caching services

@@ -1,7 +1,20 @@
+# Claude Instructions
+
+This is a DOTNET Core (net8) API. It's primary purpose is to:
+- Expose an API at the /stats/* path for the Vue front-end. The repo for the front end is here https://github.com/dylanMunyard/bf1942-ui/
+
+The API is for querying the player metrics we capture in a background job from the https://bflist.io APIs, implemented in junie-des-1942stats/Services/BfListApiService.cs
+
 ## Development Guidelines
+- Always try the most simple approach first, thinking through your approach in steps, and summarising your approach to me before proceeding
+- This app uses ClickHouse and Sqlite as the data sources. Be very aware of SQL injection vulnerabilities and NEVER craft your own SQL statements. Always use ADO.NET libraries for calling ClickHouse, and stick to EF Core for Sqlite. If you must write manual queries that accept parameters, they still need to be parameterised. 
 
-- Any time you add a new achievement (e.g. add a new constant in @Gamification/Services/BadgeDefinitionsService.cs) please update @achievements.md 
+### Performance Guidelines
+- When you implement a query, never read records to memory and process them in a loop. Use native queries to perform the task, and warn before proceeding if a task is not possible without reading records to memory. 
+- Use Redis for caching the outputs of the APIs. If an API is "time-sensitive" and must return the latest data from the database I will be explicit about that. You can assume data can and must be cached, unless I state otherwise. 
 
-## Security Guidelines
+## Deployment Guidelines
+- The deployment pipeline runs in Jenkins, and is deployed to Kubernetes. If you add a new setting please add it to the deployment manifests. The app has a staging (pre-prod) environment, with it's own deployment manifest in the same folder as the prod manifests. These need to be updated to. 
 
-- ClickHouse querying should preference ADO.NET instead of Http queries sent using raw HttpClient with escaped parmeters. This will prevent the application from SQL injection vulnerabilities.
+## ClickHouse are you listening
+I want to make sure you have read these instructions, I want you to add an emoji to every response you write. 

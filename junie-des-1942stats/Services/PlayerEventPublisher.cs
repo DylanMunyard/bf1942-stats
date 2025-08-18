@@ -6,11 +6,11 @@ namespace junie_des_1942stats.Services;
 
 public class PlayerEventPublisher : IPlayerEventPublisher
 {
-    private readonly IConnectionMultiplexer _connectionMultiplexer;
+    private readonly IConnectionMultiplexer? _connectionMultiplexer;
     private readonly ILogger<PlayerEventPublisher> _logger;
     private const string ChannelName = "player:events";
 
-    public PlayerEventPublisher(IConnectionMultiplexer connectionMultiplexer, ILogger<PlayerEventPublisher> logger)
+    public PlayerEventPublisher(IConnectionMultiplexer? connectionMultiplexer, ILogger<PlayerEventPublisher> logger)
     {
         _connectionMultiplexer = connectionMultiplexer;
         _logger = logger;
@@ -18,6 +18,13 @@ public class PlayerEventPublisher : IPlayerEventPublisher
 
     public async Task PublishPlayerOnlineEvent(string playerName, string serverGuid, string serverName, string mapName, string gameType, int sessionId)
     {
+        if (_connectionMultiplexer == null)
+        {
+            _logger.LogDebug("Redis unavailable - skipping player online event for {PlayerName} on {ServerName}",
+                playerName, serverName);
+            return;
+        }
+
         try
         {
             var payload = JsonSerializer.Serialize(new
@@ -53,6 +60,13 @@ public class PlayerEventPublisher : IPlayerEventPublisher
 
     public async Task PublishServerMapChangeEvent(string serverGuid, string serverName, string oldMapName, string newMapName, string gameType, string? joinLink)
     {
+        if (_connectionMultiplexer == null)
+        {
+            _logger.LogDebug("Redis unavailable - skipping server map change event for {ServerName}",
+                serverName);
+            return;
+        }
+
         try
         {
             var payload = JsonSerializer.Serialize(new
