@@ -146,4 +146,48 @@ FORMAT TabSeparated";
         return topScores;
     }
 
+
+    /// <summary>
+    /// Get player's time series trend data for K/D ratio and kill rate over the specified time period
+    /// Aggregates data by day to provide good granularity for trend analysis
+    /// </summary>
+    public async Task<string> GetPlayerTimeSeriesTrendAsync(string playerName, DateTime fromDate)
+    {
+        var query = $@"
+WITH player_rounds_daily AS (
+    SELECT 
+        player_name,
+        toDate(round_end_time) as day_date,
+        SUM(final_kills) as daily_kills,
+        SUM(final_deaths) as daily_deaths,
+        SUM(play_time_minutes) as daily_minutes
+    FROM player_rounds
+    WHERE player_name = '{playerName.Replace("'", "''")}'
+      AND round_end_time >= '{fromDate:yyyy-MM-dd HH:mm:ss}'
+    GROUP BY player_name, toDate(round_end_time)
+    HAVING daily_kills > 0 OR daily_deaths > 0
+),
+cumulative_daily AS (
+    SELECT 
+        day_date,
+        daily_kills,
+        daily_deaths,
+        daily_minutes,
+        -- Running totals for cumulative K/D and kill rate trends
+        SUM(daily_kills) OVER (ORDER BY day_date ROWS UNBOUNDED PRECEDING) as cumulative_kills,
+        SUM(daily_deaths) OVER (ORDER BY day_date ROWS UNBOUNDED PRECEDING) as cumulative_deaths,
+        SUM(daily_minutes) OVER (ORDER BY day_date ROWS UNBOUNDED PRECEDING) as cumulative_minutes
+    FROM player_rounds_daily
+)
+SELECT 
+    day_date as timestamp,
+    CASE WHEN cumulative_deaths > 0 THEN round(cumulative_kills / cumulative_deaths, 3) ELSE toFloat64(cumulative_kills) END as kd_ratio,
+    CASE WHEN cumulative_minutes > 0 THEN round(cumulative_kills / cumulative_minutes, 3) ELSE 0.0 END as kill_rate
+FROM cumulative_daily
+ORDER BY day_date
+FORMAT TabSeparatedWithNames";
+
+        return await ExecuteQueryAsync(query);
+    }
+
 }

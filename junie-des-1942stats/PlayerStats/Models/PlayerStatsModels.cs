@@ -51,6 +51,9 @@ public class PlayerTimeStatistics
 
     // Server-specific insights (replaces BestScores)
     public List<ServerInsight> Servers { get; set; } = new();
+    
+    // Recent performance stats from last 60 sessions
+    public RecentStats? RecentStats { get; set; }
 }
 
 public class ServerInfo
@@ -149,6 +152,7 @@ public class ServerRanking
     public string ScoreDisplay => $"{TotalScore} points";
 
     public double AveragePing { get; set; }
+    public List<MonthlyServerRanking> HistoricalRankings { get; set; } = new();
 }
 
 public class PlayerInsights
@@ -285,7 +289,39 @@ public class ServerInsight
     public DateTime HighestScoreStartTime { get; set; }
     public double KillsPerMinute { get; set; }
     public int TotalRounds { get; set; }
+    public ServerRanking? Ranking { get; set; }
     public double KdRatio => TotalDeaths > 0 ? Math.Round((double)TotalKills / TotalDeaths, 2) : TotalKills;
+}
+
+public class MonthlyServerRanking
+{
+    public int Year { get; set; }
+    public int Month { get; set; }
+    public int Rank { get; set; }
+    public int TotalScore { get; set; }
+    public int TotalKills { get; set; }
+    public int TotalDeaths { get; set; }
+    public double KDRatio { get; set; }
+    public int TotalPlayTimeMinutes { get; set; }
+    public string MonthYearDisplay => $"{Year}-{Month:D2}";
+}
+
+// Time Series Trend Analysis for Player Performance (6-month lookback)
+public class RecentStats
+{
+    public DateTime AnalysisPeriodStart { get; set; }
+    public DateTime AnalysisPeriodEnd { get; set; }
+    public int TotalRoundsAnalyzed { get; set; }
+    
+    // Time series data for K/D ratio and kill rate trends
+    public List<TrendDataPoint> KdRatioTrend { get; set; } = new();
+    public List<TrendDataPoint> KillRateTrend { get; set; } = new();
+}
+
+public class TrendDataPoint
+{
+    public DateTime Timestamp { get; set; }
+    public double Value { get; set; }
 }
 
 

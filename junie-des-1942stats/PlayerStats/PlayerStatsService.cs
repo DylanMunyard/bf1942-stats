@@ -3,18 +3,21 @@ using junie_des_1942stats.PlayerTracking;
 using junie_des_1942stats.ClickHouse;
 using junie_des_1942stats.Caching;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace junie_des_1942stats.PlayerStats;
 
 public class PlayerStatsService(PlayerTrackerDbContext dbContext,
     PlayerInsightsService playerInsightsService,
     PlayerRoundsReadService playerRoundsReadService,
-    ICacheService cacheService)
+    ICacheService cacheService,
+    ILogger<PlayerStatsService> logger)
 {
     private readonly PlayerTrackerDbContext _dbContext = dbContext;
     private readonly PlayerInsightsService _playerInsightsService = playerInsightsService;
     private readonly PlayerRoundsReadService _playerRoundsReadService = playerRoundsReadService;
     private readonly ICacheService _cacheService = cacheService;
+    private readonly ILogger<PlayerStatsService> _logger = logger;
 
     // Define a threshold for considering a player "active" (e.g., 5 minutes)
     private readonly TimeSpan _activeThreshold = TimeSpan.FromMinutes(5);
@@ -153,6 +156,27 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         };
     }
 
+    private async Task<List<MonthlyServerRanking>> GetPlayerHistoricalRankingsAsync(string playerName, string serverGuid)
+    {
+        return await _dbContext.ServerPlayerRankings
+            .Where(r => r.PlayerName == playerName && r.ServerGuid == serverGuid)
+            .OrderByDescending(r => r.Year)
+            .ThenByDescending(r => r.Month)
+            .Take(12)
+            .Select(r => new MonthlyServerRanking
+            {
+                Year = r.Year,
+                Month = r.Month,
+                Rank = r.Rank,
+                TotalScore = r.TotalScore,
+                TotalKills = r.TotalKills,
+                TotalDeaths = r.TotalDeaths,
+                KDRatio = r.KDRatio,
+                TotalPlayTimeMinutes = r.TotalPlayTimeMinutes
+            })
+            .ToListAsync();
+    }
+
     public async Task<PlayerTimeStatistics> GetPlayerStatistics(string playerName)
     {
         // First check if the player exists
@@ -186,9 +210,6 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             TotalDeaths = clickHouseStats?.TotalDeaths ?? 0,
             TotalPlayTimeMinutes = clickHouseStats?.TotalPlayTimeMinutes ?? 0
         };
-
-        if (aggregateStats == null)
-            return new PlayerTimeStatistics();
 
         // Get the most recent 10 sessions with server info
         var recentSessions = await _dbContext.PlayerSessions
@@ -271,6 +292,9 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             Insights = insights,
             Servers = serverInsights
         };
+
+        // Calculate time series trend stats over last 6 months
+        stats.RecentStats = await CalculateTimeSeriesTrendAsync(playerName);
 
         return stats;
     }
@@ -678,6 +702,9 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             // The player's rank is the number of players with higher scores + 1
             var playerRank = higherScoringPlayers + 1;
 
+            // Get historical rankings for this server
+            var historicalRankings = await GetPlayerHistoricalRankingsAsync(playerName, serverStat.ServerGuid);
+
             return new ServerRanking
             {
                 ServerGuid = serverStat.ServerGuid,
@@ -685,7 +712,8 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                 Rank = playerRank,
                 TotalScore = serverStat.TotalScore,
                 TotalRankedPlayers = totalPlayers,
-                AveragePing = Math.Round(averagePing)
+                AveragePing = Math.Round(averagePing),
+                HistoricalRankings = historicalRankings
             };
         });
 
@@ -791,7 +819,132 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         return null;
     }
 
+    private async Task<RecentStats?> CalculateTimeSeriesTrendAsync(string playerName)
+    {
+        try
+        {
+            _logger.LogDebug("Calculating time series trend data for player: {PlayerName}", playerName);
+            
+            // Look back 6 months for trend analysis
+            var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
+            
+            // Get time series data from ClickHouse
+            var timeSeriesResult = await _playerRoundsReadService.GetPlayerTimeSeriesTrendAsync(playerName, sixMonthsAgo);
+
+            _logger.LogDebug("ClickHouse time series result for {PlayerName}: {Result}", playerName, 
+                timeSeriesResult?.Substring(0, Math.Min(200, timeSeriesResult?.Length ?? 0)));
+
+            // Parse time series data
+            var trendPoints = ParseTimeSeriesData(timeSeriesResult ?? "");
+            if (!trendPoints.Any())
+            {
+                _logger.LogWarning("No time series data found for player: {PlayerName}. Raw result: {RawResult}", 
+                    playerName, timeSeriesResult);
+                return null;
+            }
+
+            // Calculate total rounds analyzed from the time series query
+            var totalRounds = await GetPlayerRoundCountAsync(playerName, sixMonthsAgo);
+
+            var recentStats = new RecentStats
+            {
+                AnalysisPeriodStart = sixMonthsAgo,
+                AnalysisPeriodEnd = DateTime.UtcNow,
+                TotalRoundsAnalyzed = totalRounds,
+                KdRatioTrend = trendPoints.Select(tp => new TrendDataPoint 
+                { 
+                    Timestamp = tp.Timestamp, 
+                    Value = tp.KdRatio 
+                }).ToList(),
+                KillRateTrend = trendPoints.Select(tp => new TrendDataPoint 
+                { 
+                    Timestamp = tp.Timestamp, 
+                    Value = tp.KillRate 
+                }).ToList()
+            };
+
+            return recentStats;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to calculate time series trend for player: {PlayerName}", playerName);
+            return null;
+        }
+    }
+
+    private async Task<int> GetPlayerRoundCountAsync(string playerName, DateTime fromDate)
+    {
+        try
+        {
+            var countResult = await _playerRoundsReadService.ExecuteQueryAsync($@"
+                SELECT COUNT(*) as round_count
+                FROM player_rounds
+                WHERE player_name = '{playerName.Replace("'", "''")}'
+                  AND round_end_time >= '{fromDate:yyyy-MM-dd HH:mm:ss}'
+                FORMAT TabSeparated");
+
+            var lines = countResult.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            if (lines.Length > 0 && int.TryParse(lines[0], out var count))
+            {
+                return count;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get round count for player: {PlayerName}", playerName);
+        }
+        
+        return 0;
+    }
+
+    private List<TimeSeriesPoint> ParseTimeSeriesData(string result)
+    {
+        var points = new List<TimeSeriesPoint>();
+        
+        if (string.IsNullOrWhiteSpace(result))
+        {
+            _logger.LogWarning("Empty or null time series result from ClickHouse");
+            return points;
+        }
+
+        var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        _logger.LogDebug("Parsing {LineCount} lines of time series data", lines.Length);
+        
+        // Skip header row
+        var dataLines = lines.Skip(1);
+        
+        foreach (var line in dataLines)
+        {
+            try
+            {
+                var parts = line.Split('\t');
+                if (parts.Length >= 3)
+                {
+                    points.Add(new TimeSeriesPoint
+                    {
+                        Timestamp = DateTime.Parse(parts[0]),
+                        KdRatio = double.Parse(parts[1]),
+                        KillRate = double.Parse(parts[2])
+                    });
+                }
+                else
+                {
+                    _logger.LogWarning("Invalid time series line format (expected 3+ parts, got {PartCount}): {Line}", parts.Length, line);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to parse time series line: {Line}", line);
+            }
+        }
+        
+        _logger.LogDebug("Successfully parsed {PointCount} time series points", points.Count);
+        return points;
+    }
+
+
 }
+
 
 public class PlayerClickHouseStats
 {
@@ -800,4 +953,11 @@ public class PlayerClickHouseStats
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }
     public int TotalPlayTimeMinutes { get; set; }
+}
+
+public class TimeSeriesPoint
+{
+    public DateTime Timestamp { get; set; }
+    public double KdRatio { get; set; }
+    public double KillRate { get; set; }
 }

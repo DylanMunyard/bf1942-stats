@@ -108,6 +108,19 @@ public class PlayersController : ControllerBase
 
         var stats = await _playerStatsService.GetPlayerStatistics(playerName);
 
+        // Copy ranking from insights.ServerRankings to servers array
+        foreach (var server in stats.Servers)
+        {
+            server.Ranking = stats.Insights.ServerRankings
+                .FirstOrDefault(r => r.ServerGuid == server.ServerGuid);
+        }
+
+        // Ensure recentStats is not null before returning
+        if (stats.RecentStats == null)
+        {
+            stats.RecentStats = new Models.RecentStats();
+        }
+
         return Ok(stats);
     }
 
