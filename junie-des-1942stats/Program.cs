@@ -308,6 +308,16 @@ try
         ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
     });
 
+    builder.Services.AddHttpClient<PlayerProgressionService>(client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(5); // Longer timeout for complex analytics
+        client.DefaultRequestHeaders.Add("X-ClickHouse-User", "default");
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+    });
+
     // Register ClickHouse Write Services (use CLICKHOUSE_WRITE_URL)
     builder.Services.AddSingleton<PlayerMetricsWriteService>(sp =>
     {
@@ -358,6 +368,18 @@ try
 
         var logger = sp.GetRequiredService<ILogger<PlayerInsightsService>>();
         return new PlayerInsightsService(httpClient, clickHouseReadUrl, logger);
+    });
+
+    builder.Services.AddSingleton<PlayerProgressionService>(sp =>
+    {
+        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(PlayerProgressionService));
+
+        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
+
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerProgressionService ClickHouse Read URL: {clickHouseReadUrl}");
+
+        var logger = sp.GetRequiredService<ILogger<PlayerProgressionService>>();
+        return new PlayerProgressionService(httpClient, clickHouseReadUrl, logger);
     });
 
     // Register RealTimeAnalyticsService (read-only)
