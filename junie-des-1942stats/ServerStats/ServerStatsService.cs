@@ -112,12 +112,10 @@ public class ServerStatsService(
 
         statistics.TopScoresMonth = topScoresMonth;
 
-        // Get the last 5 rounds (unique maps) showing when each map was last played
-        // Use a fixed 5-hour window for recent map rotations (much faster than analyzing days of data)
-        var recentRoundsStart = DateTime.UtcNow.AddHours(-5);
-        var lastRounds = await GetLastRoundsAsync(server.Guid, 5);
+        // Get the last 20 rounds showing recent map rotations
+        var lastRounds = await GetLastRoundsAsync(server.Guid, 20);
 
-        statistics.LastRounds = lastRounds;
+        statistics.RecentRounds = lastRounds;
 
         // Set current map from the combined query
         statistics.CurrentMap = serverWithCurrentMap?.CurrentMap;

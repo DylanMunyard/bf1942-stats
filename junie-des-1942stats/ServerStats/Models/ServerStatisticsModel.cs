@@ -29,8 +29,8 @@ public class ServerStatistics
     // Top 10 best scores in the period (1 month)
     public List<TopScore> TopScoresMonth { get; set; } = new List<TopScore>();
 
-    // Last 5 rounds with session links
-    public List<RoundInfo> LastRounds { get; set; } = new List<RoundInfo>();
+    // Recent rounds (typically last 20) with session links
+    public List<RoundInfo> RecentRounds { get; set; } = new List<RoundInfo>();
 
     // Current map being played (null if server has no active players)
     public string? CurrentMap { get; set; }
