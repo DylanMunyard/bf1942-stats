@@ -14,7 +14,7 @@ public interface IBfListApiService
 
     // Helper methods for UI that need ServerSummary
     Task<ServerSummary[]> FetchServerSummariesAsync(string game, int perPage = 100, string? cursor = null, string? after = null);
-    Task<(ServerSummary[] servers, bool cacheHit)> FetchAllServerSummariesWithCacheStatusAsync(string game);
+    Task<ServerSummary[]> FetchAllServerSummariesWithCacheStatusAsync(string game);
     Task<ServerSummary[]> FetchAllServerSummariesAsync(string game);
     Task<ServerSummary?> FetchSingleServerSummaryAsync(string game, string serverIdentifier);
 }
@@ -25,7 +25,7 @@ public class BfListApiService : IBfListApiService
     private readonly ICacheService _cacheService;
     private readonly ILogger<BfListApiService> _logger;
 
-    private const int ServerListCacheSeconds = 20; // 20 seconds to match upstream API cache time
+    private const int ServerListCacheSeconds = 30; 
     private const int SingleServerCacheSeconds = 8; // 8 seconds for individual server updates
 
     public BfListApiService(IHttpClientFactory httpClientFactory, ICacheService cacheService, ILogger<BfListApiService> logger)
@@ -85,6 +85,61 @@ public class BfListApiService : IBfListApiService
     }
 
     public async Task<object[]> FetchAllServersAsync(string game)
+    {
+        if (game.ToLower() == "bf1942")
+        {
+            var cacheKey = $"raw_servers:{game}";
+            var cachedResult = await _cacheService.GetAsync<Bf1942ServerInfo[]>(cacheKey);
+
+            if (cachedResult != null)
+            {
+                _logger.LogDebug("Cache hit for raw servers of game {Game}", game);
+                return cachedResult.Cast<object>().ToArray();
+            }
+
+            _logger.LogDebug("Cache miss for raw servers of game {Game}", game);
+            var freshServers = await FetchAllServersFromApiAsync(game);
+            var typedServers = freshServers.Cast<Bf1942ServerInfo>().ToArray();
+            await _cacheService.SetAsync(cacheKey, typedServers, TimeSpan.FromSeconds(ServerListCacheSeconds));
+            return freshServers;
+        }
+        else if (game.ToLower() == "bfvietnam")
+        {
+            var cacheKey = $"raw_servers:{game}";
+            var cachedResult = await _cacheService.GetAsync<BfvietnamServerInfo[]>(cacheKey);
+
+            if (cachedResult != null)
+            {
+                _logger.LogDebug("Cache hit for raw servers of game {Game}", game);
+                return cachedResult.Cast<object>().ToArray();
+            }
+
+            _logger.LogDebug("Cache miss for raw servers of game {Game}", game);
+            var freshServers = await FetchAllServersFromApiAsync(game);
+            var typedServers = freshServers.Cast<BfvietnamServerInfo>().ToArray();
+            await _cacheService.SetAsync(cacheKey, typedServers, TimeSpan.FromSeconds(ServerListCacheSeconds));
+            return freshServers;
+        }
+        else // fh2
+        {
+            var cacheKey = $"raw_servers:{game}";
+            var cachedResult = await _cacheService.GetAsync<Fh2ServerInfo[]>(cacheKey);
+
+            if (cachedResult != null)
+            {
+                _logger.LogDebug("Cache hit for raw servers of game {Game}", game);
+                return cachedResult.Cast<object>().ToArray();
+            }
+
+            _logger.LogDebug("Cache miss for raw servers of game {Game}", game);
+            var freshServers = await FetchAllServersFromApiAsync(game);
+            var typedServers = freshServers.Cast<Fh2ServerInfo>().ToArray();
+            await _cacheService.SetAsync(cacheKey, typedServers, TimeSpan.FromSeconds(ServerListCacheSeconds));
+            return freshServers;
+        }
+    }
+
+    private async Task<object[]> FetchAllServersFromApiAsync(string game)
     {
         var allServers = new List<object>();
         string? cursor = null;
@@ -245,46 +300,15 @@ public class BfListApiService : IBfListApiService
         return ConvertToServerSummaries(servers, game);
     }
 
-    public async Task<(ServerSummary[] servers, bool cacheHit)> FetchAllServerSummariesWithCacheStatusAsync(string game)
+    public async Task<ServerSummary[]> FetchAllServerSummariesWithCacheStatusAsync(string game)
     {
-        var cacheKey = $"all_servers:{game}";
-        var cachedResult = await _cacheService.GetAsync<ServerSummary[]>(cacheKey);
-
-        if (cachedResult != null)
-        {
-            _logger.LogDebug("Cache hit for all servers of game {Game}", game);
-            
-            // Start async background refresh without awaiting
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    _logger.LogDebug("Starting background refresh for all servers of game {Game}", game);
-                    var servers = await FetchAllServersAsync(game);
-                    var summaries = ConvertToServerSummaries(servers, game);
-                    await _cacheService.SetAsync(cacheKey, summaries, TimeSpan.FromSeconds(ServerListCacheSeconds));
-                    _logger.LogDebug("Background refresh completed for all servers of game {Game}", game);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Background refresh failed for all servers of game {Game}", game);
-                }
-            });
-            
-            return (cachedResult, true);
-        }
-
-        _logger.LogDebug("Cache miss for all servers of game {Game}", game);
         var servers = await FetchAllServersAsync(game);
-        var summaries = ConvertToServerSummaries(servers, game);
-        await _cacheService.SetAsync(cacheKey, summaries, TimeSpan.FromSeconds(ServerListCacheSeconds));
-        return (summaries, false);
+        return ConvertToServerSummaries(servers, game);
     }
 
     public async Task<ServerSummary[]> FetchAllServerSummariesAsync(string game)
     {
-        var (servers, _) = await FetchAllServerSummariesWithCacheStatusAsync(game);
-        return servers;
+        return await FetchAllServerSummariesWithCacheStatusAsync(game);
     }
 
     public async Task<ServerSummary?> FetchSingleServerSummaryAsync(string game, string serverIdentifier)
@@ -429,10 +453,6 @@ public class ServerListResponse
     /// </summary>
     public string LastUpdated { get; set; } = "";
 
-    /// <summary>
-    /// Whether this response was served from cache
-    /// </summary>
-    public bool CacheHit { get; set; }
 }
 
 public class BfvietnamServersResponse : ServerListResponse
