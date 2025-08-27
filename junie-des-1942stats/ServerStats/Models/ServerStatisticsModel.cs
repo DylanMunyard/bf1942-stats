@@ -29,6 +29,12 @@ public class ServerStatistics
     // Top 10 best scores in the period (1 month)
     public List<TopScore> TopScoresMonth { get; set; } = new List<TopScore>();
 
+    // Most active players by time played (all time)
+    public List<PlayerActivity> MostActivePlayersByTimeAllTime { get; set; } = new List<PlayerActivity>();
+
+    // Top 10 best scores (all time)
+    public List<TopScore> TopScoresAllTime { get; set; } = new List<TopScore>();
+
     // Recent rounds (typically last 20) with session links
     public List<RoundInfo> RecentRounds { get; set; } = new List<RoundInfo>();
 

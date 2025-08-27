@@ -112,6 +112,17 @@ public class ServerStatsService(
 
         statistics.TopScoresMonth = topScoresMonth;
 
+        // Get most active players for all time (using a very early date instead of DateTime.MinValue)
+        var allTimeStart = new DateTime(2000, 1, 1); // Start from year 2000
+        var mostActivePlayersAllTime = await _playerRoundsService.GetMostActivePlayersAsync(server.Guid, allTimeStart, endPeriod, 10);
+
+        statistics.MostActivePlayersByTimeAllTime = mostActivePlayersAllTime;
+
+        // Get top scores for all time
+        var topScoresAllTime = await _playerRoundsService.GetTopScoresAsync(server.Guid, allTimeStart, endPeriod, 10);
+
+        statistics.TopScoresAllTime = topScoresAllTime;
+
         // Get the last 20 rounds showing recent map rotations
         var lastRounds = await GetLastRoundsAsync(server.Guid, 20);
 
