@@ -345,7 +345,7 @@ try
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRoundsReadService ClickHouse Read URL: {clickHouseReadUrl}");
 
         var logger = sp.GetRequiredService<ILogger<PlayerRoundsReadService>>();
-        return new PlayerRoundsReadService(httpClient, clickHouseReadUrl, logger);
+        return new PlayerRoundsReadService(httpClient, clickHouseReadUrl, logger, sp);
     });
 
     builder.Services.AddSingleton<PlayerInsightsService>(sp =>

@@ -20,7 +20,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
     private readonly ILogger<PlayerStatsService> _logger = logger;
 
     // Define a threshold for considering a player "active" (e.g., 5 minutes)
-    private readonly TimeSpan _activeThreshold = TimeSpan.FromMinutes(5);
+    private readonly TimeSpan _activeThreshold = TimeSpan.FromMinutes(1);
 
     public async Task<PagedResult<PlayerBasicInfo>> GetAllPlayersWithPaging(
         int page,
@@ -225,20 +225,19 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                 MapName = s.MapName,
                 GameType = s.GameType,
                 StartTime = s.StartTime,
+                LastSeenTime = s.LastSeenTime,
                 TotalKills = s.TotalKills,
                 TotalDeaths = s.TotalDeaths,
                 TotalScore = s.TotalScore,
-                IsActive = s.IsActive
+                IsActive = s.IsActive,
+                GameId = s.Server.GameId
             })
             .ToListAsync();
 
 
         // Get the current active session if any
-        var activeSession = await _dbContext.PlayerSessions
-            .Where(ps => ps.PlayerName == playerName && ps.IsActive)
-            .Include(s => s.Server)
-            .OrderByDescending(s => s.LastSeenTime)
-            .FirstOrDefaultAsync();
+        var activeSession = recentSessions
+            .FirstOrDefault(ps => ps.IsActive);
 
         // Check if player is currently active (seen within the last 5 minutes)
         bool isActive = activeSession != null &&
@@ -281,10 +280,10 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                 ? new ServerInfo
                 {
                     ServerGuid = activeSession.ServerGuid,
-                    ServerName = activeSession.Server.Name,
+                    ServerName = activeSession.ServerName,
                     SessionKills = activeSession.TotalKills,
                     SessionDeaths = activeSession.TotalDeaths,
-                    GameId = activeSession.Server.GameId,
+                    GameId = activeSession.GameId,
                     MapName = activeSession.MapName,
                 }
                 : null,
@@ -295,6 +294,17 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
 
         // Calculate time series trend stats over last 6 months
         stats.RecentStats = await CalculateTimeSeriesTrendAsync(playerName);
+
+        // Get best scores for different time periods
+        try
+        {
+            stats.BestScores = await _playerRoundsReadService.GetPlayerBestScoresAsync(playerName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get best scores for player: {PlayerName}", playerName);
+            stats.BestScores = new PlayerBestScores(); // Return empty object instead of null
+        }
 
         return stats;
     }

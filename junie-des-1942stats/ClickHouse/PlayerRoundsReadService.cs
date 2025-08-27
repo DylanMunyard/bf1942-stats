@@ -3,18 +3,24 @@ using junie_des_1942stats.ClickHouse.Models;
 using junie_des_1942stats.ClickHouse.Interfaces;
 using junie_des_1942stats.ClickHouse.Base;
 using junie_des_1942stats.ServerStats.Models;
+using junie_des_1942stats.PlayerStats.Models;
+using junie_des_1942stats.PlayerTracking;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 
 namespace junie_des_1942stats.ClickHouse;
 
 public class PlayerRoundsReadService : BaseClickHouseService, IClickHouseReader
 {
     private readonly ILogger<PlayerRoundsReadService> _logger;
+    private readonly IServiceProvider _serviceProvider;
 
-    public PlayerRoundsReadService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerRoundsReadService> logger)
+    public PlayerRoundsReadService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerRoundsReadService> logger, IServiceProvider serviceProvider)
         : base(httpClient, clickHouseUrl)
     {
         _logger = logger;
+        _serviceProvider = serviceProvider;
     }
 
     public async Task<string> ExecuteQueryAsync(string query)
@@ -188,6 +194,180 @@ ORDER BY day_date
 FORMAT TabSeparatedWithNames";
 
         return await ExecuteQueryAsync(query);
+    }
+
+    /// <summary>
+    /// Get player's best scores for different time periods: this week, last 30 days, and all time
+    /// </summary>
+    public async Task<PlayerBestScores> GetPlayerBestScoresAsync(string playerName)
+    {
+        var thisWeekStart = DateTime.UtcNow.AddDays(-(int)DateTime.UtcNow.DayOfWeek);
+        var last30DaysStart = DateTime.UtcNow.AddDays(-30);
+        
+        var query = $@"
+SELECT 
+    'ThisWeek' as period,
+    final_score,
+    final_kills,
+    final_deaths,
+    map_name,
+    server_guid,
+    round_end_time,
+    round_id
+FROM (
+    SELECT 
+        final_score,
+        final_kills,
+        final_deaths,
+        map_name,
+        server_guid,
+        round_end_time,
+        round_id
+    FROM player_rounds
+    WHERE player_name = '{playerName.Replace("'", "''")}'
+      AND final_score > 0
+      AND round_end_time >= '{thisWeekStart:yyyy-MM-dd HH:mm:ss}'
+    ORDER BY final_score DESC
+    LIMIT 3
+)
+
+UNION ALL
+
+SELECT 
+    'Last30Days' as period,
+    final_score,
+    final_kills,
+    final_deaths,
+    map_name,
+    server_guid,
+    round_end_time,
+    round_id
+FROM (
+    SELECT 
+        final_score,
+        final_kills,
+        final_deaths,
+        map_name,
+        server_guid,
+        round_end_time,
+        round_id
+    FROM player_rounds
+    WHERE player_name = '{playerName.Replace("'", "''")}'
+      AND final_score > 0
+      AND round_end_time >= '{last30DaysStart:yyyy-MM-dd HH:mm:ss}'
+    ORDER BY final_score DESC
+    LIMIT 3
+)
+
+UNION ALL
+
+SELECT 
+    'AllTime' as period,
+    final_score,
+    final_kills,
+    final_deaths,
+    map_name,
+    server_guid,
+    round_end_time,
+    round_id
+FROM (
+    SELECT 
+        final_score,
+        final_kills,
+        final_deaths,
+        map_name,
+        server_guid,
+        round_end_time,
+        round_id
+    FROM player_rounds
+    WHERE player_name = '{playerName.Replace("'", "''")}'
+      AND final_score > 0
+    ORDER BY final_score DESC
+    LIMIT 3
+)
+FORMAT TabSeparated";
+
+        var result = await ExecuteQueryAsync(query);
+        var bestScores = ParseBestScoresResult(result);
+        
+        // Replace server GUIDs with server names
+        await ReplaceServerGuidsWithNamesAsync(bestScores);
+        
+        return bestScores;
+    }
+
+    private PlayerBestScores ParseBestScoresResult(string result)
+    {
+        var bestScores = new PlayerBestScores();
+        
+        foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = line.Split('\t');
+            if (parts.Length >= 8)
+            {
+                var scoreDetail = new BestScoreDetail
+                {
+                    Score = int.TryParse(parts[1], out var score) ? score : 0,
+                    Kills = int.TryParse(parts[2], out var kills) ? kills : 0,
+                    Deaths = int.TryParse(parts[3], out var deaths) ? deaths : 0,
+                    MapName = parts[4],
+                    ServerGuid = parts[5], // Store the server GUID
+                    Timestamp = DateTime.TryParse(parts[6], out var date) ? date : DateTime.MinValue,
+                    RoundId = parts[7]
+                };
+
+                switch (parts[0])
+                {
+                    case "ThisWeek":
+                        bestScores.ThisWeek.Add(scoreDetail);
+                        break;
+                    case "Last30Days":
+                        bestScores.Last30Days.Add(scoreDetail);
+                        break;
+                    case "AllTime":
+                        bestScores.AllTime.Add(scoreDetail);
+                        break;
+                }
+            }
+        }
+
+        return bestScores;
+    }
+    
+    private async Task ReplaceServerGuidsWithNamesAsync(PlayerBestScores bestScores)
+    {
+        // Collect all unique server GUIDs from all time periods
+        var allScoreDetails = new List<BestScoreDetail>();
+        allScoreDetails.AddRange(bestScores.ThisWeek);
+        allScoreDetails.AddRange(bestScores.Last30Days);
+        allScoreDetails.AddRange(bestScores.AllTime);
+        
+        if (!allScoreDetails.Any())
+            return;
+            
+        var serverGuids = allScoreDetails
+            .Select(s => s.ServerGuid) // Use the ServerGuid field
+            .Where(guid => !string.IsNullOrEmpty(guid))
+            .Distinct()
+            .ToList();
+            
+        if (!serverGuids.Any())
+            return;
+        
+        // Look up server names from the database
+        using var scope = _serviceProvider.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
+        
+        var serverLookup = await dbContext.Servers
+            .Where(s => serverGuids.Contains(s.Guid))
+            .ToDictionaryAsync(s => s.Guid, s => s.Name);
+        
+        // Replace server names with actual server names (keep GUIDs unchanged)
+        foreach (var scoreDetail in allScoreDetails)
+        {
+            scoreDetail.ServerName =
+                serverLookup.TryGetValue(scoreDetail.ServerGuid, out var serverName) ? serverName : "";
+        }
     }
 
 }

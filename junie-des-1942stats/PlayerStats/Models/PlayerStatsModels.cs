@@ -54,6 +54,9 @@ public class PlayerTimeStatistics
     
     // Recent performance stats from last 60 sessions
     public RecentStats? RecentStats { get; set; }
+    
+    // Best scores for different time periods
+    public PlayerBestScores? BestScores { get; set; }
 }
 
 public class ServerInfo
@@ -79,6 +82,7 @@ public class Session
     public int TotalScore { get; set; } // Can track highest score or final score
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }
+    public string GameId { get; set; } = string.Empty;
 }
 
 public class SessionDetail
@@ -324,5 +328,24 @@ public class TrendDataPoint
     public double Value { get; set; }
 }
 
+// Best scores for different time periods
+public class PlayerBestScores
+{
+    public List<BestScoreDetail> ThisWeek { get; set; } = new();
+    public List<BestScoreDetail> Last30Days { get; set; } = new();
+    public List<BestScoreDetail> AllTime { get; set; } = new();
+}
+
+public class BestScoreDetail
+{
+    public int Score { get; set; }
+    public int Kills { get; set; }
+    public int Deaths { get; set; }
+    public string MapName { get; set; } = string.Empty;
+    public string ServerName { get; set; } = string.Empty;
+    public string ServerGuid { get; set; } = string.Empty;
+    public DateTime Timestamp { get; set; }
+    public string RoundId { get; set; } = string.Empty;
+}
 
 
