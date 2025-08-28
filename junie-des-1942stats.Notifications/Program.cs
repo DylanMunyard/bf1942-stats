@@ -3,12 +3,17 @@ using junie_des_1942stats.Notifications.Handlers;
 using junie_des_1942stats.Notifications.Hubs;
 using junie_des_1942stats.Notifications.Models;
 using junie_des_1942stats.Notifications.Services;
+using junie_des_1942stats.Notifications.Telemetry;
 using StackExchange.Redis;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
+using System.Diagnostics;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Exporter;
 
 // Configure Serilog
 var seqUrl = Environment.GetEnvironmentVariable("SEQ_URL") ?? "http://192.168.1.230:5341";
@@ -53,6 +58,42 @@ try
 
     // Add Serilog to the application
     builder.Host.UseSerilog();
+
+    // Configure OpenTelemetry
+    builder.Services.AddOpenTelemetry()
+        .ConfigureResource(resource => resource
+            .AddService(serviceName: serviceName, serviceVersion: "1.0.0")
+            .AddAttributes(new Dictionary<string, object>
+            {
+                ["deployment.environment"] = environment,
+                ["host.name"] = Environment.MachineName
+            }))
+        
+        .WithTracing(tracing =>
+            {
+                tracing.AddAspNetCoreInstrumentation(options =>
+                {
+                    // Don't trace health checks and SignalR negotiate
+                    options.Filter = httpContext =>
+                    {
+                        var path = httpContext.Request.Path.Value?.ToLower() ?? "";
+                        return !path.Contains("/health") && !path.Contains("/hub/negotiate");
+                    };
+                    options.RecordException = true;
+                });
+                tracing.AddHttpClientInstrumentation();
+                tracing.AddOtlpExporter(opt =>
+                {
+                    opt.Endpoint = new Uri($"{seqUrl}/ingest/otlp/v1/traces");
+                    opt.Protocol = OtlpExportProtocol.HttpProtobuf;
+                });
+                tracing.AddSource("junie-des-1942stats.Notifications.*");
+                tracing.AddSource(ActivitySources.Redis.Name);
+                tracing.AddSource(ActivitySources.Http.Name);
+                tracing.AddSource(ActivitySources.SignalR.Name);
+                tracing.AddSource(ActivitySources.Events.Name);
+            }
+        );
 
     // Configure JWT Authentication to validate self-minted tokens from main app
     var issuer = builder.Configuration["Jwt:Issuer"] ?? "";

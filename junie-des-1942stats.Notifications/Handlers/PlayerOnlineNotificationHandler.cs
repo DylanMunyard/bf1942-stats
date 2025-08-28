@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using junie_des_1942stats.Notifications.Models;
 using junie_des_1942stats.Notifications.Hubs;
 using junie_des_1942stats.Notifications.Services;
+using junie_des_1942stats.Notifications.Telemetry;
+using System.Diagnostics;
 
 namespace junie_des_1942stats.Notifications.Handlers;
 
@@ -27,6 +29,12 @@ public class PlayerOnlineNotificationHandler
 
     public async Task Handle(PlayerOnlineNotification notification, CancellationToken cancellationToken)
     {
+        using var activity = ActivitySources.Events.StartActivity("HandlePlayerOnlineNotification");
+        activity?.SetTag("player.name", notification.PlayerName);
+        activity?.SetTag("server.name", notification.ServerName);
+        activity?.SetTag("server.guid", notification.ServerGuid);
+        activity?.SetTag("map.name", notification.MapName);
+        
         try
         {
             _logger.LogInformation("Processing player online notification for {PlayerName} on {ServerName}",
@@ -34,8 +42,10 @@ public class PlayerOnlineNotificationHandler
 
             // Get users who have this player as a buddy
             var usersToNotify = await _buddyApiService.GetUsersWithBuddy(notification.PlayerName);
+            var usersList = usersToNotify.ToList();
+            activity?.SetTag("users_to_notify.count", usersList.Count);
 
-            if (!usersToNotify.Any())
+            if (!usersList.Any())
             {
                 _logger.LogDebug("No users found with {PlayerName} as buddy", notification.PlayerName);
                 return;
@@ -51,31 +61,43 @@ public class PlayerOnlineNotificationHandler
                 Message = $"{notification.PlayerName} is now online on {notification.ServerName} playing {notification.MapName}"
             };
 
+            var totalNotificationsSent = 0;
+            
             // Send notifications to all connected users who have this buddy
-            foreach (var userEmail in usersToNotify)
+            foreach (var userEmail in usersList)
             {
                 var connectionIds = await _buddyNotificationService.GetUserConnectionIds(userEmail);
                 foreach (var connectionId in connectionIds)
                 {
                     const string eventName = "BuddyOnline";
                     _logger.LogInformation("Sending SignalR event {EventName} to connection {ConnectionId} for user {UserEmail}", eventName, connectionId, userEmail);
+                    
+                    using var signalRActivity = ActivitySources.SignalR.StartActivity("SendBuddyOnlineNotification");
+                    signalRActivity?.SetTag("event.name", eventName);
+                    signalRActivity?.SetTag("connection.id", connectionId);
+                    signalRActivity?.SetTag("user.email", userEmail);
+                    
                     try
                     {
                         await _hubContext.Clients.Client(connectionId).SendAsync(eventName, message, cancellationToken);
+                        totalNotificationsSent++;
                         _logger.LogInformation("Sent SignalR event {EventName} to connection {ConnectionId}", eventName, connectionId);
                     }
                     catch (Exception ex)
                     {
+                        signalRActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                         _logger.LogError(ex, "Failed to send SignalR event {EventName} to connection {ConnectionId}", eventName, connectionId);
                     }
                 }
             }
 
+            activity?.SetTag("notifications_sent.count", totalNotificationsSent);
             _logger.LogInformation("Sent buddy online notifications to {UserCount} users for {PlayerName}",
-                usersToNotify.Count(), notification.PlayerName);
+                usersList.Count, notification.PlayerName);
         }
         catch (Exception ex)
         {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             _logger.LogError(ex, "Error handling player online notification for {PlayerName}", notification.PlayerName);
         }
     }

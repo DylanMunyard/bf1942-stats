@@ -5,6 +5,8 @@ using StackExchange.Redis;
 using System.Text.Json;
 using junie_des_1942stats.Notifications.Services;
 using junie_des_1942stats.Notifications.Models;
+using junie_des_1942stats.Notifications.Telemetry;
+using System.Diagnostics;
 
 namespace junie_des_1942stats.Notifications.Consumers
 {
@@ -117,6 +119,8 @@ namespace junie_des_1942stats.Notifications.Consumers
 
         private async Task ProcessPlayerEvent(RedisValue jsonMessage)
         {
+            using var activity = ActivitySources.Events.StartActivity("ProcessPlayerEvent");
+            
             try
             {
                 using var scope = _scopeFactory.CreateScope();
@@ -125,7 +129,10 @@ namespace junie_des_1942stats.Notifications.Consumers
                 var notification = CreateNotification(jsonMessage);
                 if (notification != null)
                 {
-                    _logger.LogDebug("Processing event of type {EventType}", notification.GetType().Name);
+                    var eventType = notification.GetType().Name;
+                    activity?.SetTag("event.type", eventType);
+                    
+                    _logger.LogDebug("Processing event of type {EventType}", eventType);
 
                     // Publish using the concrete type to ensure proper handler resolution
                     await (notification switch
@@ -135,15 +142,17 @@ namespace junie_des_1942stats.Notifications.Consumers
                         _ => Task.CompletedTask
                     });
 
-                    _logger.LogDebug("Successfully processed {EventType}", notification.GetType().Name);
+                    _logger.LogDebug("Successfully processed {EventType}", eventType);
                 }
                 else
                 {
+                    activity?.SetStatus(ActivityStatusCode.Error, "Failed to parse event");
                     _logger.LogWarning("Failed to parse event from Redis message: {Message}", jsonMessage.ToString());
                 }
             }
             catch (Exception ex)
             {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                 _logger.LogError(ex, "Error processing Pub/Sub message");
             }
         }

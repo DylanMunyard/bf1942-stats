@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using junie_des_1942stats.Notifications.Services;
+using junie_des_1942stats.Notifications.Telemetry;
 using System.Security.Claims;
+using System.Diagnostics;
 
 namespace junie_des_1942stats.Notifications.Hubs;
 
@@ -22,7 +24,12 @@ public class NotificationHub : Hub
 
     public override async Task OnConnectedAsync()
     {
+        using var activity = ActivitySources.SignalR.StartActivity("OnConnectedAsync");
+        
         var userEmail = GetUserEmail();
+        activity?.SetTag("user.email", userEmail);
+        activity?.SetTag("connection.id", Context.ConnectionId);
+        
         if (!string.IsNullOrEmpty(userEmail))
         {
             await _buddyNotificationService.AddUserConnection(userEmail, Context.ConnectionId);
@@ -30,6 +37,7 @@ public class NotificationHub : Hub
         }
         else
         {
+            activity?.SetStatus(ActivityStatusCode.Error, "User connected without valid email");
             _logger.LogWarning("User connected without valid email: {ConnectionId}", Context.ConnectionId);
         }
 
@@ -38,7 +46,13 @@ public class NotificationHub : Hub
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
+        using var activity = ActivitySources.SignalR.StartActivity("OnDisconnectedAsync");
+        
         var userEmail = GetUserEmail();
+        activity?.SetTag("user.email", userEmail);
+        activity?.SetTag("connection.id", Context.ConnectionId);
+        activity?.SetTag("has_exception", exception != null);
+        
         if (!string.IsNullOrEmpty(userEmail))
         {
             await _buddyNotificationService.RemoveUserConnection(userEmail, Context.ConnectionId);
@@ -47,6 +61,7 @@ public class NotificationHub : Hub
 
         if (exception != null)
         {
+            activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
             _logger.LogError(exception, "User disconnected due to error: {ConnectionId}", Context.ConnectionId);
         }
 
