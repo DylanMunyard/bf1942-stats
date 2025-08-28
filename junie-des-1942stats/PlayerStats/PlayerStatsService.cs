@@ -834,21 +834,21 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         try
         {
             _logger.LogDebug("Calculating time series trend data for player: {PlayerName}", playerName);
-            
+
             // Look back 6 months for trend analysis
             var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
-            
+
             // Get time series data from ClickHouse
             var timeSeriesResult = await _playerRoundsReadService.GetPlayerTimeSeriesTrendAsync(playerName, sixMonthsAgo);
 
-            _logger.LogDebug("ClickHouse time series result for {PlayerName}: {Result}", playerName, 
+            _logger.LogDebug("ClickHouse time series result for {PlayerName}: {Result}", playerName,
                 timeSeriesResult?.Substring(0, Math.Min(200, timeSeriesResult?.Length ?? 0)));
 
             // Parse time series data
             var trendPoints = ParseTimeSeriesData(timeSeriesResult ?? "");
             if (!trendPoints.Any())
             {
-                _logger.LogWarning("No time series data found for player: {PlayerName}. Raw result: {RawResult}", 
+                _logger.LogWarning("No time series data found for player: {PlayerName}. Raw result: {RawResult}",
                     playerName, timeSeriesResult);
                 return null;
             }
@@ -861,15 +861,15 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                 AnalysisPeriodStart = sixMonthsAgo,
                 AnalysisPeriodEnd = DateTime.UtcNow,
                 TotalRoundsAnalyzed = totalRounds,
-                KdRatioTrend = trendPoints.Select(tp => new TrendDataPoint 
-                { 
-                    Timestamp = tp.Timestamp, 
-                    Value = tp.KdRatio 
+                KdRatioTrend = trendPoints.Select(tp => new TrendDataPoint
+                {
+                    Timestamp = tp.Timestamp,
+                    Value = tp.KdRatio
                 }).ToList(),
-                KillRateTrend = trendPoints.Select(tp => new TrendDataPoint 
-                { 
-                    Timestamp = tp.Timestamp, 
-                    Value = tp.KillRate 
+                KillRateTrend = trendPoints.Select(tp => new TrendDataPoint
+                {
+                    Timestamp = tp.Timestamp,
+                    Value = tp.KillRate
                 }).ToList()
             };
 
@@ -903,14 +903,14 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         {
             _logger.LogWarning(ex, "Failed to get round count for player: {PlayerName}", playerName);
         }
-        
+
         return 0;
     }
 
     private List<TimeSeriesPoint> ParseTimeSeriesData(string result)
     {
         var points = new List<TimeSeriesPoint>();
-        
+
         if (string.IsNullOrWhiteSpace(result))
         {
             _logger.LogWarning("Empty or null time series result from ClickHouse");
@@ -919,10 +919,10 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
 
         var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         _logger.LogDebug("Parsing {LineCount} lines of time series data", lines.Length);
-        
+
         // Skip header row
         var dataLines = lines.Skip(1);
-        
+
         foreach (var line in dataLines)
         {
             try
@@ -947,7 +947,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                 _logger.LogWarning(ex, "Failed to parse time series line: {Line}", line);
             }
         }
-        
+
         _logger.LogDebug("Successfully parsed {PointCount} time series points", points.Count);
         return points;
     }

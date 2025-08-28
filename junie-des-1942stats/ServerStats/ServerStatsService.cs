@@ -677,7 +677,7 @@ FORMAT TabSeparated";
         _logger.LogDebug("DATA CHECK RESULT:\n{Result}", dataCheckResult);
 
         var timeGrouping = GetClickHouseTimeGrouping(granularity);
-        
+
         // For 7 days and 1 month, use simple aggregation
         // For 3+ months, use averaging approach to avoid inflating numbers
         string query;

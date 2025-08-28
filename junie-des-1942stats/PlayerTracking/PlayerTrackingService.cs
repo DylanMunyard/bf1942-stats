@@ -113,7 +113,7 @@ public class PlayerTrackingService
                 {
                     // Calculate playtime BEFORE updating session data
                     var additionalPlayTime = CalculatePlayTime(matchingSession, timestamp);
-                    
+
                     // Update existing session for current map
                     UpdateSessionData(matchingSession, playerInfo, server, timestamp);
                     sessionsToUpdate.Add(matchingSession);

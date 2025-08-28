@@ -25,7 +25,7 @@ public class BfListApiService : IBfListApiService
     private readonly ICacheService _cacheService;
     private readonly ILogger<BfListApiService> _logger;
 
-    private const int ServerListCacheSeconds = 30; 
+    private const int ServerListCacheSeconds = 30;
     private const int SingleServerCacheSeconds = 8; // 8 seconds for individual server updates
 
     public BfListApiService(IHttpClientFactory httpClientFactory, ICacheService cacheService, ILogger<BfListApiService> logger)
@@ -536,4 +536,44 @@ public class ServerSummary
     /// Team information
     /// </summary>
     public TeamInfo[] Teams { get; set; } = [];
+
+    /// <summary>
+    /// Server country from geo location data
+    /// </summary>
+    public string? Country { get; set; }
+
+    /// <summary>
+    /// Server region from geo location data
+    /// </summary>
+    public string? Region { get; set; }
+
+    /// <summary>
+    /// Server city from geo location data
+    /// </summary>
+    public string? City { get; set; }
+
+    /// <summary>
+    /// Server location coordinates (latitude,longitude) from geo location data
+    /// </summary>
+    public string? Loc { get; set; }
+
+    /// <summary>
+    /// Server timezone from geo location data
+    /// </summary>
+    public string? Timezone { get; set; }
+
+    /// <summary>
+    /// Server organization/ASN from geo location data
+    /// </summary>
+    public string? Org { get; set; }
+
+    /// <summary>
+    /// Server postal code from geo location data
+    /// </summary>
+    public string? Postal { get; set; }
+
+    /// <summary>
+    /// Date when geo location was last looked up
+    /// </summary>
+    public DateTime? GeoLookupDate { get; set; }
 }

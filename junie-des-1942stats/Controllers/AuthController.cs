@@ -398,7 +398,7 @@ public class AuthController : ControllerBase
             await _context.SaveChangesAsync();
 
             userFavoriteServer.Server = server;
-            
+
             return CreatedAtAction(nameof(GetFavoriteServers), await EnrichFavoriteServerInfoAsync(userFavoriteServer));
         }
         catch (Exception ex)

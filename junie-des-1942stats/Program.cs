@@ -76,7 +76,7 @@ try
 
     // Register OAuth services
     builder.Services.AddScoped<junie_des_1942stats.Services.OAuth.IGoogleAuthService, junie_des_1942stats.Services.OAuth.GoogleAuthService>();
-    
+
     // CORS
     var allowedOrigin = builder.Configuration["Cors:AllowedOrigins"];
     builder.Services.AddCors(options =>
@@ -401,13 +401,13 @@ try
             return null!;
         }
     });
-    
+
     builder.Services.AddSingleton<IDatabase>(sp =>
     {
         var multiplexer = sp.GetRequiredService<IConnectionMultiplexer>();
         return multiplexer?.GetDatabase()!;
     });
-    
+
     builder.Services.AddSingleton<IPlayerEventPublisher, PlayerEventPublisher>();
 
     // Register caching services

@@ -15,7 +15,7 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<UserPlayerName> UserPlayerNames { get; set; }
     public DbSet<UserFavoriteServer> UserFavoriteServers { get; set; }
     public DbSet<UserBuddy> UserBuddies { get; set; }
-        public DbSet<RefreshToken> RefreshTokens { get; set; }
+    public DbSet<RefreshToken> RefreshTokens { get; set; }
 
     public PlayerTrackerDbContext(DbContextOptions<PlayerTrackerDbContext> options)
         : base(options)

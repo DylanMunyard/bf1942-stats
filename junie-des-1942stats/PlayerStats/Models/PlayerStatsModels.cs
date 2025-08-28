@@ -51,10 +51,10 @@ public class PlayerTimeStatistics
 
     // Server-specific insights (replaces BestScores)
     public List<ServerInsight> Servers { get; set; } = new();
-    
+
     // Recent performance stats from last 60 sessions
     public RecentStats? RecentStats { get; set; }
-    
+
     // Best scores for different time periods
     public PlayerBestScores? BestScores { get; set; }
 }
@@ -316,7 +316,7 @@ public class RecentStats
     public DateTime AnalysisPeriodStart { get; set; }
     public DateTime AnalysisPeriodEnd { get; set; }
     public int TotalRoundsAnalyzed { get; set; }
-    
+
     // Time series data for K/D ratio and kill rate trends
     public List<TrendDataPoint> KdRatioTrend { get; set; } = new();
     public List<TrendDataPoint> KillRateTrend { get; set; } = new();

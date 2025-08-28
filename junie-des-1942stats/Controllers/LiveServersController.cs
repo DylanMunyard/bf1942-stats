@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using junie_des_1942stats.Services;
 using Microsoft.Extensions.Logging;
+using junie_des_1942stats.PlayerTracking;
+using Microsoft.EntityFrameworkCore;
 
 namespace junie_des_1942stats.Controllers;
 
@@ -10,15 +12,18 @@ public class LiveServersController : ControllerBase
 {
     private readonly IBfListApiService _bfListApiService;
     private readonly ILogger<LiveServersController> _logger;
+    private readonly PlayerTrackerDbContext _dbContext;
 
     private static readonly string[] ValidGames = ["bf1942", "fh2", "bfvietnam"];
 
     public LiveServersController(
         IBfListApiService bfListApiService,
-        ILogger<LiveServersController> logger)
+        ILogger<LiveServersController> logger,
+        PlayerTrackerDbContext dbContext)
     {
         _bfListApiService = bfListApiService;
         _logger = logger;
+        _dbContext = dbContext;
     }
 
     /// <summary>
@@ -38,9 +43,12 @@ public class LiveServersController : ControllerBase
         {
             var servers = await _bfListApiService.FetchAllServerSummariesWithCacheStatusAsync(game);
 
+            // Enrich servers with geo location data from database
+            var enrichedServers = await EnrichServersWithGeoLocationAsync(servers);
+
             var response = new ServerListResponse
             {
-                Servers = servers,
+                Servers = enrichedServers,
                 LastUpdated = DateTime.UtcNow.ToString("O")
             };
 
@@ -88,7 +96,11 @@ public class LiveServersController : ControllerBase
                 return NotFound($"Server {serverIdentifier} not found");
             }
 
-            return Ok(server);
+            // Enrich server with geo location data from database
+            var enrichedServers = await EnrichServersWithGeoLocationAsync(new[] { server });
+            var enrichedServer = enrichedServers.FirstOrDefault();
+
+            return Ok(enrichedServer ?? server);
         }
         catch (HttpRequestException ex)
         {
@@ -109,5 +121,34 @@ public class LiveServersController : ControllerBase
         return !string.IsNullOrEmpty(ip) &&
                System.Net.IPAddress.TryParse(ip, out _) &&
                port > 0 && port <= 65535;
+    }
+
+    private async Task<ServerSummary[]> EnrichServersWithGeoLocationAsync(ServerSummary[] servers)
+    {
+        if (servers.Length == 0) return servers;
+
+        // Create lookup table for server geo data by GUID
+        var serverGuids = servers.Select(s => s.Guid).ToArray();
+        var geoData = await _dbContext.Servers
+            .Where(gs => serverGuids.Contains(gs.Guid))
+            .ToDictionaryAsync(gs => gs.Guid, gs => gs);
+
+        // Enrich servers with geo location data
+        foreach (var server in servers)
+        {
+            if (geoData.TryGetValue(server.Guid, out var gameServer))
+            {
+                server.Country = gameServer.Country;
+                server.Region = gameServer.Region;
+                server.City = gameServer.City;
+                server.Loc = gameServer.Loc;
+                server.Timezone = gameServer.Timezone;
+                server.Org = gameServer.Org;
+                server.Postal = gameServer.Postal;
+                server.GeoLookupDate = gameServer.GeoLookupDate;
+            }
+        }
+
+        return servers;
     }
 }

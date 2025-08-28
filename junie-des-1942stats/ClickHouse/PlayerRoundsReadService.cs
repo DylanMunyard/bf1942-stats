@@ -203,7 +203,7 @@ FORMAT TabSeparatedWithNames";
     {
         var thisWeekStart = DateTime.UtcNow.AddDays(-(int)DateTime.UtcNow.DayOfWeek);
         var last30DaysStart = DateTime.UtcNow.AddDays(-30);
-        
+
         var query = $@"
 SELECT 
     'ThisWeek' as period,
@@ -289,17 +289,17 @@ FORMAT TabSeparated";
 
         var result = await ExecuteQueryAsync(query);
         var bestScores = ParseBestScoresResult(result);
-        
+
         // Replace server GUIDs with server names
         await ReplaceServerGuidsWithNamesAsync(bestScores);
-        
+
         return bestScores;
     }
 
     private PlayerBestScores ParseBestScoresResult(string result)
     {
         var bestScores = new PlayerBestScores();
-        
+
         foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             var parts = line.Split('\t');
@@ -333,7 +333,7 @@ FORMAT TabSeparated";
 
         return bestScores;
     }
-    
+
     private async Task ReplaceServerGuidsWithNamesAsync(PlayerBestScores bestScores)
     {
         // Collect all unique server GUIDs from all time periods
@@ -341,27 +341,27 @@ FORMAT TabSeparated";
         allScoreDetails.AddRange(bestScores.ThisWeek);
         allScoreDetails.AddRange(bestScores.Last30Days);
         allScoreDetails.AddRange(bestScores.AllTime);
-        
+
         if (!allScoreDetails.Any())
             return;
-            
+
         var serverGuids = allScoreDetails
             .Select(s => s.ServerGuid) // Use the ServerGuid field
             .Where(guid => !string.IsNullOrEmpty(guid))
             .Distinct()
             .ToList();
-            
+
         if (!serverGuids.Any())
             return;
-        
+
         // Look up server names from the database
         using var scope = _serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
-        
+
         var serverLookup = await dbContext.Servers
             .Where(s => serverGuids.Contains(s.Guid))
             .ToDictionaryAsync(s => s.Guid, s => s.Name);
-        
+
         // Replace server names with actual server names (keep GUIDs unchanged)
         foreach (var scoreDetail in allScoreDetails)
         {
