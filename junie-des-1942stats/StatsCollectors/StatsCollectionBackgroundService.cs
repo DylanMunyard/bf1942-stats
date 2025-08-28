@@ -6,6 +6,7 @@ using junie_des_1942stats.PlayerTracking;
 using junie_des_1942stats.Bflist;
 using junie_des_1942stats.ClickHouse;
 using junie_des_1942stats.Services;
+using junie_des_1942stats.Telemetry;
 using Serilog.Context;
 
 namespace junie_des_1942stats.StatsCollectors;
@@ -66,6 +67,11 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
 
         var currentCycle = Interlocked.Increment(ref _cycleCount);
 
+        using var activity = ActivitySources.StatsCollection.StartActivity("StatsCollection.Cycle");
+        activity?.SetTag("cycle_number", currentCycle);
+        activity?.SetTag("collection_interval_seconds", _collectionInterval.TotalSeconds);
+        activity?.SetTag("enable_round_syncing", _enableRoundSyncing);
+
         var cycleStopwatch = Stopwatch.StartNew();
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Starting stats collection cycle #{currentCycle}...");
 
@@ -122,6 +128,11 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
                 await playerMetricsService.StoreBatchedPlayerMetricsAsync(allServers, timestamp);
                 clickHouseStopwatch.Stop();
                 Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse batch storage: {clickHouseStopwatch.ElapsedMilliseconds}ms ({allServers.Count} servers)");
+                
+                activity?.SetTag("total_servers_processed", allServers.Count);
+                activity?.SetTag("bf1942_servers_processed", bf1942Servers.Count);
+                activity?.SetTag("fh2_servers_processed", fh2Servers.Count);
+                activity?.SetTag("bfvietnam_servers_processed", bfvietnamServers.Count);
 
                 // 5. Sync completed PlayerSessions to ClickHouse player_rounds
                 if (_enableRoundSyncing)
@@ -135,11 +146,15 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
 
                         roundsSyncStopwatch.Stop();
                         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRounds sync: {result.ProcessedCount} records ({roundsSyncStopwatch.ElapsedMilliseconds}ms)");
+                        activity?.SetTag("rounds_synced_count", result.ProcessedCount);
+                        activity?.SetTag("rounds_sync_duration_ms", roundsSyncStopwatch.ElapsedMilliseconds);
                     }
                     catch (Exception ex)
                     {
                         roundsSyncStopwatch.Stop();
                         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRounds sync failed: {ex.Message} ({roundsSyncStopwatch.ElapsedMilliseconds}ms)");
+                        activity?.SetTag("rounds_sync_error", ex.Message);
+                        activity?.SetStatus(ActivityStatusCode.Error, $"PlayerRounds sync failed: {ex.Message}");
                     }
                 }
                 else
@@ -151,11 +166,14 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         catch (Exception ex)
         {
             Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Error in collection cycle: {ex}");
+            activity?.SetTag("error", ex.Message);
+            activity?.SetStatus(ActivityStatusCode.Error, $"Collection cycle failed: {ex.Message}");
         }
         finally
         {
             cycleStopwatch.Stop();
             Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Cycle #{currentCycle} completed in {cycleStopwatch.ElapsedMilliseconds}ms");
+            activity?.SetTag("cycle_duration_ms", cycleStopwatch.ElapsedMilliseconds);
             Interlocked.Exchange(ref _isRunning, 0);
         }
     }

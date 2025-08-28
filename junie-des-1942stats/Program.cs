@@ -118,6 +118,7 @@ try
                 tracing.AddSource(ActivitySources.BfListApi.Name);
                 tracing.AddSource(ActivitySources.Cache.Name);
                 tracing.AddSource(ActivitySources.ClickHouse.Name);
+                tracing.AddSource(ActivitySources.StatsCollection.Name);
             }
         );
 
