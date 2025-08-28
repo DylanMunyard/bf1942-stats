@@ -4,6 +4,8 @@ using junie_des_1942stats.ClickHouse;
 using junie_des_1942stats.Caching;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using junie_des_1942stats.Telemetry;
+using System.Diagnostics;
 
 namespace junie_des_1942stats.PlayerStats;
 

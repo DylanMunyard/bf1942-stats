@@ -8,6 +8,8 @@ using junie_des_1942stats.PlayerTracking;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
+using junie_des_1942stats.Telemetry;
+using System.Diagnostics;
 
 namespace junie_des_1942stats.ClickHouse;
 
@@ -33,6 +35,10 @@ public class PlayerRoundsReadService : BaseClickHouseService, IClickHouseReader
     /// </summary>
     public async Task<string> GetPlayerStatsAsync(string? playerName = null, DateTime? fromDate = null, DateTime? toDate = null)
     {
+        using var activity = ActivitySources.ClickHouse.StartActivity("GetPlayerStats");
+        activity?.SetTag("player.name", playerName);
+        activity?.SetTag("query.from_date", fromDate?.ToString("yyyy-MM-dd HH:mm:ss"));
+        activity?.SetTag("query.to_date", toDate?.ToString("yyyy-MM-dd HH:mm:ss"));
         var conditions = new List<string>();
 
         if (!string.IsNullOrEmpty(playerName))
@@ -201,6 +207,8 @@ FORMAT TabSeparatedWithNames";
     /// </summary>
     public async Task<PlayerBestScores> GetPlayerBestScoresAsync(string playerName)
     {
+        using var activity = ActivitySources.ClickHouse.StartActivity("GetPlayerBestScores");
+        activity?.SetTag("player.name", playerName);
         var thisWeekStart = DateTime.UtcNow.AddDays(-(int)DateTime.UtcNow.DayOfWeek);
         var last30DaysStart = DateTime.UtcNow.AddDays(-30);
 

@@ -21,6 +21,11 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using junie_des_1942stats.Services.Auth;
+using System.Diagnostics;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Resources;
+using junie_des_1942stats.Telemetry;
+using OpenTelemetry.Exporter;
 
 // Configure Serilog
 var seqUrl = Environment.GetEnvironmentVariable("SEQ_URL") ?? "http://192.168.1.230:5341";
@@ -67,6 +72,54 @@ try
 
     // Add Serilog to the application
     builder.Host.UseSerilog();
+
+    // Configure OpenTelemetry
+    builder.Services.AddOpenTelemetry()
+        .ConfigureResource(resource => resource
+            .AddService(serviceName: serviceName, serviceVersion: "1.0.0")
+            .AddAttributes(new Dictionary<string, object>
+            {
+                ["deployment.environment"] = environment,
+                ["host.name"] = Environment.MachineName
+            }))
+        
+        .WithTracing(tracing =>
+            {
+                tracing.AddAspNetCoreInstrumentation(options =>
+                {
+                    // Don't trace health checks and metrics endpoints
+                    options.Filter = httpContext =>
+                    {
+                        var path = httpContext.Request.Path.Value?.ToLower() ?? "";
+                        return !path.Contains("/health") && !path.Contains("/metrics") && !path.Contains("/swagger");
+                    };
+                    options.RecordException = true;
+                });
+                tracing.AddHttpClientInstrumentation();
+                tracing.AddEntityFrameworkCoreInstrumentation(options =>
+                {
+                    options.SetDbStatementForStoredProcedure = true;
+                    options.SetDbStatementForText = true;
+                });
+                tracing.AddSqlClientInstrumentation(options =>
+                {
+                    options.SetDbStatementForStoredProcedure = true;
+                    options.SetDbStatementForText = true;
+                    options.RecordException = true;
+                });
+                tracing.AddOtlpExporter(opt =>
+                {
+                    opt.Endpoint = new Uri($"{seqUrl}/ingest/otlp/v1/traces");
+                    opt.Protocol = OtlpExportProtocol.HttpProtobuf;
+                });
+                tracing.AddSource("junie-des-1942stats.*");
+                tracing.AddSource(ActivitySources.PlayerStats.Name);
+                tracing.AddSource(ActivitySources.Database.Name);
+                tracing.AddSource(ActivitySources.BfListApi.Name);
+                tracing.AddSource(ActivitySources.Cache.Name);
+                tracing.AddSource(ActivitySources.ClickHouse.Name);
+            }
+        );
 
     // Add services to the container
     builder.Services.AddControllers().AddJsonOptions(o =>

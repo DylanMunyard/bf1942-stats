@@ -5,6 +5,8 @@ using ClickHouse.Client.ADO;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using junie_des_1942stats.ClickHouse.Models;
+using junie_des_1942stats.Telemetry;
+using System.Diagnostics;
 
 namespace junie_des_1942stats.ClickHouse;
 
@@ -48,6 +50,10 @@ public class ServerStatisticsService : IDisposable
 
     public async Task<List<ServerStatistics>> GetServerStats(string playerName, TimePeriod period, string serverGuid)
     {
+        using var activity = ActivitySources.ClickHouse.StartActivity("GetServerStats");
+        activity?.SetTag("player.name", playerName);
+        activity?.SetTag("server.guid", serverGuid);
+        activity?.SetTag("time.period", period.ToString());
         try
         {
             if (_connection.State != System.Data.ConnectionState.Open)

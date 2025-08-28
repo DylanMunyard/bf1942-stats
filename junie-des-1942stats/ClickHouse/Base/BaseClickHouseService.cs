@@ -1,6 +1,8 @@
 using System.Net.Http;
 using System.Text;
 using junie_des_1942stats.ClickHouse.Interfaces;
+using junie_des_1942stats.Telemetry;
+using System.Diagnostics;
 
 namespace junie_des_1942stats.ClickHouse.Base;
 
@@ -17,26 +19,46 @@ public abstract class BaseClickHouseService
 
     protected async Task<string> ExecuteQueryInternalAsync(string query)
     {
+        using var activity = ActivitySources.ClickHouse.StartActivity("ClickHouse.Query");
+        activity?.SetTag("clickhouse.url", _clickHouseUrl);
+        activity?.SetTag("clickhouse.query", query.Length > 500 ? query[..500] + "..." : query);
+        activity?.SetTag("clickhouse.operation", "query");
+
         var content = new StringContent(query, Encoding.UTF8, "text/plain");
         var response = await _httpClient.PostAsync($"{_clickHouseUrl}/", content);
+
+        activity?.SetTag("clickhouse.status_code", (int)response.StatusCode);
 
         if (!response.IsSuccessStatusCode)
         {
             var errorContent = await response.Content.ReadAsStringAsync();
+            activity?.SetTag("clickhouse.error", errorContent);
+            activity?.SetStatus(ActivityStatusCode.Error, $"ClickHouse query failed: {response.StatusCode}");
             throw new Exception($"ClickHouse query failed: {response.StatusCode} - {errorContent}");
         }
 
-        return await response.Content.ReadAsStringAsync();
+        var result = await response.Content.ReadAsStringAsync();
+        activity?.SetTag("clickhouse.result_size", result.Length);
+        return result;
     }
 
     protected async Task ExecuteCommandInternalAsync(string command)
     {
+        using var activity = ActivitySources.ClickHouse.StartActivity("ClickHouse.Command");
+        activity?.SetTag("clickhouse.url", _clickHouseUrl);
+        activity?.SetTag("clickhouse.command", command.Length > 500 ? command[..500] + "..." : command);
+        activity?.SetTag("clickhouse.operation", "command");
+
         var content = new StringContent(command, Encoding.UTF8, "text/plain");
         var response = await _httpClient.PostAsync($"{_clickHouseUrl}/", content);
+
+        activity?.SetTag("clickhouse.status_code", (int)response.StatusCode);
 
         if (!response.IsSuccessStatusCode)
         {
             var errorContent = await response.Content.ReadAsStringAsync();
+            activity?.SetTag("clickhouse.error", errorContent);
+            activity?.SetStatus(ActivityStatusCode.Error, $"ClickHouse command failed: {response.StatusCode}");
             throw new Exception($"ClickHouse command failed: {response.StatusCode} - {errorContent}");
         }
     }

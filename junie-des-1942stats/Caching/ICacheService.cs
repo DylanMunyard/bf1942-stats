@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using junie_des_1942stats.Telemetry;
+using System.Diagnostics;
 
 namespace junie_des_1942stats.Caching;
 
@@ -30,19 +32,29 @@ public class CacheService : ICacheService
 
     public async Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default) where T : class
     {
+        using var activity = ActivitySources.Cache.StartActivity("Cache.Get");
+        activity?.SetTag("cache.key", key);
+        activity?.SetTag("cache.type", typeof(T).Name);
+        
         try
         {
             var cachedValue = await _distributedCache.GetStringAsync(key, cancellationToken);
 
             if (string.IsNullOrEmpty(cachedValue))
             {
+                activity?.SetTag("cache.hit", false);
+                _logger.LogDebug("Cache miss for key: {Key}", key);
                 return null;
             }
 
+            activity?.SetTag("cache.hit", true);
+            _logger.LogDebug("Cache hit for key: {Key}", key);
             return JsonSerializer.Deserialize<T>(cachedValue, _jsonOptions);
         }
         catch (Exception ex)
         {
+            activity?.SetTag("cache.error", ex.Message);
+            activity?.SetTag("cache.hit", false);
             _logger.LogWarning(ex, "Cache get failed for key: {Key}", key);
             return null;
         }

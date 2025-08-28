@@ -3,6 +3,8 @@ using junie_des_1942stats.Bflist;
 using junie_des_1942stats.StatsCollectors.Modals;
 using junie_des_1942stats.Caching;
 using Microsoft.Extensions.Logging;
+using junie_des_1942stats.Telemetry;
+using System.Diagnostics;
 
 namespace junie_des_1942stats.Services;
 
@@ -37,6 +39,12 @@ public class BfListApiService : IBfListApiService
 
     public async Task<object[]> FetchServersAsync(string game, int perPage = 100, string? cursor = null, string? after = null)
     {
+        using var activity = ActivitySources.BfListApi.StartActivity("FetchServers");
+        activity?.SetTag("bflist.game", game);
+        activity?.SetTag("bflist.per_page", perPage);
+        activity?.SetTag("bflist.has_cursor", !string.IsNullOrEmpty(cursor));
+        activity?.SetTag("bflist.has_after", !string.IsNullOrEmpty(after));
+
         var httpClient = _httpClientFactory.CreateClient("BfListApi");
         var baseUrl = $"https://api.bflist.io/v2/{game}/servers?perPage={perPage}";
 
@@ -48,6 +56,8 @@ public class BfListApiService : IBfListApiService
         {
             baseUrl += $"&after={Uri.EscapeDataString(after)}";
         }
+
+        activity?.SetTag("bflist.url", baseUrl);
 
         _logger.LogDebug("Fetching servers from BFList API: {Url}", baseUrl);
 

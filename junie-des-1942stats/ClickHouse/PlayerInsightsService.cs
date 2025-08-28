@@ -2,6 +2,8 @@ using junie_des_1942stats.ClickHouse.Base;
 using junie_des_1942stats.ClickHouse.Interfaces;
 using junie_des_1942stats.PlayerStats.Models;
 using Microsoft.Extensions.Logging;
+using junie_des_1942stats.Telemetry;
+using System.Diagnostics;
 
 namespace junie_des_1942stats.ClickHouse;
 
@@ -25,6 +27,10 @@ public class PlayerInsightsService : BaseClickHouseService, IClickHouseReader
     /// </summary>
     public async Task<List<PlayerKillMilestone>> GetPlayersKillMilestonesAsync(List<string> playerNames)
     {
+        using var activity = ActivitySources.ClickHouse.StartActivity("GetPlayersKillMilestones");
+        activity?.SetTag("players.count", playerNames.Count);
+        activity?.SetTag("players.names", string.Join(", ", playerNames.Take(5))); // Limit to first 5 for readability
+        
         if (!playerNames.Any()) return new List<PlayerKillMilestone>();
 
         var playerNamesQuoted = string.Join(", ", playerNames.Select(p => $"'{p.Replace("'", "''")}'"));
