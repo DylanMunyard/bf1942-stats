@@ -3,6 +3,7 @@ using junie_des_1942stats.Services;
 using Microsoft.Extensions.Logging;
 using junie_des_1942stats.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
+using junie_des_1942stats.ClickHouse.Interfaces;
 
 namespace junie_des_1942stats.Controllers;
 
@@ -13,17 +14,20 @@ public class LiveServersController : ControllerBase
     private readonly IBfListApiService _bfListApiService;
     private readonly ILogger<LiveServersController> _logger;
     private readonly PlayerTrackerDbContext _dbContext;
+    private readonly IClickHouseReader _clickHouseReader;
 
     private static readonly string[] ValidGames = ["bf1942", "fh2", "bfvietnam"];
 
     public LiveServersController(
         IBfListApiService bfListApiService,
         ILogger<LiveServersController> logger,
-        PlayerTrackerDbContext dbContext)
+        PlayerTrackerDbContext dbContext,
+        IClickHouseReader clickHouseReader)
     {
         _bfListApiService = bfListApiService;
         _logger = logger;
         _dbContext = dbContext;
+        _clickHouseReader = clickHouseReader;
     }
 
     /// <summary>
@@ -176,7 +180,7 @@ public class LiveServersController : ControllerBase
 
         try
         {
-            var history = await _bfListApiService.GetPlayersOnlineHistoryAsync(game.ToLower(), period.ToLower());
+            var history = await GetPlayersOnlineHistoryFromClickHouse(game.ToLower(), period.ToLower());
             return Ok(history);
         }
         catch (Exception ex)
@@ -184,5 +188,62 @@ public class LiveServersController : ControllerBase
             _logger.LogError(ex, "Unexpected error fetching players online history for game {Game} with period {Period}", game, period);
             return StatusCode(500, "Internal server error");
         }
+    }
+
+    private async Task<PlayersOnlineHistoryResponse> GetPlayersOnlineHistoryFromClickHouse(string game, string period)
+    {
+        var days = period switch
+        {
+            "1d" => 1,
+            "3d" => 3,
+            "7d" => 7,
+            _ => 7
+        };
+
+        var query = $@"
+WITH server_latest_counts AS (
+    SELECT 
+        toStartOfHour(timestamp) as time_bucket,
+        server_guid,
+        argMax(players_online, timestamp) as players_online
+    FROM server_online_counts
+    WHERE game = '{game.Replace("'", "''")}'
+        AND timestamp >= now() - INTERVAL {days} DAY
+        AND timestamp < now()
+    GROUP BY time_bucket, server_guid
+)
+SELECT 
+    time_bucket,
+    SUM(players_online) as total_players
+FROM server_latest_counts
+GROUP BY time_bucket
+ORDER BY time_bucket
+FORMAT TabSeparated";
+
+        var result = await _clickHouseReader.ExecuteQueryAsync(query);
+        var dataPoints = new List<PlayersOnlineDataPoint>();
+
+        foreach (var line in result?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? [])
+        {
+            var parts = line.Split('\t');
+            if (parts.Length >= 2 &&
+                DateTime.TryParse(parts[0], out var timestamp) &&
+                int.TryParse(parts[1], out var totalPlayers))
+            {
+                dataPoints.Add(new PlayersOnlineDataPoint
+                {
+                    Timestamp = timestamp,
+                    TotalPlayers = totalPlayers
+                });
+            }
+        }
+
+        return new PlayersOnlineHistoryResponse
+        {
+            DataPoints = dataPoints.ToArray(),
+            Period = period,
+            Game = game,
+            LastUpdated = DateTime.UtcNow.ToString("O")
+        };
     }
 }
