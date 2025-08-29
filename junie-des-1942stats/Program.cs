@@ -320,10 +320,10 @@ try
     });
 
 
-    // Add ClickHouse HTTP clients with 2 second timeout
+    // Add ClickHouse HTTP clients with longer timeout for write operations
     builder.Services.AddHttpClient<PlayerMetricsWriteService>(client =>
     {
-        client.Timeout = TimeSpan.FromSeconds(2);
+        client.Timeout = TimeSpan.FromSeconds(60);
         // Add ClickHouse authentication header
         client.DefaultRequestHeaders.Add("X-ClickHouse-User", "default");
     })
@@ -334,7 +334,7 @@ try
 
     builder.Services.AddHttpClient<PlayerRoundsWriteService>(client =>
     {
-        client.Timeout = TimeSpan.FromSeconds(2);
+        client.Timeout = TimeSpan.FromSeconds(60);
         client.DefaultRequestHeaders.Add("X-ClickHouse-User", "default");
     })
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler

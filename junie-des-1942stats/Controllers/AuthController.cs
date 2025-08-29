@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
+using junie_des_1942stats.ClickHouse;
 using junie_des_1942stats.Services.Auth;
 using Microsoft.Extensions.Configuration;
 using junie_des_1942stats.PlayerTracking;
@@ -658,6 +659,46 @@ public class AuthController : ControllerBase
 
         await _context.SaveChangesAsync();
         return user;
+    }
+
+    /// <summary>
+    /// Migration endpoint for server online counts - call after deployment
+    /// </summary>
+    [HttpPost("migrate-online-counts")]
+    public async Task<IActionResult> MigrateOnlineCounts([FromServices] PlayerMetricsWriteService playerMetricsService)
+    {
+        try
+        {
+            _logger.LogInformation("Starting migration of player_metrics to server_online_counts");
+            await playerMetricsService.MigrateToServerOnlineCountsAsync(_context);
+            _logger.LogInformation("Successfully completed migration to server_online_counts");
+            return Ok(new { message = "Migration completed successfully", timestamp = DateTime.UtcNow });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to migrate to server_online_counts");
+            return StatusCode(500, new { message = "Migration failed", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Migration endpoint for updating bot flags on existing records - call after deployment
+    /// </summary>
+    [HttpPost("update-bot-flags")]
+    public async Task<IActionResult> UpdateBotFlags([FromServices] PlayerMetricsWriteService playerMetricsService)
+    {
+        try
+        {
+            _logger.LogInformation("Starting update of bot flags for existing player_metrics records");
+            await playerMetricsService.UpdateBotFlagsForExistingRecordsAsync();
+            _logger.LogInformation("Successfully completed bot flags update for existing records");
+            return Ok(new { message = "Bot flags update completed successfully", timestamp = DateTime.UtcNow });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update bot flags for existing records");
+            return StatusCode(500, new { message = "Bot flags update failed", error = ex.Message });
+        }
     }
 
     private string GetClientIpAddress()
