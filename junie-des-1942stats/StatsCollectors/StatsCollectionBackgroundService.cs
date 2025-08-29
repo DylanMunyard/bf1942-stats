@@ -97,7 +97,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
                 // 2. BF1942 stats
                 var bf1942Stopwatch = Stopwatch.StartNew();
                 var bf1942ServersStopwatch = Stopwatch.StartNew();
-                var bf1942Servers = await CollectServerStatsAsync(bfListApiService, playerTrackingService, "bf1942", CancellationToken.None);
+                var bf1942Servers = await CollectBf1942ServerStatsAsync(bfListApiService, playerTrackingService, "bf1942", CancellationToken.None);
                 bf1942ServersStopwatch.Stop();
                 bf1942Stopwatch.Stop();
                 Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] BF1942 stats: {bf1942Stopwatch.ElapsedMilliseconds}ms (Servers: {bf1942ServersStopwatch.ElapsedMilliseconds}ms)");
@@ -178,7 +178,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         }
     }
 
-    private async Task<List<IGameServer>> CollectServerStatsAsync(IBfListApiService bfListApiService, PlayerTrackingService playerTrackingService, string game, CancellationToken stoppingToken)
+    private async Task<List<IGameServer>> CollectBf1942ServerStatsAsync(IBfListApiService bfListApiService, PlayerTrackingService playerTrackingService, string game, CancellationToken stoppingToken)
     {
         var allServersObjects = await bfListApiService.FetchAllServersAsync(game);
         var allServers = allServersObjects.Cast<Bf1942ServerInfo>().ToList();
@@ -193,7 +193,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             gameServerAdapters.Add(adapter);
 
             // Store to SQLite every cycle
-            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp);
+            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp, "bf1942");
         }
 
         return gameServerAdapters;
@@ -214,7 +214,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             gameServerAdapters.Add(adapter);
 
             // Store to SQLite every cycle
-            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp);
+            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp, "bfvietnam");
         }
 
         return gameServerAdapters;
@@ -235,7 +235,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             gameServerAdapters.Add(adapter);
 
             // Store to SQLite every cycle
-            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp);
+            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp, "fh2");
         }
 
         return gameServerAdapters;

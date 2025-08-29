@@ -221,6 +221,7 @@ public class GameServer
     public string Ip { get; set; } = "";
     public int Port { get; set; }
     public string GameId { get; set; } = "";
+    public string Game { get; set; } = ""; // Standardized game type: bf1942, fh2, bfvietnam
 
     // Server info fields from bflist API
     public int? MaxPlayers { get; set; }

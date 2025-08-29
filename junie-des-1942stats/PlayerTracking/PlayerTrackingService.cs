@@ -23,37 +23,15 @@ public class PlayerTrackingService
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<PlayerTrackingService>.Instance;
     }
 
-    // Method to track players from Bf1942ServerInfo
-    public async Task TrackPlayersFromServerInfo(Bf1942ServerInfo serverInfo, DateTime timestamp)
+    public async Task TrackPlayersFromServerInfo(IGameServer server, DateTime timestamp, string game)
     {
-        var adapter = new Bf1942ServerAdapter(serverInfo);
-        await TrackPlayersFromServer(adapter, timestamp);
-    }
-
-    // Method to track players from Fh2ServerInfo
-    public async Task TrackPlayersFromServerInfo(Fh2ServerInfo serverInfo, DateTime timestamp)
-    {
-        var adapter = new Fh2ServerAdapter(serverInfo);
-        await TrackPlayersFromServer(adapter, timestamp);
-    }
-
-    // Method to track players from BfvServerInfo
-    public async Task TrackPlayersFromServerInfo(BfvietnamServerInfo serverInfo, DateTime timestamp)
-    {
-        // Create an adapter to treat BfvServerInfo as a generic IGameServer
-        var adapter = new BfvietnamServerAdapter(serverInfo);
-        await TrackPlayersFromServer(adapter, timestamp);
-    }
-
-    public async Task TrackPlayersFromServerInfo(IGameServer server, DateTime timestamp)
-    {
-        await TrackPlayersFromServer(server, timestamp);
+        await TrackPlayersFromServer(server, timestamp, game);
     }
 
     // Core method that works with the common interface
-    private async Task TrackPlayersFromServer(IGameServer server, DateTime timestamp)
+    private async Task TrackPlayersFromServer(IGameServer server, DateTime timestamp, string game)
     {
-        var (gameServer, serverMapChangeOldMap) = await GetOrCreateServerAsync(server);
+        var (gameServer, serverMapChangeOldMap) = await GetOrCreateServerAsync(server, game);
 
         if (!server.Players.Any())
             return;
@@ -230,7 +208,7 @@ public class PlayerTrackingService
         }
     }
 
-    private async Task<(GameServer server, string? oldMapName)> GetOrCreateServerAsync(IGameServer serverInfo)
+    private async Task<(GameServer server, string? oldMapName)> GetOrCreateServerAsync(IGameServer serverInfo, string game)
     {
         var server = await _dbContext.Servers
             .FirstOrDefaultAsync(s => s.Guid == serverInfo.Guid);
@@ -247,6 +225,7 @@ public class PlayerTrackingService
                 Ip = serverInfo.Ip,
                 Port = serverInfo.Port,
                 GameId = serverInfo.GameId,
+                Game = game,
                 MaxPlayers = serverInfo.MaxPlayers,
                 MapName = serverInfo.MapName,
                 JoinLink = serverInfo.JoinLink
@@ -265,6 +244,12 @@ public class PlayerTrackingService
             {
                 server.Name = serverInfo.Name;
                 server.GameId = serverInfo.GameId;
+            }
+
+            // Update game if provided and different
+            if (!string.IsNullOrEmpty(game) && server.Game != game)
+            {
+                server.Game = game;
             }
 
             // Check for map change before updating
