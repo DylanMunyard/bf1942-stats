@@ -151,4 +151,38 @@ public class LiveServersController : ControllerBase
 
         return servers;
     }
+
+    /// <summary>
+    /// Get players online history for a specific game
+    /// </summary>
+    /// <param name="game">Game type: bf1942, fh2, or bfvietnam</param>
+    /// <param name="period">Time period: 1d, 3d, or 7d (default: 7d)</param>
+    /// <returns>Players online history data</returns>
+    [HttpGet("{game}/players-online-history")]
+    public async Task<ActionResult<PlayersOnlineHistoryResponse>> GetPlayersOnlineHistory(
+        string game, 
+        [FromQuery] string period = "7d")
+    {
+        if (!ValidGames.Contains(game.ToLower()))
+        {
+            return BadRequest($"Invalid game type. Valid types: {string.Join(", ", ValidGames)}");
+        }
+
+        var validPeriods = new[] { "1d", "3d", "7d" };
+        if (!validPeriods.Contains(period.ToLower()))
+        {
+            return BadRequest($"Invalid period. Valid periods: {string.Join(", ", validPeriods)}");
+        }
+
+        try
+        {
+            var history = await _bfListApiService.GetPlayersOnlineHistoryAsync(game.ToLower(), period.ToLower());
+            return Ok(history);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error fetching players online history for game {Game} with period {Period}", game, period);
+            return StatusCode(500, "Internal server error");
+        }
+    }
 }

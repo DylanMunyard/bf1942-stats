@@ -82,7 +82,7 @@ try
                 ["deployment.environment"] = environment,
                 ["host.name"] = Environment.MachineName
             }))
-        
+
         .WithTracing(tracing =>
             {
                 tracing.AddAspNetCoreInstrumentation(options =>

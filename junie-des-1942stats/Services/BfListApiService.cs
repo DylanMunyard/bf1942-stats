@@ -5,6 +5,8 @@ using junie_des_1942stats.Caching;
 using Microsoft.Extensions.Logging;
 using junie_des_1942stats.Telemetry;
 using System.Diagnostics;
+using Microsoft.EntityFrameworkCore;
+using junie_des_1942stats.PlayerTracking;
 
 namespace junie_des_1942stats.Services;
 
@@ -19,6 +21,9 @@ public interface IBfListApiService
     Task<ServerSummary[]> FetchAllServerSummariesWithCacheStatusAsync(string game);
     Task<ServerSummary[]> FetchAllServerSummariesAsync(string game);
     Task<ServerSummary?> FetchSingleServerSummaryAsync(string game, string serverIdentifier);
+
+    // Get players online history data from database
+    Task<PlayersOnlineHistoryResponse> GetPlayersOnlineHistoryAsync(string game, string period = "7d");
 }
 
 public class BfListApiService : IBfListApiService
@@ -26,15 +31,17 @@ public class BfListApiService : IBfListApiService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ICacheService _cacheService;
     private readonly ILogger<BfListApiService> _logger;
+    private readonly PlayerTrackerDbContext _dbContext;
 
     private const int ServerListCacheSeconds = 30;
     private const int SingleServerCacheSeconds = 8; // 8 seconds for individual server updates
 
-    public BfListApiService(IHttpClientFactory httpClientFactory, ICacheService cacheService, ILogger<BfListApiService> logger)
+    public BfListApiService(IHttpClientFactory httpClientFactory, ICacheService cacheService, ILogger<BfListApiService> logger, PlayerTrackerDbContext dbContext)
     {
         _httpClientFactory = httpClientFactory;
         _cacheService = cacheService;
         _logger = logger;
+        _dbContext = dbContext;
     }
 
     public async Task<object[]> FetchServersAsync(string game, int perPage = 100, string? cursor = null, string? after = null)
@@ -446,6 +453,63 @@ public class BfListApiService : IBfListApiService
             Teams = server.Teams?.ToArray() ?? []
         };
     }
+
+    public async Task<PlayersOnlineHistoryResponse> GetPlayersOnlineHistoryAsync(string game, string period = "7d")
+    {
+        // Parse the period parameter
+        var days = period switch
+        {
+            "1d" => 1,
+            "3d" => 3, 
+            "7d" => 7,
+            _ => 7 // Default to 7 days
+        };
+
+        var startDate = DateTime.UtcNow.AddDays(-days);
+        
+        // Query the database to get player counts over time by sampling PlayerSessions
+        // We'll sample every hour to get a reasonable number of data points
+        var dataPoints = new List<PlayersOnlineDataPoint>();
+        var sampleInterval = TimeSpan.FromHours(1);
+        
+        for (var currentTime = startDate; currentTime <= DateTime.UtcNow; currentTime = currentTime.Add(sampleInterval))
+        {
+            // Count active sessions at this point in time for the specific game
+            // A session is considered active if it started before or at currentTime and
+            // either IsActive=true OR LastSeenTime is within a reasonable window of currentTime
+            var gracePeriod = TimeSpan.FromMinutes(15); // Consider session active if seen within last 15 minutes
+            
+            var activeSessions = await _dbContext.PlayerSessions
+                .Where(ps => ps.StartTime <= currentTime && 
+                           (ps.IsActive || ps.LastSeenTime >= currentTime.Subtract(gracePeriod)) &&
+                           ps.Server.GameId == game)
+                .CountAsync();
+
+            // Count unique servers with active sessions at this time
+            var activeServers = await _dbContext.PlayerSessions
+                .Where(ps => ps.StartTime <= currentTime && 
+                           (ps.IsActive || ps.LastSeenTime >= currentTime.Subtract(gracePeriod)) &&
+                           ps.Server.GameId == game)
+                .Select(ps => ps.ServerGuid)
+                .Distinct()
+                .CountAsync();
+
+            dataPoints.Add(new PlayersOnlineDataPoint
+            {
+                Timestamp = currentTime,
+                TotalPlayers = activeSessions,
+                ActiveServers = activeServers
+            });
+        }
+
+        return new PlayersOnlineHistoryResponse
+        {
+            DataPoints = dataPoints.ToArray(),
+            Period = period,
+            Game = game,
+            LastUpdated = DateTime.UtcNow.ToString("O")
+        };
+    }
 }
 
 /// <summary>
@@ -586,4 +650,45 @@ public class ServerSummary
     /// Date when geo location was last looked up
     /// </summary>
     public DateTime? GeoLookupDate { get; set; }
+}
+
+public class PlayersOnlineHistoryResponse
+{
+    /// <summary>
+    /// Array of player count data points over time
+    /// </summary>
+    public PlayersOnlineDataPoint[] DataPoints { get; set; } = [];
+    
+    /// <summary>
+    /// The period for which the data was requested (e.g., "7d", "3d", "1d")
+    /// </summary>
+    public string Period { get; set; } = "";
+    
+    /// <summary>
+    /// The game for which the data was requested
+    /// </summary>
+    public string Game { get; set; } = "";
+    
+    /// <summary>
+    /// When the data was last updated
+    /// </summary>
+    public string LastUpdated { get; set; } = "";
+}
+
+public class PlayersOnlineDataPoint
+{
+    /// <summary>
+    /// Timestamp of the data point
+    /// </summary>
+    public DateTime Timestamp { get; set; }
+    
+    /// <summary>
+    /// Total number of players online at this timestamp
+    /// </summary>
+    public int TotalPlayers { get; set; }
+    
+    /// <summary>
+    /// Number of active servers at this timestamp
+    /// </summary>
+    public int ActiveServers { get; set; }
 }

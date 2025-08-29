@@ -497,22 +497,13 @@ public class ServerStatsService(
             EndPeriod = endPeriod
         };
 
-        // Get comprehensive player count data from ClickHouse using single optimized query
-        _logger.LogDebug("=== STARTING PLAYER COUNT DATA FETCH ===");
-        _logger.LogDebug("Server GUID: {ServerGuid}", server.Guid);
-        _logger.LogDebug("Server Name: {ServerName}", server.Name);
-        _logger.LogDebug("Start Period: {StartPeriod}", startPeriod);
-        _logger.LogDebug("End Period: {EndPeriod}", endPeriod);
-        _logger.LogDebug("Granularity: {Granularity}", granularity);
-
+        // Get comprehensive player count data from ClickHouse with comparison period
         try
         {
-            var playerCountData = await GetPlayerCountDataFromClickHouse(server.Guid, startPeriod, endPeriod, granularity);
-            _logger.LogDebug("Player count data retrieved - History: {HistoryCount}, Summary: {Summary}",
-                playerCountData.History?.Count ?? 0,
-                playerCountData.Summary != null ? "Not null" : "NULL");
-
+            var playerCountData = await GetPlayerCountDataWithComparisonFromClickHouse(server.Guid, startPeriod, endPeriod, granularity);
+            
             insights.PlayerCountHistory = playerCountData.History ?? new List<PlayerCountDataPoint>();
+            insights.PlayerCountHistoryComparison = playerCountData.HistoryComparison ?? new List<PlayerCountDataPoint>();
             insights.PlayerCountSummary = playerCountData.Summary;
         }
         catch (Exception ex)
@@ -520,16 +511,27 @@ public class ServerStatsService(
             // Log the error but continue with empty metrics
             _logger.LogError(ex, "Error fetching player count data from ClickHouse");
             insights.PlayerCountHistory = [];
+            insights.PlayerCountHistoryComparison = [];
             insights.PlayerCountSummary = null;
         }
 
-        _logger.LogDebug("=== FINAL INSIGHT RESULTS ===");
-        _logger.LogDebug("PlayerCountHistory count: {Count}", insights.PlayerCountHistory?.Count ?? 0);
-        _logger.LogDebug("PlayerCountSummary: {Summary}", insights.PlayerCountSummary != null ? "Present" : "NULL");
+        // Get all maps data
+        try
+        {
+            var allMaps = await GetAllMapsFromClickHouse(server.Guid, startPeriod, endPeriod);
+            insights.Maps = allMaps;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching maps data from ClickHouse");
+            insights.Maps = [];
+        }
 
         // Use ClickHouse to calculate ping statistics with appropriate granularity
-        var timeGrouping = GetTimeGroupingFunction(granularity);
-        var query = $@"
+        try
+        {
+            var timeGrouping = GetTimeGroupingFunction(granularity);
+            var query = $@"
 WITH filtered_pings AS (
     SELECT 
         {timeGrouping} as time_period,
@@ -551,33 +553,38 @@ GROUP BY time_period
 ORDER BY time_period
 FORMAT TabSeparated";
 
-        var result = await _clickHouseReader.ExecuteQueryAsync(query);
-        var pingData = new List<PingDataPoint>();
+            var result = await _clickHouseReader.ExecuteQueryAsync(query);
+            var pingData = new List<PingDataPoint>();
 
-        foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var parts = line.Split('\t');
-            if (parts.Length >= 4)
+            foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
             {
-                var timePeriod = ParseTimePeriod(parts[0], granularity);
-                pingData.Add(new PingDataPoint
+                var parts = line.Split('\t');
+                if (parts.Length >= 4)
                 {
-                    TimePeriod = timePeriod,
-                    AveragePing = double.Parse(parts[1]),
-                    MedianPing = double.Parse(parts[2]),
-                    P95Ping = Math.Round(double.Parse(parts[3]), 2)
-                });
+                    var timePeriod = ParseTimePeriod(parts[0], granularity);
+                    pingData.Add(new PingDataPoint
+                    {
+                        TimePeriod = timePeriod,
+                        AveragePing = double.Parse(parts[1]),
+                        MedianPing = double.Parse(parts[2]),
+                        P95Ping = Math.Round(double.Parse(parts[3]), 2)
+                    });
+                }
             }
-        }
 
-        insights.PingByHour = new PingByHourInsight
+            insights.PingByHour = new PingByHourInsight
+            {
+                Data = pingData
+            };
+        }
+        catch (Exception ex)
         {
-            Data = pingData
-        };
+            _logger.LogError(ex, "Error fetching ping data from ClickHouse");
+            insights.PingByHour = new PingByHourInsight { Data = [] };
+        }
 
         // Cache the result for 20 minutes
         await _cacheService.SetAsync(cacheKey, insights, TimeSpan.FromMinutes(20));
-        _logger.LogDebug("Cached server insights: {ServerName}, period: {Period}", serverName, period);
 
         return insights;
     }
@@ -657,259 +664,242 @@ FORMAT TabSeparated";
         return (history, summary);
     }
 
+    private async Task<(List<PlayerCountDataPoint> History, List<PlayerCountDataPoint> HistoryComparison, PlayerCountSummary Summary)> 
+        GetPlayerCountDataWithComparisonFromClickHouse(string serverGuid, DateTime startPeriod, DateTime endPeriod, TimeGranularity granularity)
+    {
+        // Use separate queries for reliability
+        var historyWithComparisonTask = GetPlayerCountHistoryWithComparisonFromClickHouse(serverGuid, startPeriod, endPeriod, granularity);
+        var summaryTask = GetPlayerCountSummaryFromClickHouse(serverGuid, startPeriod, endPeriod, granularity);
+
+        await Task.WhenAll(historyWithComparisonTask, summaryTask);
+
+        var (currentHistory, comparisonHistory) = await historyWithComparisonTask;
+        var summary = await summaryTask;
+
+        return (currentHistory, comparisonHistory, summary);
+    }
+
     private async Task<List<PlayerCountDataPoint>> GetPlayerCountHistoryFromClickHouse(
         string serverGuid, DateTime startPeriod, DateTime endPeriod, TimeGranularity granularity)
     {
-        // First, let's check if we have any data for this server at all
-        var dataCheckQuery = $@"
-SELECT COUNT(*) as total_records, 
-       MIN(round_start_time) as earliest, 
-       MAX(round_start_time) as latest,
-       COUNT(DISTINCT player_name) as unique_players
-FROM player_rounds 
-WHERE server_guid = '{serverGuid.Replace("'", "''")}' 
-FORMAT TabSeparated";
-
-        _logger.LogDebug("=== DATA CHECK QUERY ===");
-        _logger.LogDebug("QUERY:\n{Query}", dataCheckQuery);
-
-        var dataCheckResult = await _clickHouseReader.ExecuteQueryAsync(dataCheckQuery);
-        _logger.LogDebug("DATA CHECK RESULT:\n{Result}", dataCheckResult);
-
-        var timeGrouping = GetClickHouseTimeGrouping(granularity);
-
-        // For 7 days and 1 month, use simple aggregation
-        // For 3+ months, use averaging approach to avoid inflating numbers
-        string query;
-        if (granularity <= TimeGranularity.FourHourly)
+        // Simple time grouping for server_online_counts timestamp column
+        var timeGrouping = granularity switch
         {
-            // For 7 days and 1 month - return data points as-is
-            query = $@"
+            TimeGranularity.Hourly => "toStartOfHour(timestamp)",
+            TimeGranularity.FourHourly => "toDateTime(toUnixTimestamp(toStartOfHour(timestamp)) - (toUnixTimestamp(toStartOfHour(timestamp)) % 14400))",
+            TimeGranularity.Daily => "toStartOfDay(timestamp)", 
+            TimeGranularity.Weekly => "toMonday(timestamp)",
+            TimeGranularity.Monthly => "toStartOfMonth(timestamp)",
+            _ => "toStartOfHour(timestamp)"
+        };
+
+        // Use Grafana-style sampling: take the last (most recent) value in each time bucket
+        // This preserves actual player counts without smoothing
+        var query = $@"
 SELECT 
-    {timeGrouping} as timestamp,
-    COUNT(DISTINCT player_name) as unique_players_started
-FROM player_rounds
+    {timeGrouping} as time_bucket,
+    argMax(players_online, timestamp) as players_online
+FROM server_online_counts
 WHERE server_guid = '{serverGuid.Replace("'", "''")}'
-    AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
-    AND round_start_time < '{endPeriod:yyyy-MM-dd HH:mm:ss}'
-GROUP BY timestamp
-ORDER BY timestamp
+    AND timestamp >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
+    AND timestamp < '{endPeriod:yyyy-MM-dd HH:mm:ss}'
+GROUP BY time_bucket
+ORDER BY time_bucket
 FORMAT TabSeparated";
-        }
-        else
-        {
-            // For 3+ months - use averaging approach to avoid inflating numbers
-            // Average hourly data into larger time buckets instead of aggregating unique players
-            query = $@"
-WITH hourly_data AS (
-    SELECT 
-        toStartOfHour(round_start_time) as hour_timestamp,
-        COUNT(DISTINCT player_name) as hourly_players
-    FROM player_rounds
-    WHERE server_guid = '{serverGuid.Replace("'", "''")}'
-        AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
-        AND round_start_time < '{endPeriod:yyyy-MM-dd HH:mm:ss}'
-    GROUP BY hour_timestamp
-)
-SELECT 
-    {timeGrouping.Replace("round_start_time", "hour_timestamp")} as timestamp,
-    ROUND(AVG(hourly_players)) as avg_players
-FROM hourly_data
-GROUP BY timestamp
-ORDER BY timestamp
-FORMAT TabSeparated";
-        }
-
-        _logger.LogDebug("=== PLAYER COUNT HISTORY QUERY ===");
-        _logger.LogDebug("Server GUID: {ServerGuid}", serverGuid);
-        _logger.LogDebug("Start Period: {StartPeriod}", startPeriod);
-        _logger.LogDebug("End Period: {EndPeriod}", endPeriod);
-        _logger.LogDebug("Granularity: {Granularity}", granularity);
-        _logger.LogDebug("Time Grouping: {TimeGrouping}", timeGrouping);
-        _logger.LogDebug("FULL QUERY:\n{Query}", query);
 
         var result = await _clickHouseReader.ExecuteQueryAsync(query);
 
-        _logger.LogDebug("RAW RESULT:\n{Result}", result);
-        _logger.LogDebug("Result length: {Length} characters", result?.Length ?? 0);
-        _logger.LogDebug("Result lines: {Lines}", result?.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length ?? 0);
-
         var history = new List<PlayerCountDataPoint>();
 
-        var lineCount = 0;
         foreach (var line in result?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>())
         {
-            lineCount++;
-            _logger.LogDebug("Processing line {LineNumber}: '{Line}'", lineCount, line);
-
             var parts = line.Split('\t');
-            _logger.LogDebug("Split into {PartCount} parts: [{Parts}]", parts.Length, string.Join(", ", parts));
 
             if (parts.Length >= 2 &&
                 DateTime.TryParse(parts[0], out var timestamp) &&
-                int.TryParse(parts[1], out var playersStarted))
+                int.TryParse(parts[1], out var playersOnline))
             {
-                _logger.LogDebug("Successfully parsed: timestamp={Timestamp}, players={Players}", timestamp, playersStarted);
                 history.Add(new PlayerCountDataPoint
                 {
                     Timestamp = timestamp,
-                    PlayerCount = playersStarted,
-                    UniquePlayersStarted = playersStarted
+                    PlayerCount = playersOnline, // Actual player count, not averaged!
+                    UniquePlayersStarted = playersOnline // For compatibility
                 });
-            }
-            else
-            {
-                _logger.LogWarning("Failed to parse line: parts.Length={Length}, timestamp parse={TimestampParse}, players parse={PlayersStartedParse}",
-                    parts.Length,
-                    parts.Length > 0 ? DateTime.TryParse(parts[0], out _) : false,
-                    parts.Length > 1 ? int.TryParse(parts[1], out _) : false);
             }
         }
 
-        _logger.LogDebug("Final history count: {Count}", history.Count);
-
         return history;
+    }
+
+    private async Task<(List<PlayerCountDataPoint> Current, List<PlayerCountDataPoint> Comparison)> 
+        GetPlayerCountHistoryWithComparisonFromClickHouse(
+            string serverGuid, DateTime startPeriod, DateTime endPeriod, TimeGranularity granularity)
+    {
+        // Calculate comparison period (same duration, but shifted back)
+        var totalDays = (int)(endPeriod - startPeriod).TotalDays;
+        var comparisonEndPeriod = startPeriod;
+        var comparisonStartPeriod = startPeriod.AddDays(-totalDays);
+
+        // Simple time grouping for server_online_counts timestamp column
+        var timeGrouping = granularity switch
+        {
+            TimeGranularity.Hourly => "toStartOfHour(timestamp)",
+            TimeGranularity.FourHourly => "toDateTime(toUnixTimestamp(toStartOfHour(timestamp)) - (toUnixTimestamp(toStartOfHour(timestamp)) % 14400))",
+            TimeGranularity.Daily => "toStartOfDay(timestamp)", 
+            TimeGranularity.Weekly => "toMonday(timestamp)",
+            TimeGranularity.Monthly => "toStartOfMonth(timestamp)",
+            _ => "toStartOfHour(timestamp)"
+        };
+
+        // Query both current and comparison periods in a single query for consistency
+        var query = $@"
+WITH current_period AS (
+    SELECT 
+        {timeGrouping} as time_bucket,
+        argMax(players_online, timestamp) as players_online,
+        'current' as period_type
+    FROM server_online_counts
+    WHERE server_guid = '{serverGuid.Replace("'", "''")}'
+        AND timestamp >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
+        AND timestamp < '{endPeriod:yyyy-MM-dd HH:mm:ss}'
+    GROUP BY time_bucket
+),
+comparison_period AS (
+    SELECT 
+        {timeGrouping} as time_bucket,
+        argMax(players_online, timestamp) as players_online,
+        'comparison' as period_type
+    FROM server_online_counts
+    WHERE server_guid = '{serverGuid.Replace("'", "''")}'
+        AND timestamp >= '{comparisonStartPeriod:yyyy-MM-dd HH:mm:ss}'
+        AND timestamp < '{comparisonEndPeriod:yyyy-MM-dd HH:mm:ss}'
+    GROUP BY time_bucket
+)
+SELECT 
+    time_bucket,
+    players_online,
+    period_type
+FROM current_period
+UNION ALL
+SELECT 
+    time_bucket,
+    players_online,
+    period_type
+FROM comparison_period
+ORDER BY period_type, time_bucket
+FORMAT TabSeparated";
+
+        var result = await _clickHouseReader.ExecuteQueryAsync(query);
+
+        var currentHistory = new List<PlayerCountDataPoint>();
+        var comparisonHistory = new List<PlayerCountDataPoint>();
+
+        foreach (var line in result?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>())
+        {
+            var parts = line.Split('\t');
+            if (parts.Length >= 3 &&
+                DateTime.TryParse(parts[0], out var timestamp) &&
+                int.TryParse(parts[1], out var playersOnline) &&
+                !string.IsNullOrEmpty(parts[2]))
+            {
+                var dataPoint = new PlayerCountDataPoint
+                {
+                    Timestamp = timestamp,
+                    PlayerCount = playersOnline,
+                    UniquePlayersStarted = playersOnline // For compatibility
+                };
+
+                if (parts[2] == "current")
+                {
+                    currentHistory.Add(dataPoint);
+                }
+                else if (parts[2] == "comparison")
+                {
+                    // Adjust comparison timestamps to align with current period for UI display
+                    var adjustedTimestamp = timestamp.AddDays(totalDays);
+                    dataPoint.Timestamp = adjustedTimestamp;
+                    comparisonHistory.Add(dataPoint);
+                }
+            }
+        }
+
+        return (currentHistory, comparisonHistory);
     }
 
     private async Task<PlayerCountSummary> GetPlayerCountSummaryFromClickHouse(
         string serverGuid, DateTime startPeriod, DateTime endPeriod, TimeGranularity granularity)
     {
-        var timeGrouping = GetClickHouseTimeGrouping(granularity);
         var totalDays = (int)(endPeriod - startPeriod).TotalDays;
         var halfPeriodDays = totalDays / 2;
         var midPeriod = startPeriod.AddDays(halfPeriodDays);
 
-        string query;
-        if (granularity <= TimeGranularity.FourHourly)
+        // Use the same time grouping as history for consistency
+        var timeGrouping = granularity switch
         {
-            // For 7 days and 1 month - use simple aggregation 
-            query = $@"
-WITH time_buckets AS (
+            TimeGranularity.Hourly => "toStartOfHour(timestamp)",
+            TimeGranularity.FourHourly => "toDateTime(toUnixTimestamp(toStartOfHour(timestamp)) - (toUnixTimestamp(toStartOfHour(timestamp)) % 14400))",
+            TimeGranularity.Daily => "toStartOfDay(timestamp)", 
+            TimeGranularity.Weekly => "toMonday(timestamp)",
+            TimeGranularity.Monthly => "toStartOfMonth(timestamp)",
+            _ => "toStartOfHour(timestamp)"
+        };
+
+        // Use server_online_counts with the SAME sampling as history to ensure consistency
+        var query = $@"
+WITH sampled_data AS (
     SELECT 
         {timeGrouping} as time_bucket,
-        COUNT(DISTINCT player_name) as players_in_bucket
-    FROM player_rounds
+        argMax(players_online, timestamp) as players_online,
+        argMax(timestamp, timestamp) as bucket_timestamp
+    FROM server_online_counts
     WHERE server_guid = '{serverGuid.Replace("'", "''")}'
-        AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
-        AND round_start_time < '{endPeriod:yyyy-MM-dd HH:mm:ss}'
+        AND timestamp >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
+        AND timestamp < '{endPeriod:yyyy-MM-dd HH:mm:ss}'
     GROUP BY time_bucket
+),
+summary AS (
+    SELECT 
+        AVG(players_online) as avg_players,
+        MAX(players_online) as peak_players,
+        argMax(bucket_timestamp, players_online) as peak_timestamp
+    FROM sampled_data
 ),
 period_comparison AS (
     SELECT 
         CASE 
-            WHEN round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}' 
-                AND round_start_time < '{midPeriod:yyyy-MM-dd HH:mm:ss}' THEN 'older'
-            WHEN round_start_time >= '{midPeriod:yyyy-MM-dd HH:mm:ss}' 
-                AND round_start_time < '{endPeriod:yyyy-MM-dd HH:mm:ss}' THEN 'recent'
+            WHEN bucket_timestamp >= '{startPeriod:yyyy-MM-dd HH:mm:ss}' 
+                AND bucket_timestamp < '{midPeriod:yyyy-MM-dd HH:mm:ss}' THEN 'older'
+            WHEN bucket_timestamp >= '{midPeriod:yyyy-MM-dd HH:mm:ss}' 
+                AND bucket_timestamp < '{endPeriod:yyyy-MM-dd HH:mm:ss}' THEN 'recent'
         END as period_type,
-        COUNT(DISTINCT player_name) as unique_players
+        AVG(players_online) as avg_players
+    FROM sampled_data
+    WHERE bucket_timestamp IS NOT NULL
+    GROUP BY period_type
+),
+unique_players AS (
+    SELECT COUNT(DISTINCT player_name) as total_unique
     FROM player_rounds
     WHERE server_guid = '{serverGuid.Replace("'", "''")}'
         AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
         AND round_start_time < '{endPeriod:yyyy-MM-dd HH:mm:ss}'
-    GROUP BY period_type, toStartOfHour(round_start_time)
-),
-summary AS (
-    SELECT 
-        AVG(players_in_bucket) as avg_players,
-        MAX(players_in_bucket) as peak_players,
-        argMax(time_bucket, players_in_bucket) as peak_timestamp,
-        (SELECT COUNT(DISTINCT player_name) FROM player_rounds 
-         WHERE server_guid = '{serverGuid.Replace("'", "''")}'
-           AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
-           AND round_start_time < '{endPeriod:yyyy-MM-dd HH:mm:ss}') as total_unique
-    FROM time_buckets
-),
-period_averages AS (
-    SELECT 
-        period_type,
-        AVG(unique_players) as avg_players
-    FROM period_comparison
-    WHERE period_type IS NOT NULL
-    GROUP BY period_type
 )
 SELECT 
     s.avg_players,
     s.peak_players,
     s.peak_timestamp,
-    s.total_unique,
+    up.total_unique,
     COALESCE(
         ROUND((recent.avg_players - older.avg_players) / NULLIF(older.avg_players, 0) * 100),
         0
     ) as change_percent
 FROM summary s
-LEFT JOIN (SELECT avg_players FROM period_averages WHERE period_type = 'recent') recent ON 1=1
-LEFT JOIN (SELECT avg_players FROM period_averages WHERE period_type = 'older') older ON 1=1
+CROSS JOIN unique_players up
+LEFT JOIN (SELECT avg_players FROM period_comparison WHERE period_type = 'recent') recent ON 1=1
+LEFT JOIN (SELECT avg_players FROM period_comparison WHERE period_type = 'older') older ON 1=1
 FORMAT TabSeparated";
-        }
-        else
-        {
-            // For 3+ months - use averaging approach to avoid inflated peaks
-            query = $@"
-WITH hourly_data AS (
-    SELECT 
-        toStartOfHour(round_start_time) as hour_timestamp,
-        COUNT(DISTINCT player_name) as hourly_players
-    FROM player_rounds
-    WHERE server_guid = '{serverGuid.Replace("'", "''")}'
-        AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
-        AND round_start_time < '{endPeriod:yyyy-MM-dd HH:mm:ss}'
-    GROUP BY hour_timestamp
-),
-time_buckets AS (
-    SELECT 
-        {timeGrouping.Replace("round_start_time", "hour_timestamp")} as time_bucket,
-        ROUND(AVG(hourly_players)) as avg_players_in_bucket,
-        MAX(hourly_players) as max_players_in_bucket
-    FROM hourly_data
-    GROUP BY time_bucket
-),
-period_comparison AS (
-    SELECT 
-        CASE 
-            WHEN hour_timestamp >= '{startPeriod:yyyy-MM-dd HH:mm:ss}' 
-                AND hour_timestamp < '{midPeriod:yyyy-MM-dd HH:mm:ss}' THEN 'older'
-            WHEN hour_timestamp >= '{midPeriod:yyyy-MM-dd HH:mm:ss}' 
-                AND hour_timestamp < '{endPeriod:yyyy-MM-dd HH:mm:ss}' THEN 'recent'
-        END as period_type,
-        hourly_players
-    FROM hourly_data
-),
-summary AS (
-    SELECT 
-        AVG(avg_players_in_bucket) as avg_players,
-        MAX(max_players_in_bucket) as peak_players,
-        argMax(time_bucket, max_players_in_bucket) as peak_timestamp,
-        (SELECT COUNT(DISTINCT player_name) FROM player_rounds 
-         WHERE server_guid = '{serverGuid.Replace("'", "''")}'
-           AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
-           AND round_start_time < '{endPeriod:yyyy-MM-dd HH:mm:ss}') as total_unique
-    FROM time_buckets
-),
-period_averages AS (
-    SELECT 
-        period_type,
-        AVG(hourly_players) as avg_players
-    FROM period_comparison
-    WHERE period_type IS NOT NULL
-    GROUP BY period_type
-)
-SELECT 
-    s.avg_players,
-    s.peak_players,
-    s.peak_timestamp,
-    s.total_unique,
-    COALESCE(
-        ROUND((recent.avg_players - older.avg_players) / NULLIF(older.avg_players, 0) * 100),
-        0
-    ) as change_percent
-FROM summary s
-LEFT JOIN (SELECT avg_players FROM period_averages WHERE period_type = 'recent') recent ON 1=1
-LEFT JOIN (SELECT avg_players FROM period_averages WHERE period_type = 'older') older ON 1=1
-FORMAT TabSeparated";
-        }
 
-        _logger.LogDebug("=== PLAYER COUNT SUMMARY QUERY ===");
+        _logger.LogDebug("=== PLAYER COUNT SUMMARY QUERY (Consistent Sampling) ===");
         _logger.LogDebug("Server GUID: {ServerGuid}", serverGuid);
         _logger.LogDebug("Start Period: {StartPeriod}", startPeriod);
         _logger.LogDebug("End Period: {EndPeriod}", endPeriod);
@@ -948,6 +938,81 @@ FORMAT TabSeparated";
 
         return summary;
     }
+
+    private async Task<List<PopularMapDataPoint>> GetAllMapsFromClickHouse(
+        string serverGuid, DateTime startPeriod, DateTime endPeriod)
+    {
+        // Simple and reliable approach: aggregate by map directly
+        var query = $@"
+WITH map_data AS (
+    SELECT 
+        map_name,
+        COUNT() AS data_points,
+        AVG(players_online) AS avg_players,
+        MAX(players_online) AS peak_players,
+        MIN(timestamp) AS first_seen,
+        MAX(timestamp) AS last_seen
+    FROM server_online_counts
+    WHERE server_guid = '{serverGuid.Replace("'", "''")}'
+        AND timestamp >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
+        AND timestamp < '{endPeriod:yyyy-MM-dd HH:mm:ss}'
+        AND map_name != ''
+    GROUP BY map_name
+),
+total_data AS (
+    SELECT SUM(data_points) AS total_points
+    FROM map_data
+)
+SELECT 
+    md.map_name,
+    ROUND(md.avg_players, 2) AS avg_players,
+    md.peak_players,
+    ROUND(md.data_points * 0.5, 0) AS estimated_play_time_minutes, -- 30 seconds per data point = 0.5 minutes
+    ROUND(md.data_points * 100.0 / NULLIF(td.total_points, 0), 2) AS play_time_percentage
+FROM map_data md
+CROSS JOIN total_data td
+ORDER BY md.data_points DESC, md.avg_players DESC
+FORMAT TabSeparated";
+
+        _logger.LogDebug("=== ALL MAPS QUERY (30-second intervals) ===");
+        _logger.LogDebug("Server GUID: {ServerGuid}", serverGuid);
+        _logger.LogDebug("Start Period: {StartPeriod}", startPeriod);
+        _logger.LogDebug("End Period: {EndPeriod}", endPeriod);
+        _logger.LogDebug("FULL QUERY:\n{Query}", query);
+
+        var result = await _clickHouseReader.ExecuteQueryAsync(query);
+        
+        _logger.LogDebug("RAW RESULT:\n{Result}", result);
+        
+        var allMaps = new List<PopularMapDataPoint>();
+
+        foreach (var line in result?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>())
+        {
+            var parts = line.Split('\t');
+            if (parts.Length >= 5)
+            {
+                if (double.TryParse(parts[1], out var avgPlayers) &&
+                    int.TryParse(parts[2], out var peakPlayers) &&
+                    int.TryParse(parts[3], out var totalPlayTime) &&
+                    double.TryParse(parts[4], out var playTimePercentage))
+                {
+                    allMaps.Add(new PopularMapDataPoint
+                    {
+                        MapName = parts[0],
+                        AveragePlayerCount = Math.Round(avgPlayers, 2),
+                        PeakPlayerCount = peakPlayers,
+                        TotalPlayTime = totalPlayTime,
+                        PlayTimePercentage = Math.Round(playTimePercentage, 2)
+                    });
+                }
+            }
+        }
+
+        _logger.LogDebug("All maps count: {Count}", allMaps.Count);
+
+        return allMaps;
+    }
+
 
     private string GetClickHouseTimeGrouping(TimeGranularity granularity)
     {

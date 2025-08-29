@@ -171,7 +171,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
                 {
                     Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse online counts: SKIPPED (disabled by configuration)");
                 }
-                
+
                 activity?.SetTag("total_servers_processed", allServers.Count);
                 activity?.SetTag("bf1942_servers_processed", bf1942Servers.Count);
                 activity?.SetTag("fh2_servers_processed", fh2Servers.Count);

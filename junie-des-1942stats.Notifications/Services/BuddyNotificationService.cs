@@ -23,15 +23,15 @@ public class BuddyNotificationService : IBuddyNotificationService
     {
         using var activity = ActivitySources.Redis.StartActivity("GetUserConnectionIds");
         activity?.SetTag("user.email", userEmail);
-        
+
         try
         {
             var key = UserConnectionsKeyPrefix + userEmail;
             activity?.SetTag("redis.key", key);
-            
+
             var connectionIds = await _redis.SetMembersAsync(key);
             var connections = connectionIds.Select(c => c.ToString()).ToArray();
-            
+
             activity?.SetTag("connections.count", connections.Length);
             return connections;
         }
@@ -48,12 +48,12 @@ public class BuddyNotificationService : IBuddyNotificationService
         using var activity = ActivitySources.Redis.StartActivity("AddUserConnection");
         activity?.SetTag("user.email", userEmail);
         activity?.SetTag("connection.id", connectionId);
-        
+
         try
         {
             var key = UserConnectionsKeyPrefix + userEmail;
             activity?.SetTag("redis.key", key);
-            
+
             await _redis.SetAddAsync(key, connectionId);
             // Set expiry to 24 hours to clean up stale connections
             await _redis.KeyExpireAsync(key, TimeSpan.FromHours(24));
@@ -72,12 +72,12 @@ public class BuddyNotificationService : IBuddyNotificationService
         using var activity = ActivitySources.Redis.StartActivity("RemoveUserConnection");
         activity?.SetTag("user.email", userEmail);
         activity?.SetTag("connection.id", connectionId);
-        
+
         try
         {
             var key = UserConnectionsKeyPrefix + userEmail;
             activity?.SetTag("redis.key", key);
-            
+
             await _redis.SetRemoveAsync(key, connectionId);
 
             _logger.LogDebug("Removed connection {ConnectionId} for user {UserEmail}", connectionId, userEmail);

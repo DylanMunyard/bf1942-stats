@@ -25,11 +25,11 @@ public class NotificationHub : Hub
     public override async Task OnConnectedAsync()
     {
         using var activity = ActivitySources.SignalR.StartActivity("OnConnectedAsync");
-        
+
         var userEmail = GetUserEmail();
         activity?.SetTag("user.email", userEmail);
         activity?.SetTag("connection.id", Context.ConnectionId);
-        
+
         if (!string.IsNullOrEmpty(userEmail))
         {
             await _buddyNotificationService.AddUserConnection(userEmail, Context.ConnectionId);
@@ -47,12 +47,12 @@ public class NotificationHub : Hub
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         using var activity = ActivitySources.SignalR.StartActivity("OnDisconnectedAsync");
-        
+
         var userEmail = GetUserEmail();
         activity?.SetTag("user.email", userEmail);
         activity?.SetTag("connection.id", Context.ConnectionId);
         activity?.SetTag("has_exception", exception != null);
-        
+
         if (!string.IsNullOrEmpty(userEmail))
         {
             await _buddyNotificationService.RemoveUserConnection(userEmail, Context.ConnectionId);

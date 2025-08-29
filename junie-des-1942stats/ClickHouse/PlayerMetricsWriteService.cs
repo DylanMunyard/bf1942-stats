@@ -55,7 +55,7 @@ ORDER BY (server_guid, timestamp)
 PARTITION BY toYYYYMM(timestamp)";
 
         await ExecuteCommandAsync(createTableQuery);
-        
+
         // Add the is_bot column if it doesn't exist (for existing tables)
         await ExecuteCommandAsync("ALTER TABLE player_metrics ADD COLUMN IF NOT EXISTS is_bot UInt8 DEFAULT 0");
     }
@@ -125,7 +125,7 @@ PARTITION BY toYYYYMM(timestamp)";
             {
                 var maxTimestampQuery = "SELECT max(timestamp) as max_ts FROM server_online_counts";
                 var maxTimestampResult = await ExecuteQueryInternalAsync(maxTimestampQuery);
-                
+
                 // Parse ClickHouse result - it returns the timestamp as a string
                 if (!string.IsNullOrWhiteSpace(maxTimestampResult))
                 {
@@ -155,7 +155,7 @@ PARTITION BY toYYYYMM(timestamp)";
             var whereClause = $"WHERE {string.Join(" AND ", whereConditions)}";
 
             // Build the migration query with dynamic server mapping
-            var serverMappingCases = string.Join(",\n        ", 
+            var serverMappingCases = string.Join(",\n        ",
                 serverGameMapping.Select(kvp => $"server_guid = '{kvp.Key}', '{kvp.Value}'"));
 
             var migrationQuery = $@"
@@ -176,7 +176,7 @@ GROUP BY timestamp, server_guid, server_name
 ORDER BY timestamp, server_guid";
 
             await ExecuteCommandAsync(migrationQuery);
-            
+
             Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Successfully migrated player_metrics to server_online_counts (excluding bots)");
         }
         catch (Exception ex)

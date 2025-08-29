@@ -35,7 +35,7 @@ public class CacheService : ICacheService
         using var activity = ActivitySources.Cache.StartActivity("Cache.Get");
         activity?.SetTag("cache.key", key);
         activity?.SetTag("cache.type", typeof(T).Name);
-        
+
         try
         {
             var cachedValue = await _distributedCache.GetStringAsync(key, cancellationToken);

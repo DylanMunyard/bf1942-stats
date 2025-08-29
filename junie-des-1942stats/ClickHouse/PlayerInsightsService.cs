@@ -30,7 +30,7 @@ public class PlayerInsightsService : BaseClickHouseService, IClickHouseReader
         using var activity = ActivitySources.ClickHouse.StartActivity("GetPlayersKillMilestones");
         activity?.SetTag("players.count", playerNames.Count);
         activity?.SetTag("players.names", string.Join(", ", playerNames.Take(5))); // Limit to first 5 for readability
-        
+
         if (!playerNames.Any()) return new List<PlayerKillMilestone>();
 
         var playerNamesQuoted = string.Join(", ", playerNames.Select(p => $"'{p.Replace("'", "''")}'"));

@@ -8,9 +8,16 @@ namespace junie_des_1942stats.ServerStats.Models
         public DateTime EndPeriod { get; set; }
         public PingByHourInsight? PingByHour { get; set; }
 
-        // New improved player count data structure
+        // Current period player count data
         public List<PlayerCountDataPoint> PlayerCountHistory { get; set; } = [];
+        
+        // Comparison period player count data (for the same time range in the previous period)
+        public List<PlayerCountDataPoint> PlayerCountHistoryComparison { get; set; } = [];
+        
         public PlayerCountSummary? PlayerCountSummary { get; set; }
+
+        // Maps analysis
+        public List<PopularMapDataPoint> Maps { get; set; } = [];
     }
 
     public class PlayerCountDataPoint
@@ -43,5 +50,14 @@ namespace junie_des_1942stats.ServerStats.Models
 
         // Legacy property for backward compatibility
         public int Hour => TimePeriod.Hour;
+    }
+
+    public class PopularMapDataPoint
+    {
+        public string MapName { get; set; } = "";
+        public double AveragePlayerCount { get; set; }
+        public int PeakPlayerCount { get; set; }
+        public int TotalPlayTime { get; set; } // Total minutes the map was active
+        public double PlayTimePercentage { get; set; } // Percentage of total server time
     }
 }

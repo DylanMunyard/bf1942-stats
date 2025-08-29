@@ -28,14 +28,14 @@ public class BuddyApiService : IBuddyApiService
     {
         using var activity = ActivitySources.Http.StartActivity("GetUsersWithBuddy");
         activity?.SetTag("buddy.player_name", buddyPlayerName);
-        
+
         try
         {
             _logger.LogInformation("Getting users with buddy {BuddyName} from API", buddyPlayerName);
-            
+
             var response = await _httpClient.GetAsync($"{_apiBaseUrl}/stats/notification/users-with-buddy?buddyPlayerName={Uri.EscapeDataString(buddyPlayerName)}");
             activity?.SetTag("http.status_code", (int)response.StatusCode);
-            
+
             if (response.IsSuccessStatusCode)
             {
                 var userEmails = await response.Content.ReadFromJsonAsync<string[]>();
@@ -63,14 +63,14 @@ public class BuddyApiService : IBuddyApiService
     {
         using var activity = ActivitySources.Http.StartActivity("GetUsersWithFavouriteServer");
         activity?.SetTag("server.guid", serverGuid);
-        
+
         try
         {
             _logger.LogInformation("Getting users with favourite server {ServerGuid} from API", serverGuid);
-            
+
             var response = await _httpClient.GetAsync($"{_apiBaseUrl}/stats/notification/users-with-favourite-server?serverGuid={Uri.EscapeDataString(serverGuid)}");
             activity?.SetTag("http.status_code", (int)response.StatusCode);
-            
+
             if (response.IsSuccessStatusCode)
             {
                 var userEmails = await response.Content.ReadFromJsonAsync<string[]>();

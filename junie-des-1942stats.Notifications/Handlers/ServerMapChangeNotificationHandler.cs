@@ -35,7 +35,7 @@ public class ServerMapChangeNotificationHandler
         activity?.SetTag("map.old", notification.OldMapName);
         activity?.SetTag("map.new", notification.NewMapName);
         activity?.SetTag("game.type", notification.GameType);
-        
+
         try
         {
             _logger.LogInformation("Processing server map change notification for {ServerName}: {OldMap} -> {NewMap}",
@@ -63,7 +63,7 @@ public class ServerMapChangeNotificationHandler
             };
 
             var totalNotificationsSent = 0;
-            
+
             // Send notifications to all connected users who have this server as favourite
             foreach (var userEmail in usersList)
             {
@@ -72,12 +72,12 @@ public class ServerMapChangeNotificationHandler
                 {
                     const string eventName = "ServerMapChange";
                     _logger.LogInformation("Sending SignalR event {EventName} to connection {ConnectionId} for user {UserEmail}", eventName, connectionId, userEmail);
-                    
+
                     using var signalRActivity = ActivitySources.SignalR.StartActivity("SendServerMapChangeNotification");
                     signalRActivity?.SetTag("event.name", eventName);
                     signalRActivity?.SetTag("connection.id", connectionId);
                     signalRActivity?.SetTag("user.email", userEmail);
-                    
+
                     try
                     {
                         await _hubContext.Clients.Client(connectionId).SendAsync(eventName, message, cancellationToken);

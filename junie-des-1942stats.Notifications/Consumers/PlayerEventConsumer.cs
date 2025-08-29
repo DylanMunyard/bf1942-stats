@@ -120,7 +120,7 @@ namespace junie_des_1942stats.Notifications.Consumers
         private async Task ProcessPlayerEvent(RedisValue jsonMessage)
         {
             using var activity = ActivitySources.Events.StartActivity("ProcessPlayerEvent");
-            
+
             try
             {
                 using var scope = _scopeFactory.CreateScope();
@@ -131,7 +131,7 @@ namespace junie_des_1942stats.Notifications.Consumers
                 {
                     var eventType = notification.GetType().Name;
                     activity?.SetTag("event.type", eventType);
-                    
+
                     _logger.LogDebug("Processing event of type {EventType}", eventType);
 
                     // Publish using the concrete type to ensure proper handler resolution

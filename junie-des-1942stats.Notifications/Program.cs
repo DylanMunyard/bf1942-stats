@@ -68,7 +68,7 @@ try
                 ["deployment.environment"] = environment,
                 ["host.name"] = Environment.MachineName
             }))
-        
+
         .WithTracing(tracing =>
             {
                 tracing.AddAspNetCoreInstrumentation(options =>
@@ -98,7 +98,7 @@ try
     // Configure JWT Authentication to validate self-minted tokens from main app
     var issuer = builder.Configuration["Jwt:Issuer"] ?? "";
     var audience = builder.Configuration["Jwt:Audience"] ?? "";
-    
+
     string? ReadConfigStringOrFile(string valueKey, string pathKey)
     {
         var v = builder.Configuration[valueKey];

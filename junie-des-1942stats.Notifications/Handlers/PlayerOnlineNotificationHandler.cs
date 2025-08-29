@@ -34,7 +34,7 @@ public class PlayerOnlineNotificationHandler
         activity?.SetTag("server.name", notification.ServerName);
         activity?.SetTag("server.guid", notification.ServerGuid);
         activity?.SetTag("map.name", notification.MapName);
-        
+
         try
         {
             _logger.LogInformation("Processing player online notification for {PlayerName} on {ServerName}",
@@ -62,7 +62,7 @@ public class PlayerOnlineNotificationHandler
             };
 
             var totalNotificationsSent = 0;
-            
+
             // Send notifications to all connected users who have this buddy
             foreach (var userEmail in usersList)
             {
@@ -71,12 +71,12 @@ public class PlayerOnlineNotificationHandler
                 {
                     const string eventName = "BuddyOnline";
                     _logger.LogInformation("Sending SignalR event {EventName} to connection {ConnectionId} for user {UserEmail}", eventName, connectionId, userEmail);
-                    
+
                     using var signalRActivity = ActivitySources.SignalR.StartActivity("SendBuddyOnlineNotification");
                     signalRActivity?.SetTag("event.name", eventName);
                     signalRActivity?.SetTag("connection.id", connectionId);
                     signalRActivity?.SetTag("user.email", userEmail);
-                    
+
                     try
                     {
                         await _hubContext.Clients.Client(connectionId).SendAsync(eventName, message, cancellationToken);
