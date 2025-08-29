@@ -21,9 +21,6 @@ public interface IBfListApiService
     Task<ServerSummary[]> FetchAllServerSummariesWithCacheStatusAsync(string game);
     Task<ServerSummary[]> FetchAllServerSummariesAsync(string game);
     Task<ServerSummary?> FetchSingleServerSummaryAsync(string game, string serverIdentifier);
-
-    // Get players online history data from database
-    Task<PlayersOnlineHistoryResponse> GetPlayersOnlineHistoryAsync(string game, string period = "7d");
 }
 
 public class BfListApiService : IBfListApiService
@@ -453,63 +450,6 @@ public class BfListApiService : IBfListApiService
             Teams = server.Teams?.ToArray() ?? []
         };
     }
-
-    public async Task<PlayersOnlineHistoryResponse> GetPlayersOnlineHistoryAsync(string game, string period = "7d")
-    {
-        // Parse the period parameter
-        var days = period switch
-        {
-            "1d" => 1,
-            "3d" => 3, 
-            "7d" => 7,
-            _ => 7 // Default to 7 days
-        };
-
-        var startDate = DateTime.UtcNow.AddDays(-days);
-        
-        // Query the database to get player counts over time by sampling PlayerSessions
-        // We'll sample every hour to get a reasonable number of data points
-        var dataPoints = new List<PlayersOnlineDataPoint>();
-        var sampleInterval = TimeSpan.FromHours(1);
-        
-        for (var currentTime = startDate; currentTime <= DateTime.UtcNow; currentTime = currentTime.Add(sampleInterval))
-        {
-            // Count active sessions at this point in time for the specific game
-            // A session is considered active if it started before or at currentTime and
-            // either IsActive=true OR LastSeenTime is within a reasonable window of currentTime
-            var gracePeriod = TimeSpan.FromMinutes(15); // Consider session active if seen within last 15 minutes
-            
-            var activeSessions = await _dbContext.PlayerSessions
-                .Where(ps => ps.StartTime <= currentTime && 
-                           (ps.IsActive || ps.LastSeenTime >= currentTime.Subtract(gracePeriod)) &&
-                           ps.Server.GameId == game)
-                .CountAsync();
-
-            // Count unique servers with active sessions at this time
-            var activeServers = await _dbContext.PlayerSessions
-                .Where(ps => ps.StartTime <= currentTime && 
-                           (ps.IsActive || ps.LastSeenTime >= currentTime.Subtract(gracePeriod)) &&
-                           ps.Server.GameId == game)
-                .Select(ps => ps.ServerGuid)
-                .Distinct()
-                .CountAsync();
-
-            dataPoints.Add(new PlayersOnlineDataPoint
-            {
-                Timestamp = currentTime,
-                TotalPlayers = activeSessions,
-                ActiveServers = activeServers
-            });
-        }
-
-        return new PlayersOnlineHistoryResponse
-        {
-            DataPoints = dataPoints.ToArray(),
-            Period = period,
-            Game = game,
-            LastUpdated = DateTime.UtcNow.ToString("O")
-        };
-    }
 }
 
 /// <summary>
@@ -686,9 +626,4 @@ public class PlayersOnlineDataPoint
     /// Total number of players online at this timestamp
     /// </summary>
     public int TotalPlayers { get; set; }
-    
-    /// <summary>
-    /// Number of active servers at this timestamp
-    /// </summary>
-    public int ActiveServers { get; set; }
 }

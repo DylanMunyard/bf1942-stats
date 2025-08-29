@@ -203,7 +203,7 @@ public class LiveServersController : ControllerBase
         var query = $@"
 WITH server_latest_counts AS (
     SELECT 
-        toStartOfHour(timestamp) as time_bucket,
+        toDateTime(toUnixTimestamp(timestamp) - (toUnixTimestamp(timestamp) % 300)) as time_bucket,
         server_guid,
         argMax(players_online, timestamp) as players_online
     FROM server_online_counts
