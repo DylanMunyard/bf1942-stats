@@ -257,6 +257,7 @@ public class PlayerContextInfo
 public class SessionListItem
 {
     public int SessionId { get; set; }
+    public string PlayerName { get; set; } = string.Empty;
     public string ServerName { get; set; } = string.Empty;
     public string ServerGuid { get; set; } = string.Empty;
     public string MapName { get; set; } = string.Empty;

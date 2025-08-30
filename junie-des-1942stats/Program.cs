@@ -302,6 +302,7 @@ try
     // Register the player tracking service
     builder.Services.AddScoped<PlayerTrackingService>();
     builder.Services.AddScoped<PlayerStatsService>();
+    builder.Services.AddScoped<SessionsService>();
 
     // Register the ServerStatsService
     builder.Services.AddScoped<ServerStatsService>();
