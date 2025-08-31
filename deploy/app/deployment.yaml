@@ -63,6 +63,13 @@ spec:
               value: "https://1942.munyard.dev"
             - name: Cors__AllowedOrigins
               value: "https://1942.munyard.dev"
+            # Bot Detection Configuration
+            - name: BotDetection__DefaultPlayerNames__0
+              value: "BFPlayer"
+            - name: BotDetection__DefaultPlayerNames__1
+              value: "Player"
+            - name: BotDetection__DefaultPlayerNames__2
+              value: "BFSoldier"
             # Refresh token cookie configuration (Secret provided via external secret manager)
             - name: RefreshToken__CookieName
               value: "rt"
@@ -226,32 +233,3 @@ spec:
       containers:
         - name: redis
           image: redis:7-alpine
-          ports:
-            - containerPort: 6379
-          args:
-            - redis-server
-            - --appendonly
-            - "yes"
-          volumeMounts:
-            - name: redis-dev-data
-              mountPath: /data
-      volumes:
-        - name: redis-dev-data
-          emptyDir: {}
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: redis-dev-service
-  namespace: bf42-stats
-  labels:
-    app: redis-dev
-spec:
-  selector:
-    app: redis-dev
-  type: ClusterIP
-  ports:
-    - port: 6380
-      targetPort: 6379
-      name: redis

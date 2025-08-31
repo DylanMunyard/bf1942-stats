@@ -299,6 +299,9 @@ try
                .EnableSensitiveDataLogging(false)  // Disable sensitive data logging
                .LogTo(message => { }, LogLevel.Warning)); // Only log warnings and errors
 
+    // Register bot detection service
+    builder.Services.AddSingleton<IBotDetectionService, BotDetectionService>();
+    
     // Register the player tracking service
     builder.Services.AddScoped<PlayerTrackingService>();
     builder.Services.AddScoped<PlayerStatsService>();

@@ -20,7 +20,10 @@
         "Jwt:Audience": "http://localhost:5173",
         "RefreshToken:CookieName": "rt",
         "RefreshToken:CookiePath": "/stats",
-        "RefreshToken:Days": "60"
+        "RefreshToken:Days": "60",
+        "BotDetection__DefaultPlayerNames__0": "BFPlayer",
+        "BotDetection__DefaultPlayerNames__1": "Player",
+        "BotDetection__DefaultPlayerNames__2": "BFSoldier"
       }
     }
   }

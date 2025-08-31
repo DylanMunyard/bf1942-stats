@@ -11,14 +11,16 @@ public class PlayerTrackingService
     private readonly PlayerTrackerDbContext _dbContext;
     private readonly IPlayerEventPublisher? _eventPublisher;
     private readonly ILogger<PlayerTrackingService> _logger;
+    private readonly IBotDetectionService _botDetectionService;
     private readonly TimeSpan _sessionTimeout = TimeSpan.FromMinutes(5);
     private static readonly SemaphoreSlim IpInfoSemaphore = new SemaphoreSlim(10); // max 10 concurrent
     private static DateTime _lastIpInfoRequest = DateTime.MinValue;
     private static readonly object IpInfoLock = new object();
 
-    public PlayerTrackingService(PlayerTrackerDbContext dbContext, IPlayerEventPublisher? eventPublisher = null, ILogger<PlayerTrackingService>? logger = null)
+    public PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetectionService botDetectionService, IPlayerEventPublisher? eventPublisher = null, ILogger<PlayerTrackingService>? logger = null)
     {
         _dbContext = dbContext;
+        _botDetectionService = botDetectionService;
         _eventPublisher = eventPublisher;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<PlayerTrackingService>.Instance;
     }
@@ -67,7 +69,7 @@ public class PlayerTrackingService
                     Name = playerInfo.Name,
                     FirstSeen = timestamp,
                     LastSeen = timestamp,
-                    AiBot = playerInfo.AiBot,
+                    AiBot = _botDetectionService.IsBotPlayer(playerInfo.Name, playerInfo.AiBot),
                 };
                 newPlayers.Add(player);
                 playerMap.Add(player.Name, player);
@@ -75,7 +77,7 @@ public class PlayerTrackingService
             else
             {
                 // Update existing player
-                player.AiBot = playerInfo.AiBot;
+                player.AiBot = _botDetectionService.IsBotPlayer(playerInfo.Name, playerInfo.AiBot);
                 player.LastSeen = timestamp;
                 _dbContext.Players.Update(player);
             }

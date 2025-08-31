@@ -53,6 +53,7 @@ public class PlayerRoundsWriteService : BaseClickHouseService, IClickHouseWriter
     {
         var createTableQuery = @"
 CREATE TABLE IF NOT EXISTS player_rounds (
+    round_id String,
     player_name String,
     server_guid String,
     map_name String,
@@ -62,18 +63,17 @@ CREATE TABLE IF NOT EXISTS player_rounds (
     final_kills UInt32,
     final_deaths UInt32,
     play_time_minutes Float64,
-    round_id String,
     team_label String,
     game_id String,
     created_at DateTime DEFAULT now()
-) ENGINE = MergeTree()
-ORDER BY (player_name, server_guid, round_start_time)
+) ENGINE = ReplacingMergeTree()
+ORDER BY round_id
 PARTITION BY toYYYYMM(round_start_time)
 SETTINGS index_granularity = 8192";
 
         await ExecuteCommandAsync(createTableQuery);
 
-        // Create indexes
+        // Create indexes for common query patterns
         var indexQueries = new[]
         {
             "ALTER TABLE player_rounds ADD INDEX IF NOT EXISTS idx_player_time (player_name, round_start_time) TYPE minmax GRANULARITY 1",
@@ -96,72 +96,6 @@ SETTINGS index_granularity = 8192";
     public async Task ExecuteCommandAsync(string command)
     {
         await ExecuteCommandInternalAsync(command);
-    }
-
-    /// <summary>
-    /// Syncs completed PlayerSessions to ClickHouse player_rounds table using incremental sync
-    /// </summary>
-    public async Task<SyncResult> SyncCompletedSessionsAsync(int batchSize = 5000)
-    {
-        var startTime = DateTime.UtcNow;
-        try
-        {
-            // Use last synced timestamp from ClickHouse for incremental sync (read operation)
-            var lastSyncedTime = await GetLastSyncedTimestampAsync();
-            var fromDate = lastSyncedTime ?? DateTime.UtcNow.AddDays(-365);
-
-            _logger.LogInformation("Starting incremental sync of completed player sessions from {FromDate}", fromDate);
-
-            // Use scoped DbContext for database access
-            using var scope = _scopeFactory.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
-
-            // Get completed sessions since last sync, ordered consistently
-            // Use > instead of >= to avoid re-syncing the exact last record and prevent duplicates
-            var query = lastSyncedTime.HasValue
-                ? dbContext.PlayerSessions.Where(ps => !ps.IsActive && ps.LastSeenTime > fromDate)
-                : dbContext.PlayerSessions.Where(ps => !ps.IsActive && ps.LastSeenTime >= fromDate);
-
-            var completedSessions = await query
-                .OrderBy(ps => ps.SessionId)
-                .Take(batchSize)
-                .Include(ps => ps.Observations.OrderByDescending(o => o.Timestamp).Take(1))
-                .ToListAsync();
-
-            if (!completedSessions.Any())
-            {
-                _logger.LogInformation("No new sessions found for incremental sync");
-                return new SyncResult
-                {
-                    ProcessedCount = 0,
-                    Duration = DateTime.UtcNow - startTime
-                };
-            }
-
-            var playerRounds = completedSessions.Select(ConvertToPlayerRound).ToList();
-            await InsertPlayerRoundsAsync(playerRounds);
-
-            var duration = DateTime.UtcNow - startTime;
-            _logger.LogInformation("Successfully synced {Count} completed sessions to ClickHouse in {Duration}ms",
-                playerRounds.Count, duration.TotalMilliseconds);
-
-            return new SyncResult
-            {
-                ProcessedCount = playerRounds.Count,
-                Duration = duration
-            };
-        }
-        catch (Exception ex)
-        {
-            var duration = DateTime.UtcNow - startTime;
-            _logger.LogError(ex, "Failed to sync completed sessions");
-            return new SyncResult
-            {
-                ProcessedCount = 0,
-                Duration = duration,
-                ErrorMessage = ex.Message
-            };
-        }
     }
 
     private async Task<DateTime?> GetLastSyncedTimestampAsync()
@@ -193,6 +127,113 @@ SETTINGS index_granularity = 8192";
 
         return null;
     }
+
+    /// <summary>
+    /// Syncs completed PlayerSessions to ClickHouse player_rounds table using idempotent sync
+    /// </summary>
+    public async Task<SyncResult> SyncCompletedSessionsAsync(int batchSize = 10000)
+    {
+        var startTime = DateTime.UtcNow;
+        var totalProcessedCount = 0;
+        
+        try
+        {
+            // Use last synced timestamp from ClickHouse for incremental sync (read operation)
+            var lastSyncedTime = await GetLastSyncedTimestampAsync();
+            var fromDate = lastSyncedTime ?? DateTime.UtcNow.AddDays(-365);
+            
+            _logger.LogInformation("Starting batch sync of all completed player sessions (batch size: {BatchSize})", batchSize);
+
+            // Use scoped DbContext for database access
+            using var scope = _scopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
+
+            // Get total count for progress reporting
+            var totalQuery = lastSyncedTime.HasValue
+                ? dbContext.PlayerSessions.Where(ps => !ps.IsActive && ps.LastSeenTime > fromDate.AddHours(-1))
+                : dbContext.PlayerSessions.Where(ps => !ps.IsActive && ps.LastSeenTime >= fromDate);
+            
+            var totalCount = await totalQuery.CountAsync();
+            if (totalCount == 0)
+            {
+                _logger.LogInformation("No completed sessions found to sync");
+                return new SyncResult
+                {
+                    ProcessedCount = 0,
+                    Duration = DateTime.UtcNow - startTime
+                };
+            }
+
+            _logger.LogInformation("Found {TotalCount} sessions to sync", totalCount);
+
+            // Process all records in batches
+            var processedSoFar = 0;
+            var batchNumber = 0;
+
+            while (processedSoFar < totalCount)
+            {
+                batchNumber++;
+                var batchStartTime = DateTime.UtcNow;
+                
+                // Get completed sessions since last sync, ordered consistently
+                var query = lastSyncedTime.HasValue
+                    ? dbContext.PlayerSessions.Where(ps => !ps.IsActive && ps.LastSeenTime > fromDate.AddHours(-1))
+                    : dbContext.PlayerSessions.Where(ps => !ps.IsActive && ps.LastSeenTime >= fromDate);
+
+                // Get batch of completed sessions - ReplacingMergeTree handles deduplication
+                var completedSessions = await query
+                    .OrderBy(ps => ps.SessionId)
+                    .Skip(processedSoFar)
+                    .Take(batchSize)
+                    .Include(ps => ps.Observations.OrderByDescending(o => o.Timestamp).Take(1))
+                    .ToListAsync();
+
+                if (!completedSessions.Any())
+                {
+                    break; // No more records to process
+                }
+
+                var playerRounds = completedSessions.Select(ConvertToPlayerRound).ToList();
+                await InsertPlayerRoundsAsync(playerRounds);
+
+                processedSoFar += playerRounds.Count;
+                totalProcessedCount += playerRounds.Count;
+                
+                var batchDuration = DateTime.UtcNow - batchStartTime;
+                _logger.LogInformation("Batch {BatchNumber}: Synced {BatchCount} sessions ({ProcessedSoFar}/{TotalCount}) in {Duration}ms", 
+                    batchNumber, playerRounds.Count, processedSoFar, totalCount, batchDuration.TotalMilliseconds);
+
+                // Small delay to prevent overwhelming the database
+                if (processedSoFar < totalCount)
+                {
+                    await Task.Delay(100);
+                }
+            }
+
+            var duration = DateTime.UtcNow - startTime;
+            _logger.LogInformation("Successfully synced all {Count} completed sessions to ClickHouse in {Duration}ms across {BatchCount} batches", 
+                totalProcessedCount, duration.TotalMilliseconds, batchNumber);
+
+            return new SyncResult
+            {
+                ProcessedCount = totalProcessedCount,
+                Duration = duration
+            };
+        }
+        catch (Exception ex)
+        {
+            var duration = DateTime.UtcNow - startTime;
+            _logger.LogError(ex, "Failed to sync completed sessions after processing {ProcessedCount} records", totalProcessedCount);
+            return new SyncResult
+            {
+                ProcessedCount = totalProcessedCount,
+                Duration = duration,
+                ErrorMessage = ex.Message
+            };
+        }
+    }
+
+
 
     private PlayerRound ConvertToPlayerRound(PlayerSession session)
     {
@@ -247,9 +288,10 @@ SETTINGS index_granularity = 8192";
             };
             using var csvWriter = new CsvWriter(stringWriter, config);
 
-            // Write CSV records without header
+            // Write CSV records without header, round_id first to match new schema
             csvWriter.WriteRecords(rounds.Select(r => new
             {
+                RoundId = r.RoundId,
                 PlayerName = r.PlayerName,
                 ServerGuid = r.ServerGuid,
                 MapName = r.MapName,
@@ -259,14 +301,13 @@ SETTINGS index_granularity = 8192";
                 FinalKills = r.FinalKills,
                 FinalDeaths = r.FinalDeaths,
                 PlayTimeMinutes = r.PlayTimeMinutes.ToString("F2", CultureInfo.InvariantCulture),
-                RoundId = r.RoundId,
                 TeamLabel = r.TeamLabel,
                 GameId = r.GameId,
                 CreatedAt = r.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")
             }));
 
             var csvData = stringWriter.ToString();
-            var query = "INSERT INTO player_rounds (player_name, server_guid, map_name, round_start_time, round_end_time, final_score, final_kills, final_deaths, play_time_minutes, round_id, team_label, game_id, created_at) FORMAT CSV";
+            var query = "INSERT INTO player_rounds (round_id, player_name, server_guid, map_name, round_start_time, round_end_time, final_score, final_kills, final_deaths, play_time_minutes, team_label, game_id, created_at) FORMAT CSV";
             var fullRequest = query + "\n" + csvData;
 
             await ExecuteCommandAsync(fullRequest);
