@@ -48,7 +48,7 @@ public class RankingCalculationService(IServiceProvider services) : BackgroundSe
             dbContext.ServerPlayerRankings.RemoveRange(existingRankingsForMonth);
             await dbContext.SaveChangesAsync(); // Save changes before adding new ones
 
-            // Use a raw SQL query to get the data for the current month
+            // Use a raw SQL query to get the data for the current month, excluding bots
             var playerData = await dbContext.Database.SqlQueryRaw<PlayerRankingData>(@"
             SELECT 
                 ps.PlayerName,
@@ -57,9 +57,11 @@ public class RankingCalculationService(IServiceProvider services) : BackgroundSe
                 SUM(ps.TotalDeaths) AS TotalDeaths,
                 CAST(SUM((julianday(ps.LastSeenTime) - julianday(ps.StartTime)) * 1440) AS INTEGER) AS TotalPlayTimeMinutes
             FROM PlayerSessions ps
+            INNER JOIN Players p ON ps.PlayerName = p.Name
             WHERE ps.ServerGuid = {0}
               AND strftime('%Y', ps.StartTime) = {1} 
               AND strftime('%m', ps.StartTime) = {2}
+              AND p.AiBot = 0
             GROUP BY ps.PlayerName
             ORDER BY SUM(ps.TotalScore) DESC",
                 server.Guid, currentYearString, currentMonthString).ToListAsync();

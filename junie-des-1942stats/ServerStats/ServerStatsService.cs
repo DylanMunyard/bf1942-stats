@@ -884,6 +884,7 @@ unique_players AS (
     WHERE server_guid = '{serverGuid.Replace("'", "''")}'
         AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
         AND round_start_time < '{endPeriod:yyyy-MM-dd HH:mm:ss}'
+        AND is_bot = 0
 )
 SELECT 
     s.avg_players,

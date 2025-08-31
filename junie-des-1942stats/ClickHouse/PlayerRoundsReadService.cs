@@ -39,7 +39,7 @@ public class PlayerRoundsReadService : BaseClickHouseService, IClickHouseReader
         activity?.SetTag("player.name", playerName);
         activity?.SetTag("query.from_date", fromDate?.ToString("yyyy-MM-dd HH:mm:ss"));
         activity?.SetTag("query.to_date", toDate?.ToString("yyyy-MM-dd HH:mm:ss"));
-        var conditions = new List<string>();
+        var conditions = new List<string> { "is_bot = 0" }; // Exclude bots
 
         if (!string.IsNullOrEmpty(playerName))
             conditions.Add($"player_name = '{playerName.Replace("'", "''")}'");
@@ -50,7 +50,7 @@ public class PlayerRoundsReadService : BaseClickHouseService, IClickHouseReader
         if (toDate.HasValue)
             conditions.Add($"round_start_time <= '{toDate.Value:yyyy-MM-dd HH:mm:ss}'");
 
-        var whereClause = conditions.Any() ? "WHERE " + string.Join(" AND ", conditions) : "";
+        var whereClause = "WHERE " + string.Join(" AND ", conditions);
 
         var query = $@"
 SELECT 
@@ -86,6 +86,7 @@ FROM player_rounds
 WHERE server_guid = '{serverGuid.Replace("'", "''")}'
   AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
   AND round_end_time <= '{endPeriod:yyyy-MM-dd HH:mm:ss}'
+  AND is_bot = 0
 GROUP BY player_name
 ORDER BY minutes_played DESC
 LIMIT {limit}

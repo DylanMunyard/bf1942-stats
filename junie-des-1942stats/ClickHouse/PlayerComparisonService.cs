@@ -1324,7 +1324,7 @@ map_averages AS (
         AVG(final_kills / nullIf(play_time_minutes, 0)) as avg_kill_rate,
         AVG(final_score / nullIf(play_time_minutes, 0)) as avg_score_rate
     FROM player_rounds
-    WHERE round_start_time >= now() - INTERVAL 6 MONTH
+    WHERE is_bot = 0 AND round_start_time >= now() - INTERVAL 6 MONTH
       AND play_time_minutes > 5{serverFilter}
     GROUP BY map_name
 )

@@ -173,6 +173,7 @@ FORMAT TabSeparated";
 SELECT DISTINCT server_guid, any(game_id) as game_id
 FROM player_rounds
 WHERE server_guid IN ('{serverGuids}')
+  AND is_bot = 0
 GROUP BY server_guid
 FORMAT TabSeparated";
 

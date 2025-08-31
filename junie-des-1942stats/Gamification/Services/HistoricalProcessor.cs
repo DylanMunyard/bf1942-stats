@@ -297,6 +297,7 @@ WITH running_totals AS (
     FROM player_rounds
     WHERE round_end_time >= '{startDate:yyyy-MM-dd HH:mm:ss}'
     AND round_end_time <= '{endDate:yyyy-MM-dd HH:mm:ss}'
+    AND is_bot = 0
     ORDER BY player_name, round_end_time
 ),
 milestone_crossings AS (
@@ -505,6 +506,7 @@ ORDER BY player_name, threshold";
             FROM player_rounds
             WHERE round_end_time >= '{startDate:yyyy-MM-dd HH:mm:ss}'
             AND round_end_time <= '{endDate:yyyy-MM-dd HH:mm:ss}'
+            AND is_bot = 0
             GROUP BY player_name
             HAVING total_rounds >= 5  -- Only process players with meaningful activity
             ORDER BY total_kills DESC";
