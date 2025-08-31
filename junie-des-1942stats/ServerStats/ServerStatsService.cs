@@ -176,7 +176,8 @@ public class ServerStatsService(
         var isDescending = orderDirection.Equals("desc", StringComparison.OrdinalIgnoreCase);
 
         IQueryable<ServerPlayerRanking> baseQuery = _dbContext.ServerPlayerRankings
-            .Where(sr => sr.Server.Name == serverName);
+            .Include(sr => sr.Player)
+            .Where(sr => sr.Server.Name == serverName && !sr.Player.AiBot);
 
         // If year is provided, filter by year and month (use all months for the year)
         if (year.HasValue)

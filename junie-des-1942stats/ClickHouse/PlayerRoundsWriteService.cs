@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS player_rounds (
     play_time_minutes Float64,
     team_label String,
     game_id String,
+    is_bot UInt8,
     created_at DateTime DEFAULT now()
 ) ENGINE = ReplacingMergeTree()
 ORDER BY round_id
@@ -72,6 +73,9 @@ PARTITION BY toYYYYMM(round_start_time)
 SETTINGS index_granularity = 8192";
 
         await ExecuteCommandAsync(createTableQuery);
+
+        // Add the is_bot column if it doesn't exist (for existing tables)
+        await ExecuteCommandAsync("ALTER TABLE player_rounds ADD COLUMN IF NOT EXISTS is_bot UInt8 DEFAULT 0");
 
         // Create indexes for common query patterns
         var indexQueries = new[]
@@ -185,6 +189,7 @@ SETTINGS index_granularity = 8192";
                     .OrderBy(ps => ps.SessionId)
                     .Skip(processedSoFar)
                     .Take(batchSize)
+                    .Include(ps => ps.Player)
                     .Include(ps => ps.Observations.OrderByDescending(o => o.Timestamp).Take(1))
                     .ToListAsync();
 
@@ -260,6 +265,7 @@ SETTINGS index_granularity = 8192";
             RoundId = roundId,
             TeamLabel = teamLabel,
             GameId = session.GameType,
+            IsBot = session.Player?.AiBot ?? false,
             CreatedAt = DateTime.UtcNow
         };
     }
@@ -303,11 +309,12 @@ SETTINGS index_granularity = 8192";
                 PlayTimeMinutes = r.PlayTimeMinutes.ToString("F2", CultureInfo.InvariantCulture),
                 TeamLabel = r.TeamLabel,
                 GameId = r.GameId,
+                IsBot = r.IsBot ? 1 : 0,
                 CreatedAt = r.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")
             }));
 
             var csvData = stringWriter.ToString();
-            var query = "INSERT INTO player_rounds (round_id, player_name, server_guid, map_name, round_start_time, round_end_time, final_score, final_kills, final_deaths, play_time_minutes, team_label, game_id, created_at) FORMAT CSV";
+            var query = "INSERT INTO player_rounds (round_id, player_name, server_guid, map_name, round_start_time, round_end_time, final_score, final_kills, final_deaths, play_time_minutes, team_label, game_id, is_bot, created_at) FORMAT CSV";
             var fullRequest = query + "\n" + csvData;
 
             await ExecuteCommandAsync(fullRequest);

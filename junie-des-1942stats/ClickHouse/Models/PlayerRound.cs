@@ -11,6 +11,7 @@ public class PlayerRound
     public uint FinalKills { get; set; }
     public uint FinalDeaths { get; set; }
     public double PlayTimeMinutes { get; set; }
+    public bool IsBot { get; set; }
 
     // Convenience properties for gamification (map to existing properties)
     public int Score => FinalScore;
