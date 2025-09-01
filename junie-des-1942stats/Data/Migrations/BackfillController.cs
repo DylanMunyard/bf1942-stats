@@ -22,6 +22,7 @@ public class BackfillController : ControllerBase
         public string? ServerGuid { get; set; }
         public DateTime? FromUtc { get; set; }
         public DateTime? ToUtc { get; set; }
+        public bool MarkLatestPerServerActive { get; set; } = false;
     }
 
     public class BackfillResponse
@@ -39,7 +40,7 @@ public class BackfillController : ControllerBase
     {
         var started = DateTime.UtcNow;
         _logger.LogInformation("API backfill request started: server={ServerGuid} from={From} to={To}", request.ServerGuid ?? "ALL", request.FromUtc, request.ToUtc);
-        var count = await _backfillService.BackfillRoundsAsync(request.FromUtc, request.ToUtc, request.ServerGuid, cancellationToken);
+        var count = await _backfillService.BackfillRoundsAsync(request.FromUtc, request.ToUtc, request.ServerGuid, request.MarkLatestPerServerActive, cancellationToken);
         var ended = DateTime.UtcNow;
         var response = new BackfillResponse
         {

@@ -21,6 +21,7 @@ public class RoundBackfillService
         DateTime? startTimeUtc = null,
         DateTime? endTimeUtc = null,
         string? serverGuid = null,
+        bool markLatestPerServerActive = false,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("BackfillRoundsAsync started: startTimeUtc={StartTimeUtc}, endTimeUtc={EndTimeUtc}, serverGuid={ServerGuid}", 
@@ -351,6 +352,13 @@ public class RoundBackfillService
             }
         }
 
+        // Optionally, mark the very latest round per server as active across the whole database
+        if (markLatestPerServerActive)
+        {
+            _logger.LogInformation("Backfill: Marking latest round per server as active across entire database");
+            await MarkLatestRoundsPerServerActiveAsync(serverGuid, cancellationToken);
+        }
+        
         // Calculate participant counts for all rounds in a single SQL query
         _logger.LogInformation("Backfill: Calculating participant counts for all {RoundCount} rounds", roundsToProcess.Count);
         
@@ -400,6 +408,8 @@ public class RoundBackfillService
         return createdOrUpdatedRounds;
     }
 
+    // Removed the per-processed-set activation to simplify behavior; use global activation instead
+
     private static string ComputeRoundId(string serverGuid, string mapName, DateTime startTimeUtc)
     {
         var normalized = new DateTime(startTimeUtc.Ticks - (startTimeUtc.Ticks % TimeSpan.TicksPerSecond), DateTimeKind.Utc);
@@ -409,6 +419,58 @@ public class RoundBackfillService
         var hex = Convert.ToHexString(hash);
         var roundId = hex[..20].ToLowerInvariant();
         return roundId;
+    }
+
+    private async Task MarkLatestRoundsPerServerActiveAsync(string? scopeServerGuid, CancellationToken cancellationToken)
+    {
+        // Determine which servers to process (all servers or a single server if scoped)
+        List<string> serverGuids;
+        if (!string.IsNullOrWhiteSpace(scopeServerGuid))
+        {
+            serverGuids = new List<string> { scopeServerGuid };
+        }
+        else
+        {
+            serverGuids = await _dbContext.Rounds
+                .Select(r => r.ServerGuid)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+        }
+
+        _logger.LogInformation("Backfill: Preparing to activate latest rounds for {ServerCount} servers", serverGuids.Count);
+
+        const int batchSize = 100;
+        for (int i = 0; i < serverGuids.Count; i += batchSize)
+        {
+            var batch = serverGuids.Skip(i).Take(batchSize).ToList();
+            var batchNumber = (i / batchSize) + 1;
+            var totalBatches = (int)Math.Ceiling((double)serverGuids.Count / batchSize);
+
+            // Compute the last round per server in this batch using Coalesce(EndTime, StartTime)
+            var lastRoundIds = await _dbContext.Rounds
+                .Where(r => batch.Contains(r.ServerGuid))
+                .GroupBy(r => r.ServerGuid)
+                .Select(g => g
+                    .OrderByDescending(r => (r.EndTime ?? r.StartTime))
+                    .Select(r => r.RoundId)
+                    .First())
+                .ToListAsync(cancellationToken);
+
+            // Activate the winners
+            if (lastRoundIds.Count > 0)
+            {
+                var roundList = string.Join(',', lastRoundIds.Select(id => $"'{id.Replace("'", "''")}'"));
+                var activateSql =
+                    "UPDATE Rounds\n" +
+                    "SET IsActive = 1\n" +
+                    "WHERE RoundId IN (" + roundList + ")";
+                await _dbContext.Database.ExecuteSqlRawAsync(activateSql, cancellationToken: cancellationToken);
+            }
+
+            _logger.LogInformation("Backfill: Marked last round active for batch {BatchNumber}/{TotalBatches} (servers={ServerCount})", batchNumber, totalBatches, batch.Count);
+        }
+
+        _logger.LogInformation("Backfill: Completed activation of latest rounds per server");
     }
 }
 
