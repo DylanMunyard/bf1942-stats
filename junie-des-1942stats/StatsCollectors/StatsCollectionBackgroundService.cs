@@ -24,6 +24,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     private readonly bool _enableClickhouseSyncing;
     private readonly bool _enablePlayerMetricsSyncing;
     private readonly bool _enableServerOnlineCountsSyncing;
+    private readonly bool _enableRoundsSyncing;
 
 
 
@@ -36,6 +37,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         _enableClickhouseSyncing = Environment.GetEnvironmentVariable("ENABLE_ROUND_SYNCING")?.ToLowerInvariant() == "true";
         _enablePlayerMetricsSyncing = Environment.GetEnvironmentVariable("ENABLE_PLAYER_METRICS_SYNCING")?.ToLowerInvariant() == "true";
         _enableServerOnlineCountsSyncing = Environment.GetEnvironmentVariable("ENABLE_SERVER_ONLINE_COUNTS_SYNCING")?.ToLowerInvariant() == "true";
+        _enableRoundsSyncing = Environment.GetEnvironmentVariable("ENABLE_ROUNDS_SYNCING")?.ToLowerInvariant() == "true";
 
         var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
         var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? clickHouseReadUrl;
@@ -46,6 +48,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Round syncing to ClickHouse: {(_enableClickhouseSyncing ? "ENABLED" : "DISABLED")}");
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Player metrics syncing to ClickHouse: {(_enablePlayerMetricsSyncing ? "ENABLED" : "DISABLED")}");
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Server online counts syncing to ClickHouse: {(_enableServerOnlineCountsSyncing ? "ENABLED" : "DISABLED")}");
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Rounds syncing: {(_enableRoundsSyncing ? "ENABLED" : "DISABLED")}");
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] To avoid writes to production: Set CLICKHOUSE_WRITE_URL to dev instance or leave syncing flags=false");
     }
 
@@ -79,6 +82,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         activity?.SetTag("enable_round_syncing", _enableClickhouseSyncing);
         activity?.SetTag("enable_player_metrics_syncing", _enablePlayerMetricsSyncing);
         activity?.SetTag("enable_server_online_counts_syncing", _enableServerOnlineCountsSyncing);
+        activity?.SetTag("enable_rounds_syncing", _enableRoundsSyncing);
 
         var cycleStopwatch = Stopwatch.StartNew();
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Starting stats collection cycle #{currentCycle}...");
@@ -236,7 +240,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             gameServerAdapters.Add(adapter);
 
             // Store to SQLite every cycle
-            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp, "bf1942");
+            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp, "bf1942", _enableRoundsSyncing);
         }
 
         return gameServerAdapters;
@@ -257,7 +261,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             gameServerAdapters.Add(adapter);
 
             // Store to SQLite every cycle
-            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp, "bfvietnam");
+            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp, "bfvietnam", _enableRoundsSyncing);
         }
 
         return gameServerAdapters;
@@ -278,7 +282,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             gameServerAdapters.Add(adapter);
 
             // Store to SQLite every cycle
-            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp, "fh2");
+            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp, "fh2", _enableRoundsSyncing);
         }
 
         return gameServerAdapters;

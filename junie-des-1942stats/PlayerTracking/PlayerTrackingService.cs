@@ -27,13 +27,13 @@ public class PlayerTrackingService
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<PlayerTrackingService>.Instance;
     }
 
-    public async Task TrackPlayersFromServerInfo(IGameServer server, DateTime timestamp, string game)
+    public async Task TrackPlayersFromServerInfo(IGameServer server, DateTime timestamp, string game, bool enableRoundsSyncing)
     {
-        await TrackPlayersFromServer(server, timestamp, game);
+        await TrackPlayersFromServer(server, timestamp, game, enableRoundsSyncing);
     }
 
     // Core method that works with the common interface
-    private async Task TrackPlayersFromServer(IGameServer server, DateTime timestamp, string game)
+    private async Task TrackPlayersFromServer(IGameServer server, DateTime timestamp, string game, bool enableRoundsSyncing)
     {
         var (gameServer, serverMapChangeOldMap) = await GetOrCreateServerAsync(server, game);
 
@@ -45,9 +45,13 @@ public class PlayerTrackingService
             await PublishServerMapChangeEvent(server, serverMapChangeOldMap);
         }
 
-        // Ensure active round and record round observation regardless of player count
-        var activeRound = await EnsureActiveRoundAsync(server, timestamp, serverMapChangeOldMap);
-        await RecordRoundObservationAsync(activeRound, server, timestamp);
+        // Ensure active round and record round observation regardless of player count (if enabled)
+        Round? activeRound = null;
+        if (enableRoundsSyncing)
+        {
+            activeRound = await EnsureActiveRoundAsync(server, timestamp, serverMapChangeOldMap);
+            await RecordRoundObservationAsync(activeRound, server, timestamp);
+        }
 
         // If no players, we skip session handling but still tracked round + observation
         if (!server.Players.Any())
