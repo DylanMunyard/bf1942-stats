@@ -72,6 +72,7 @@ public class ServerInfo
 public class Session
 {
     public int SessionId { get; set; }
+    public string? RoundId { get; set; }
     public string ServerName { get; set; } = string.Empty;
     public string ServerGuid { get; set; } = string.Empty;
     public string MapName { get; set; } = string.Empty;
@@ -88,6 +89,7 @@ public class Session
 public class SessionDetail
 {
     public int SessionId { get; set; }
+    public string? RoundId { get; set; }
     public string PlayerName { get; set; } = "";
     public string ServerName { get; set; } = "";
     public string MapName { get; set; } = "";
@@ -257,6 +259,7 @@ public class PlayerContextInfo
 public class SessionListItem
 {
     public int SessionId { get; set; }
+    public string? RoundId { get; set; }
     public string PlayerName { get; set; } = string.Empty;
     public string ServerName { get; set; } = string.Empty;
     public string ServerGuid { get; set; } = string.Empty;

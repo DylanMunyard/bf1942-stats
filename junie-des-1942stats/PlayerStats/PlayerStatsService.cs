@@ -222,6 +222,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             .Select(s => new Session
             {
                 SessionId = s.SessionId,
+                RoundId = s.RoundId,
                 ServerName = s.Server.Name,
                 ServerGuid = s.ServerGuid,
                 MapName = s.MapName,
@@ -328,6 +329,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         var sessionDetail = new SessionDetail
         {
             SessionId = session.SessionId,
+            RoundId = session.RoundId,
             PlayerName = session.PlayerName,
             ServerName = session.Server.Name,
             MapName = session.MapName,

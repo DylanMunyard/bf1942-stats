@@ -191,6 +191,7 @@ public class SessionsService
             .Select(s => new SessionListItem
             {
                 SessionId = s.SessionId,
+                RoundId = s.RoundId,
                 PlayerName = s.PlayerName,
                 ServerName = s.Server.Name,
                 ServerGuid = s.ServerGuid,

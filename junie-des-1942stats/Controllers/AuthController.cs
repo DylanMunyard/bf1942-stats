@@ -576,6 +576,7 @@ public class AuthController : ControllerBase
                     PlayerName = session.PlayerName,
                     ServerName = session.Server.Name,
                     ServerGuid = session.ServerGuid,
+                    RoundId = session.RoundId,
                     CurrentMap = session.MapName,
                     JoinLink = session.Server.JoinLink,
                     SessionDurationMinutes = (int)(now - session.StartTime).TotalMinutes,
@@ -846,6 +847,7 @@ public class OnlineBuddyResponse
     public string PlayerName { get; set; } = "";
     public string ServerName { get; set; } = "";
     public string ServerGuid { get; set; } = "";
+    public string? RoundId { get; set; }
     public string? CurrentMap { get; set; }
     public string? JoinLink { get; set; }
     public int SessionDurationMinutes { get; set; }

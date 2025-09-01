@@ -161,6 +161,7 @@ public class SessionRoundReport
 public class SessionInfo
 {
     public int SessionId { get; set; }
+    public string? RoundId { get; set; }
     public string PlayerName { get; set; } = null!;
     public string ServerName { get; set; } = null!;
     public string ServerGuid { get; set; } = null!;

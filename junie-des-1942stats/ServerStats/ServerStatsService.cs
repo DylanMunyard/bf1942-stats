@@ -24,7 +24,7 @@ public class ServerStatsService(
     ICacheKeyService cacheKeyService,
     PlayerRoundsReadService playerRoundsService,
     IClickHouseReader clickHouseReader,
-    HistoricalRoundsService historicalRoundsService)
+    RoundsService roundsService)
 {
     private readonly PlayerTrackerDbContext _dbContext = dbContext;
     private readonly ILogger<ServerStatsService> _logger = logger;
@@ -32,7 +32,7 @@ public class ServerStatsService(
     private readonly ICacheKeyService _cacheKeyService = cacheKeyService;
     private readonly PlayerRoundsReadService _playerRoundsService = playerRoundsService;
     private readonly IClickHouseReader _clickHouseReader = clickHouseReader;
-    private readonly HistoricalRoundsService _historicalRoundsService = historicalRoundsService;
+    private readonly RoundsService _roundsService = roundsService;
 
     public async Task<ServerStatistics> GetServerStatistics(
         string serverName,
@@ -154,7 +154,7 @@ public class ServerStatsService(
         statistics.TopKillRatesAllTime = topKillRatesAllTime;
 
         // Get the last 20 rounds showing recent map rotations
-        var lastRounds = await GetLastRoundsAsync(server.Guid, 20);
+        var lastRounds = await _roundsService.GetRecentRoundsAsync(server.Guid, 20);
 
         statistics.RecentRounds = lastRounds;
 
@@ -323,19 +323,7 @@ public class ServerStatsService(
     }
 
 
-    private async Task<List<RoundInfo>> GetLastRoundsAsync(string serverGuid, int limit)
-    {
-        var filters = new RoundFilters { ServerGuid = serverGuid };
-        var roundsResult = await _historicalRoundsService.GetAllRounds(1, limit, "StartTime", "desc", filters);
-
-        return roundsResult.Items.Select(r => new RoundInfo
-        {
-            MapName = r.MapName,
-            StartTime = r.StartTime,
-            EndTime = r.EndTime,
-            IsActive = r.IsActive,
-        }).ToList();
-    }
+    // Removed legacy last rounds method that depended on HistoricalRoundsService
 
 
     public async Task<SessionRoundReport?> GetRoundReport(string serverGuid, string mapName, DateTime startTime)
@@ -471,6 +459,7 @@ public class ServerStatsService(
             Session = new SessionInfo
             {
                 SessionId = representativeSession.SessionId,
+                RoundId = representativeSession.RoundId,
                 PlayerName = representativeSession.PlayerName,
                 ServerName = representativeSession.Server.Name,
                 ServerGuid = representativeSession.ServerGuid,

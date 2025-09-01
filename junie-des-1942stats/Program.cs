@@ -308,11 +308,9 @@ try
     builder.Services.AddScoped<PlayerStatsService>();
     builder.Services.AddScoped<SessionsService>();
 
-    // Register the ServerStatsService
+    // Register the ServerStatsService and supporting services
     builder.Services.AddScoped<ServerStatsService>();
-
-    // Register the HistoricalRoundsService
-    builder.Services.AddScoped<HistoricalRoundsService>();
+    builder.Services.AddScoped<RoundsService>();
 
     // Register the stat collector background services
     builder.Services.AddHostedService<StatsCollectionBackgroundService>();
