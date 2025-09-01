@@ -5,7 +5,7 @@ using junie_des_1942stats.PlayerTracking;
 namespace junie_des_1942stats.Controllers;
 
 [ApiController]
-[Route("admin/[controller]")]
+[Route("stats/admin/[controller]")]
 public class BackfillController : ControllerBase
 {
     private readonly RoundBackfillService _backfillService;
