@@ -53,6 +53,20 @@ public class PlayerRoundsReadService : BaseClickHouseService, IClickHouseReader
         return await ExecuteQueryInternalAsync(query);
     }
 
+    private static string UnescapeTabSeparatedValue(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return value;
+        
+        // Unescape ClickHouse TabSeparated format escaping
+        return value
+            .Replace("\\'", "'")      // Single quotes
+            .Replace("\\\\", "\\")    // Backslashes  
+            .Replace("\\t", "\t")     // Tabs
+            .Replace("\\n", "\n")     // Newlines
+            .Replace("\\r", "\r");    // Carriage returns
+    }
+
     /// <summary>
     /// Query aggregated player statistics from the player_rounds table
     /// </summary>
@@ -106,7 +120,7 @@ SELECT
     SUM(final_kills) as total_kills,
     SUM(final_deaths) as total_deaths
 FROM player_rounds
-WHERE server_guid = '{serverGuid.Replace("'", "''")}'
+WHERE server_guid = '{serverGuid.Replace("'", "''")}' 
   AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
   AND round_end_time <= '{endPeriod:yyyy-MM-dd HH:mm:ss}'
   AND is_bot = 0
@@ -125,7 +139,7 @@ FORMAT TabSeparated";
             {
                 players.Add(new PlayerActivity
                 {
-                    PlayerName = parts[0],
+                    PlayerName = UnescapeTabSeparatedValue(parts[0]),
                     MinutesPlayed = int.TryParse(parts[1], out var minutes) ? minutes : 0,
                     TotalKills = int.TryParse(parts[2], out var kills) ? kills : 0,
                     TotalDeaths = int.TryParse(parts[3], out var deaths) ? deaths : 0
@@ -139,23 +153,25 @@ FORMAT TabSeparated";
     /// <summary>
     /// Get top scores from ClickHouse
     /// </summary>
-    public async Task<List<TopScore>> GetTopScoresAsync(string serverGuid, DateTime startPeriod, DateTime endPeriod, int limit = 10)
+    public async Task<List<TopScore>> GetTopScoresAsync(string serverGuid, DateTime startPeriod, DateTime endPeriod, int limit = 10, int? minRoundsOverride = null)
     {
+        var minRounds = CalculateMinimumRounds(startPeriod, endPeriod, minRoundsOverride);
+
         var query = $@"
 SELECT 
     player_name,
-    final_score,
-    final_kills,
-    final_deaths,
-    map_name,
-    round_end_time,
-    round_id
+    SUM(final_score) as total_score,
+    SUM(final_kills) as total_kills,
+    SUM(final_deaths) as total_deaths,
+    COUNT() as total_rounds
 FROM player_rounds
-WHERE server_guid = '{serverGuid.Replace("'", "''")}'
+WHERE server_guid = '{serverGuid.Replace("'", "''")}' 
   AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
   AND round_end_time <= '{endPeriod:yyyy-MM-dd HH:mm:ss}'
   AND is_bot = 0
-ORDER BY final_score DESC
+GROUP BY player_name
+HAVING COUNT() >= {minRounds}
+ORDER BY total_score DESC
 LIMIT {limit}
 FORMAT TabSeparated";
 
@@ -165,17 +181,17 @@ FORMAT TabSeparated";
         foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             var parts = line.Split('\t');
-            if (parts.Length >= 7)
+            if (parts.Length >= 4)
             {
                 topScores.Add(new TopScore
                 {
-                    PlayerName = parts[0],
+                    PlayerName = UnescapeTabSeparatedValue(parts[0]),
                     Score = int.TryParse(parts[1], out var score) ? score : 0,
                     Kills = int.TryParse(parts[2], out var kills) ? kills : 0,
                     Deaths = int.TryParse(parts[3], out var deaths) ? deaths : 0,
-                    MapName = parts[4],
-                    Timestamp = DateTime.TryParse(parts[5], out var date) ? date : DateTime.MinValue,
-                    SessionId = parts[6].GetHashCode() // Use round_id hash as session ID substitute
+                    MapName = "", // Not available in this aggregated query
+                    Timestamp = DateTime.MinValue, // Not available in this aggregated query
+                    SessionId = 0 // Not available in this aggregated query
                 });
             }
         }
@@ -219,7 +235,7 @@ FORMAT TabSeparated";
             {
                 topKDRatios.Add(new TopKDRatio
                 {
-                    PlayerName = parts[0],
+                    PlayerName = UnescapeTabSeparatedValue(parts[0]),
                     Kills = int.TryParse(parts[1], out var kills) ? kills : 0,
                     Deaths = int.TryParse(parts[2], out var deaths) ? deaths : 0,
                     KDRatio = double.TryParse(parts[3], out var kdRatio) ? kdRatio : 0,
@@ -270,7 +286,7 @@ FORMAT TabSeparated";
             {
                 topKillRates.Add(new TopKillRate
                 {
-                    PlayerName = parts[0],
+                    PlayerName = UnescapeTabSeparatedValue(parts[0]),
                     Kills = int.TryParse(parts[1], out var kills) ? kills : 0,
                     Deaths = int.TryParse(parts[2], out var deaths) ? deaths : 0,
                     PlayTimeMinutes = int.TryParse(parts[3], out var playTime) ? playTime : 0,
