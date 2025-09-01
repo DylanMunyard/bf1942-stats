@@ -1,4 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Extensions.Logging;
 using junie_des_1942stats.Bflist;
 using junie_des_1942stats.Services;
@@ -35,8 +37,23 @@ public class PlayerTrackingService
     {
         var (gameServer, serverMapChangeOldMap) = await GetOrCreateServerAsync(server, game);
 
+        // Publish server map change event if detected
+        if (!string.IsNullOrEmpty(serverMapChangeOldMap))
+        {
+            _logger.LogInformation("TRACKING: Detected map change for {ServerGuid} / {ServerName}: {OldMap} -> {NewMap}",
+                server.Guid, server.Name, serverMapChangeOldMap, server.MapName);
+            await PublishServerMapChangeEvent(server, serverMapChangeOldMap);
+        }
+
+        // Ensure active round and record round observation regardless of player count
+        var activeRound = await EnsureActiveRoundAsync(server, timestamp, serverMapChangeOldMap);
+        await RecordRoundObservationAsync(activeRound, server, timestamp);
+
+        // If no players, we skip session handling but still tracked round + observation
         if (!server.Players.Any())
+        {
             return;
+        }
 
         var playerNames = server.Players.Select(p => p.Name).ToList();
 
@@ -96,6 +113,11 @@ public class PlayerTrackingService
 
                     // Update existing session for current map
                     UpdateSessionData(matchingSession, playerInfo, server, timestamp);
+                    // Ensure the session is linked to the active round
+                    if (activeRound != null)
+                    {
+                        matchingSession.RoundId = activeRound.RoundId;
+                    }
                     sessionsToUpdate.Add(matchingSession);
                     pendingObservations.Add((playerInfo, matchingSession));
 
@@ -112,7 +134,7 @@ public class PlayerTrackingService
                     }
 
                     // Create new session for new map
-                    var newSession = CreateNewSession(playerInfo, server, timestamp);
+                    var newSession = CreateNewSession(playerInfo, server, timestamp, activeRound?.RoundId);
                     sessionsToCreate.Add(newSession);
                     pendingObservations.Add((playerInfo, newSession));
                 }
@@ -120,7 +142,7 @@ public class PlayerTrackingService
             else
             {
                 // No existing sessions - create new one (player coming online)
-                var newSession = CreateNewSession(playerInfo, server, timestamp);
+                var newSession = CreateNewSession(playerInfo, server, timestamp, activeRound?.RoundId);
                 sessionsToCreate.Add(newSession);
                 pendingObservations.Add((playerInfo, newSession));
 
@@ -189,18 +211,31 @@ public class PlayerTrackingService
                     await _dbContext.SaveChangesAsync();
                 }
 
+                // Update participant count for the round (distinct non-bot players)
+                if (activeRound != null)
+                {
+                    var nonBotCount = await _dbContext.PlayerSessions
+                        .Where(ps => ps.RoundId == activeRound.RoundId)
+                        .Join(_dbContext.Players,
+                              ps => ps.PlayerName,
+                              p => p.Name,
+                              (ps, p) => new { ps.PlayerName, p.AiBot })
+                        .Where(x => !x.AiBot)
+                        .Select(x => x.PlayerName)
+                        .Distinct()
+                        .CountAsync();
+
+                    activeRound.ParticipantCount = nonBotCount;
+                    activeRound.Tickets1 = server.Tickets1;
+                    activeRound.Tickets2 = server.Tickets2;
+                    _dbContext.Rounds.Update(activeRound);
+                    await _dbContext.SaveChangesAsync();
+                }
+
                 await transaction.CommitAsync();
 
                 // Publish events after successful database operations
                 await PublishPlayerEvents(eventsToPublish, server);
-
-                // Publish server map change event if detected
-                if (!string.IsNullOrEmpty(serverMapChangeOldMap))
-                {
-                    _logger.LogInformation("TRACKING: Detected map change for {ServerGuid} / {ServerName}: {OldMap} -> {NewMap}",
-                        server.Guid, server.Name, serverMapChangeOldMap, server.MapName);
-                    await PublishServerMapChangeEvent(server, serverMapChangeOldMap);
-                }
             }
             catch (Exception ex)
             {
@@ -326,7 +361,7 @@ public class PlayerTrackingService
     }
 
     // Helper methods
-    private PlayerSession CreateNewSession(PlayerInfo playerInfo, IGameServer server, DateTime timestamp)
+    private PlayerSession CreateNewSession(PlayerInfo playerInfo, IGameServer server, DateTime timestamp, string? roundId)
     {
         return new PlayerSession
         {
@@ -340,7 +375,8 @@ public class PlayerTrackingService
             TotalKills = playerInfo.Kills,
             TotalDeaths = playerInfo.Deaths,
             MapName = server.MapName,
-            GameType = server.GameType
+            GameType = server.GameType,
+            RoundId = roundId
         };
     }
 
@@ -358,6 +394,126 @@ public class PlayerTrackingService
 
         if (!string.IsNullOrEmpty(server.GameType))
             session.GameType = server.GameType;
+    }
+
+    private static string ComputeRoundId(string serverGuid, string mapName, DateTime startTimeUtc)
+    {
+        // Normalize to second precision for stability
+        var normalized = new DateTime(startTimeUtc.Ticks - (startTimeUtc.Ticks % TimeSpan.TicksPerSecond), DateTimeKind.Utc);
+        var payload = $"{serverGuid}|{mapName}|{normalized:yyyy-MM-ddTHH:mm:ssZ}";
+        using var sha = SHA256.Create();
+        var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(payload));
+        var hex = Convert.ToHexString(hash);
+        return hex[..20].ToLowerInvariant();
+    }
+
+    private async Task<Round?> EnsureActiveRoundAsync(IGameServer server, DateTime timestamp, string? oldMapName)
+    {
+        // Skip round tracking if map name is empty
+        if (string.IsNullOrWhiteSpace(server.MapName)) return null;
+
+        var active = await _dbContext.Rounds
+            .Where(r => r.ServerGuid == server.Guid && r.IsActive)
+            .OrderByDescending(r => r.StartTime)
+            .FirstOrDefaultAsync();
+
+        // Detect map change via server update or explicit oldMapName
+        var mapChanged = !string.IsNullOrEmpty(oldMapName) || (active != null && !string.Equals(active.MapName, server.MapName, StringComparison.Ordinal));
+
+        if (active != null && mapChanged)
+        {
+            active.IsActive = false;
+            active.EndTime = timestamp;
+            active.DurationMinutes = (int)Math.Max(0, (active.EndTime.Value - active.StartTime).TotalMinutes);
+            _dbContext.Rounds.Update(active);
+            await _dbContext.SaveChangesAsync();
+            active = null;
+        }
+
+        if (active == null)
+        {
+            var (team1Label, team2Label) = GetTeamLabels(server);
+            var newRound = new Round
+            {
+                ServerGuid = server.Guid,
+                ServerName = server.Name,
+                MapName = server.MapName,
+                GameType = server.GameType ?? "",
+                StartTime = timestamp,
+                IsActive = true,
+                Tickets1 = server.Tickets1,
+                Tickets2 = server.Tickets2,
+                Team1Label = team1Label,
+                Team2Label = team2Label
+            };
+            newRound.RoundId = ComputeRoundId(newRound.ServerGuid, newRound.MapName, newRound.StartTime.ToUniversalTime());
+
+            // Upsert semantics: if a round with same RoundId exists, load it
+            var existing = await _dbContext.Rounds.FindAsync(newRound.RoundId);
+            if (existing == null)
+            {
+                await _dbContext.Rounds.AddAsync(newRound);
+                await _dbContext.SaveChangesAsync();
+                active = newRound;
+            }
+            else
+            {
+                // If the existing is not active, reopen only if it matches same map and close time is very recent
+                active = existing;
+                active.IsActive = true;
+                active.EndTime = null;
+                _dbContext.Rounds.Update(active);
+                await _dbContext.SaveChangesAsync();
+            }
+        }
+        else
+        {
+            // Keep metadata fresh
+            var (team1Label, team2Label) = GetTeamLabels(server);
+            active.ServerName = server.Name;
+            active.GameType = server.GameType ?? "";
+            active.Tickets1 = server.Tickets1;
+            active.Tickets2 = server.Tickets2;
+            active.Team1Label = team1Label;
+            active.Team2Label = team2Label;
+            _dbContext.Rounds.Update(active);
+            await _dbContext.SaveChangesAsync();
+        }
+
+        return active;
+    }
+
+    private (string? team1Label, string? team2Label) GetTeamLabels(IGameServer server)
+    {
+        string? team1Label = null;
+        string? team2Label = null;
+        if (server.Teams != null)
+        {
+            var t1 = server.Teams.FirstOrDefault(t => t.Index == 1);
+            var t2 = server.Teams.FirstOrDefault(t => t.Index == 2);
+            team1Label = t1?.Label;
+            team2Label = t2?.Label;
+        }
+        return (team1Label, team2Label);
+    }
+
+    private async Task RecordRoundObservationAsync(Round? round, IGameServer server, DateTime timestamp)
+    {
+        if (round == null) return;
+
+        var (team1Label, team2Label) = GetTeamLabels(server);
+
+        var observation = new RoundObservation
+        {
+            RoundId = round.RoundId,
+            Timestamp = timestamp,
+            Tickets1 = server.Tickets1,
+            Tickets2 = server.Tickets2,
+            Team1Label = team1Label,
+            Team2Label = team2Label
+        };
+        await _dbContext.RoundObservations.AddAsync(observation);
+        await _dbContext.SaveChangesAsync();
     }
 
     private int CalculatePlayTime(PlayerSession session, DateTime timestamp)

@@ -15,6 +15,8 @@ public class RoundListItem
     public int ParticipantCount { get; set; }
     public int TotalSessions { get; set; }
     public bool IsActive { get; set; }
+    public string? Team1Label { get; set; }
+    public string? Team2Label { get; set; }
 }
 
 

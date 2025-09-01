@@ -304,6 +304,7 @@ try
     
     // Register the player tracking service
     builder.Services.AddScoped<PlayerTrackingService>();
+    builder.Services.AddScoped<RoundBackfillService>();
     builder.Services.AddScoped<PlayerStatsService>();
     builder.Services.AddScoped<SessionsService>();
 
@@ -576,6 +577,7 @@ try
     using (var scope = host.Services.CreateScope())
     {
         var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
+        var backfill = scope.ServiceProvider.GetRequiredService<RoundBackfillService>();
         var playerMetricsService = scope.ServiceProvider.GetRequiredService<PlayerMetricsWriteService>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
@@ -623,6 +625,29 @@ try
         else
         {
             logger.LogInformation("Skipping ClickHouse schema creation - no write URL configured and not in development environment");
+        }
+
+        // Optional startup backfill controlled by env var
+        try
+        {
+            var doBackfill = Environment.GetEnvironmentVariable("ROUNDS_BACKFILL_ON_STARTUP");
+            if (!string.IsNullOrEmpty(doBackfill) && (doBackfill.Equals("1") || doBackfill.Equals("true", StringComparison.OrdinalIgnoreCase)))
+            {
+                var backfillServer = Environment.GetEnvironmentVariable("ROUNDS_BACKFILL_SERVER");
+                var backfillFrom = Environment.GetEnvironmentVariable("ROUNDS_BACKFILL_FROM");
+                var backfillTo = Environment.GetEnvironmentVariable("ROUNDS_BACKFILL_TO");
+
+                DateTime? from = DateTime.TryParse(backfillFrom, out var f) ? f : null;
+                DateTime? to = DateTime.TryParse(backfillTo, out var t) ? t : null;
+
+                logger.LogInformation("Starting rounds backfill: server={Server} from={From} to={To}", backfillServer ?? "ALL", from, to);
+                var count = await backfill.BackfillRoundsAsync(from, to, backfillServer);
+                logger.LogInformation("Completed rounds backfill. Upserted {Count} rounds", count);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Rounds backfill failed during startup");
         }
     }
 

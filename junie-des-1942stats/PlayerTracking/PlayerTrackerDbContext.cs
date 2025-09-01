@@ -10,6 +10,8 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<GameServer> Servers { get; set; }
     public DbSet<PlayerSession> PlayerSessions { get; set; }
     public DbSet<PlayerObservation> PlayerObservations { get; set; }
+    public DbSet<Round> Rounds { get; set; }
+    public DbSet<RoundObservation> RoundObservations { get; set; }
     public DbSet<ServerPlayerRanking> ServerPlayerRankings { get; set; }
     public DbSet<User> Users { get; set; }
     public DbSet<UserPlayerName> UserPlayerNames { get; set; }
@@ -50,6 +52,13 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<PlayerSession>()
             .HasIndex(ps => new { ps.IsActive, ps.LastSeenTime });
 
+        // Indexes for Round filtering from PlayerSession
+        modelBuilder.Entity<PlayerSession>()
+            .HasIndex(ps => ps.RoundId);
+
+        modelBuilder.Entity<PlayerSession>()
+            .HasIndex(ps => new { ps.RoundId, ps.PlayerName });
+
         // Configure PlayerObservation entity
         modelBuilder.Entity<PlayerObservation>()
             .HasKey(po => po.ObservationId);
@@ -75,6 +84,42 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<ServerPlayerRanking>()
             .HasIndex(r => new { r.ServerGuid, r.Rank });
 
+        // Configure Round entity
+        modelBuilder.Entity<Round>()
+            .HasKey(r => r.RoundId);
+
+        modelBuilder.Entity<Round>()
+            .HasIndex(r => new { r.ServerGuid, r.EndTime });
+
+        modelBuilder.Entity<Round>()
+            .HasIndex(r => new { r.ServerGuid, r.StartTime });
+
+        modelBuilder.Entity<Round>()
+            .HasIndex(r => r.MapName);
+
+        modelBuilder.Entity<Round>()
+            .HasIndex(r => r.IsActive);
+
+        // One active round per server (partial unique index)
+        modelBuilder.Entity<Round>()
+            .HasIndex(r => r.ServerGuid)
+            .IsUnique()
+            .HasFilter("IsActive = 1");
+
+        // Check constraint to ensure EndTime >= StartTime when EndTime is not null
+        modelBuilder.Entity<Round>()
+            .ToTable(t => t.HasCheckConstraint("CK_Round_EndTime", "EndTime IS NULL OR EndTime >= StartTime"));
+
+        // Configure RoundObservation entity
+        modelBuilder.Entity<RoundObservation>()
+            .HasKey(ro => ro.Id);
+
+        modelBuilder.Entity<RoundObservation>()
+            .HasIndex(ro => ro.RoundId);
+
+        modelBuilder.Entity<RoundObservation>()
+            .HasIndex(ro => new { ro.RoundId, ro.Timestamp });
+
         // Configure relationships
         modelBuilder.Entity<PlayerSession>()
             .HasOne(ps => ps.Player)
@@ -85,6 +130,14 @@ public class PlayerTrackerDbContext : DbContext
             .HasOne(ps => ps.Server)
             .WithMany(s => s.Sessions)
             .HasForeignKey(ps => ps.ServerGuid);
+
+        // Relationship: PlayerSession → Round (optional FK)
+        modelBuilder.Entity<PlayerSession>()
+            .HasOne<Round>()
+            .WithMany()
+            .HasForeignKey(ps => ps.RoundId)
+            .HasPrincipalKey(r => r.RoundId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder.Entity<PlayerObservation>()
             .HasOne(po => po.Session)
@@ -257,11 +310,41 @@ public class PlayerSession
     public int TotalDeaths { get; set; }
     public string MapName { get; set; } = "";
     public string GameType { get; set; } = "";
+    public string? RoundId { get; set; }
 
     // Navigation properties
     public Player Player { get; set; } = null!;
     public GameServer Server { get; set; } = null!;
     public List<PlayerObservation> Observations { get; set; } = new();
+}
+
+public class Round
+{
+    public string RoundId { get; set; } = ""; // PK (hash prefix)
+    public string ServerGuid { get; set; } = "";
+    public string ServerName { get; set; } = "";
+    public string MapName { get; set; } = "";
+    public string GameType { get; set; } = "";
+    public DateTime StartTime { get; set; }
+    public DateTime? EndTime { get; set; }
+    public bool IsActive { get; set; }
+    public int? DurationMinutes { get; set; }
+    public int? ParticipantCount { get; set; }
+    public int? Tickets1 { get; set; }
+    public int? Tickets2 { get; set; }
+    public string? Team1Label { get; set; }
+    public string? Team2Label { get; set; }
+}
+
+public class RoundObservation
+{
+    public int Id { get; set; }
+    public string RoundId { get; set; } = "";
+    public DateTime Timestamp { get; set; }
+    public int? Tickets1 { get; set; }
+    public int? Tickets2 { get; set; }
+    public string? Team1Label { get; set; }
+    public string? Team2Label { get; set; }
 }
 
 public class PlayerObservation
