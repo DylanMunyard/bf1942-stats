@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using junie_des_1942stats.PlayerTracking;
 
-namespace junie_des_1942stats.Controllers;
+namespace junie_des_1942stats.Data.Migrations;
 
 [ApiController]
 [Route("stats/admin/[controller]")]
@@ -54,5 +54,3 @@ public class BackfillController : ControllerBase
         return Ok(response);
     }
 }
-
-
