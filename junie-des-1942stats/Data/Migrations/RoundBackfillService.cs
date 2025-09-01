@@ -41,10 +41,11 @@ public class RoundBackfillService
             expandedFrom, expandedTo);
         
         // Build base filter for pairs discovery
+        // Use intersection semantics so sessions that overlap the window are included
         var baseQuery = _dbContext.PlayerSessions.AsNoTracking().AsQueryable();
         if (expandedFrom.HasValue)
         {
-            baseQuery = baseQuery.Where(s => s.StartTime >= expandedFrom.Value);
+            baseQuery = baseQuery.Where(s => s.LastSeenTime >= expandedFrom.Value);
         }
         if (expandedTo.HasValue)
         {
@@ -81,7 +82,8 @@ public class RoundBackfillService
             _logger.LogInformation("Backfill: Loading sessions for server={ServerGuid} map={MapName}...", serverGuidKey, mapNameKey);
             var list = await _dbContext.PlayerSessions.AsNoTracking()
                 .Where(s => s.ServerGuid == serverGuidKey && s.MapName == mapNameKey)
-                .Where(s => !expandedFrom.HasValue || s.StartTime >= expandedFrom.Value)
+                // Intersection semantics: session overlaps the [expandedFrom, expandedTo] window
+                .Where(s => !expandedFrom.HasValue || s.LastSeenTime >= expandedFrom.Value)
                 .Where(s => !expandedTo.HasValue || s.StartTime <= expandedTo.Value)
                 .Select(s => new { s.SessionId, s.StartTime, s.LastSeenTime, s.GameType })
                 .OrderBy(s => s.StartTime)
@@ -138,34 +140,34 @@ public class RoundBackfillService
             
             for (int i = 1; i < list.Count; i++)
             {
-                var prev = list[i - 1];
                 var curr = list[i];
-                var gapSeconds = (curr.StartTime - prev.StartTime).TotalSeconds;
-                
+                // Split groups based on the gap from the current group's end time
+                var gapSeconds = (curr.StartTime - groupEnd).TotalSeconds;
+
                 if (gapSeconds > 600)
                 {
-                    _logger.LogInformation("Backfill: Gap of {GapSeconds} seconds detected between sessions {PrevSessionId} and {CurrSessionId}. Collecting group with {GroupSize} sessions.", 
-                        gapSeconds, prev.SessionId, curr.SessionId, currentGroup.Count);
+                    _logger.LogInformation("Backfill: Gap of {GapSeconds} seconds from groupEnd detected before session {CurrSessionId}. Collecting group with {GroupSize} sessions.",
+                        gapSeconds, curr.SessionId, currentGroup.Count);
                     CollectGroup();
                     currentGroup.Add(curr.SessionId);
                     groupStart = curr.StartTime;
                     groupEnd = curr.LastSeenTime;
                     gameType = curr.GameType ?? gameType;
-                    _logger.LogInformation("Backfill: Started new group with session {SessionId}, groupStart={GroupStart}, groupEnd={GroupEnd}", 
+                    _logger.LogInformation("Backfill: Started new group with session {SessionId}, groupStart={GroupStart}, groupEnd={GroupEnd}",
                         curr.SessionId, groupStart, groupEnd);
                 }
                 else
                 {
                     currentGroup.Add(curr.SessionId);
-                    if (curr.LastSeenTime > groupEnd) 
+                    if (curr.LastSeenTime > groupEnd)
                     {
-                        _logger.LogDebug("Backfill: Extended group end time from {OldGroupEnd} to {NewGroupEnd} for session {SessionId}", 
+                        _logger.LogDebug("Backfill: Extended group end time from {OldGroupEnd} to {NewGroupEnd} for session {SessionId}",
                             groupEnd, curr.LastSeenTime, curr.SessionId);
                         groupEnd = curr.LastSeenTime;
                     }
-                    if (!string.IsNullOrEmpty(curr.GameType)) 
+                    if (!string.IsNullOrEmpty(curr.GameType))
                     {
-                        _logger.LogDebug("Backfill: Updated game type from '{OldGameType}' to '{NewGameType}' for session {SessionId}", 
+                        _logger.LogDebug("Backfill: Updated game type from '{OldGameType}' to '{NewGameType}' for session {SessionId}",
                             gameType, curr.GameType, curr.SessionId);
                         gameType = curr.GameType;
                     }
@@ -299,7 +301,7 @@ public class RoundBackfillService
 
                     // Build a single SQL statement with CASE to update all sessions in the batch
                     var caseStatements = new List<string>();
-                    var parameters = new List<object?>();
+                    var parameters = new List<object>();
                     var paramIndex = 0;
 
                     foreach (var sessionId in sessionBatch)
