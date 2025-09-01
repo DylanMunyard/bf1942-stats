@@ -160,6 +160,105 @@ FORMAT TabSeparated";
         return topScores;
     }
 
+    /// <summary>
+    /// Get top K/D ratios from ClickHouse
+    /// </summary>
+    public async Task<List<TopKDRatio>> GetTopKDRatiosAsync(string serverGuid, DateTime startPeriod, DateTime endPeriod, int limit = 10)
+    {
+        var query = $@"
+SELECT 
+    player_name,
+    final_kills,
+    final_deaths,
+    CASE WHEN final_deaths > 0 THEN round(final_kills / final_deaths, 3) ELSE toFloat64(final_kills) END as kd_ratio,
+    map_name,
+    round_end_time,
+    round_id
+FROM player_rounds
+WHERE server_guid = '{serverGuid.Replace("'", "''")}' 
+  AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
+  AND round_end_time <= '{endPeriod:yyyy-MM-dd HH:mm:ss}'
+  AND is_bot = 0
+  AND (final_kills > 0 OR final_deaths > 0)
+ORDER BY kd_ratio DESC
+LIMIT {limit}
+FORMAT TabSeparated";
+
+        var result = await ExecuteQueryAsync(query);
+        var topKDRatios = new List<TopKDRatio>();
+
+        foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = line.Split('\t');
+            if (parts.Length >= 7)
+            {
+                topKDRatios.Add(new TopKDRatio
+                {
+                    PlayerName = parts[0],
+                    Kills = int.TryParse(parts[1], out var kills) ? kills : 0,
+                    Deaths = int.TryParse(parts[2], out var deaths) ? deaths : 0,
+                    KDRatio = double.TryParse(parts[3], out var kdRatio) ? kdRatio : 0,
+                    MapName = parts[4],
+                    Timestamp = DateTime.TryParse(parts[5], out var date) ? date : DateTime.MinValue,
+                    SessionId = parts[6].GetHashCode()
+                });
+            }
+        }
+
+        return topKDRatios;
+    }
+
+    /// <summary>
+    /// Get top kill rates from ClickHouse (kills per minute)
+    /// </summary>
+    public async Task<List<TopKillRate>> GetTopKillRatesAsync(string serverGuid, DateTime startPeriod, DateTime endPeriod, int limit = 10)
+    {
+        var query = $@"
+SELECT 
+    player_name,
+    final_kills,
+    final_deaths,
+    play_time_minutes,
+    CASE WHEN play_time_minutes > 0 THEN round(final_kills / play_time_minutes, 3) ELSE 0.0 END as kill_rate,
+    map_name,
+    round_end_time,
+    round_id
+FROM player_rounds
+WHERE server_guid = '{serverGuid.Replace("'", "''")}' 
+  AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
+  AND round_end_time <= '{endPeriod:yyyy-MM-dd HH:mm:ss}'
+  AND is_bot = 0
+  AND final_kills > 0
+  AND play_time_minutes > 0
+ORDER BY kill_rate DESC
+LIMIT {limit}
+FORMAT TabSeparated";
+
+        var result = await ExecuteQueryAsync(query);
+        var topKillRates = new List<TopKillRate>();
+
+        foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = line.Split('\t');
+            if (parts.Length >= 8)
+            {
+                topKillRates.Add(new TopKillRate
+                {
+                    PlayerName = parts[0],
+                    Kills = int.TryParse(parts[1], out var kills) ? kills : 0,
+                    Deaths = int.TryParse(parts[2], out var deaths) ? deaths : 0,
+                    PlayTimeMinutes = int.TryParse(parts[3], out var playTime) ? playTime : 0,
+                    KillRate = double.TryParse(parts[4], out var killRate) ? killRate : 0,
+                    MapName = parts[5],
+                    Timestamp = DateTime.TryParse(parts[6], out var date) ? date : DateTime.MinValue,
+                    SessionId = parts[7].GetHashCode()
+                });
+            }
+        }
+
+        return topKillRates;
+    }
+
 
     /// <summary>
     /// Get player's time series trend data for K/D ratio and kill rate over the specified time period

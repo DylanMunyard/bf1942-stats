@@ -101,6 +101,16 @@ public class ServerStatsService(
 
         statistics.TopScoresWeek = topScoresWeek;
 
+        // Get top K/D ratios for 1 week (7 days)
+        var topKDRatiosWeek = await _playerRoundsService.GetTopKDRatiosAsync(server.Guid, oneWeekStart, endPeriod, 10);
+
+        statistics.TopKDRatiosWeek = topKDRatiosWeek;
+
+        // Get top kill rates for 1 week (7 days)
+        var topKillRatesWeek = await _playerRoundsService.GetTopKillRatesAsync(server.Guid, oneWeekStart, endPeriod, 10);
+
+        statistics.TopKillRatesWeek = topKillRatesWeek;
+
         // Get most active players for 1 month (30 days)
         var oneMonthStart = endPeriod.AddDays(-30);
         var mostActivePlayersMonth = await _playerRoundsService.GetMostActivePlayersAsync(server.Guid, oneMonthStart, endPeriod, 10);
@@ -112,6 +122,16 @@ public class ServerStatsService(
 
         statistics.TopScoresMonth = topScoresMonth;
 
+        // Get top K/D ratios for 1 month (30 days)
+        var topKDRatiosMonth = await _playerRoundsService.GetTopKDRatiosAsync(server.Guid, oneMonthStart, endPeriod, 10);
+
+        statistics.TopKDRatiosMonth = topKDRatiosMonth;
+
+        // Get top kill rates for 1 month (30 days)
+        var topKillRatesMonth = await _playerRoundsService.GetTopKillRatesAsync(server.Guid, oneMonthStart, endPeriod, 10);
+
+        statistics.TopKillRatesMonth = topKillRatesMonth;
+
         // Get most active players for all time (using a very early date instead of DateTime.MinValue)
         var allTimeStart = new DateTime(2000, 1, 1); // Start from year 2000
         var mostActivePlayersAllTime = await _playerRoundsService.GetMostActivePlayersAsync(server.Guid, allTimeStart, endPeriod, 10);
@@ -122,6 +142,16 @@ public class ServerStatsService(
         var topScoresAllTime = await _playerRoundsService.GetTopScoresAsync(server.Guid, allTimeStart, endPeriod, 10);
 
         statistics.TopScoresAllTime = topScoresAllTime;
+
+        // Get top K/D ratios for all time
+        var topKDRatiosAllTime = await _playerRoundsService.GetTopKDRatiosAsync(server.Guid, allTimeStart, endPeriod, 10);
+
+        statistics.TopKDRatiosAllTime = topKDRatiosAllTime;
+
+        // Get top kill rates for all time
+        var topKillRatesAllTime = await _playerRoundsService.GetTopKillRatesAsync(server.Guid, allTimeStart, endPeriod, 10);
+
+        statistics.TopKillRatesAllTime = topKillRatesAllTime;
 
         // Get the last 20 rounds showing recent map rotations
         var lastRounds = await GetLastRoundsAsync(server.Guid, 20);

@@ -23,17 +23,35 @@ public class ServerStatistics
     // Top 10 best scores in the period (1 week)
     public List<TopScore> TopScoresWeek { get; set; } = new List<TopScore>();
 
+    // Top 10 K/D ratios (1 week)
+    public List<TopKDRatio> TopKDRatiosWeek { get; set; } = new List<TopKDRatio>();
+
+    // Top 10 kill rates (1 week)
+    public List<TopKillRate> TopKillRatesWeek { get; set; } = new List<TopKillRate>();
+
     // Most active players by time played (1 month)
     public List<PlayerActivity> MostActivePlayersByTimeMonth { get; set; } = new List<PlayerActivity>();
 
     // Top 10 best scores in the period (1 month)
     public List<TopScore> TopScoresMonth { get; set; } = new List<TopScore>();
 
+    // Top 10 K/D ratios (1 month)
+    public List<TopKDRatio> TopKDRatiosMonth { get; set; } = new List<TopKDRatio>();
+
+    // Top 10 kill rates (1 month)
+    public List<TopKillRate> TopKillRatesMonth { get; set; } = new List<TopKillRate>();
+
     // Most active players by time played (all time)
     public List<PlayerActivity> MostActivePlayersByTimeAllTime { get; set; } = new List<PlayerActivity>();
 
     // Top 10 best scores (all time)
     public List<TopScore> TopScoresAllTime { get; set; } = new List<TopScore>();
+
+    // Top 10 K/D ratios (all time)
+    public List<TopKDRatio> TopKDRatiosAllTime { get; set; } = new List<TopKDRatio>();
+
+    // Top 10 kill rates (all time)
+    public List<TopKillRate> TopKillRatesAllTime { get; set; } = new List<TopKillRate>();
 
     // Recent rounds (typically last 20) with session links
     public List<RoundInfo> RecentRounds { get; set; } = new List<RoundInfo>();
@@ -57,6 +75,29 @@ public class TopScore
     public int Score { get; set; }
     public int Kills { get; set; }
     public int Deaths { get; set; }
+    public string MapName { get; set; } = "";
+    public DateTime Timestamp { get; set; }
+    public int SessionId { get; set; }
+}
+
+public class TopKDRatio
+{
+    public string PlayerName { get; set; } = "";
+    public double KDRatio { get; set; }
+    public int Kills { get; set; }
+    public int Deaths { get; set; }
+    public string MapName { get; set; } = "";
+    public DateTime Timestamp { get; set; }
+    public int SessionId { get; set; }
+}
+
+public class TopKillRate
+{
+    public string PlayerName { get; set; } = "";
+    public double KillRate { get; set; }
+    public int Kills { get; set; }
+    public int Deaths { get; set; }
+    public int PlayTimeMinutes { get; set; }
     public string MapName { get; set; } = "";
     public DateTime Timestamp { get; set; }
     public int SessionId { get; set; }
