@@ -25,6 +25,29 @@ public class PlayerRoundsReadService : BaseClickHouseService, IClickHouseReader
         _serviceProvider = serviceProvider;
     }
 
+    private static int CalculateMinimumRounds(DateTime startPeriod, DateTime endPeriod, int? minRoundsOverride = null)
+    {
+        if (minRoundsOverride.HasValue)
+        {
+            return minRoundsOverride.Value;
+        }
+
+        var totalDays = (int)(endPeriod - startPeriod).TotalDays;
+        
+        if (totalDays <= 7)
+        {
+            return 20;  // 7 days or less: 5 rounds minimum
+        }
+        else if (totalDays <= 30)
+        {
+            return 40; // 30 days or less: 20 rounds minimum
+        }
+        else
+        {
+            return 80; // All time: 40 rounds minimum
+        }
+    }
+
     public async Task<string> ExecuteQueryAsync(string query)
     {
         return await ExecuteQueryInternalAsync(query);
@@ -163,24 +186,26 @@ FORMAT TabSeparated";
     /// <summary>
     /// Get top K/D ratios from ClickHouse
     /// </summary>
-    public async Task<List<TopKDRatio>> GetTopKDRatiosAsync(string serverGuid, DateTime startPeriod, DateTime endPeriod, int limit = 10)
+    public async Task<List<TopKDRatio>> GetTopKDRatiosAsync(string serverGuid, DateTime startPeriod, DateTime endPeriod, int limit = 10, int? minRoundsOverride = null)
     {
+        var minRounds = CalculateMinimumRounds(startPeriod, endPeriod, minRoundsOverride);
+
         var query = $@"
 SELECT 
     player_name,
-    final_kills,
-    final_deaths,
-    CASE WHEN final_deaths > 0 THEN round(final_kills / final_deaths, 3) ELSE toFloat64(final_kills) END as kd_ratio,
-    map_name,
-    round_end_time,
-    round_id
+    SUM(final_kills) as total_kills,
+    SUM(final_deaths) as total_deaths,
+    CASE WHEN SUM(final_deaths) > 0 THEN round(SUM(final_kills) / SUM(final_deaths), 3) ELSE toFloat64(SUM(final_kills)) END as overall_kd_ratio,
+    COUNT() as total_rounds
 FROM player_rounds
 WHERE server_guid = '{serverGuid.Replace("'", "''")}' 
   AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
   AND round_end_time <= '{endPeriod:yyyy-MM-dd HH:mm:ss}'
   AND is_bot = 0
   AND (final_kills > 0 OR final_deaths > 0)
-ORDER BY kd_ratio DESC
+GROUP BY player_name
+HAVING COUNT() >= {minRounds}
+ORDER BY overall_kd_ratio DESC
 LIMIT {limit}
 FORMAT TabSeparated";
 
@@ -190,7 +215,7 @@ FORMAT TabSeparated";
         foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             var parts = line.Split('\t');
-            if (parts.Length >= 7)
+            if (parts.Length >= 5)
             {
                 topKDRatios.Add(new TopKDRatio
                 {
@@ -198,9 +223,7 @@ FORMAT TabSeparated";
                     Kills = int.TryParse(parts[1], out var kills) ? kills : 0,
                     Deaths = int.TryParse(parts[2], out var deaths) ? deaths : 0,
                     KDRatio = double.TryParse(parts[3], out var kdRatio) ? kdRatio : 0,
-                    MapName = parts[4],
-                    Timestamp = DateTime.TryParse(parts[5], out var date) ? date : DateTime.MinValue,
-                    SessionId = parts[6].GetHashCode()
+                    TotalRounds = int.TryParse(parts[4], out var rounds) ? rounds : 0
                 });
             }
         }
@@ -211,18 +234,18 @@ FORMAT TabSeparated";
     /// <summary>
     /// Get top kill rates from ClickHouse (kills per minute)
     /// </summary>
-    public async Task<List<TopKillRate>> GetTopKillRatesAsync(string serverGuid, DateTime startPeriod, DateTime endPeriod, int limit = 10)
+    public async Task<List<TopKillRate>> GetTopKillRatesAsync(string serverGuid, DateTime startPeriod, DateTime endPeriod, int limit = 10, int? minRoundsOverride = null)
     {
+        var minRounds = CalculateMinimumRounds(startPeriod, endPeriod, minRoundsOverride);
+
         var query = $@"
 SELECT 
     player_name,
-    final_kills,
-    final_deaths,
-    play_time_minutes,
-    CASE WHEN play_time_minutes > 0 THEN round(final_kills / play_time_minutes, 3) ELSE 0.0 END as kill_rate,
-    map_name,
-    round_end_time,
-    round_id
+    SUM(final_kills) as total_kills,
+    SUM(final_deaths) as total_deaths,
+    SUM(play_time_minutes) as total_play_time_minutes,
+    CASE WHEN SUM(play_time_minutes) > 0 THEN round(SUM(final_kills) / SUM(play_time_minutes), 3) ELSE 0.0 END as overall_kill_rate,
+    COUNT() as total_rounds
 FROM player_rounds
 WHERE server_guid = '{serverGuid.Replace("'", "''")}' 
   AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
@@ -230,7 +253,10 @@ WHERE server_guid = '{serverGuid.Replace("'", "''")}'
   AND is_bot = 0
   AND final_kills > 0
   AND play_time_minutes > 0
-ORDER BY kill_rate DESC
+GROUP BY player_name
+HAVING SUM(final_kills) > 0 AND SUM(play_time_minutes) > 0
+  AND COUNT() >= {minRounds}
+ORDER BY overall_kill_rate DESC
 LIMIT {limit}
 FORMAT TabSeparated";
 
@@ -240,7 +266,7 @@ FORMAT TabSeparated";
         foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             var parts = line.Split('\t');
-            if (parts.Length >= 8)
+            if (parts.Length >= 6)
             {
                 topKillRates.Add(new TopKillRate
                 {
@@ -249,9 +275,7 @@ FORMAT TabSeparated";
                     Deaths = int.TryParse(parts[2], out var deaths) ? deaths : 0,
                     PlayTimeMinutes = int.TryParse(parts[3], out var playTime) ? playTime : 0,
                     KillRate = double.TryParse(parts[4], out var killRate) ? killRate : 0,
-                    MapName = parts[5],
-                    Timestamp = DateTime.TryParse(parts[6], out var date) ? date : DateTime.MinValue,
-                    SessionId = parts[7].GetHashCode()
+                    TotalRounds = int.TryParse(parts[5], out var rounds) ? rounds : 0
                 });
             }
         }

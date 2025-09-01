@@ -86,9 +86,7 @@ public class TopKDRatio
     public double KDRatio { get; set; }
     public int Kills { get; set; }
     public int Deaths { get; set; }
-    public string MapName { get; set; } = "";
-    public DateTime Timestamp { get; set; }
-    public int SessionId { get; set; }
+    public int TotalRounds { get; set; } // Total rounds played in the period
 }
 
 public class TopKillRate
@@ -98,9 +96,7 @@ public class TopKillRate
     public int Kills { get; set; }
     public int Deaths { get; set; }
     public int PlayTimeMinutes { get; set; }
-    public string MapName { get; set; } = "";
-    public DateTime Timestamp { get; set; }
-    public int SessionId { get; set; }
+    public int TotalRounds { get; set; } // Total rounds played in the period
 }
 
 
