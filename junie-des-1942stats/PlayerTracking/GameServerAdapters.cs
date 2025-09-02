@@ -15,6 +15,7 @@ namespace junie_des_1942stats.PlayerTracking
         int? Tickets2 { get; }
         int? MaxPlayers { get; }
         string? JoinLink { get; }
+        int? RoundTimeRemain { get; }
         IEnumerable<PlayerInfo> Players { get; }
         IEnumerable<TeamInfo> Teams { get; }
     }
@@ -32,6 +33,7 @@ namespace junie_des_1942stats.PlayerTracking
         public int? Tickets2 => serverInfo.Tickets2;
         public int? MaxPlayers => serverInfo.MaxPlayers;
         public string? JoinLink => serverInfo.JoinLink;
+        public int? RoundTimeRemain => serverInfo.RoundTimeRemain;
 
         public IEnumerable<PlayerInfo> Players => serverInfo.Players;
         public IEnumerable<TeamInfo> Teams => serverInfo.Teams;
@@ -50,6 +52,8 @@ namespace junie_des_1942stats.PlayerTracking
         public int? Tickets2 => null;
         public int? MaxPlayers => serverInfo.MaxPlayers;
         public string? JoinLink => null; // FH2 doesn't have JoinLink field
+        public int? RoundTimeRemain => serverInfo.Timelimit;
+
         public IEnumerable<PlayerInfo> Players => serverInfo.Players;
         public IEnumerable<TeamInfo> Teams => serverInfo.Teams;
     }
@@ -68,6 +72,8 @@ namespace junie_des_1942stats.PlayerTracking
         public int? Tickets2 => _serverInfo.Tickets2;
         public int? MaxPlayers => _serverInfo.MaxPlayers;
         public string? JoinLink => _serverInfo.JoinLink;
+        public int? RoundTimeRemain => 0; // BFV doesn't have this field in the provided sample
+
         public IEnumerable<PlayerInfo> Players => _serverInfo.Players;
         public IEnumerable<TeamInfo> Teams => _serverInfo.Teams;
     }

@@ -160,6 +160,7 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
     }
 
     // Build player_metrics batches (keyset pagination by Timestamp, SessionId)
+    // Only includes observations from completed/inactive sessions to avoid old map data
     private static async Task<List<PlayerMetricWithKey>> LoadPlayerMetricsBatchAsync(
         PlayerTrackerDbContext db,
         DateTime fromUtc,
@@ -173,6 +174,7 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
                         join ps in db.PlayerSessions on po.SessionId equals ps.SessionId
                         join s in db.Servers on ps.ServerGuid equals s.Guid
                         join p in db.Players on ps.PlayerName equals p.Name
+                        where !ps.IsActive
                         select new
                         {
                             po.Timestamp,
@@ -228,11 +230,12 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
     // Estimate server_online_counts by computing active non-bot sessions per minute in window
     private static async Task<List<ServerOnlineCount>> ComputeServerOnlineCountsAsync(PlayerTrackerDbContext db, DateTime fromUtc, DateTime toUtc)
     {
-        // Load sessions that overlap window
+        // Load sessions that overlap window and were active during the time period
         var sessions = await db.PlayerSessions
             .Where(ps => ps.LastSeenTime >= fromUtc.AddMinutes(-5)
                          && ps.StartTime <= toUtc
-                         && !ps.Player.AiBot)
+                         && !ps.Player.AiBot
+                         && !ps.IsActive) // Only include completed/inactive sessions to avoid counting timed out active sessions
             .Select(ps => new { ps.PlayerName, ps.ServerGuid, ps.StartTime, ps.LastSeenTime, ps.IsActive, ps.MapName })
             .ToListAsync();
 

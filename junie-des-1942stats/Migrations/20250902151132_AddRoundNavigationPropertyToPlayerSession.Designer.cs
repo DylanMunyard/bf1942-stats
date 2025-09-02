@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using junie_des_1942stats.PlayerTracking;
 
@@ -10,9 +11,11 @@ using junie_des_1942stats.PlayerTracking;
 namespace junie_des_1942stats.Migrations
 {
     [DbContext(typeof(PlayerTrackerDbContext))]
-    partial class PlayerTrackerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250902151132_AddRoundNavigationPropertyToPlayerSession")]
+    partial class AddRoundNavigationPropertyToPlayerSession
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.5");
@@ -564,7 +567,7 @@ namespace junie_des_1942stats.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("junie_des_1942stats.PlayerTracking.Round", null)
+                    b.HasOne("junie_des_1942stats.PlayerTracking.Round", "Round")
                         .WithMany("Sessions")
                         .HasForeignKey("RoundId")
                         .OnDelete(DeleteBehavior.SetNull);
@@ -576,6 +579,8 @@ namespace junie_des_1942stats.Migrations
                         .IsRequired();
 
                     b.Navigation("Player");
+
+                    b.Navigation("Round");
 
                     b.Navigation("Server");
                 });

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using junie_des_1942stats.PlayerTracking;
 
@@ -10,9 +11,11 @@ using junie_des_1942stats.PlayerTracking;
 namespace junie_des_1942stats.Migrations
 {
     [DbContext(typeof(PlayerTrackerDbContext))]
-    partial class PlayerTrackerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250902150031_AddRoundTimeRemainToRoundAndRoundObservations")]
+    partial class AddRoundTimeRemainToRoundAndRoundObservations
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.5");
@@ -543,6 +546,54 @@ namespace junie_des_1942stats.Migrations
                         .IsUnique();
 
                     b.ToTable("UserPlayerNames");
+                });
+
+            modelBuilder.Entity("junie_des_1942stats.ServerStats.Models.RoundListItem", b =>
+                {
+                    b.Property<int>("DurationMinutes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("EndTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("GameType")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("MapName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ParticipantCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RoundId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ServerGuid")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ServerName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("StartTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Team1Label")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Team2Label")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TotalSessions")
+                        .HasColumnType("INTEGER");
+
+                    b.ToTable("RoundListItem");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.PlayerObservation", b =>

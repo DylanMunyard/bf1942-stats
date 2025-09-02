@@ -448,7 +448,8 @@ public class PlayerTrackingService
                 Tickets1 = server.Tickets1,
                 Tickets2 = server.Tickets2,
                 Team1Label = team1Label,
-                Team2Label = team2Label
+                Team2Label = team2Label,
+                RoundTimeRemain = server.RoundTimeRemain
             };
             newRound.RoundId = ComputeRoundId(newRound.ServerGuid, newRound.MapName, newRound.StartTime.ToUniversalTime());
 
@@ -480,6 +481,7 @@ public class PlayerTrackingService
             active.Tickets2 = server.Tickets2;
             active.Team1Label = team1Label;
             active.Team2Label = team2Label;
+            active.RoundTimeRemain = server.RoundTimeRemain;
             _dbContext.Rounds.Update(active);
             await _dbContext.SaveChangesAsync();
         }
@@ -514,7 +516,8 @@ public class PlayerTrackingService
             Tickets1 = server.Tickets1,
             Tickets2 = server.Tickets2,
             Team1Label = team1Label,
-            Team2Label = team2Label
+            Team2Label = team2Label,
+            RoundTimeRemain = server.RoundTimeRemain
         };
         await _dbContext.RoundObservations.AddAsync(observation);
         await _dbContext.SaveChangesAsync();

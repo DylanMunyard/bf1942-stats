@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using junie_des_1942stats.ServerStats.Models;
 using junie_des_1942stats.PlayerStats.Models;
 
 namespace junie_des_1942stats.PlayerTracking;
@@ -225,10 +224,6 @@ public class PlayerTrackerDbContext : DbContext
             .WithMany()
             .HasForeignKey(ub => ub.BuddyPlayerName);
 
-        // Configure RoundListItem as keyless entity (for query results only)
-        modelBuilder.Entity<RoundListItem>()
-            .HasNoKey();
-
         // Configure ServerBestScoreRaw as keyless entity (for query results only)
         modelBuilder.Entity<ServerBestScoreRaw>()
             .HasNoKey();
@@ -334,6 +329,7 @@ public class Round
     public int? Tickets2 { get; set; }
     public string? Team1Label { get; set; }
     public string? Team2Label { get; set; }
+    public int? RoundTimeRemain { get; set; }
 
     // Navigation properties
     public List<PlayerSession> Sessions { get; set; } = new();
@@ -348,6 +344,7 @@ public class RoundObservation
     public int? Tickets2 { get; set; }
     public string? Team1Label { get; set; }
     public string? Team2Label { get; set; }
+    public int? RoundTimeRemain { get; set; }
 }
 
 public class PlayerObservation

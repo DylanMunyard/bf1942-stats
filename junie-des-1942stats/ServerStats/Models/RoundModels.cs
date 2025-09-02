@@ -17,6 +17,7 @@ public class RoundListItem
     public bool IsActive { get; set; }
     public string? Team1Label { get; set; }
     public string? Team2Label { get; set; }
+    public int? RoundTimeRemain { get; set; }
 }
 
 
