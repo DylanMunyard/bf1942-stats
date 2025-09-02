@@ -59,7 +59,7 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
             var roundsWriter = scope.ServiceProvider.GetRequiredService<PlayerRoundsWriteService>();
 
             var now = DateTime.UtcNow;
-            var from = now.AddMinutes(-5); // sync last 5 minutes window idempotently
+            var from = now.AddHours(-2); // sync last 2 hours window idempotently to fix historical data
 
             if (_enablePlayerMetricsSyncing)
             {
@@ -160,7 +160,6 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
     }
 
     // Build player_metrics batches (keyset pagination by Timestamp, SessionId)
-    // Only includes observations from completed/inactive sessions to avoid old map data
     private static async Task<List<PlayerMetricWithKey>> LoadPlayerMetricsBatchAsync(
         PlayerTrackerDbContext db,
         DateTime fromUtc,
@@ -174,7 +173,6 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
                         join ps in db.PlayerSessions on po.SessionId equals ps.SessionId
                         join s in db.Servers on ps.ServerGuid equals s.Guid
                         join p in db.Players on ps.PlayerName equals p.Name
-                        where !ps.IsActive
                         select new
                         {
                             po.Timestamp,
@@ -228,14 +226,28 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
     }
 
     // Estimate server_online_counts by computing active non-bot sessions per minute in window
+    // Uses Round table to get the correct map for each specific minute, avoiding old map data issues
+    // This prevents the issue where players staying connected through map changes would appear on the old map
     private static async Task<List<ServerOnlineCount>> ComputeServerOnlineCountsAsync(PlayerTrackerDbContext db, DateTime fromUtc, DateTime toUtc)
     {
-        // Load sessions that overlap window and were active during the time period
+        // Get all rounds that overlap with our time window to determine the correct map for each minute
+        var overlappingRounds = await db.Rounds
+            .Where(r => r.StartTime < toUtc && (r.EndTime == null || r.EndTime > fromUtc))
+            .Select(r => new { r.ServerGuid, r.ServerName, r.GameType, r.MapName, r.StartTime, r.EndTime })
+            .ToListAsync();
+
+        // Also get server info for the Game field
+        var serverGuids = overlappingRounds.Select(r => r.ServerGuid).Distinct().ToList();
+        var servers = await db.Servers
+            .Where(s => serverGuids.Contains(s.Guid))
+            .Select(s => new { s.Guid, s.Game })
+            .ToDictionaryAsync(s => s.Guid, s => s);
+
+        // Load sessions that overlap window (using 2-hour buffer to ensure we capture all relevant data)
         var sessions = await db.PlayerSessions
-            .Where(ps => ps.LastSeenTime >= fromUtc.AddMinutes(-5)
+            .Where(ps => ps.LastSeenTime >= fromUtc.AddHours(-2)
                          && ps.StartTime <= toUtc
-                         && !ps.Player.AiBot
-                         && !ps.IsActive) // Only include completed/inactive sessions to avoid counting timed out active sessions
+                         && !ps.Player.AiBot)
             .Select(ps => new { ps.PlayerName, ps.ServerGuid, ps.StartTime, ps.LastSeenTime, ps.IsActive, ps.MapName })
             .ToListAsync();
 
@@ -253,38 +265,57 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
 
             for (var t = startMinute; t <= endMinuteExclusive; t = t.AddMinutes(1))
             {
-                var key = (t, s.ServerGuid, s.MapName ?? "");
-                if (!buckets.TryGetValue(key, out var count))
+                // Find the round that was active at this specific minute
+                var activeRound = overlappingRounds.FirstOrDefault(r => 
+                    r.ServerGuid == s.ServerGuid && 
+                    r.StartTime <= t && 
+                    (r.EndTime == null || r.EndTime > t));
+
+                if (activeRound != null)
                 {
-                    buckets[key] = 1;
-                }
-                else
-                {
-                    buckets[key] = (ushort)(count + 1);
+                    // Use the map from the active round at this specific minute
+                    var key = (t, s.ServerGuid, activeRound.MapName);
+                    if (!buckets.TryGetValue(key, out var count))
+                    {
+                        buckets[key] = 1;
+                    }
+                    else
+                    {
+                        buckets[key] = (ushort)(count + 1);
+                    }
                 }
             }
         }
 
-        // Load server names and games
-        var serverGuids = buckets.Keys.Select(k => k.serverGuid).Distinct().ToList();
-        var servers = await db.Servers.Where(s => serverGuids.Contains(s.Guid)).ToDictionaryAsync(s => s.Guid, s => new { s.Name, s.Game });
-
+        // Build results using round and server information
         var results = new List<ServerOnlineCount>();
         foreach (var kvp in buckets)
         {
             var key = kvp.Key;
             var count = kvp.Value;
+            
+            // Get server info for name and game
             if (!servers.TryGetValue(key.serverGuid, out var serverInfo)) continue;
-
-            results.Add(new ServerOnlineCount
+            
+            // Find the round info for this specific minute and map
+            var roundInfo = overlappingRounds.FirstOrDefault(r => 
+                r.ServerGuid == key.serverGuid && 
+                r.MapName == key.mapName &&
+                r.StartTime <= key.minute && 
+                (r.EndTime == null || r.EndTime > key.minute));
+            
+            if (roundInfo != null)
             {
-                Timestamp = key.minute,
-                ServerGuid = key.serverGuid,
-                ServerName = serverInfo.Name,
-                PlayersOnline = count,
-                MapName = key.mapName,
-                Game = serverInfo.Game
-            });
+                results.Add(new ServerOnlineCount
+                {
+                    Timestamp = key.minute,
+                    ServerGuid = key.serverGuid,
+                    ServerName = roundInfo.ServerName,
+                    PlayersOnline = count,
+                    MapName = key.mapName, // This is the map from the active round at this minute
+                    Game = serverInfo.Game
+                });
+            }
         }
 
         return results;
