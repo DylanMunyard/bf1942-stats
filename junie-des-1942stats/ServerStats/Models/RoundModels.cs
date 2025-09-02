@@ -38,3 +38,8 @@ public class RoundFilters
     public string? GameId { get; set; }
 }
 
+public class RoundWithPlayers : RoundListItem
+{
+    public List<PlayerStatsModels.SessionListItem> Players { get; set; } = new List<PlayerStatsModels.SessionListItem>();
+}
+

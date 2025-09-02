@@ -306,7 +306,6 @@ try
     builder.Services.AddScoped<PlayerTrackingService>();
     builder.Services.AddScoped<RoundBackfillService>();
     builder.Services.AddScoped<PlayerStatsService>();
-    builder.Services.AddScoped<SessionsService>();
 
     // Register the ServerStatsService and supporting services
     builder.Services.AddScoped<ServerStatsService>();
