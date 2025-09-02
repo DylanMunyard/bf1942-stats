@@ -21,9 +21,6 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     private int _cycleCount = 0;
 
     // Configuration setting for round syncing
-    private readonly bool _enableClickhouseSyncing;
-    private readonly bool _enablePlayerMetricsSyncing;
-    private readonly bool _enableServerOnlineCountsSyncing;
     private readonly bool _enableRoundsSyncing;
 
 
@@ -34,9 +31,6 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         _configuration = configuration;
 
         // Check environment variable for round syncing - default to false (disabled)
-        _enableClickhouseSyncing = Environment.GetEnvironmentVariable("ENABLE_ROUND_SYNCING")?.ToLowerInvariant() == "true";
-        _enablePlayerMetricsSyncing = Environment.GetEnvironmentVariable("ENABLE_PLAYER_METRICS_SYNCING")?.ToLowerInvariant() == "true";
-        _enableServerOnlineCountsSyncing = Environment.GetEnvironmentVariable("ENABLE_SERVER_ONLINE_COUNTS_SYNCING")?.ToLowerInvariant() == "true";
         _enableRoundsSyncing = Environment.GetEnvironmentVariable("ENABLE_ROUNDS_SYNCING")?.ToLowerInvariant() == "true";
 
         var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
@@ -45,10 +39,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
 
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse Read URL: {clickHouseReadUrl}");
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse Write URL: {clickHouseWriteUrl} {(isWriteUrlSet ? "(custom)" : "(fallback to read URL)")}");
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Round syncing to ClickHouse: {(_enableClickhouseSyncing ? "ENABLED" : "DISABLED")}");
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Player metrics syncing to ClickHouse: {(_enablePlayerMetricsSyncing ? "ENABLED" : "DISABLED")}");
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Server online counts syncing to ClickHouse: {(_enableServerOnlineCountsSyncing ? "ENABLED" : "DISABLED")}");
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Rounds syncing: {(_enableRoundsSyncing ? "ENABLED" : "DISABLED")}");
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Rounds tracking in SQLite: {(_enableRoundsSyncing ? "ENABLED" : "DISABLED")}");
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] To avoid writes to production: Set CLICKHOUSE_WRITE_URL to dev instance or leave syncing flags=false");
     }
 
@@ -79,9 +70,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         using var activity = ActivitySources.StatsCollection.StartActivity("StatsCollection.Cycle");
         activity?.SetTag("cycle_number", currentCycle);
         activity?.SetTag("collection_interval_seconds", _collectionInterval.TotalSeconds);
-        activity?.SetTag("enable_round_syncing", _enableClickhouseSyncing);
-        activity?.SetTag("enable_player_metrics_syncing", _enablePlayerMetricsSyncing);
-        activity?.SetTag("enable_server_online_counts_syncing", _enableServerOnlineCountsSyncing);
+        activity?.SetTag("enable_rounds_tracking", _enableRoundsSyncing);
         activity?.SetTag("enable_rounds_syncing", _enableRoundsSyncing);
 
         var cycleStopwatch = Stopwatch.StartNew();
@@ -96,8 +85,6 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             using (var scope = _scopeFactory.CreateScope())
             {
                 var playerTrackingService = scope.ServiceProvider.GetRequiredService<PlayerTrackingService>();
-                var playerMetricsService = scope.ServiceProvider.GetRequiredService<PlayerMetricsWriteService>();
-                var playerRoundsService = scope.ServiceProvider.GetRequiredService<PlayerRoundsWriteService>();
                 var bfListApiService = scope.ServiceProvider.GetRequiredService<IBfListApiService>();
 
                 // 1. Global timeout cleanup
@@ -137,77 +124,17 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
                 allServers.AddRange(bfvietnamServers);
                 var timestamp = DateTime.UtcNow;
 
-                if (_enablePlayerMetricsSyncing)
-                {
-                    var clickHouseStopwatch = Stopwatch.StartNew();
-                    await playerMetricsService.StoreBatchedPlayerMetricsAsync(allServers, timestamp);
-                    clickHouseStopwatch.Stop();
-                    Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse batch storage: {clickHouseStopwatch.ElapsedMilliseconds}ms ({allServers.Count} servers)");
-                    activity?.SetTag("player_metrics_duration_ms", clickHouseStopwatch.ElapsedMilliseconds);
-                }
-                else
-                {
-                    Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse batch storage: SKIPPED (disabled by configuration)");
-                }
+                // Removed ClickHouse batch storage. Metrics syncing handled by ClickHouseSyncBackgroundService.
 
                 // 5. Store server online counts alongside detailed metrics
-                if (_enableServerOnlineCountsSyncing)
-                {
-                    var onlineCountsStopwatch = Stopwatch.StartNew();
-                    try
-                    {
-                        var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
-                        await playerMetricsService.StoreServerOnlineCountsAsync(allServers, timestamp, dbContext);
-                        onlineCountsStopwatch.Stop();
-                        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse online counts: {onlineCountsStopwatch.ElapsedMilliseconds}ms ({allServers.Count} servers)");
-                        activity?.SetTag("online_counts_duration_ms", onlineCountsStopwatch.ElapsedMilliseconds);
-                    }
-                    catch (Exception ex)
-                    {
-                        onlineCountsStopwatch.Stop();
-                        // Log but don't fail - this is expected during transition period
-                        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Online counts storage failed (expected during transition): {ex.Message} ({onlineCountsStopwatch.ElapsedMilliseconds}ms)");
-                        activity?.SetTag("online_counts_error", ex.Message);
-                        // Don't set activity status as error since this is expected during transition
-                    }
-                }
-                else
-                {
-                    Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse online counts: SKIPPED (disabled by configuration)");
-                }
+                // Removed ClickHouse online counts storage. Online counts syncing handled by ClickHouseSyncBackgroundService.
 
                 activity?.SetTag("total_servers_processed", allServers.Count);
                 activity?.SetTag("bf1942_servers_processed", bf1942Servers.Count);
                 activity?.SetTag("fh2_servers_processed", fh2Servers.Count);
                 activity?.SetTag("bfvietnam_servers_processed", bfvietnamServers.Count);
 
-                // 6. Sync completed PlayerSessions to ClickHouse player_rounds
-                if (_enableClickhouseSyncing)
-                {
-                    var roundsSyncStopwatch = Stopwatch.StartNew();
-                    try
-                    {
-                        // Use incremental sync based on last synced timestamp (no explicit paging needed)
-                        // The method internally handles paging efficiently for the incremental data
-                        var result = await playerRoundsService.SyncCompletedSessionsAsync();
-
-                        roundsSyncStopwatch.Stop();
-                        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRounds sync: {result.ProcessedCount} records ({roundsSyncStopwatch.ElapsedMilliseconds}ms)");
-                        activity?.SetTag("rounds_synced_count", result.ProcessedCount);
-                        activity?.SetTag("rounds_sync_duration_ms", roundsSyncStopwatch.ElapsedMilliseconds);
-                    }
-                    catch (Exception ex)
-                    {
-                        roundsSyncStopwatch.Stop();
-                        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRounds sync failed: {ex.Message} ({roundsSyncStopwatch.ElapsedMilliseconds}ms)");
-                        activity?.SetTag("rounds_sync_error", ex.Message);
-                        activity?.SetStatus(ActivityStatusCode.Error, $"PlayerRounds sync failed: {ex.Message}");
-                    }
-                }
-                else
-                {
-                    Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerRounds sync: SKIPPED (disabled by configuration)");
-                }
+                // Removed PlayerRounds sync to ClickHouse. Rounds syncing handled by ClickHouseSyncBackgroundService.
             }
         }
         catch (Exception ex)

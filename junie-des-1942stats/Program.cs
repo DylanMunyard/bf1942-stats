@@ -313,6 +313,7 @@ try
 
     // Register the stat collector background services
     builder.Services.AddHostedService<StatsCollectionBackgroundService>();
+    builder.Services.AddHostedService<ClickHouseSyncBackgroundService>();
     builder.Services.AddHostedService<RankingCalculationService>();
 
     // Add HTTP server for Prometheus to scrape

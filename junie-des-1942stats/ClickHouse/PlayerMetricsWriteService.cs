@@ -102,6 +102,28 @@ PARTITION BY toYYYYMM(timestamp)";
         await ExecuteCommandInternalAsync(command);
     }
 
+    // Public bulk insert helper for precomputed metrics
+    public async Task WritePlayerMetricsAsync(IEnumerable<PlayerMetric> metrics)
+    {
+        var list = metrics?.ToList() ?? new List<PlayerMetric>();
+        if (list.Count == 0)
+        {
+            return;
+        }
+        await InsertPlayerMetricsAsync(list);
+    }
+
+    // Public bulk insert helper for precomputed server online counts
+    public async Task WriteServerOnlineCountsAsync(IEnumerable<ServerOnlineCount> onlineCounts)
+    {
+        var list = onlineCounts?.ToList() ?? new List<ServerOnlineCount>();
+        if (list.Count == 0)
+        {
+            return;
+        }
+        await InsertServerOnlineCountsAsync(list);
+    }
+
     public async Task StoreBatchedPlayerMetricsAsync(IEnumerable<IGameServer> servers, DateTime timestamp)
     {
         var allMetrics = new List<PlayerMetric>();
