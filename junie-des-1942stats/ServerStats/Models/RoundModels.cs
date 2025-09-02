@@ -36,6 +36,7 @@ public class RoundFilters
     public int? MaxParticipants { get; set; }
     public bool? IsActive { get; set; }
     public string? GameId { get; set; }
+    public List<string>? PlayerNames { get; set; }
 }
 
 public class RoundWithPlayers : RoundListItem

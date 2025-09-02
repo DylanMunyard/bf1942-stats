@@ -39,6 +39,7 @@ public class RoundsController : ControllerBase
         [FromQuery] int? maxParticipants = null,
         [FromQuery] bool? isActive = null,
         [FromQuery] string? gameId = null,
+        [FromQuery] List<string>? playerNames = null,
         [FromQuery] bool includePlayers = true)
     {
         // Validate parameters
@@ -103,7 +104,10 @@ public class RoundsController : ControllerBase
                 MinParticipants = minParticipants,
                 MaxParticipants = maxParticipants,
                 IsActive = isActive,
-                GameId = gameId
+                GameId = gameId,
+                PlayerNames = playerNames != null && playerNames.Any()
+                    ? playerNames.Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n.Trim()).ToList()
+                    : null
             };
 
             var result = await _roundsService.GetRounds(page, pageSize, sortBy, sortOrder, filters, includePlayers);

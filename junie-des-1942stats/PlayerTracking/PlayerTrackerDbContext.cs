@@ -134,7 +134,7 @@ public class PlayerTrackerDbContext : DbContext
         // Relationship: PlayerSession → Round (optional FK)
         modelBuilder.Entity<PlayerSession>()
             .HasOne<Round>()
-            .WithMany()
+            .WithMany(r => r.Sessions)
             .HasForeignKey(ps => ps.RoundId)
             .HasPrincipalKey(r => r.RoundId)
             .OnDelete(DeleteBehavior.SetNull);
@@ -334,6 +334,9 @@ public class Round
     public int? Tickets2 { get; set; }
     public string? Team1Label { get; set; }
     public string? Team2Label { get; set; }
+
+    // Navigation properties
+    public List<PlayerSession> Sessions { get; set; } = new();
 }
 
 public class RoundObservation

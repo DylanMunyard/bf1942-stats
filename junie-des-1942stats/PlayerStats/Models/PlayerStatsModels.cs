@@ -261,10 +261,6 @@ public class SessionListItem
     public int SessionId { get; set; }
     public string? RoundId { get; set; }
     public string PlayerName { get; set; } = string.Empty;
-    public string ServerName { get; set; } = string.Empty;
-    public string ServerGuid { get; set; } = string.Empty;
-    public string MapName { get; set; } = string.Empty;
-    public string? GameType { get; set; }
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
     public int DurationMinutes { get; set; }

@@ -109,6 +109,13 @@ public class RoundsService(PlayerTrackerDbContext dbContext)
             query = query.Where(r => r.IsActive == filters.IsActive.Value);
         }
 
+        // Filter by player names: keep only rounds that have at least one of the specified players
+        if (filters.PlayerNames != null && filters.PlayerNames.Any())
+        {
+            var names = filters.PlayerNames;
+            query = query.Where(r => r.Sessions.Any(ps => names.Contains(ps.PlayerName)));
+        }
+
         // Apply sorting
         query = sortBy.ToLowerInvariant() switch
         {
@@ -144,49 +151,55 @@ public class RoundsService(PlayerTrackerDbContext dbContext)
         // Get total count
         var totalCount = await query.CountAsync();
 
-        // Apply pagination
+        // Apply pagination and get rounds
         var rounds = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
 
-        // Convert to RoundWithPlayers and optionally load players
-        var result = new List<RoundWithPlayers>();
-
-        foreach (var round in rounds)
+        // Convert to RoundWithPlayers
+        var result = rounds.Select(round => new RoundWithPlayers
         {
-            var roundWithPlayers = new RoundWithPlayers
-            {
-                RoundId = round.RoundId,
-                ServerName = round.ServerName,
-                ServerGuid = round.ServerGuid,
-                MapName = round.MapName,
-                GameType = round.GameType,
-                StartTime = round.StartTime,
-                EndTime = round.EndTime ?? DateTime.UtcNow,
-                DurationMinutes = round.DurationMinutes ?? 0,
-                ParticipantCount = round.ParticipantCount ?? 0,
-                IsActive = round.IsActive,
-                Team1Label = round.Team1Label,
-                Team2Label = round.Team2Label,
-                Players = new List<PlayerStats.Models.SessionListItem>()
-            };
+            RoundId = round.RoundId,
+            ServerName = round.ServerName,
+            ServerGuid = round.ServerGuid,
+            MapName = round.MapName,
+            GameType = round.GameType,
+            StartTime = round.StartTime,
+            EndTime = round.EndTime ?? DateTime.UtcNow,
+            DurationMinutes = round.DurationMinutes ?? 0,
+            ParticipantCount = round.ParticipantCount ?? 0,
+            IsActive = round.IsActive,
+            Team1Label = round.Team1Label,
+            Team2Label = round.Team2Label,
+            Players = new List<PlayerStats.Models.SessionListItem>()
+        }).ToList();
 
-            if (includePlayers)
+        // If players are requested, load them all in a single query
+        if (includePlayers && rounds.Any())
+        {
+            var roundIds = rounds.Select(r => r.RoundId).Where(id => !string.IsNullOrEmpty(id)).ToList();
+            
+            if (roundIds.Any())
             {
-                var players = await _dbContext.PlayerSessions
+                var playerQuery = _dbContext.PlayerSessions
                     .AsNoTracking()
-                    .Where(ps => ps.RoundId == round.RoundId)
-                    .OrderBy(ps => ps.PlayerName)
+                    .Where(ps => ps.RoundId != null && roundIds.Contains(ps.RoundId));
+
+                if (filters.PlayerNames != null && filters.PlayerNames.Any())
+                {
+                    var names = filters.PlayerNames;
+                    playerQuery = playerQuery.Where(ps => names.Contains(ps.PlayerName));
+                }
+
+                var allPlayers = await playerQuery
+                    .OrderBy(ps => ps.RoundId)
+                    .ThenBy(ps => ps.PlayerName)
                     .Select(ps => new PlayerStats.Models.SessionListItem
                     {
                         SessionId = ps.SessionId,
-                        RoundId = ps.RoundId,
+                        RoundId = ps.RoundId!,
                         PlayerName = ps.PlayerName,
-                        ServerName = round.ServerName,
-                        ServerGuid = ps.ServerGuid,
-                        MapName = ps.MapName,
-                        GameType = ps.GameType,
                         StartTime = ps.StartTime,
                         EndTime = ps.IsActive ? ps.LastSeenTime : ps.LastSeenTime,
                         DurationMinutes = (int)(ps.LastSeenTime - ps.StartTime).TotalMinutes,
@@ -197,10 +210,17 @@ public class RoundsService(PlayerTrackerDbContext dbContext)
                     })
                     .ToListAsync();
 
-                roundWithPlayers.Players = players;
-            }
+                // Group players by RoundId and assign to rounds
+                var playersByRound = allPlayers.GroupBy(p => p.RoundId!).ToDictionary(g => g.Key, g => g.ToList());
 
-            result.Add(roundWithPlayers);
+                foreach (var round in result)
+                {
+                    if (playersByRound.TryGetValue(round.RoundId, out var players))
+                    {
+                        round.Players = players;
+                    }
+                }
+            }
         }
 
         return new PlayerStats.Models.PagedResult<RoundWithPlayers>
