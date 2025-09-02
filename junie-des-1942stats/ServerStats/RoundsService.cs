@@ -1,12 +1,14 @@
 using junie_des_1942stats.PlayerTracking;
 using junie_des_1942stats.ServerStats.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace junie_des_1942stats.ServerStats;
 
-public class RoundsService(PlayerTrackerDbContext dbContext)
+public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsService> logger)
 {
     private readonly PlayerTrackerDbContext _dbContext = dbContext;
+    private readonly ILogger<RoundsService> _logger = logger;
 
     public async Task<List<RoundInfo>> GetRecentRoundsAsync(string serverGuid, int limit)
     {
@@ -34,7 +36,8 @@ public class RoundsService(PlayerTrackerDbContext dbContext)
         string sortBy, 
         string sortOrder, 
         RoundFilters filters,
-        bool includePlayers = true)
+        bool includePlayers = true,
+        bool onlySpecifiedPlayers = false)
     {
         var query = _dbContext.Rounds.AsNoTracking();
 
@@ -109,11 +112,29 @@ public class RoundsService(PlayerTrackerDbContext dbContext)
             query = query.Where(r => r.IsActive == filters.IsActive.Value);
         }
 
-        // Filter by player names: keep only rounds that have at least one of the specified players
+        // Filter by player names: require that ALL specified players are present (AND semantics)
         if (filters.PlayerNames != null && filters.PlayerNames.Any())
         {
-            var names = filters.PlayerNames;
-            query = query.Where(r => r.Sessions.Any(ps => names.Contains(ps.PlayerName)));
+            var names = filters.PlayerNames
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Select(n => n.Trim())
+                .Distinct()
+                .ToList();
+
+            if (names.Count > 0)
+            {
+                _logger.LogInformation("Filtering rounds by ALL player names: {PlayerNames}", string.Join(", ", names));
+
+                // Subquery: find roundIds that contain all requested player names
+                var matchingRoundIds = _dbContext.PlayerSessions
+                    .AsNoTracking()
+                    .Where(ps => ps.RoundId != null && names.Contains(ps.PlayerName))
+                    .GroupBy(ps => ps.RoundId!)
+                    .Where(g => g.Select(ps => ps.PlayerName).Distinct().Count() == names.Count)
+                    .Select(g => g.Key);
+
+                query = query.Where(r => r.RoundId != null && matchingRoundIds.Contains(r.RoundId));
+            }
         }
 
         // Apply sorting
@@ -186,7 +207,8 @@ public class RoundsService(PlayerTrackerDbContext dbContext)
                     .AsNoTracking()
                     .Where(ps => ps.RoundId != null && roundIds.Contains(ps.RoundId));
 
-                if (filters.PlayerNames != null && filters.PlayerNames.Any())
+                // Restrict the players list to specified names only if requested
+                if (onlySpecifiedPlayers && filters.PlayerNames != null && filters.PlayerNames.Any())
                 {
                     var names = filters.PlayerNames;
                     playerQuery = playerQuery.Where(ps => names.Contains(ps.PlayerName));
