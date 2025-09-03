@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using CsvHelper;
 using CsvHelper.Configuration;
 using junie_des_1942stats.ClickHouse.Interfaces;
@@ -23,7 +24,6 @@ public class PlayerMetricsWriteService : BaseClickHouseService, IClickHouseWrite
         try
         {
             await CreatePlayerMetricsTableAsync();
-            await CreateDailyRankingsViewAsync();
             await CreateServerOnlineCountsTableAsync();
             Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse schema verified/created successfully");
         }
@@ -36,48 +36,27 @@ public class PlayerMetricsWriteService : BaseClickHouseService, IClickHouseWrite
 
     private async Task CreatePlayerMetricsTableAsync()
     {
-        var createTableQuery = @"
-CREATE TABLE IF NOT EXISTS player_metrics (
-    timestamp DateTime,
+        var createV2 = @"
+CREATE TABLE IF NOT EXISTS player_metrics
+(
+    timestamp   DateTime,
     server_guid String,
-    server_name String,
     player_name String,
-    score Int32,
-    kills UInt16,
-    deaths UInt16,
-    ping UInt16,
-    team_name String,
-    map_name String,
-    game_type String,
-    is_bot UInt8
-) ENGINE = MergeTree()
-ORDER BY (server_guid, timestamp)
-PARTITION BY toYYYYMM(timestamp)";
 
-        await ExecuteCommandAsync(createTableQuery);
-
-        // Add the is_bot column if it doesn't exist (for existing tables)
-        await ExecuteCommandAsync("ALTER TABLE player_metrics ADD COLUMN IF NOT EXISTS is_bot UInt8 DEFAULT 0");
-    }
-
-    private async Task CreateDailyRankingsViewAsync()
-    {
-        var createViewQuery = @"
-CREATE MATERIALIZED VIEW IF NOT EXISTS daily_rankings 
-ENGINE = AggregatingMergeTree()
-ORDER BY (server_guid, date)
-AS SELECT 
-    server_guid,
-    server_name,
-    toDate(timestamp) as date,
-    player_name,
-    sumState(kills) as total_kills,
-    sumState(deaths) as total_deaths,
-    avgState(ping) as avg_ping
-FROM player_metrics
-GROUP BY server_guid, server_name, date, player_name";
-
-        await ExecuteCommandAsync(createViewQuery);
+    server_name String,
+    score       Int32,
+    kills       UInt16,
+    deaths      UInt16,
+    ping        UInt16,
+    team_name   String,
+    map_name    String,
+    game_type   String,
+    is_bot      UInt8
+)
+ENGINE = ReplacingMergeTree()
+PARTITION BY toYYYYMM(timestamp)
+ORDER BY (timestamp, server_guid, player_name)";
+        await ExecuteCommandAsync(createV2);
     }
 
     private async Task CreateServerOnlineCountsTableAsync()
@@ -90,8 +69,8 @@ CREATE TABLE IF NOT EXISTS server_online_counts (
     players_online UInt16,
     map_name String,
     game String
-) ENGINE = MergeTree()
-ORDER BY (server_guid, timestamp)
+) ENGINE = ReplacingMergeTree()
+ORDER BY (server_guid, timestamp, game)
 PARTITION BY toYYYYMM(timestamp)";
 
         await ExecuteCommandAsync(createTableQuery);
@@ -122,89 +101,6 @@ PARTITION BY toYYYYMM(timestamp)";
             return;
         }
         await InsertServerOnlineCountsAsync(list);
-    }
-
-    public async Task StoreBatchedPlayerMetricsAsync(IEnumerable<IGameServer> servers, DateTime timestamp)
-    {
-        var allMetrics = new List<PlayerMetric>();
-
-        foreach (var server in servers)
-        {
-            if (!server.Players.Any())
-                continue;
-
-            var serverMetrics = server.Players.Select(player =>
-            {
-                // Get team label from Teams array if TeamLabel is empty
-                var teamLabel = player.TeamLabel;
-                if (string.IsNullOrEmpty(teamLabel) && server.Teams?.Any() == true)
-                {
-                    var team = server.Teams.FirstOrDefault(t => t.Index == player.Team);
-                    teamLabel = team?.Label ?? "";
-                }
-
-                var metric = new PlayerMetric
-                {
-                    Timestamp = timestamp,
-                    ServerGuid = server.Guid,
-                    ServerName = server.Name,
-                    PlayerName = player.Name,
-                    Score = player.Score,
-                    Kills = (ushort)Math.Max(0, player.Kills),
-                    Deaths = (ushort)Math.Max(0, player.Deaths),
-                    Ping = (ushort)Math.Max(0, player.Ping),
-                    TeamName = teamLabel,
-                    MapName = server.MapName,
-                    GameType = server.GameType,
-                    IsBot = player.AiBot
-                };
-                return metric;
-            });
-
-            allMetrics.AddRange(serverMetrics);
-        }
-
-        if (allMetrics.Any())
-        {
-            await InsertPlayerMetricsAsync(allMetrics);
-        }
-    }
-
-    /// <summary>
-    /// Stores server online counts alongside the detailed player metrics
-    /// </summary>
-    public async Task StoreServerOnlineCountsAsync(IEnumerable<IGameServer> servers, DateTime timestamp, PlayerTrackerDbContext dbContext)
-    {
-        var onlineCounts = new List<ServerOnlineCount>();
-
-        // Get server GUID to game mapping from SQLite
-        var serverGuids = servers.Select(s => s.Guid).ToList();
-        var serverGameMapping = await dbContext.Servers
-            .Where(s => serverGuids.Contains(s.Guid) && !string.IsNullOrEmpty(s.Game))
-            .ToDictionaryAsync(s => s.Guid, s => s.Game);
-
-        foreach (var server in servers)
-        {
-            var playersOnline = (ushort)server.Players.Count(p => !p.AiBot);
-            var game = serverGameMapping.GetValueOrDefault(server.Guid, "");
-
-            var onlineCount = new ServerOnlineCount
-            {
-                Timestamp = timestamp,
-                ServerGuid = server.Guid,
-                ServerName = server.Name,
-                PlayersOnline = playersOnline,
-                MapName = server.MapName ?? "",
-                Game = game
-            };
-
-            onlineCounts.Add(onlineCount);
-        }
-
-        if (onlineCounts.Any())
-        {
-            await InsertServerOnlineCountsAsync(onlineCounts);
-        }
     }
 
     private async Task InsertServerOnlineCountsAsync(List<ServerOnlineCount> onlineCounts)
@@ -261,13 +157,12 @@ PARTITION BY toYYYYMM(timestamp)";
             };
             using var csvWriter = new CsvWriter(stringWriter, config);
 
-            // Write CSV records without header
             csvWriter.WriteRecords(metrics.Select(m => new
             {
                 Timestamp = m.Timestamp.ToString("yyyy-MM-dd HH:mm:ss"),
                 ServerGuid = m.ServerGuid,
-                ServerName = m.ServerName,
                 PlayerName = m.PlayerName,
+                ServerName = m.ServerName,
                 Score = m.Score,
                 Kills = m.Kills,
                 Deaths = m.Deaths,
@@ -279,10 +174,10 @@ PARTITION BY toYYYYMM(timestamp)";
             }));
 
             var csvData = stringWriter.ToString();
-            var query = $"INSERT INTO player_metrics (timestamp, server_guid, server_name, player_name, score, kills, deaths, ping, team_name, map_name, game_type, is_bot) FORMAT CSV";
+            var query = "INSERT INTO player_metrics (timestamp, server_guid, player_name, server_name, score, kills, deaths, ping, team_name, map_name, game_type, is_bot) FORMAT CSV";
             var fullRequest = query + "\n" + csvData;
-
             await ExecuteCommandAsync(fullRequest);
+
             Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Successfully stored {metrics.Count} player metrics to ClickHouse");
         }
         catch (Exception ex)
@@ -290,6 +185,8 @@ PARTITION BY toYYYYMM(timestamp)";
             Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Failed to store player metrics to ClickHouse: {ex.Message}");
         }
     }
+
+    
 }
 
 public class PlayerMetric

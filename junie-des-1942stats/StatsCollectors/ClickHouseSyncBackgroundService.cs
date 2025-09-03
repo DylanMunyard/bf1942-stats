@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
@@ -84,7 +85,6 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
                     var minuteEnd = minute.AddMinutes(1);
                     DateTime? afterTs = null;
                     int? afterSessionId = null;
-                    var deletedMinute = false;
 
                     while (true)
                     {
@@ -94,14 +94,7 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
                             break;
                         }
 
-                        if (!deletedMinute)
-                        {
-                            var fromStr = minute.ToString("yyyy-MM-dd HH:mm:ss");
-                            var toStr = minuteEnd.ToString("yyyy-MM-dd HH:mm:ss");
-                            await metricsWriter.ExecuteCommandAsync($"ALTER TABLE player_metrics DELETE WHERE timestamp >= '{fromStr}' AND timestamp < '{toStr}'");
-                            deletedMinute = true;
-                        }
-
+                        // No need to delete with ReplacingMergeTree - duplicates will be handled automatically
                         await metricsWriter.WritePlayerMetricsAsync(batch.Select(b => b.Metric));
                         totalMetrics += batch.Count;
 
@@ -128,9 +121,6 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
                 var counts = await ComputeServerOnlineCountsAsync(dbContext, from, now);
                 if (counts.Count > 0)
                 {
-                    var fromStr = from.ToString("yyyy-MM-dd HH:mm:ss");
-                    var toStr = now.ToString("yyyy-MM-dd HH:mm:ss");
-                    await metricsWriter.ExecuteCommandAsync($"ALTER TABLE server_online_counts DELETE WHERE timestamp >= '{fromStr}' AND timestamp < '{toStr}'");
                     await metricsWriter.WriteServerOnlineCountsAsync(counts);
                 }
                 countsStopwatch.Stop();

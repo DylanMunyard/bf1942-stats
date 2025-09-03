@@ -345,6 +345,16 @@ try
         ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
     });
 
+    builder.Services.AddHttpClient<PlayerMetricsMigrationService>(client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(300); // 5 minutes for migration operations
+        client.DefaultRequestHeaders.Add("X-ClickHouse-User", "default");
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+    });
+
     builder.Services.AddHttpClient<PlayerRoundsReadService>(client =>
     {
         client.Timeout = TimeSpan.FromSeconds(2);
@@ -390,6 +400,19 @@ try
         var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
         var logger = sp.GetRequiredService<ILogger<PlayerRoundsWriteService>>();
         return new PlayerRoundsWriteService(httpClient, clickHouseWriteUrl, scopeFactory, logger);
+    });
+
+    builder.Services.AddSingleton<PlayerMetricsMigrationService>(sp =>
+    {
+        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(PlayerMetricsMigrationService));
+
+        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
+        var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? clickHouseReadUrl;
+
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerMetricsMigrationService ClickHouse Write URL: {clickHouseWriteUrl}");
+
+        var logger = sp.GetRequiredService<ILogger<PlayerMetricsMigrationService>>();
+        return new PlayerMetricsMigrationService(httpClient, clickHouseWriteUrl, logger);
     });
 
     // Register ClickHouse Read Services (use CLICKHOUSE_URL)
