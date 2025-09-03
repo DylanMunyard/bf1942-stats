@@ -28,7 +28,7 @@ public class ServerOnlineCountsMigrationController : ControllerBase
     {
         public DateTime? FromUtc { get; set; }
         public DateTime? ToUtc { get; set; }
-        public int BatchMinutes { get; set; } = 1440 * 7 * 2; // weekly
+        public int BatchMinutes { get; set; } = 1440 * 7 * 2; // fortnightly
     }
 
     public class RepopulateResponse
@@ -38,6 +38,15 @@ public class ServerOnlineCountsMigrationController : ControllerBase
         public long DurationMs { get; set; }
         public string? ErrorMessage { get; set; }
         public DateTime ExecutedAtUtc { get; set; }
+    }
+
+    // Defines a single round interval window (used for fast lookups)
+    private sealed class RoundWindow
+    {
+        public DateTime Start { get; set; }
+        public DateTime? End { get; set; }
+        public string MapName { get; set; } = "";
+        public string ServerName { get; set; } = "";
     }
 
     [HttpPost("repopulate")]
@@ -52,10 +61,13 @@ public class ServerOnlineCountsMigrationController : ControllerBase
 
             // Load all servers once; only a few hundred total
             var serversByGuid = await _db.Servers
+                .AsNoTracking()
                 .Select(s => new { s.Guid, s.Game })
                 .ToDictionaryAsync(s => s.Guid, s => s.Game);
 
             var total = 0;
+            var buffer = new List<ServerOnlineCount>(200_000);
+            const int MaxRowsPerInsert = 200_000;
             for (var windowStart = new DateTime(fromUtc.Year, fromUtc.Month, fromUtc.Day, fromUtc.Hour, 0, 0, DateTimeKind.Utc);
                  windowStart < toUtc;
                  windowStart = windowStart.AddMinutes(request.BatchMinutes))
@@ -64,9 +76,21 @@ public class ServerOnlineCountsMigrationController : ControllerBase
                 var counts = await ComputeServerOnlineCountsAsync(_db, windowStart, windowEnd, serversByGuid);
                 if (counts.Count > 0)
                 {
-                    await _writer.WriteServerOnlineCountsAsync(counts);
+                    // Buffer rows for larger bulk inserts
+                    buffer.AddRange(counts);
                     total += counts.Count;
+                    if (buffer.Count >= MaxRowsPerInsert)
+                    {
+                        await _writer.WriteServerOnlineCountsAsync(buffer);
+                        buffer.Clear();
+                    }
                 }
+            }
+
+            if (buffer.Count > 0)
+            {
+                await _writer.WriteServerOnlineCountsAsync(buffer);
+                buffer.Clear();
             }
 
             var ended = DateTime.UtcNow;
@@ -101,15 +125,35 @@ public class ServerOnlineCountsMigrationController : ControllerBase
         IReadOnlyDictionary<string, string> serversByGuid)
     {
         var overlappingRounds = await db.Rounds
+            .AsNoTracking()
             .Where(r => r.StartTime < toUtc && (r.EndTime == null || r.EndTime > fromUtc))
             .Select(r => new { r.ServerGuid, r.ServerName, r.GameType, r.MapName, r.StartTime, r.EndTime })
             .ToListAsync();
 
+        // Pre-index rounds by server and sort by start time for fast lookups
+        var roundsByServer = overlappingRounds
+            .GroupBy(r => r.ServerGuid)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderBy(r => r.StartTime)
+                      .Select(r => new RoundWindow
+                      {
+                          Start = r.StartTime,
+                          End = r.EndTime,
+                          MapName = r.MapName,
+                          ServerName = r.ServerName
+                      })
+                      .ToList());
+
+        var serverGuids = roundsByServer.Keys.ToList();
+
         var sessions = await db.PlayerSessions
+            .AsNoTracking()
             .Where(ps => ps.LastSeenTime >= fromUtc.AddMinutes(-60)
                          && ps.StartTime <= toUtc
+                         && serverGuids.Contains(ps.ServerGuid)
                          && !ps.Player.AiBot)
-            .Select(ps => new { ps.PlayerName, ps.ServerGuid, ps.StartTime, ps.LastSeenTime, ps.IsActive, ps.MapName })
+            .Select(ps => new { ps.ServerGuid, ps.StartTime, ps.LastSeenTime })
             .ToListAsync();
 
         var buckets = new Dictionary<(DateTime minute, string serverGuid, string mapName), ushort>();
@@ -122,7 +166,11 @@ public class ServerOnlineCountsMigrationController : ControllerBase
 
             for (var t = startMinute; t <= endMinuteExclusive; t = t.AddMinutes(1))
             {
-                var activeRound = overlappingRounds.FirstOrDefault(r => r.ServerGuid == s.ServerGuid && r.StartTime <= t && (r.EndTime == null || r.EndTime > t));
+                if (!roundsByServer.TryGetValue(s.ServerGuid, out var serverRounds))
+                {
+                    continue;
+                }
+                var activeRound = FindActiveRound(serverRounds, t);
                 if (activeRound != null)
                 {
                     var key = (t, s.ServerGuid, activeRound.MapName);
@@ -144,22 +192,51 @@ public class ServerOnlineCountsMigrationController : ControllerBase
             var key = kvp.Key;
             var count = kvp.Value;
             if (!serversByGuid.TryGetValue(key.serverGuid, out var game)) continue;
-            var roundInfo = overlappingRounds.FirstOrDefault(r => r.ServerGuid == key.serverGuid && r.MapName == key.mapName && r.StartTime <= key.minute && (r.EndTime == null || r.EndTime > key.minute));
-            if (roundInfo != null)
+            if (roundsByServer.TryGetValue(key.serverGuid, out var serverRounds2))
             {
-                results.Add(new ServerOnlineCount
+                var roundInfo = FindActiveRound(serverRounds2, key.minute);
+                if (roundInfo != null && roundInfo.MapName == key.mapName)
                 {
-                    Timestamp = key.minute,
-                    ServerGuid = key.serverGuid,
-                    ServerName = roundInfo.ServerName,
-                    PlayersOnline = count,
-                    MapName = key.mapName,
-                    Game = game
-                });
+                    results.Add(new ServerOnlineCount
+                    {
+                        Timestamp = key.minute,
+                        ServerGuid = key.serverGuid,
+                        ServerName = roundInfo.ServerName,
+                        PlayersOnline = count,
+                        MapName = key.mapName,
+                        Game = game
+                    });
+                }
             }
         }
 
         return results;
+
+        // Local types and helpers
+        static RoundWindow? FindActiveRound(List<RoundWindow> rounds, DateTime t)
+        {
+            if (rounds.Count == 0) return null;
+            int lo = 0, hi = rounds.Count - 1;
+            RoundWindow? candidate = null;
+            while (lo <= hi)
+            {
+                int mid = (lo + hi) / 2;
+                var r = rounds[mid];
+                if (r.Start <= t)
+                {
+                    candidate = r;
+                    lo = mid + 1;
+                }
+                else
+                {
+                    hi = mid - 1;
+                }
+            }
+            if (candidate == null) return null;
+            if (candidate.End == null || candidate.End > t) return candidate;
+            return null;
+        }
+
     }
 }
 

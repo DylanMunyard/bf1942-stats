@@ -117,7 +117,15 @@ PARTITION BY toYYYYMM(timestamp)";
             };
             using var csvWriter = new CsvWriter(stringWriter, config);
 
-            csvWriter.WriteRecords(onlineCounts.Select(c => new
+            // Sort to match ClickHouse PARTITION/ORDER BY for more efficient inserts
+            var ordered = onlineCounts
+                .OrderBy(c => c.Timestamp.Year)
+                .ThenBy(c => c.Timestamp.Month)
+                .ThenBy(c => c.ServerGuid)
+                .ThenBy(c => c.Timestamp)
+                .ThenBy(c => c.Game);
+
+            csvWriter.WriteRecords(ordered.Select(c => new
             {
                 Timestamp = c.Timestamp.ToString("yyyy-MM-dd HH:mm:ss"),
                 ServerGuid = c.ServerGuid,
