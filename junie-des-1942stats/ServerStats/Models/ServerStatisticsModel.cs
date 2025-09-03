@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Runtime.Serialization;
+using junie_des_1942stats.Gamification.Models;
 
 namespace junie_des_1942stats.ServerStats.Models;
 
@@ -52,6 +53,15 @@ public class ServerStatistics
 
     // Top 10 kill rates (all time)
     public List<TopKillRate> TopKillRatesAllTime { get; set; } = new List<TopKillRate>();
+
+    // Top 10 placement leaderboards (1 week)
+    public List<PlacementLeaderboardEntry> TopPlacementsWeek { get; set; } = new List<PlacementLeaderboardEntry>();
+
+    // Top 10 placement leaderboards (1 month)
+    public List<PlacementLeaderboardEntry> TopPlacementsMonth { get; set; } = new List<PlacementLeaderboardEntry>();
+
+    // Top 10 placement leaderboards (all time)
+    public List<PlacementLeaderboardEntry> TopPlacementsAllTime { get; set; } = new List<PlacementLeaderboardEntry>();
 
     // Recent rounds (typically last 20) with session links
     public List<RoundInfo> RecentRounds { get; set; } = new List<RoundInfo>();

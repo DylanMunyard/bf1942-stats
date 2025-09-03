@@ -5,6 +5,7 @@ using junie_des_1942stats.Caching;
 using junie_des_1942stats.ClickHouse;
 using junie_des_1942stats.ClickHouse.Base;
 using junie_des_1942stats.ClickHouse.Interfaces;
+using junie_des_1942stats.Gamification.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -90,73 +91,65 @@ public class ServerStatsService(
             EndPeriod = endPeriod
         };
 
-        // Get most active players for 1 week (7 days)
+        // Define time periods
         var oneWeekStart = endPeriod.AddDays(-7);
-        var mostActivePlayersWeek = await _playerRoundsService.GetMostActivePlayersAsync(server.Guid, oneWeekStart, endPeriod, 10);
-
-        statistics.MostActivePlayersByTimeWeek = mostActivePlayersWeek;
-
-        // Get top scores for 1 week (7 days)
-        var topScoresWeek = await _playerRoundsService.GetTopScoresAsync(server.Guid, oneWeekStart, endPeriod, 10);
-
-        statistics.TopScoresWeek = topScoresWeek;
-
-        // Get top K/D ratios for 1 week (7 days)
-        var topKDRatiosWeek = await _playerRoundsService.GetTopKDRatiosAsync(server.Guid, oneWeekStart, endPeriod, 10);
-
-        statistics.TopKDRatiosWeek = topKDRatiosWeek;
-
-        // Get top kill rates for 1 week (7 days)
-        var topKillRatesWeek = await _playerRoundsService.GetTopKillRatesAsync(server.Guid, oneWeekStart, endPeriod, 10);
-
-        statistics.TopKillRatesWeek = topKillRatesWeek;
-
-        // Get most active players for 1 month (30 days)
         var oneMonthStart = endPeriod.AddDays(-30);
-        var mostActivePlayersMonth = await _playerRoundsService.GetMostActivePlayersAsync(server.Guid, oneMonthStart, endPeriod, 10);
-
-        statistics.MostActivePlayersByTimeMonth = mostActivePlayersMonth;
-
-        // Get top scores for 1 month (30 days)
-        var topScoresMonth = await _playerRoundsService.GetTopScoresAsync(server.Guid, oneMonthStart, endPeriod, 10);
-
-        statistics.TopScoresMonth = topScoresMonth;
-
-        // Get top K/D ratios for 1 month (30 days)
-        var topKDRatiosMonth = await _playerRoundsService.GetTopKDRatiosAsync(server.Guid, oneMonthStart, endPeriod, 10);
-
-        statistics.TopKDRatiosMonth = topKDRatiosMonth;
-
-        // Get top kill rates for 1 month (30 days)
-        var topKillRatesMonth = await _playerRoundsService.GetTopKillRatesAsync(server.Guid, oneMonthStart, endPeriod, 10);
-
-        statistics.TopKillRatesMonth = topKillRatesMonth;
-
-        // Get most active players for all time (using a very early date instead of DateTime.MinValue)
         var allTimeStart = new DateTime(2000, 1, 1); // Start from year 2000
-        var mostActivePlayersAllTime = await _playerRoundsService.GetMostActivePlayersAsync(server.Guid, allTimeStart, endPeriod, 10);
 
-        statistics.MostActivePlayersByTimeAllTime = mostActivePlayersAllTime;
+        // Execute all leaderboard queries in parallel for maximum performance
+        var mostActivePlayersWeekTask = _playerRoundsService.GetMostActivePlayersAsync(server.Guid, oneWeekStart, endPeriod, 10);
+        var topScoresWeekTask = _playerRoundsService.GetTopScoresAsync(server.Guid, oneWeekStart, endPeriod, 10);
+        var topKDRatiosWeekTask = _playerRoundsService.GetTopKDRatiosAsync(server.Guid, oneWeekStart, endPeriod, 10);
+        var topKillRatesWeekTask = _playerRoundsService.GetTopKillRatesAsync(server.Guid, oneWeekStart, endPeriod, 10);
 
-        // Get top scores for all time
-        var topScoresAllTime = await _playerRoundsService.GetTopScoresAsync(server.Guid, allTimeStart, endPeriod, 10);
+        var mostActivePlayersMonthTask = _playerRoundsService.GetMostActivePlayersAsync(server.Guid, oneMonthStart, endPeriod, 10);
+        var topScoresMonthTask = _playerRoundsService.GetTopScoresAsync(server.Guid, oneMonthStart, endPeriod, 10);
+        var topKDRatiosMonthTask = _playerRoundsService.GetTopKDRatiosAsync(server.Guid, oneMonthStart, endPeriod, 10);
+        var topKillRatesMonthTask = _playerRoundsService.GetTopKillRatesAsync(server.Guid, oneMonthStart, endPeriod, 10);
 
-        statistics.TopScoresAllTime = topScoresAllTime;
+        var mostActivePlayersAllTimeTask = _playerRoundsService.GetMostActivePlayersAsync(server.Guid, allTimeStart, endPeriod, 10);
+        var topScoresAllTimeTask = _playerRoundsService.GetTopScoresAsync(server.Guid, allTimeStart, endPeriod, 10);
+        var topKDRatiosAllTimeTask = _playerRoundsService.GetTopKDRatiosAsync(server.Guid, allTimeStart, endPeriod, 10);
+        var topKillRatesAllTimeTask = _playerRoundsService.GetTopKillRatesAsync(server.Guid, allTimeStart, endPeriod, 10);
 
-        // Get top K/D ratios for all time
-        var topKDRatiosAllTime = await _playerRoundsService.GetTopKDRatiosAsync(server.Guid, allTimeStart, endPeriod, 10);
+        // Execute placement queries in parallel
+        var topPlacementsWeekTask = GetPlacementLeaderboardAsync(server.Guid, oneWeekStart, endPeriod, 10);
+        var topPlacementsMonthTask = GetPlacementLeaderboardAsync(server.Guid, oneMonthStart, endPeriod, 10);
+        var topPlacementsAllTimeTask = GetPlacementLeaderboardAsync(server.Guid, allTimeStart, endPeriod, 10);
 
-        statistics.TopKDRatiosAllTime = topKDRatiosAllTime;
+        // Execute recent rounds query independently
+        var recentRoundsTask = _roundsService.GetRecentRoundsAsync(server.Guid, 20);
 
-        // Get top kill rates for all time
-        var topKillRatesAllTime = await _playerRoundsService.GetTopKillRatesAsync(server.Guid, allTimeStart, endPeriod, 10);
+        // Wait for all queries to complete
+        await Task.WhenAll(
+            mostActivePlayersWeekTask, topScoresWeekTask, topKDRatiosWeekTask, topKillRatesWeekTask,
+            mostActivePlayersMonthTask, topScoresMonthTask, topKDRatiosMonthTask, topKillRatesMonthTask,
+            mostActivePlayersAllTimeTask, topScoresAllTimeTask, topKDRatiosAllTimeTask, topKillRatesAllTimeTask,
+            topPlacementsWeekTask, topPlacementsMonthTask, topPlacementsAllTimeTask,
+            recentRoundsTask
+        );
 
-        statistics.TopKillRatesAllTime = topKillRatesAllTime;
+        // Assign results to statistics object
+        statistics.MostActivePlayersByTimeWeek = await mostActivePlayersWeekTask;
+        statistics.TopScoresWeek = await topScoresWeekTask;
+        statistics.TopKDRatiosWeek = await topKDRatiosWeekTask;
+        statistics.TopKillRatesWeek = await topKillRatesWeekTask;
 
-        // Get the last 20 rounds showing recent map rotations
-        var lastRounds = await _roundsService.GetRecentRoundsAsync(server.Guid, 20);
+        statistics.MostActivePlayersByTimeMonth = await mostActivePlayersMonthTask;
+        statistics.TopScoresMonth = await topScoresMonthTask;
+        statistics.TopKDRatiosMonth = await topKDRatiosMonthTask;
+        statistics.TopKillRatesMonth = await topKillRatesMonthTask;
 
-        statistics.RecentRounds = lastRounds;
+        statistics.MostActivePlayersByTimeAllTime = await mostActivePlayersAllTimeTask;
+        statistics.TopScoresAllTime = await topScoresAllTimeTask;
+        statistics.TopKDRatiosAllTime = await topKDRatiosAllTimeTask;
+        statistics.TopKillRatesAllTime = await topKillRatesAllTimeTask;
+
+        statistics.TopPlacementsWeek = await topPlacementsWeekTask;
+        statistics.TopPlacementsMonth = await topPlacementsMonthTask;
+        statistics.TopPlacementsAllTime = await topPlacementsAllTimeTask;
+
+        statistics.RecentRounds = await recentRoundsTask;
 
         // Set current map from the combined query
         statistics.CurrentMap = serverWithCurrentMap?.CurrentMap;
@@ -166,6 +159,76 @@ public class ServerStatsService(
         _logger.LogDebug("Cached server statistics: {ServerName}, {Days} days", serverName, daysToAnalyze);
 
         return statistics;
+    }
+
+    /// <summary>
+    /// Get placement leaderboard for a specific server and time period.
+    /// Returns players ranked by their placement achievements (gold, silver, bronze).
+    /// </summary>
+    private async Task<List<PlacementLeaderboardEntry>> GetPlacementLeaderboardAsync(
+        string serverGuid, 
+        DateTime startPeriod, 
+        DateTime endPeriod, 
+        int limit = 10)
+    {
+        try
+        {
+            // Query placement achievements from ClickHouse
+            // Group by player and count first/second/third place finishes
+            // Order by Olympic-style ranking (gold first, then silver, then bronze)
+            var query = $@"
+SELECT 
+    player_name,
+    countIf(tier = 'gold') as first_places,
+    countIf(tier = 'silver') as second_places,
+    countIf(tier = 'bronze') as third_places
+FROM player_achievements
+WHERE achievement_type = 'round_placement'
+    AND server_guid = '{serverGuid.Replace("'", "''")}'
+    AND achieved_at >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
+    AND achieved_at < '{endPeriod:yyyy-MM-dd HH:mm:ss}'
+GROUP BY player_name
+HAVING first_places > 0 OR second_places > 0 OR third_places > 0
+ORDER BY first_places DESC, second_places DESC, third_places DESC
+LIMIT {limit}
+FORMAT TabSeparated";
+
+            _logger.LogDebug("Executing placement leaderboard query for server {ServerGuid} from {Start} to {End}", 
+                serverGuid, startPeriod, endPeriod);
+
+            var result = await _clickHouseReader.ExecuteQueryAsync(query);
+            var entries = new List<PlacementLeaderboardEntry>();
+
+            var lines = result?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var parts = lines[i].Split('\t');
+                if (parts.Length >= 4 &&
+                    int.TryParse(parts[1], out var firstPlaces) &&
+                    int.TryParse(parts[2], out var secondPlaces) &&
+                    int.TryParse(parts[3], out var thirdPlaces))
+                {
+                    entries.Add(new PlacementLeaderboardEntry
+                    {
+                        Rank = i + 1,
+                        PlayerName = parts[0],
+                        FirstPlaces = firstPlaces,
+                        SecondPlaces = secondPlaces,
+                        ThirdPlaces = thirdPlaces
+                    });
+                }
+            }
+
+            _logger.LogDebug("Found {Count} placement leaderboard entries for server {ServerGuid}", 
+                entries.Count, serverGuid);
+
+            return entries;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching placement leaderboard for server {ServerGuid}", serverGuid);
+            return new List<PlacementLeaderboardEntry>();
+        }
     }
 
     public async Task<PagedResult<ServerRanking>> GetServerRankings(string serverName, int? year = null, int page = 1, int pageSize = 100,
@@ -401,7 +464,7 @@ public class ServerStatsService(
             .ToListAsync();
 
         // Create leaderboard snapshots starting from actual round start
-        var leaderboardSnapshots = new List<LeaderboardSnapshot>();
+        var leaderboardSnapshots = new List<ServerStats.Models.LeaderboardSnapshot>();
         var currentTime = actualRoundStart; // Start from earliest session time
 
         while (currentTime <= actualRoundEnd)
@@ -427,7 +490,7 @@ public class ServerStatsService(
                 })
                 .Where(x => x.LastSeen >= currentTime.AddMinutes(-1)) // Only include players seen in last minute
                 .OrderByDescending(x => x.Score)
-                .Select((x, i) => new LeaderboardEntry
+                .Select((x, i) => new ServerStats.Models.LeaderboardEntry
                 {
                     Rank = i + 1,
                     PlayerName = x.PlayerName,
@@ -440,7 +503,7 @@ public class ServerStatsService(
                 })
                 .ToList();
 
-            leaderboardSnapshots.Add(new LeaderboardSnapshot
+            leaderboardSnapshots.Add(new ServerStats.Models.LeaderboardSnapshot
             {
                 Timestamp = currentTime,
                 Entries = playerScores
