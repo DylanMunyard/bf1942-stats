@@ -254,7 +254,7 @@ public class GamificationService
                 .ToList();
 
             var milestones = allAchievements
-                .Where(a => a.AchievementType == AchievementTypes.Milestone)
+                .Where(a => a.AchievementType is AchievementTypes.Milestone or AchievementTypes.Placement)
                 .OrderByDescending(a => a.Value)
                 .ToList();
 
