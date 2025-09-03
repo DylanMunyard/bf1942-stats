@@ -45,6 +45,8 @@ spec:
               value: "http://clickhouse-service.clickhouse:8123"
             - name: CLICKHOUSE_WRITE_URL
               value: "http://clickhouse-service.clickhouse:8123"
+            - name: PLAYER_ROUNDS_BATCH_SIZE
+              value: "100000"
             - name: REDIS_CONNECTION_STRING
               value: "redis-service.bf42-stats:6379"
             - name: ENABLE_ROUND_SYNCING

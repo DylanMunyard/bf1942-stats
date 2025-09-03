@@ -19,6 +19,16 @@ public class PlayerRoundsWriteService : BaseClickHouseService, IClickHouseWriter
     private readonly ILogger<PlayerRoundsWriteService> _logger;
     private readonly IClickHouseReader? _reader;
 
+    private static int GetEnvInt(string name, int defaultValue)
+    {
+        var value = Environment.GetEnvironmentVariable(name);
+        if (int.TryParse(value, out var parsed) && parsed >= 0)
+        {
+            return parsed;
+        }
+        return defaultValue;
+    }
+
     public PlayerRoundsWriteService(
         HttpClient httpClient,
         string clickHouseUrl,
@@ -135,18 +145,26 @@ SETTINGS index_granularity = 8192";
     /// <summary>
     /// Syncs completed PlayerSessions to ClickHouse player_rounds table using idempotent sync
     /// </summary>
-    public async Task<SyncResult> SyncCompletedSessionsAsync(int batchSize = 10000)
+    public async Task<SyncResult> SyncCompletedSessionsAsync(int batchSize = 100_000)
     {
         var startTime = DateTime.UtcNow;
         var totalProcessedCount = 0;
         
         try
         {
+            // Read runtime overrides
+            var envBatchSize = GetEnvInt("PLAYER_ROUNDS_BATCH_SIZE", batchSize);
+            var delayMs = GetEnvInt("PLAYER_ROUNDS_DELAY_MS", 100);
+            var effectiveBatchSize = Math.Max(1, envBatchSize);
+
             // Use last synced timestamp from ClickHouse for incremental sync (read operation)
             var lastSyncedTime = await GetLastSyncedTimestampAsync();
-            var fromDate = lastSyncedTime ?? DateTime.UtcNow.AddDays(-365);
+            var fromDate = lastSyncedTime ?? DateTime.MinValue;
+            var mode = lastSyncedTime.HasValue ? "Incremental" : "InitialLoad";
             
-            _logger.LogInformation("Starting batch sync of all completed player sessions (batch size: {BatchSize})", batchSize);
+            _logger.LogInformation(
+                "Starting sync of completed sessions. Mode={Mode}, BatchSize={BatchSize}, DelayMs={DelayMs}, FromDate={FromDate:o}, LastSynced={LastSynced:o}",
+                mode, effectiveBatchSize, delayMs, fromDate, lastSyncedTime);
 
             // Use scoped DbContext for database access
             using var scope = _scopeFactory.CreateScope();
@@ -154,8 +172,8 @@ SETTINGS index_granularity = 8192";
 
             // Get total count for progress reporting
             var totalQuery = lastSyncedTime.HasValue
-                ? dbContext.PlayerSessions.Where(ps => !ps.IsActive && ps.LastSeenTime > fromDate.AddHours(-1))
-                : dbContext.PlayerSessions.Where(ps => !ps.IsActive && ps.LastSeenTime >= fromDate);
+                ? dbContext.PlayerSessions.AsNoTracking().Where(ps => !ps.IsActive && ps.LastSeenTime > fromDate.AddHours(-1))
+                : dbContext.PlayerSessions.AsNoTracking().Where(ps => !ps.IsActive && ps.LastSeenTime >= fromDate);
             
             var totalCount = await totalQuery.CountAsync();
             if (totalCount == 0)
@@ -180,25 +198,57 @@ SETTINGS index_granularity = 8192";
                 var batchStartTime = DateTime.UtcNow;
                 
                 // Get completed sessions since last sync, ordered consistently
-                var query = lastSyncedTime.HasValue
-                    ? dbContext.PlayerSessions.Where(ps => !ps.IsActive && ps.LastSeenTime > fromDate.AddHours(-1))
-                    : dbContext.PlayerSessions.Where(ps => !ps.IsActive && ps.LastSeenTime >= fromDate);
+                var baseQuery = lastSyncedTime.HasValue
+                    ? dbContext.PlayerSessions.AsNoTracking().Where(ps => !ps.IsActive && ps.LastSeenTime > fromDate.AddHours(-1))
+                    : dbContext.PlayerSessions.AsNoTracking().Where(ps => !ps.IsActive && ps.LastSeenTime >= fromDate);
 
-                // Get batch of completed sessions - ReplacingMergeTree handles deduplication
-                var completedSessions = await query
+                // Project minimal data needed for export
+                var completedBatch = await baseQuery
                     .OrderBy(ps => ps.SessionId)
                     .Skip(processedSoFar)
-                    .Take(batchSize)
-                    .Include(ps => ps.Player)
-                    .Include(ps => ps.Observations.OrderByDescending(o => o.Timestamp).Take(1))
+                    .Take(effectiveBatchSize)
+                    .Select(ps => new
+                    {
+                        ps.SessionId,
+                        ps.PlayerName,
+                        ps.ServerGuid,
+                        ps.MapName,
+                        ps.StartTime,
+                        ps.LastSeenTime,
+                        ps.TotalScore,
+                        ps.TotalKills,
+                        ps.TotalDeaths,
+                        ps.GameType,
+                        AiBot = (bool?)ps.Player.AiBot,
+                        TeamLabel = ps.Observations
+                            .OrderByDescending(o => o.Timestamp)
+                            .Select(o => o.TeamLabel)
+                            .FirstOrDefault()
+                    })
                     .ToListAsync();
 
-                if (!completedSessions.Any())
+                if (!completedBatch.Any())
                 {
                     break; // No more records to process
                 }
 
-                var playerRounds = completedSessions.Select(ConvertToPlayerRound).ToList();
+                var playerRounds = completedBatch.Select(r => new PlayerRound
+                {
+                    PlayerName = r.PlayerName,
+                    ServerGuid = r.ServerGuid,
+                    MapName = r.MapName,
+                    RoundStartTime = r.StartTime,
+                    RoundEndTime = r.LastSeenTime,
+                    FinalScore = r.TotalScore,
+                    FinalKills = (uint)Math.Max(0, r.TotalKills),
+                    FinalDeaths = (uint)Math.Max(0, r.TotalDeaths),
+                    PlayTimeMinutes = Math.Max(0, (r.LastSeenTime - r.StartTime).TotalMinutes),
+                    RoundId = GenerateRoundId(r.PlayerName, r.ServerGuid, r.MapName, r.StartTime, r.SessionId),
+                    TeamLabel = r.TeamLabel ?? string.Empty,
+                    GameId = r.GameType,
+                    IsBot = r.AiBot ?? false,
+                    CreatedAt = DateTime.UtcNow
+                }).ToList();
                 await InsertPlayerRoundsAsync(playerRounds);
 
                 processedSoFar += playerRounds.Count;
@@ -211,7 +261,7 @@ SETTINGS index_granularity = 8192";
                 // Small delay to prevent overwhelming the database
                 if (processedSoFar < totalCount)
                 {
-                    await Task.Delay(100);
+                    await Task.Delay(delayMs);
                 }
             }
 
@@ -238,43 +288,9 @@ SETTINGS index_granularity = 8192";
         }
     }
 
-
-
-    private PlayerRound ConvertToPlayerRound(PlayerSession session)
+    private string GenerateRoundId(string playerName, string serverGuid, string mapName, DateTime startTime, long sessionId)
     {
-        // Calculate play time in minutes
-        var playTimeMinutes = (session.LastSeenTime - session.StartTime).TotalMinutes;
-
-        // Generate a unique round ID
-        var roundId = GenerateRoundId(session);
-
-        // Get team label from the last observation if available
-        var teamLabel = session.Observations?.LastOrDefault()?.TeamLabel ?? "";
-
-        return new PlayerRound
-        {
-            PlayerName = session.PlayerName,
-            ServerGuid = session.ServerGuid,
-            MapName = session.MapName,
-            RoundStartTime = session.StartTime,
-            RoundEndTime = session.LastSeenTime,
-            FinalScore = session.TotalScore,
-            FinalKills = (uint)Math.Max(0, session.TotalKills),
-            FinalDeaths = (uint)Math.Max(0, session.TotalDeaths),
-            PlayTimeMinutes = Math.Max(0, playTimeMinutes),
-            RoundId = roundId,
-            TeamLabel = teamLabel,
-            GameId = session.GameType,
-            IsBot = session.Player?.AiBot ?? false,
-            CreatedAt = DateTime.UtcNow
-        };
-    }
-
-    private string GenerateRoundId(PlayerSession session)
-    {
-        // Create a deterministic round ID based on player, server, map, start time, and session ID
-        // Including SessionId ensures uniqueness even for rapid reconnections
-        var input = $"{session.PlayerName}_{session.ServerGuid}_{session.MapName}_{session.StartTime:yyyyMMddHHmmss}_{session.SessionId}";
+        var input = $"{playerName}_{serverGuid}_{mapName}_{startTime:yyyyMMddHHmmss}_{sessionId}";
         return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(input)))[..16];
     }
 
