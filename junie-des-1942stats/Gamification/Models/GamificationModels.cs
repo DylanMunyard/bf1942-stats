@@ -108,6 +108,13 @@ public class PlacementLeaderboardEntry
     public int ThirdPlaces { get; set; }
     public int TotalPlacements => FirstPlaces + SecondPlaces + ThirdPlaces;
     public int PlacementPoints => (FirstPlaces * 3) + (SecondPlaces * 2) + (ThirdPlaces * 1);
+    
+    // Weighted placement fields (only populated when using weighted queries)
+    public int WeightedFirstPlaces { get; set; }
+    public int WeightedSecondPlaces { get; set; }
+    public int WeightedThirdPlaces { get; set; }
+    public double WeightedPlacementScore { get; set; }
+    public double AverageCompetitorsCount { get; set; } // Average number of players in the rounds where placements occurred
 }
 
 // Badge tier definitions

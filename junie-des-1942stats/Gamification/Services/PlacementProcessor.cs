@@ -242,7 +242,7 @@ public class PlacementProcessor
                     _ => "Placement"
                 };
 
-                // Metadata includes team info and server name for richer queries later
+                // Metadata includes team info, server name, and total players for richer queries later
                 var serverName = serverNamesByGuid.GetValueOrDefault((string)round.ServerGuid, "");
                 var metadata = new
                 {
@@ -250,7 +250,8 @@ public class PlacementProcessor
                     team_label = player.LatestObservation?.TeamLabel,
                     server_name = serverName,
                     score = player.TotalScore,
-                    kills = player.TotalKills
+                    kills = player.TotalKills,
+                    total_players = round.ParticipantCount
                 };
 
                 var achievedAt = round.EndTime ?? player.LastSeenTime;
