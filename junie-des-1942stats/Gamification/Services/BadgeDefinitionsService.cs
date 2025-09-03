@@ -53,6 +53,9 @@ public class BadgeDefinitionsService
         // Social Badges
         AddSocialBadges(badges);
 
+        // Placement Badges
+        AddPlacementBadges(badges);
+
         return badges;
     }
 
@@ -367,5 +370,32 @@ public class BadgeDefinitionsService
             Category = BadgeCategories.Social,
             Requirements = new Dictionary<string, object> { ["consecutive_hours"] = 6 }
         };
+    }
+
+    private void AddPlacementBadges(Dictionary<string, BadgeDefinition> badges)
+    {
+        var placementBadges = new[]
+        {
+            ("round_placement_1", "1st Place", "Finish 1st in a round", "Finish 1st place in a round", BadgeTiers.Gold),
+            ("round_placement_2", "2nd Place", "Finish 2nd in a round", "Finish 2nd place in a round", BadgeTiers.Silver),
+            ("round_placement_3", "3rd Place", "Finish 3rd in a round", "Finish 3rd place in a round", BadgeTiers.Bronze)
+        };
+
+        foreach (var (id, name, desc, uiDesc, tier) in placementBadges)
+        {
+            badges[id] = new BadgeDefinition
+            {
+                Id = id,
+                Name = name,
+                Description = desc,
+                UIDescription = uiDesc,
+                Tier = tier,
+                Category = BadgeCategories.Performance,
+                Requirements = new Dictionary<string, object>
+                {
+                    ["placement"] = int.Parse(id.Split('_').Last())
+                }
+            };
+        }
     }
 }

@@ -543,6 +543,7 @@ try
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.KillStreakDetector>();
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.MilestoneCalculator>();
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.PerformanceBadgeCalculator>();
+    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.PlacementProcessor>();
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.GamificationService>();
 
     // Register Gamification Background Service
