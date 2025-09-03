@@ -41,6 +41,7 @@ public class BackfillController : ControllerBase
     [HttpPost("rounds")] 
     public async Task<ActionResult<BackfillResponse>> BackfillRounds([FromBody] BackfillRequest request, CancellationToken cancellationToken)
     {
+        /*
         _logger.LogWarning(
             "BackfillController is deprecated and disabled. Returning 403 Forbidden. Request: server={ServerGuid} from={From} to={To}", 
             request.ServerGuid ?? "ALL", request.FromUtc, request.ToUtc);
@@ -48,8 +49,8 @@ public class BackfillController : ControllerBase
         return StatusCode(403, new { 
             message = "BackfillController is deprecated and no longer available. This endpoint has been disabled for security reasons.",
             timestamp = DateTime.UtcNow
-        });
-        /*
+        });*/
+       
         var started = DateTime.UtcNow;
         _logger.LogInformation("API backfill request started: server={ServerGuid} from={From} to={To}", request.ServerGuid ?? "ALL", request.FromUtc, request.ToUtc);
         var count = await _backfillService.BackfillRoundsAsync(request.FromUtc, request.ToUtc, request.ServerGuid, request.MarkLatestPerServerActive, cancellationToken);
@@ -65,6 +66,6 @@ public class BackfillController : ControllerBase
         };
         _logger.LogInformation("API backfill completed: upserted={Count} durationMs={DurationMs}", response.UpsertedRounds, response.DurationMs);
         return Ok(response);
-        */
+        
     }
 }

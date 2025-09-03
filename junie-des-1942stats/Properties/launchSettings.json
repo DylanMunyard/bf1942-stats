@@ -8,11 +8,10 @@
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
         "REDIS_CONNECTION_STRING": "42redis.home.net:6380",
-        "ENABLE_ROUND_SYNCING": "true",
+        "ENABLE_CLICKHOUSE_ROUND_SYNCING": "true",
         "ENABLE_GAMIFICATION_PROCESSING": "true",
         "ENABLE_PLAYER_METRICS_SYNCING": "true",
         "ENABLE_SERVER_ONLINE_COUNTS_SYNCING": "true",
-        "ENABLE_ROUNDS_SYNCING": "true",
         "CLICKHOUSE_URL": "http://clickhouse-staging.home.net",
         "CLICKHOUSE_WRITE_URL": "http://clickhouse-staging.home.net",
         "GoogleOAuth__ClientId": "468014767883-2gsdumjjgpgm2fp1qgic82i45k03tj7e.apps.googleusercontent.com",

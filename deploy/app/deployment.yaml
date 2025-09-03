@@ -49,15 +49,13 @@ spec:
               value: "100000"
             - name: REDIS_CONNECTION_STRING
               value: "redis-service.bf42-stats:6379"
-            - name: ENABLE_ROUND_SYNCING
+            - name: ENABLE_CLICKHOUSE_ROUND_SYNCING
               value: "true"
             - name: ENABLE_GAMIFICATION_PROCESSING
               value: "true"
             - name: ENABLE_PLAYER_METRICS_SYNCING
               value: "true"
             - name: ENABLE_SERVER_ONLINE_COUNTS_SYNCING
-              value: "true"
-            - name: ENABLE_ROUNDS_SYNCING
               value: "true"
             - name: GoogleOAuth__ClientId
               value: "468014767883-2gsdumjjgpgm2fp1qgic82i45k03tj7e.apps.googleusercontent.com"

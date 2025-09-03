@@ -20,27 +20,12 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     private int _isRunning = 0;
     private int _cycleCount = 0;
 
-    // Configuration setting for round syncing
-    private readonly bool _enableRoundsSyncing;
-
 
 
     public StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory, IConfiguration configuration)
     {
         _scopeFactory = scopeFactory;
         _configuration = configuration;
-
-        // Check environment variable for round syncing - default to false (disabled)
-        _enableRoundsSyncing = Environment.GetEnvironmentVariable("ENABLE_ROUNDS_SYNCING")?.ToLowerInvariant() == "true";
-
-        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
-        var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? clickHouseReadUrl;
-        var isWriteUrlSet = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") != null;
-
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse Read URL: {clickHouseReadUrl}");
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] ClickHouse Write URL: {clickHouseWriteUrl} {(isWriteUrlSet ? "(custom)" : "(fallback to read URL)")}");
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Rounds tracking in SQLite: {(_enableRoundsSyncing ? "ENABLED" : "DISABLED")}");
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] To avoid writes to production: Set CLICKHOUSE_WRITE_URL to dev instance or leave syncing flags=false");
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
@@ -70,8 +55,6 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         using var activity = ActivitySources.StatsCollection.StartActivity("StatsCollection.Cycle");
         activity?.SetTag("cycle_number", currentCycle);
         activity?.SetTag("collection_interval_seconds", _collectionInterval.TotalSeconds);
-        activity?.SetTag("enable_rounds_tracking", _enableRoundsSyncing);
-        activity?.SetTag("enable_rounds_syncing", _enableRoundsSyncing);
 
         var cycleStopwatch = Stopwatch.StartNew();
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Starting stats collection cycle #{currentCycle}...");
@@ -167,7 +150,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             gameServerAdapters.Add(adapter);
 
             // Store to SQLite every cycle
-            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp, "bf1942", _enableRoundsSyncing);
+            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp, "bf1942");
         }
 
         return gameServerAdapters;
@@ -188,7 +171,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             gameServerAdapters.Add(adapter);
 
             // Store to SQLite every cycle
-            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp, "bfvietnam", _enableRoundsSyncing);
+            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp, "bfvietnam");
         }
 
         return gameServerAdapters;
@@ -209,7 +192,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
             gameServerAdapters.Add(adapter);
 
             // Store to SQLite every cycle
-            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp, "fh2", _enableRoundsSyncing);
+            await playerTrackingService.TrackPlayersFromServerInfo(adapter, timestamp, "fh2");
         }
 
         return gameServerAdapters;

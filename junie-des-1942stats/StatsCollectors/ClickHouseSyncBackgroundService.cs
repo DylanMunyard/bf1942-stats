@@ -32,7 +32,18 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
 
         _enablePlayerMetricsSyncing = Environment.GetEnvironmentVariable("ENABLE_PLAYER_METRICS_SYNCING")?.ToLowerInvariant() == "true";
         _enableServerOnlineCountsSyncing = Environment.GetEnvironmentVariable("ENABLE_SERVER_ONLINE_COUNTS_SYNCING")?.ToLowerInvariant() == "true";
-        _enableRoundsSyncing = Environment.GetEnvironmentVariable("ENABLE_ROUND_SYNCING")?.ToLowerInvariant() == "true";
+        _enableRoundsSyncing = Environment.GetEnvironmentVariable("ENABLE_CLICKHOUSE_ROUND_SYNCING")?.ToLowerInvariant() == "true";
+
+        _logger.LogInformation("Config ENABLE_PLAYER_METRICS_SYNCING: {Enabled}", _enablePlayerMetricsSyncing);
+        _logger.LogInformation("Config ENABLE_SERVER_ONLINE_COUNTS_SYNCING: {Enabled}", _enableServerOnlineCountsSyncing);
+        _logger.LogInformation("Config ENABLE_CLICKHOUSE_ROUND_SYNCING: {Enabled}", _enableRoundsSyncing);
+
+        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
+        var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? clickHouseReadUrl;
+        var isWriteUrlSet = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") != null;
+
+        _logger.LogInformation("ClickHouse Read URL: {ReadUrl}", clickHouseReadUrl);
+        _logger.LogInformation("ClickHouse Write URL: {WriteUrl} {Source}", clickHouseWriteUrl, isWriteUrlSet ? "(custom)" : "(fallback to read URL)");
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
