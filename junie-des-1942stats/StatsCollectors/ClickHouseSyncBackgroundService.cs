@@ -70,7 +70,7 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
             var roundsWriter = scope.ServiceProvider.GetRequiredService<PlayerRoundsWriteService>();
 
             var now = DateTime.UtcNow;
-            var from = now.AddMinutes(-5); // sync last 5 minutes window idempotently
+            var from = now.AddMinutes(-60); // sync last 5 minutes window idempotently
 
             if (_enablePlayerMetricsSyncing)
             {
@@ -256,7 +256,7 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
 
         // Load sessions that overlap window
         var sessions = await db.PlayerSessions
-            .Where(ps => ps.LastSeenTime >= fromUtc.AddMinutes(-5)
+            .Where(ps => ps.LastSeenTime >= fromUtc.AddMinutes(-60)
                          && ps.StartTime <= toUtc
                          && !ps.Player.AiBot)
             .Select(ps => new { ps.PlayerName, ps.ServerGuid, ps.StartTime, ps.LastSeenTime, ps.IsActive, ps.MapName })
