@@ -71,7 +71,7 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
             var roundsWriter = scope.ServiceProvider.GetRequiredService<PlayerRoundsWriteService>();
 
             var now = DateTime.UtcNow;
-            var from = now.AddMinutes(-60); // sync last 5 minutes window idempotently
+            var from = now.AddMinutes(-15); // sync last 5 minutes window idempotently
 
             if (_enablePlayerMetricsSyncing)
             {

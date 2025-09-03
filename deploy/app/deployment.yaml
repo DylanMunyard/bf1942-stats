@@ -54,9 +54,9 @@ spec:
             - name: ENABLE_GAMIFICATION_PROCESSING
               value: "true"
             - name: ENABLE_PLAYER_METRICS_SYNCING
-              value: "false"
+              value: "true"
             - name: ENABLE_SERVER_ONLINE_COUNTS_SYNCING
-              value: "false"
+              value: "true"
             - name: GoogleOAuth__ClientId
               value: "468014767883-2gsdumjjgpgm2fp1qgic82i45k03tj7e.apps.googleusercontent.com"
             - name: Jwt__Issuer
