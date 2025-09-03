@@ -763,6 +763,147 @@ public class ClickHouseGamificationService : IDisposable
         }
     }
 
+    // Placement summary and leaderboards
+    public async Task<PlayerPlacementSummary> GetPlayerPlacementSummaryAsync(string playerName, string? serverGuid = null, string? mapName = null)
+    {
+        try
+        {
+            if (_connection.State != System.Data.ConnectionState.Open)
+            {
+                await _connection.OpenAsync();
+            }
+
+            var where = new List<string> {
+                "achievement_type = {type:String}",
+                "player_name = {playerName:String}"
+            };
+            var parameters = new List<System.Data.Common.DbParameter>
+            {
+                CreateParameter("type", AchievementTypes.Placement),
+                CreateParameter("playerName", playerName)
+            };
+
+            if (!string.IsNullOrWhiteSpace(serverGuid))
+            {
+                where.Add("server_guid = {serverGuid:String}");
+                parameters.Add(CreateParameter("serverGuid", serverGuid!));
+            }
+            if (!string.IsNullOrWhiteSpace(mapName))
+            {
+                where.Add("map_name = {mapName:String}");
+                parameters.Add(CreateParameter("mapName", mapName!));
+            }
+
+            var whereClause = string.Join(" AND ", where);
+
+            var query = $@"
+                SELECT
+                    sum(if(tier = 'gold', 1, 0)) AS first_places,
+                    sum(if(tier = 'silver', 1, 0)) AS second_places,
+                    sum(if(tier = 'bronze', 1, 0)) AS third_places,
+                    anyHeavy(JSONExtractString(metadata, 'team_label')) AS any_team_label
+                FROM player_achievements
+                WHERE {whereClause}";
+
+            await using var command = _connection.CreateCommand();
+            command.CommandText = query;
+            foreach (var p in parameters) command.Parameters.Add(p);
+
+            var summary = new PlayerPlacementSummary { PlayerName = playerName, ServerGuid = serverGuid, MapName = mapName };
+
+            await using var reader = await command.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                summary.FirstPlaces = Convert.ToInt32(reader.GetValue(0));
+                summary.SecondPlaces = Convert.ToInt32(reader.GetValue(1));
+                summary.ThirdPlaces = Convert.ToInt32(reader.GetValue(2));
+                var teamLabelObj = reader.GetValue(3);
+                summary.BestTeamLabel = teamLabelObj == null || teamLabelObj is DBNull ? null : Convert.ToString(teamLabelObj);
+            }
+
+            // Determine best team by counting occurrences by team_label
+            var teamQuery = $@"
+                SELECT JSONExtractString(metadata, 'team_label') AS team_label, count() AS c
+                FROM player_achievements
+                WHERE {whereClause}
+                GROUP BY team_label
+                ORDER BY c DESC
+                LIMIT 1";
+            await using var teamCmd = _connection.CreateCommand();
+            teamCmd.CommandText = teamQuery;
+            foreach (var p in parameters) teamCmd.Parameters.Add(p);
+            await using var teamReader = await teamCmd.ExecuteReaderAsync();
+            if (await teamReader.ReadAsync())
+            {
+                var tlObj = teamReader.GetValue(0);
+                summary.BestTeamLabel = tlObj == null || tlObj is DBNull ? summary.BestTeamLabel : Convert.ToString(tlObj);
+            }
+
+            return summary;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get placement summary for player {PlayerName}", playerName);
+            throw;
+        }
+    }
+
+    public async Task<List<PlacementLeaderboardEntry>> GetPlacementLeaderboardAsync(string? serverGuid = null, string? mapName = null, int limit = 100)
+    {
+        try
+        {
+            if (_connection.State != System.Data.ConnectionState.Open)
+            {
+                await _connection.OpenAsync();
+            }
+
+            var where = new List<string> { "achievement_type = {type:String}" };
+            var parameters = new List<System.Data.Common.DbParameter> { CreateParameter("type", AchievementTypes.Placement) };
+            if (!string.IsNullOrWhiteSpace(serverGuid)) { where.Add("server_guid = {serverGuid:String}"); parameters.Add(CreateParameter("serverGuid", serverGuid!)); }
+            if (!string.IsNullOrWhiteSpace(mapName)) { where.Add("map_name = {mapName:String}"); parameters.Add(CreateParameter("mapName", mapName!)); }
+            var whereClause = string.Join(" AND ", where);
+
+            var query = $@"
+                SELECT
+                    player_name,
+                    sum(if(tier = 'gold', 1, 0)) AS first_places,
+                    sum(if(tier = 'silver', 1, 0)) AS second_places,
+                    sum(if(tier = 'bronze', 1, 0)) AS third_places,
+                    (first_places * 3 + second_places * 2 + third_places) as points
+                FROM player_achievements
+                WHERE {whereClause}
+                GROUP BY player_name
+                ORDER BY points DESC, first_places DESC, second_places DESC, third_places DESC
+                LIMIT {limit:UInt32}";
+
+            await using var command = _connection.CreateCommand();
+            command.CommandText = query;
+            foreach (var p in parameters) command.Parameters.Add(p);
+
+            var entries = new List<PlacementLeaderboardEntry>();
+            await using var reader = await command.ExecuteReaderAsync();
+            int rank = 1;
+            while (await reader.ReadAsync())
+            {
+                entries.Add(new PlacementLeaderboardEntry
+                {
+                    Rank = rank++,
+                    PlayerName = reader.GetString(0),
+                    FirstPlaces = Convert.ToInt32(reader.GetValue(1)),
+                    SecondPlaces = Convert.ToInt32(reader.GetValue(2)),
+                    ThirdPlaces = Convert.ToInt32(reader.GetValue(3))
+                });
+            }
+
+            return entries;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get placement leaderboard");
+            throw;
+        }
+    }
+
     // Helper method to create parameters
     private System.Data.Common.DbParameter CreateParameter(string name, object value)
     {

@@ -86,6 +86,30 @@ public class LeaderboardEntry
     public List<string> TopBadges { get; set; } = new();
 }
 
+public class PlayerPlacementSummary
+{
+    public string PlayerName { get; set; } = "";
+    public string? ServerGuid { get; set; }
+    public string? MapName { get; set; }
+    public int FirstPlaces { get; set; }
+    public int SecondPlaces { get; set; }
+    public int ThirdPlaces { get: set; }
+    public int TotalPlacements => FirstPlaces + SecondPlaces + ThirdPlaces;
+    public int PlacementPoints => (FirstPlaces * 3) + (SecondPlaces * 2) + (ThirdPlaces * 1);
+    public string? BestTeamLabel { get; set; }
+}
+
+public class PlacementLeaderboardEntry
+{
+    public int Rank { get; set; }
+    public string PlayerName { get; set; } = "";
+    public int FirstPlaces { get; set; }
+    public int SecondPlaces { get; set; }
+    public int ThirdPlaces { get; set; }
+    public int TotalPlacements => FirstPlaces + SecondPlaces + ThirdPlaces;
+    public int PlacementPoints => (FirstPlaces * 3) + (SecondPlaces * 2) + (ThirdPlaces * 1);
+}
+
 // Badge tier definitions
 public static class BadgeTiers
 {
@@ -102,6 +126,7 @@ public static class AchievementTypes
     public const string Badge = "badge";
     public const string Milestone = "milestone";
     public const string Ranking = "ranking";
+    public const string Placement = "placement";
 }
 
 // Badge categories

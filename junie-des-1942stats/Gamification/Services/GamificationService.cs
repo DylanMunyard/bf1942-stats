@@ -16,6 +16,7 @@ public class GamificationService
     private readonly BadgeDefinitionsService _badgeDefinitionsService;
     private readonly HistoricalProcessor _historicalProcessor;
     private readonly AchievementLabelingService _achievementLabelingService;
+    private readonly PlacementProcessor _placementProcessor;
     private readonly ILogger<GamificationService> _logger;
 
     public GamificationService(
@@ -26,6 +27,7 @@ public class GamificationService
         BadgeDefinitionsService badgeDefinitionsService,
         HistoricalProcessor historicalProcessor,
         AchievementLabelingService achievementLabelingService,
+        PlacementProcessor placementProcessor,
         ILogger<GamificationService> logger)
     {
         _gamificationService = gamificationService;
@@ -35,6 +37,7 @@ public class GamificationService
         _badgeDefinitionsService = badgeDefinitionsService;
         _historicalProcessor = historicalProcessor;
         _achievementLabelingService = achievementLabelingService;
+        _placementProcessor = placementProcessor;
         _logger = logger;
     }
 
@@ -64,6 +67,13 @@ public class GamificationService
 
             // Calculate all achievements for these new rounds
             var allAchievements = await ProcessAchievementsForRounds(newRounds);
+
+            // Additionally, calculate placements for rounds since last processed
+            var placementAchievements = await _placementProcessor.ProcessPlacementsSinceAsync(lastProcessed);
+            if (placementAchievements.Any())
+            {
+                allAchievements.AddRange(placementAchievements);
+            }
 
             // Store achievements in batch for efficiency
             if (allAchievements.Any())
@@ -292,6 +302,16 @@ public class GamificationService
             _logger.LogError(ex, "Error getting leaderboard for category {Category}", category);
             throw;
         }
+    }
+
+    public Task<PlayerPlacementSummary> GetPlayerPlacementSummaryAsync(string playerName, string? serverGuid = null, string? mapName = null)
+    {
+        return _gamificationService.GetPlayerPlacementSummaryAsync(playerName, serverGuid, mapName);
+    }
+
+    public async Task<List<PlacementLeaderboardEntry>> GetPlacementLeaderboardAsync(string? serverGuid = null, string? mapName = null, int limit = 100)
+    {
+        return await _gamificationService.GetPlacementLeaderboardAsync(serverGuid, mapName, limit);
     }
 
     /// <summary>

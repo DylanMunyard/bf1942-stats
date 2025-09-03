@@ -43,6 +43,30 @@ public class GamificationController : ControllerBase
     }
 
     /// <summary>
+    /// Get placement summary for a player (optionally filtered by server or map)
+    /// </summary>
+    [HttpGet("player/{playerName}/placements")]
+    public async Task<ActionResult<PlayerPlacementSummary>> GetPlayerPlacements(
+        string playerName,
+        [FromQuery] string? serverGuid = null,
+        [FromQuery] string? mapName = null)
+    {
+        if (string.IsNullOrWhiteSpace(playerName))
+            return BadRequest("Player name is required");
+
+        try
+        {
+            var summary = await _gamificationService.GetPlayerPlacementSummaryAsync(playerName, serverGuid, mapName);
+            return Ok(summary);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting placement summary for player {PlayerName}", playerName);
+            return StatusCode(500, "An internal server error occurred while retrieving player placements.");
+        }
+    }
+
+    /// <summary>
     /// Get recent achievements for a player
     /// </summary>
     [HttpGet("player/{playerName}/recent")]
@@ -86,7 +110,7 @@ public class GamificationController : ControllerBase
         [FromQuery] string period = "all_time",
         [FromQuery] int limit = 100)
     {
-        var validCategories = new[] { "kill_streaks", "achievements", "milestones" };
+        var validCategories = new[] { "kill_streaks", "achievements", "milestones", "placements" };
         if (!validCategories.Contains(category.ToLower()))
             return BadRequest($"Invalid category. Valid categories: {string.Join(", ", validCategories)}");
 
@@ -99,8 +123,17 @@ public class GamificationController : ControllerBase
 
         try
         {
-            var leaderboard = await _gamificationService.GetLeaderboardAsync(category, period, limit);
-            return Ok(leaderboard);
+            if (category.Equals("placements", StringComparison.OrdinalIgnoreCase))
+            {
+                // For placements, return a strongly-typed leaderboard tailored to placements
+                var entries = await _gamificationService.GetPlacementLeaderboardAsync(limit: limit);
+                return Ok(entries);
+            }
+            else
+            {
+                var leaderboard = await _gamificationService.GetLeaderboardAsync(category, period, limit);
+                return Ok(leaderboard);
+            }
         }
         catch (Exception ex)
         {
