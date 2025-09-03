@@ -52,24 +52,23 @@ public class GamificationService
             var lastProcessed = await _gamificationService.GetLastProcessedTimestampAsync();
             var now = DateTime.UtcNow;
 
-            _logger.LogInformation("Processing achievements since {LastProcessed}", lastProcessed);
+            _logger.LogInformation("Completed gamification processing cycle {LastProcessed}", lastProcessed);
 
             // Only process new player_rounds since last run
             var newRounds = await _gamificationService.GetPlayerRoundsSinceAsync(lastProcessed);
 
-            if (!newRounds.Any())
+            List<Achievement> allAchievements = [];
+            if (newRounds.Any())
             {
-                _logger.LogInformation("No new rounds to process");
-                return;
+                _logger.LogInformation("Processing {RoundCount} new rounds for gamification", newRounds.Count);
+
+                // Calculate all achievements for these new rounds
+                allAchievements = await ProcessAchievementsForRounds(newRounds);
             }
 
-            _logger.LogInformation("Processing {RoundCount} new rounds for gamification", newRounds.Count);
-
-            // Calculate all achievements for these new rounds
-            var allAchievements = await ProcessAchievementsForRounds(newRounds);
-
-            // Additionally, calculate placements for rounds since last processed
-            var placementAchievements = await _placementProcessor.ProcessPlacementsSinceAsync(lastProcessed);
+            // Additionally, calculate placements for rounds since last placement processed
+            var lastPlacementProcessed = await _gamificationService.GetLastPlacementProcessedTimestampAsync();
+            var placementAchievements = await _placementProcessor.ProcessPlacementsSinceAsync(lastPlacementProcessed);
             if (placementAchievements.Any())
             {
                 allAchievements.AddRange(placementAchievements);

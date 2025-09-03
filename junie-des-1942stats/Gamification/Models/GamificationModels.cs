@@ -93,7 +93,7 @@ public class PlayerPlacementSummary
     public string? MapName { get; set; }
     public int FirstPlaces { get; set; }
     public int SecondPlaces { get; set; }
-    public int ThirdPlaces { get: set; }
+    public int ThirdPlaces { get; set; }
     public int TotalPlacements => FirstPlaces + SecondPlaces + ThirdPlaces;
     public int PlacementPoints => (FirstPlaces * 3) + (SecondPlaces * 2) + (ThirdPlaces * 1);
     public string? BestTeamLabel { get; set; }
@@ -126,7 +126,7 @@ public static class AchievementTypes
     public const string Badge = "badge";
     public const string Milestone = "milestone";
     public const string Ranking = "ranking";
-    public const string Placement = "placement";
+    public const string Placement = "round_placement";
 }
 
 // Badge categories

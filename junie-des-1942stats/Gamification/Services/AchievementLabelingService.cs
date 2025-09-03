@@ -40,7 +40,7 @@ public class AchievementLabelingService
                     AchievementType = DetermineAchievementType(achievementId),
                     Tier = DetermineTier(achievementId),
                     Category = DetermineCategory(achievementId),
-                    DisplayName = achievementId.Replace('_', ' ').ToTitleCase()
+                    DisplayName = GenerateDisplayName(achievementId)
                 });
             }
         }
@@ -82,6 +82,8 @@ public class AchievementLabelingService
             return AchievementTypes.KillStreak;
         if (badge.Id.StartsWith("total_kills_") || badge.Id.StartsWith("milestone_playtime_") || badge.Id.StartsWith("total_score_"))
             return AchievementTypes.Milestone;
+        if (badge.Id.StartsWith("round_placement_"))
+            return AchievementTypes.Placement;
         return AchievementTypes.Badge;
     }
 
@@ -91,6 +93,8 @@ public class AchievementLabelingService
             return AchievementTypes.KillStreak;
         if (achievementId.StartsWith("total_kills_") || achievementId.StartsWith("milestone_playtime_") || achievementId.StartsWith("total_score_"))
             return AchievementTypes.Milestone;
+        if (achievementId.StartsWith("round_placement_"))
+            return AchievementTypes.Placement;
         return AchievementTypes.Badge;
     }
 
@@ -105,6 +109,18 @@ public class AchievementLabelingService
         if (achievementId.Contains("_legend"))
             return BadgeTiers.Legend;
 
+        // Special handling for round placement achievements
+        if (achievementId.StartsWith("round_placement_"))
+        {
+            return achievementId switch
+            {
+                "round_placement_1" => BadgeTiers.Gold,   // 1st place = Gold
+                "round_placement_2" => BadgeTiers.Silver, // 2nd place = Silver  
+                "round_placement_3" => BadgeTiers.Bronze, // 3rd place = Bronze
+                _ => BadgeTiers.Bronze
+            };
+        }
+
         // Default tier based on achievement type
         return DetermineAchievementType(achievementId) == AchievementTypes.KillStreak
             ? BadgeTiers.Silver
@@ -117,6 +133,8 @@ public class AchievementLabelingService
             return BadgeCategories.Performance;
         if (achievementId.StartsWith("total_kills_") || achievementId.StartsWith("milestone_playtime_") || achievementId.StartsWith("total_score_"))
             return BadgeCategories.Milestone;
+        if (achievementId.StartsWith("round_placement_"))
+            return BadgeCategories.Performance;
         if (achievementId.StartsWith("map_"))
             return BadgeCategories.MapMastery;
         if (achievementId.StartsWith("sharpshooter_") || achievementId.StartsWith("elite_warrior_"))
@@ -127,6 +145,27 @@ public class AchievementLabelingService
             return BadgeCategories.Social;
 
         return BadgeCategories.Performance; // Default
+    }
+
+    /// <summary>
+    /// Generate a display-friendly name for achievement IDs
+    /// </summary>
+    private string GenerateDisplayName(string achievementId)
+    {
+        // Special handling for placement achievements
+        if (achievementId.StartsWith("round_placement_"))
+        {
+            return achievementId switch
+            {
+                "round_placement_1" => "1st Place",
+                "round_placement_2" => "2nd Place", 
+                "round_placement_3" => "3rd Place",
+                _ => "Round Placement"
+            };
+        }
+
+        // Default: replace underscores with spaces and apply title case
+        return achievementId.Replace('_', ' ').ToTitleCase();
     }
 }
 

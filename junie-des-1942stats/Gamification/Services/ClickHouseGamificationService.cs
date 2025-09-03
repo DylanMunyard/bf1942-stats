@@ -125,6 +125,41 @@ public class ClickHouseGamificationService : IDisposable
         return DateTime.MinValue;
     }
 
+    /// <summary>
+    /// Get the last processed timestamp specifically for placement achievements
+    /// </summary>
+    public async Task<DateTime> GetLastPlacementProcessedTimestampAsync()
+    {
+        try
+        {
+            if (_connection.State != System.Data.ConnectionState.Open)
+            {
+                await _connection.OpenAsync();
+            }
+
+            var query = @"
+                SELECT MAX(processed_at) as last_processed 
+                FROM player_achievements 
+                WHERE achievement_type = {achievementType:String}";
+
+            await using var command = _connection.CreateCommand();
+            command.CommandText = query;
+            command.Parameters.Add(CreateParameter("achievementType", AchievementTypes.Placement));
+
+            var result = await command.ExecuteScalarAsync();
+            if (result != null && result != DBNull.Value && DateTime.TryParse(result.ToString(), out var lastProcessed))
+            {
+                return lastProcessed;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get last placement processed timestamp, returning minimum date");
+        }
+
+        return DateTime.MinValue;
+    }
+
     public async Task<List<Achievement>> GetPlayerAchievementsAsync(string playerName, int limit = 50)
     {
         try
