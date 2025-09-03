@@ -54,6 +54,16 @@ public class PlayerMetricsMigrationController : ControllerBase
         [FromBody] MigrationRequest request, 
         CancellationToken cancellationToken)
     {
+        _logger.LogWarning(
+            "PlayerMetricsMigrationController is disabled. Returning 401 Unauthorized. Request: batchSize={BatchSize} delayMs={DelayMs}", 
+            request.BatchSize, request.DelayMs);
+
+        return StatusCode(401, new { 
+            message = "PlayerMetricsMigrationController is disabled and no longer available. This endpoint has been disabled for security reasons.",
+            timestamp = DateTime.UtcNow
+        });
+        
+        /*
         var started = DateTime.UtcNow;
         _logger.LogInformation(
             "API migration request started: batchSize={BatchSize} delayMs={DelayMs}", 
@@ -90,6 +100,7 @@ public class PlayerMetricsMigrationController : ControllerBase
         }
 
         return Ok(response);
+        */
     }
 
     /// <summary>
@@ -99,6 +110,14 @@ public class PlayerMetricsMigrationController : ControllerBase
     [HttpPost("switch")]
     public async Task<ActionResult<SwitchResponse>> SwitchToNewTable()
     {
+        _logger.LogWarning("PlayerMetricsMigrationController is disabled. Returning 401 Unauthorized.");
+
+        return StatusCode(401, new { 
+            message = "PlayerMetricsMigrationController is disabled and no longer available. This endpoint has been disabled for security reasons.",
+            timestamp = DateTime.UtcNow
+        });
+        
+        /*
         var started = DateTime.UtcNow;
         _logger.LogInformation("API table switch request started");
 
@@ -123,6 +142,7 @@ public class PlayerMetricsMigrationController : ControllerBase
         }
 
         return Ok(response);
+        */
     }
 
     /// <summary>
@@ -132,6 +152,14 @@ public class PlayerMetricsMigrationController : ControllerBase
     [HttpPost("rollback")]
     public async Task<ActionResult<SwitchResponse>> RollbackTableSwitch()
     {
+        _logger.LogWarning("PlayerMetricsMigrationController is disabled. Returning 401 Unauthorized.");
+
+        return StatusCode(401, new { 
+            message = "PlayerMetricsMigrationController is disabled and no longer available. This endpoint has been disabled for security reasons.",
+            timestamp = DateTime.UtcNow
+        });
+        
+        /*
         var started = DateTime.UtcNow;
         _logger.LogInformation("API table rollback request started");
 
@@ -156,6 +184,7 @@ public class PlayerMetricsMigrationController : ControllerBase
         }
 
         return Ok(response);
+        */
     }
 
     /// <summary>
@@ -165,6 +194,14 @@ public class PlayerMetricsMigrationController : ControllerBase
     [HttpPost("cleanup")]
     public async Task<ActionResult<SwitchResponse>> CleanupOldTable()
     {
+        _logger.LogWarning("PlayerMetricsMigrationController is disabled. Returning 401 Unauthorized.");
+
+        return StatusCode(401, new { 
+            message = "PlayerMetricsMigrationController is disabled and no longer available. This endpoint has been disabled for security reasons.",
+            timestamp = DateTime.UtcNow
+        });
+        
+        /*
         var started = DateTime.UtcNow;
         _logger.LogInformation("API table cleanup request started");
 
@@ -189,5 +226,6 @@ public class PlayerMetricsMigrationController : ControllerBase
         }
 
         return Ok(response);
+        */
     }
 }

@@ -52,6 +52,16 @@ public class ServerOnlineCountsMigrationController : ControllerBase
     [HttpPost("repopulate")]
     public async Task<ActionResult<RepopulateResponse>> Repopulate([FromBody] RepopulateRequest request)
     {
+        _logger.LogWarning(
+            "ServerOnlineCountsMigrationController is disabled. Returning 401 Unauthorized. Request: from={From} to={To} batchMinutes={BatchMinutes}", 
+            request.FromUtc, request.ToUtc, request.BatchMinutes);
+
+        return StatusCode(401, new { 
+            message = "ServerOnlineCountsMigrationController is disabled and no longer available. This endpoint has been disabled for security reasons.",
+            timestamp = DateTime.UtcNow
+        });
+        
+        /*
         var started = DateTime.UtcNow;
         try
         {
@@ -115,6 +125,7 @@ public class ServerOnlineCountsMigrationController : ControllerBase
                 ErrorMessage = ex.Message
             });
         }
+        */
     }
 
     // Minimal local copy to avoid making method public elsewhere
