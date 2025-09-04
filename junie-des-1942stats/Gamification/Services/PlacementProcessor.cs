@@ -14,6 +14,7 @@ public class TopSessionResult
     public string PlayerName { get; set; } = string.Empty;
     public int TotalScore { get; set; }
     public int TotalKills { get; set; }
+    public int TotalDeaths { get; set; }
     public DateTime LastSeenTime { get; set; }
     public int? Team { get; set; }
     public string? TeamLabel { get; set; }
@@ -25,6 +26,7 @@ public class TopPlayerData
     public string PlayerName { get; set; } = string.Empty;
     public int TotalScore { get; set; }
     public int TotalKills { get; set; }
+    public int TotalDeaths { get; set; }
     public DateTime LastSeenTime { get; set; }
     public LatestObservationData? LatestObservation { get; set; }
 }
@@ -35,9 +37,27 @@ public class LatestObservationData
     public string? TeamLabel { get; set; }
 }
 
+public record RoundData(
+    string RoundId,
+    string ServerGuid,
+    string MapName,
+    DateTime? EndTime,
+    int? ParticipantCount
+);
+
+public record AchievementMetadata(
+    int? Team,
+    string? TeamLabel,
+    string ServerName,
+    int Score,
+    int Kills,
+    int Deaths,
+    int? TotalPlayers
+);
+
 public class RoundWithTopPlayers
 {
-    public object Round { get; set; } = null!; // Keep as object since it's from EF query
+    public RoundData Round { get; set; } = null!;
     public List<TopPlayerData> TopPlayers { get; set; } = new();
 }
 
@@ -71,12 +91,19 @@ public class PlacementProcessor
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                // First, get batch of rounds
+                // First, get batch of rounds projected to RoundData
                 var rounds = await _dbContext.Rounds.AsNoTracking()
                     .Where(r => r.EndTime != null && r.EndTime >= sinceUtc)
                     .OrderBy(r => r.EndTime)
                     .Skip(skip)
                     .Take(batchSize)
+                    .Select(r => new RoundData(
+                        r.RoundId,
+                        r.ServerGuid,
+                        r.MapName,
+                        r.EndTime,
+                        r.ParticipantCount
+                    ))
                     .ToListAsync(cancellationToken);
 
                 if (rounds.Count == 0)
@@ -97,6 +124,7 @@ public class PlacementProcessor
                             ps.PlayerName,
                             ps.TotalScore,
                             ps.TotalKills,
+                            ps.TotalDeaths,
                             ps.LastSeenTime,
                             ROW_NUMBER() OVER (
                                 PARTITION BY ps.RoundId 
@@ -127,6 +155,7 @@ public class PlacementProcessor
                         ts.PlayerName,
                         ts.TotalScore,
                         ts.TotalKills,
+                        ts.TotalDeaths,
                         ts.LastSeenTime,
                         lo.Team,
                         lo.TeamLabel
@@ -154,6 +183,7 @@ public class PlacementProcessor
                             PlayerName = s.PlayerName,
                             TotalScore = s.TotalScore,
                             TotalKills = s.TotalKills,
+                            TotalDeaths = s.TotalDeaths,
                             LastSeenTime = s.LastSeenTime,
                             LatestObservation = s.Team != null ? new LatestObservationData { Team = s.Team.Value, TeamLabel = s.TeamLabel } : null
                         }).ToList()
@@ -212,7 +242,7 @@ public class PlacementProcessor
 
         foreach (var roundData in roundsWithTopPlayers)
         {
-            var round = (dynamic)roundData.Round; // Still need dynamic for the Round object from EF
+            var round = roundData.Round;
             var topPlayers = roundData.TopPlayers;
 
             if (topPlayers.Count == 0)
@@ -242,17 +272,17 @@ public class PlacementProcessor
                     _ => "Placement"
                 };
 
-                // Metadata includes team info, server name, and total players for richer queries later
-                var serverName = serverNamesByGuid.GetValueOrDefault((string)round.ServerGuid, "");
-                var metadata = new
-                {
-                    team = player.LatestObservation?.Team,
-                    team_label = player.LatestObservation?.TeamLabel,
-                    server_name = serverName,
-                    score = player.TotalScore,
-                    kills = player.TotalKills,
-                    total_players = round.ParticipantCount
-                };
+                // Create strongly typed metadata
+                var serverName = serverNamesByGuid.GetValueOrDefault(round.ServerGuid, "");
+                var metadata = new AchievementMetadata(
+                    player.LatestObservation?.Team,
+                    player.LatestObservation?.TeamLabel,
+                    serverName,
+                    player.TotalScore,
+                    player.TotalKills,
+                    player.TotalDeaths,
+                    round.ParticipantCount
+                );
 
                 var achievedAt = round.EndTime ?? player.LastSeenTime;
 
