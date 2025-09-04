@@ -22,7 +22,8 @@ public class ServersController : ControllerBase
     [HttpGet("{serverName}")]
     public async Task<ActionResult<ServerStatistics>> GetServerStats(
         string serverName,
-        [FromQuery] int? days)
+        [FromQuery] int? days,
+        [FromQuery] int? minPlayersForWeighting)
     {
         if (string.IsNullOrWhiteSpace(serverName))
             return BadRequest("Server name cannot be empty");
@@ -34,7 +35,8 @@ public class ServersController : ControllerBase
 
         var stats = await _serverStatsService.GetServerStatistics(
             serverName,
-            days ?? 7); // Default to 7 days if not specified
+            days ?? 7, // Default to 7 days if not specified
+            minPlayersForWeighting); // Pass through the weighting parameter
 
         if (string.IsNullOrEmpty(stats.ServerGuid))
         {

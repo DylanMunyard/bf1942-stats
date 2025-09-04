@@ -37,10 +37,11 @@ public class ServerStatsService(
 
     public async Task<ServerStatistics> GetServerStatistics(
         string serverName,
-        int daysToAnalyze = 7)
+        int daysToAnalyze = 7,
+        int? minPlayersForWeighting = 10)
     {
-        // Check cache first
-        var cacheKey = _cacheKeyService.GetServerStatisticsKey(serverName, daysToAnalyze);
+        // Check cache first - include weighting parameter in cache key for separate caching
+        var cacheKey = $"{_cacheKeyService.GetServerStatisticsKey(serverName, daysToAnalyze)}_weight_{minPlayersForWeighting}";
         var cachedResult = await _cacheService.GetAsync<ServerStatistics>(cacheKey);
 
         if (cachedResult != null)
@@ -149,6 +150,25 @@ public class ServerStatsService(
         statistics.TopPlacementsMonth = await topPlacementsMonthTask;
         statistics.TopPlacementsAllTime = await topPlacementsAllTimeTask;
 
+        // If weighted placement is requested, fetch those as well
+        if (minPlayersForWeighting.HasValue)
+        {
+            var minPlayers = minPlayersForWeighting.Value;
+            statistics.MinPlayersForWeighting = minPlayers;
+
+            var weightedPlacementsWeekTask = GetWeightedPlacementLeaderboardAsync(server.Guid, oneWeekStart, endPeriod, 10, minPlayers);
+            var weightedPlacementsMonthTask = GetWeightedPlacementLeaderboardAsync(server.Guid, oneMonthStart, endPeriod, 10, minPlayers);
+            var weightedPlacementsAllTimeTask = GetWeightedPlacementLeaderboardAsync(server.Guid, allTimeStart, endPeriod, 10, minPlayers);
+
+            await Task.WhenAll(
+                weightedPlacementsWeekTask, weightedPlacementsMonthTask, weightedPlacementsAllTimeTask
+            );
+
+            statistics.WeightedTopPlacementsWeek = await weightedPlacementsWeekTask;
+            statistics.WeightedTopPlacementsMonth = await weightedPlacementsMonthTask;
+            statistics.WeightedTopPlacementsAllTime = await weightedPlacementsAllTimeTask;
+        }
+
         statistics.RecentRounds = await recentRoundsTask;
 
         // Set current map from the combined query
@@ -195,6 +215,76 @@ FORMAT TabSeparated";
 
             _logger.LogDebug("Executing placement leaderboard query for server {ServerGuid} from {Start} to {End}", 
                 serverGuid, startPeriod, endPeriod);
+
+            var result = await _clickHouseReader.ExecuteQueryAsync(query);
+            var entries = new List<PlacementLeaderboardEntry>();
+
+            var lines = result?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var parts = lines[i].Split('\t');
+                if (parts.Length >= 4 &&
+                    int.TryParse(parts[1], out var firstPlaces) &&
+                    int.TryParse(parts[2], out var secondPlaces) &&
+                    int.TryParse(parts[3], out var thirdPlaces))
+                {
+                    entries.Add(new PlacementLeaderboardEntry
+                    {
+                        Rank = i + 1,
+                        PlayerName = parts[0],
+                        FirstPlaces = firstPlaces,
+                        SecondPlaces = secondPlaces,
+                        ThirdPlaces = thirdPlaces
+                    });
+                }
+            }
+
+            _logger.LogDebug("Found {Count} placement leaderboard entries for server {ServerGuid}", 
+                entries.Count, serverGuid);
+
+            return entries;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching placement leaderboard for server {ServerGuid}", serverGuid);
+            return new List<PlacementLeaderboardEntry>();
+        }
+    }
+
+    /// <summary>
+    /// Get placement leaderboard for a specific server and time period.
+    /// Returns players ranked by their placement achievements with simple point scoring (3,2,1 points).
+    /// </summary>
+    public async Task<List<PlacementLeaderboardEntry>> GetWeightedPlacementLeaderboardAsync(
+        string serverGuid, 
+        DateTime startPeriod, 
+        DateTime endPeriod, 
+        int limit = 10,
+        int minPlayerCount = 1)
+    {
+        try
+        {
+            // Query placement achievements from ClickHouse with JSON metadata parsing
+            // Extract TotalPlayers from metadata and only count placements meeting minimum player count
+            var query = $@"
+SELECT 
+    player_name,
+    countIf(tier = 'gold' AND JSONExtract(metadata, 'TotalPlayers', 'Nullable(UInt32)') >= {minPlayerCount}) as first_places,
+    countIf(tier = 'silver' AND JSONExtract(metadata, 'TotalPlayers', 'Nullable(UInt32)') >= {minPlayerCount}) as second_places,
+    countIf(tier = 'bronze' AND JSONExtract(metadata, 'TotalPlayers', 'Nullable(UInt32)') >= {minPlayerCount}) as third_places
+FROM player_achievements
+WHERE achievement_type = 'round_placement'
+    AND server_guid = '{serverGuid.Replace("'", "''")}'
+    AND achieved_at >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
+    AND achieved_at < '{endPeriod:yyyy-MM-dd HH:mm:ss}'
+GROUP BY player_name
+HAVING first_places > 0 OR second_places > 0 OR third_places > 0
+ORDER BY first_places DESC, second_places DESC, third_places DESC
+LIMIT {limit}
+FORMAT TabSeparated";
+
+            _logger.LogDebug("Executing weighted placement leaderboard query for server {ServerGuid} from {Start} to {End} with minPlayerCount {MinPlayerCount}", 
+                serverGuid, startPeriod, endPeriod, minPlayerCount);
 
             var result = await _clickHouseReader.ExecuteQueryAsync(query);
             var entries = new List<PlacementLeaderboardEntry>();

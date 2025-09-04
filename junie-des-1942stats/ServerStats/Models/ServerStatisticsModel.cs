@@ -63,6 +63,12 @@ public class ServerStatistics
     // Top 10 placement leaderboards (all time)
     public List<PlacementLeaderboardEntry> TopPlacementsAllTime { get; set; } = new List<PlacementLeaderboardEntry>();
 
+    // Weighted placement leaderboards (only populated when minPlayersForWeighting is specified)
+    public List<PlacementLeaderboardEntry>? WeightedTopPlacementsWeek { get; set; } = [];
+    public List<PlacementLeaderboardEntry>? WeightedTopPlacementsMonth { get; set; } = [];
+    public List<PlacementLeaderboardEntry>? WeightedTopPlacementsAllTime { get; set; } = [];
+    public int? MinPlayersForWeighting { get; set; } // The minimum player count used for weighting
+
     // Recent rounds (typically last 20) with session links
     public List<RoundInfo> RecentRounds { get; set; } = new List<RoundInfo>();
 
