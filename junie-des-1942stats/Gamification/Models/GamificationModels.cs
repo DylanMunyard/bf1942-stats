@@ -127,6 +127,7 @@ public static class AchievementTypes
     public const string Milestone = "milestone";
     public const string Ranking = "ranking";
     public const string Placement = "round_placement";
+    public const string TeamVictory = "team_victory";
 }
 
 // Badge categories

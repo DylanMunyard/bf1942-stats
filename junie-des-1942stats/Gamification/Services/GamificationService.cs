@@ -17,6 +17,7 @@ public class GamificationService
     private readonly HistoricalProcessor _historicalProcessor;
     private readonly AchievementLabelingService _achievementLabelingService;
     private readonly PlacementProcessor _placementProcessor;
+    private readonly TeamVictoryProcessor _teamVictoryProcessor;
     private readonly ILogger<GamificationService> _logger;
 
     public GamificationService(
@@ -28,6 +29,7 @@ public class GamificationService
         HistoricalProcessor historicalProcessor,
         AchievementLabelingService achievementLabelingService,
         PlacementProcessor placementProcessor,
+        TeamVictoryProcessor teamVictoryProcessor,
         ILogger<GamificationService> logger)
     {
         _gamificationService = gamificationService;
@@ -38,6 +40,7 @@ public class GamificationService
         _historicalProcessor = historicalProcessor;
         _achievementLabelingService = achievementLabelingService;
         _placementProcessor = placementProcessor;
+        _teamVictoryProcessor = teamVictoryProcessor;
         _logger = logger;
     }
 
@@ -72,6 +75,14 @@ public class GamificationService
             if (placementAchievements.Any())
             {
                 allAchievements.AddRange(placementAchievements);
+            }
+
+            // Process team victory achievements for rounds since last team victory processed
+            var lastTeamVictoryProcessed = await _gamificationService.GetLastTeamVictoryProcessedTimestampAsync();
+            var teamVictoryAchievements = await _teamVictoryProcessor.ProcessTeamVictoriesSinceAsync(lastTeamVictoryProcessed);
+            if (teamVictoryAchievements.Any())
+            {
+                allAchievements.AddRange(teamVictoryAchievements);
             }
 
             // Store achievements in batch for efficiency

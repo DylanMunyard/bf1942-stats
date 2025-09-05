@@ -160,6 +160,49 @@ public class ClickHouseGamificationService : IDisposable
         return DateTime.MinValue;
     }
 
+    /// <summary>
+    /// Get the last processed timestamp specifically for team victory achievements
+    /// Uses MIN of both team_victory and team_victory_switched to ensure we don't miss any rounds
+    /// </summary>
+    public async Task<DateTime> GetLastTeamVictoryProcessedTimestampAsync()
+    {
+        try
+        {
+            if (_connection.State != System.Data.ConnectionState.Open)
+            {
+                await _connection.OpenAsync();
+            }
+
+            var query = @"
+                SELECT MIN(COALESCE(max_processed, '1900-01-01')) as last_processed
+                FROM (
+                    SELECT MAX(processed_at) as max_processed
+                    FROM player_achievements 
+                    WHERE achievement_type = {achievementType:String} AND achievement_id = 'team_victory'
+                    UNION ALL
+                    SELECT MAX(processed_at) as max_processed
+                    FROM player_achievements 
+                    WHERE achievement_type = {achievementType:String} AND achievement_id = 'team_victory_switched'
+                )";
+
+            await using var command = _connection.CreateCommand();
+            command.CommandText = query;
+            command.Parameters.Add(CreateParameter("achievementType", AchievementTypes.TeamVictory));
+
+            var result = await command.ExecuteScalarAsync();
+            if (result != null && result != DBNull.Value && DateTime.TryParse(result.ToString(), out var lastProcessed))
+            {
+                return lastProcessed;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get last team victory processed timestamp, returning minimum date");
+        }
+
+        return DateTime.MinValue;
+    }
+
     public async Task<List<Achievement>> GetPlayerAchievementsAsync(string playerName, int limit = 50)
     {
         try
