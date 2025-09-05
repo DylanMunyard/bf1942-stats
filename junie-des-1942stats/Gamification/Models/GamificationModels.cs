@@ -55,6 +55,7 @@ public class PlayerAchievementSummary
     public List<Achievement> RecentAchievements { get; set; } = new();
     public List<Achievement> AllBadges { get; set; } = new();
     public List<Achievement> Milestones { get; set; } = new();
+    public List<Achievement> TeamVictories { get; set; } = new();
     public KillStreakStats BestStreaks { get; set; } = new();
     public DateTime LastCalculated { get; set; }
 }
@@ -128,6 +129,7 @@ public static class AchievementTypes
     public const string Ranking = "ranking";
     public const string Placement = "round_placement";
     public const string TeamVictory = "team_victory";
+    public const string TeamVictorySwitched = "team_victory_switched";
 }
 
 // Badge categories
@@ -138,6 +140,7 @@ public static class BadgeCategories
     public const string Social = "social";
     public const string MapMastery = "map_mastery";
     public const string Consistency = "consistency";
+    public const string TeamPlay = "team_play";
 }
 
 /// <summary>

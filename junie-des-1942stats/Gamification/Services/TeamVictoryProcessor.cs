@@ -359,7 +359,7 @@ public class TeamVictoryProcessor
                     var achievement = CreateTeamVictoryAchievement(
                         player, winningTeam, winningTeamLabel, winningTickets, losingTeam, losingTeamLabel, losingTickets,
                         serverName, round, medianTeamObservations, winningTeamPlayers.Count, processedAt,
-                        "team_victory", "Team Victory", isTeamSwitched: false);
+                        AchievementTypes.TeamVictory, "Team Victory", isTeamSwitched: false);
 
                     achievements.Add(achievement);
                     regularAchievements++;
@@ -377,7 +377,7 @@ public class TeamVictoryProcessor
                     var achievement = CreateTeamVictoryAchievement(
                         player, winningTeam, winningTeamLabel, winningTickets, losingTeam, losingTeamLabel, losingTickets,
                         serverName, round, medianTeamObservations, winningTeamPlayers.Count, processedAt,
-                        "team_victory_switched", "Team Victory (Team Switched)", isTeamSwitched: true);
+                        AchievementTypes.TeamVictorySwitched, "Team Victory (Team Switched)", isTeamSwitched: true);
 
                     achievements.Add(achievement);
                     teamSwitchedAchievements++;

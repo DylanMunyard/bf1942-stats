@@ -167,7 +167,7 @@ public class GamificationController : ControllerBase
     [HttpGet("badges/{category}")]
     public ActionResult<List<BadgeDefinition>> GetBadgesByCategory(string category)
     {
-        var validCategories = new[] { "performance", "milestone", "social", "map_mastery", "consistency" };
+        var validCategories = new[] { "performance", "milestone", "social", "map_mastery", "consistency", "team_play" };
         if (!validCategories.Contains(category.ToLower()))
             return BadRequest($"Invalid category. Valid categories: {string.Join(", ", validCategories)}");
 

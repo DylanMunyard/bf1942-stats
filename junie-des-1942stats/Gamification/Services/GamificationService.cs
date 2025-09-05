@@ -269,12 +269,18 @@ public class GamificationService
                 .OrderByDescending(a => a.Value)
                 .ToList();
 
+            var teamVictories = allAchievements
+                .Where(a => a.AchievementType is AchievementTypes.TeamVictory or AchievementTypes.TeamVictorySwitched)
+                .OrderByDescending(a => a.AchievedAt)
+                .ToList();
+
             return new PlayerAchievementSummary
             {
                 PlayerName = playerName,
                 RecentAchievements = recentAchievements,
                 AllBadges = badges,
                 Milestones = milestones,
+                TeamVictories = teamVictories,
                 BestStreaks = streakStats,
                 LastCalculated = DateTime.UtcNow
             };

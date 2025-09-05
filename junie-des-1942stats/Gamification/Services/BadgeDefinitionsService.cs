@@ -56,6 +56,9 @@ public class BadgeDefinitionsService
         // Placement Badges
         AddPlacementBadges(badges);
 
+        // Team Victory Badges
+        AddTeamVictoryBadges(badges);
+
         return badges;
     }
 
@@ -397,5 +400,54 @@ public class BadgeDefinitionsService
                 }
             };
         }
+    }
+
+    private void AddTeamVictoryBadges(Dictionary<string, BadgeDefinition> badges)
+    {
+        // Regular Team Victory Badge
+        badges["team_victory"] = new BadgeDefinition
+        {
+            Id = "team_victory",
+            Name = "Team Victory",
+            Description = "Win a round on the victorious team",
+            UIDescription = "Be on the winning team when your team wins a round",
+            Tier = BadgeTiers.Bronze, // Base tier - actual tier determined by performance
+            Category = BadgeCategories.TeamPlay,
+            Requirements = new Dictionary<string, object>
+            {
+                ["team_loyalty"] = "Stay on winning team",
+                ["activity_requirement"] = "Active within 2 minutes of round end",
+                ["performance_tiers"] = new Dictionary<string, string>
+                {
+                    [BadgeTiers.Legend] = "Exceptional contribution (120%+ of team average)",
+                    [BadgeTiers.Gold] = "Strong contribution (100%+ of team average)",
+                    [BadgeTiers.Silver] = "Good contribution (70%+ of team average)",
+                    [BadgeTiers.Bronze] = "Team participation (40%+ of team average)"
+                }
+            }
+        };
+
+        // Team Switched Victory Badge
+        badges["team_victory_switched"] = new BadgeDefinition
+        {
+            Id = "team_victory_switched",
+            Name = "Team Victory (Team Switched)",
+            Description = "Win a round despite switching teams during gameplay",
+            UIDescription = "Win a round after switching teams (spent majority time on winning team)",
+            Tier = BadgeTiers.Bronze, // Base tier - actual tier determined by performance
+            Category = BadgeCategories.TeamPlay,
+            Requirements = new Dictionary<string, object>
+            {
+                ["team_switching"] = "Switched teams during round",
+                ["majority_time"] = "Spent majority time on winning team",
+                ["activity_requirement"] = "Active within 2 minutes of round end",
+                ["performance_tiers"] = new Dictionary<string, string>
+                {
+                    [BadgeTiers.Gold] = "Exceptional contribution despite switching (100%+)",
+                    [BadgeTiers.Silver] = "Good contribution despite switching (70%+)",
+                    [BadgeTiers.Bronze] = "Recognition for majority time on winning team"
+                }
+            }
+        };
     }
 }
