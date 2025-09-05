@@ -264,6 +264,7 @@ public class TeamVictoryProcessor
         {
             using var roundActivity = ActivitySources.Gamification.StartActivity("TeamVictoryProcessor.ProcessRound");
             roundActivity?.SetTag("round_id", round.RoundId);
+            roundActivity?.SetTag("server_guid", round.ServerGuid);
             roundActivity?.SetTag("map_name", round.MapName);
 
             if (!playersByRound.TryGetValue(round.RoundId, out var playersInRound))
