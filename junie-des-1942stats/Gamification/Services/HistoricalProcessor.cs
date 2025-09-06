@@ -574,7 +574,7 @@ ORDER BY player_name, threshold";
                             MapName = streak.MapName,
                             RoundId = "", // Not available from metrics data
                             Metadata = $"{{\"actual_streak\":{streak.MaxStreak},\"streak_duration_seconds\":{(streak.StreakEnd - streak.StreakStart).TotalSeconds:F0}}}",
-                            Version = achievedAt  // Use achieved_at as deterministic version for idempotency
+                            Version = achievementTime  // Use achievement time as deterministic version for idempotency
                         });
                     }
                 }
