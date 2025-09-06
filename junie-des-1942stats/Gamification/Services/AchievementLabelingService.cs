@@ -84,6 +84,8 @@ public class AchievementLabelingService
             return AchievementTypes.Milestone;
         if (badge.Id.StartsWith("round_placement_"))
             return AchievementTypes.Placement;
+        if (badge.Id == "team_victory" || badge.Id == "team_victory_switched")
+            return AchievementTypes.TeamVictory;
         return AchievementTypes.Badge;
     }
 
@@ -95,6 +97,8 @@ public class AchievementLabelingService
             return AchievementTypes.Milestone;
         if (achievementId.StartsWith("round_placement_"))
             return AchievementTypes.Placement;
+        if (achievementId == "team_victory" || achievementId == "team_victory_switched")
+            return AchievementTypes.TeamVictory;
         return AchievementTypes.Badge;
     }
 
@@ -143,6 +147,8 @@ public class AchievementLabelingService
             return BadgeCategories.Consistency;
         if (achievementId.StartsWith("server_") || achievementId.StartsWith("night_") || achievementId.StartsWith("early_") || achievementId.StartsWith("marathon_"))
             return BadgeCategories.Social;
+        if (achievementId == "team_victory" || achievementId == "team_victory_switched")
+            return BadgeCategories.TeamPlay;
 
         return BadgeCategories.Performance; // Default
     }
@@ -162,6 +168,16 @@ public class AchievementLabelingService
                 "round_placement_3" => "3rd Place",
                 _ => "Round Placement"
             };
+        }
+
+        // Special handling for team victory achievements
+        if (achievementId == "team_victory")
+        {
+            return "Team Victory";
+        }
+        if (achievementId == "team_victory_switched")
+        {
+            return "Team Victory (Team Switched)";
         }
 
         // Default: replace underscores with spaces and apply title case

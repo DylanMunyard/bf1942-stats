@@ -160,6 +160,48 @@ public class ClickHouseGamificationService : IDisposable
         return DateTime.MinValue;
     }
 
+    /// <summary>
+    /// Get the last processed timestamp specifically for team victory achievements
+    /// Uses MAX of both team_victory and team_victory_switched, then subtracts 120 minutes as buffer
+    /// This ensures we don't reprocess the same achievements while providing a safe buffer
+    /// </summary>
+    public async Task<DateTime> GetLastTeamVictoryProcessedTimestampAsync()
+    {
+        try
+        {
+            if (_connection.State != System.Data.ConnectionState.Open)
+            {
+                await _connection.OpenAsync();
+            }
+
+            // Get the maximum processed timestamp from either achievement type
+            // If one type has no records, it won't affect the other
+            var query = @"
+                SELECT MAX(processed_at) as last_processed
+                FROM player_achievements 
+                WHERE achievement_type = {achievementType:String} 
+                AND achievement_id IN ('team_victory', 'team_victory_switched')";
+
+            await using var command = _connection.CreateCommand();
+            command.CommandText = query;
+            command.Parameters.Add(CreateParameter("achievementType", AchievementTypes.TeamVictory));
+
+            var result = await command.ExecuteScalarAsync();
+            if (result != null && result != DBNull.Value && DateTime.TryParse(result.ToString(), out var lastProcessed))
+            {
+                // Subtract 120 minutes as a round buffer to ensure we don't miss any achievements
+                // This accounts for rounds that might have been processed but had late-arriving data
+                return lastProcessed.AddMinutes(-120);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get last team victory processed timestamp, returning minimum date");
+        }
+
+        return DateTime.MinValue;
+    }
+
     public async Task<List<Achievement>> GetPlayerAchievementsAsync(string playerName, int limit = 50)
     {
         try

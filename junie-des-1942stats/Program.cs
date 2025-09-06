@@ -355,6 +355,16 @@ try
         ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
     });
 
+    builder.Services.AddHttpClient<PlayerAchievementsMigrationService>(client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(300); // 5 minutes for migration operations
+        client.DefaultRequestHeaders.Add("X-ClickHouse-User", "default");
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+    });
+
     builder.Services.AddHttpClient<PlayerRoundsReadService>(client =>
     {
         client.Timeout = TimeSpan.FromSeconds(2);
@@ -413,6 +423,19 @@ try
 
         var logger = sp.GetRequiredService<ILogger<PlayerMetricsMigrationService>>();
         return new PlayerMetricsMigrationService(httpClient, clickHouseWriteUrl, logger);
+    });
+
+    builder.Services.AddSingleton<PlayerAchievementsMigrationService>(sp =>
+    {
+        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(PlayerAchievementsMigrationService));
+
+        var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
+        var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? clickHouseReadUrl;
+
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] PlayerAchievementsMigrationService ClickHouse Write URL: {clickHouseWriteUrl}");
+
+        var logger = sp.GetRequiredService<ILogger<PlayerAchievementsMigrationService>>();
+        return new PlayerAchievementsMigrationService(httpClient, clickHouseWriteUrl, logger);
     });
 
     // Register ClickHouse Read Services (use CLICKHOUSE_URL)
@@ -544,6 +567,7 @@ try
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.MilestoneCalculator>();
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.PerformanceBadgeCalculator>();
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.PlacementProcessor>();
+    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.TeamVictoryProcessor>();
     builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.GamificationService>();
 
     // Register Gamification Background Service
