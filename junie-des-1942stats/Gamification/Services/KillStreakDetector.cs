@@ -149,7 +149,7 @@ public class KillStreakDetector
                             MapName = round.MapName,
                             RoundId = round.RoundId,
                             Metadata = $"{{\"actual_streak\":{streakInstance.Threshold},\"round_kills\":{round.FinalKills}}}",
-                            Version = DateTime.UtcNow
+                            Version = streakInstance.AchievedAt  // Use achieved_at as deterministic version for idempotency
                         });
 
                         _logger.LogInformation("ClickHouse kill streak achievement: {PlayerName} achieved {AchievementName} with {Threshold} kills at {AchievementTime}",

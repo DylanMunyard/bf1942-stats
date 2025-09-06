@@ -348,7 +348,7 @@ public class PlacementProcessor
                     MapName = round.MapName,
                     RoundId = round.RoundId,
                     Metadata = JsonSerializer.Serialize(metadata),
-                    Version = processedAt
+                    Version = achievedAt  // Use achieved_at as deterministic version for idempotency
                 };
                 
                 achievements.Add(achievement);

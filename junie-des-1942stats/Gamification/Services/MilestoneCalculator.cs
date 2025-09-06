@@ -107,7 +107,7 @@ public class MilestoneCalculator
                         MapName = round.MapName,
                         RoundId = round.RoundId,
                         Metadata = $"{{\"previous_kills\":{previousStats.TotalKills},\"new_kills\":{newStats.TotalKills}}}",
-                        Version = DateTime.UtcNow
+                        Version = round.RoundEndTime  // Use round end time as deterministic version for idempotency
                     });
 
                     _logger.LogInformation("Kill milestone achieved: {PlayerName} reached {Milestone} total kills",
@@ -149,7 +149,7 @@ public class MilestoneCalculator
                         MapName = round.MapName,
                         RoundId = round.RoundId,
                         Metadata = $"{{\"previous_hours\":{previousStats.TotalPlayTimeMinutes / 60.0:F1},\"new_hours\":{newStats.TotalPlayTimeMinutes / 60.0:F1}}}",
-                        Version = DateTime.UtcNow
+                        Version = round.RoundEndTime  // Use round end time as deterministic version for idempotency
                     });
 
                     _logger.LogInformation("Playtime milestone achieved: {PlayerName} reached {Milestone} hours played",
@@ -188,7 +188,7 @@ public class MilestoneCalculator
                         MapName = round.MapName,
                         RoundId = round.RoundId,
                         Metadata = $"{{\"previous_score\":{previousStats.TotalScore},\"new_score\":{newStats.TotalScore}}}",
-                        Version = DateTime.UtcNow
+                        Version = round.RoundEndTime  // Use round end time as deterministic version for idempotency
                     });
 
                     _logger.LogInformation("Score milestone achieved: {PlayerName} reached {Milestone:N0} total score",

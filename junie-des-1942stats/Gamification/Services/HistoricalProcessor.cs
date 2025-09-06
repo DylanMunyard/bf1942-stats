@@ -533,7 +533,7 @@ ORDER BY player_name, threshold";
             MapName = "", // Not applicable for milestones
             RoundId = "", // Not applicable for milestones
             Metadata = $"{{\"category\":\"{category}\",\"threshold\":{value}}}",
-            Version = DateTime.UtcNow
+            Version = achievedAt  // Use achieved_at as deterministic version for idempotency
         };
     }
 
@@ -574,7 +574,7 @@ ORDER BY player_name, threshold";
                             MapName = streak.MapName,
                             RoundId = "", // Not available from metrics data
                             Metadata = $"{{\"actual_streak\":{streak.MaxStreak},\"streak_duration_seconds\":{(streak.StreakEnd - streak.StreakStart).TotalSeconds:F0}}}",
-                            Version = DateTime.UtcNow
+                            Version = achievedAt  // Use achieved_at as deterministic version for idempotency
                         });
                     }
                 }
