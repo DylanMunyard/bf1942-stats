@@ -162,7 +162,8 @@ public class ClickHouseGamificationService : IDisposable
 
     /// <summary>
     /// Get the last processed timestamp specifically for team victory achievements
-    /// Uses MIN of both team_victory and team_victory_switched to ensure we don't miss any rounds
+    /// Uses MAX of both team_victory and team_victory_switched, then subtracts 120 minutes as buffer
+    /// This ensures we don't reprocess the same achievements while providing a safe buffer
     /// </summary>
     public async Task<DateTime> GetLastTeamVictoryProcessedTimestampAsync()
     {
@@ -173,17 +174,13 @@ public class ClickHouseGamificationService : IDisposable
                 await _connection.OpenAsync();
             }
 
+            // Get the maximum processed timestamp from either achievement type
+            // If one type has no records, it won't affect the other
             var query = @"
-                SELECT MIN(COALESCE(max_processed, '1900-01-01')) as last_processed
-                FROM (
-                    SELECT MAX(processed_at) as max_processed
-                    FROM player_achievements 
-                    WHERE achievement_type = {achievementType:String} AND achievement_id = 'team_victory'
-                    UNION ALL
-                    SELECT MAX(processed_at) as max_processed
-                    FROM player_achievements 
-                    WHERE achievement_type = {achievementType:String} AND achievement_id = 'team_victory_switched'
-                )";
+                SELECT MAX(processed_at) as last_processed
+                FROM player_achievements 
+                WHERE achievement_type = {achievementType:String} 
+                AND achievement_id IN ('team_victory', 'team_victory_switched')";
 
             await using var command = _connection.CreateCommand();
             command.CommandText = query;
@@ -192,7 +189,9 @@ public class ClickHouseGamificationService : IDisposable
             var result = await command.ExecuteScalarAsync();
             if (result != null && result != DBNull.Value && DateTime.TryParse(result.ToString(), out var lastProcessed))
             {
-                return lastProcessed;
+                // Subtract 120 minutes as a round buffer to ensure we don't miss any achievements
+                // This accounts for rounds that might have been processed but had late-arriving data
+                return lastProcessed.AddMinutes(-120);
             }
         }
         catch (Exception ex)
