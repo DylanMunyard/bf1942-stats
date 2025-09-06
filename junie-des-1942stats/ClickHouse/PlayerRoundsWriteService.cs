@@ -219,6 +219,7 @@ SETTINGS index_granularity = 8192";
                         ps.TotalKills,
                         ps.TotalDeaths,
                         ps.GameType,
+                        ps.RoundId,
                         AiBot = (bool?)ps.Player.AiBot,
                         TeamLabel = ps.Observations
                             .OrderByDescending(o => o.Timestamp)
@@ -243,7 +244,7 @@ SETTINGS index_granularity = 8192";
                     FinalKills = (uint)Math.Max(0, r.TotalKills),
                     FinalDeaths = (uint)Math.Max(0, r.TotalDeaths),
                     PlayTimeMinutes = Math.Max(0, (r.LastSeenTime - r.StartTime).TotalMinutes),
-                    RoundId = GenerateRoundId(r.PlayerName, r.ServerGuid, r.MapName, r.StartTime, r.SessionId),
+                    RoundId = r.RoundId ?? GenerateRoundId(r.PlayerName, r.ServerGuid, r.MapName, r.StartTime, r.SessionId),
                     TeamLabel = r.TeamLabel ?? string.Empty,
                     GameId = r.GameType,
                     IsBot = r.AiBot ?? false,

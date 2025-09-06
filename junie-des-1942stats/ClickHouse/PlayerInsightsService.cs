@@ -156,7 +156,7 @@ FORMAT TabSeparated";
                     TotalKills = totalKills,
                     TotalDeaths = int.Parse(parts[3]),
                     HighestScore = int.TryParse(parts[4], out var score) ? score : 0,
-                    HighestScoreSessionId = parts[5],
+                    HighestScoreRoundId = parts[5],
                     HighestScoreMapName = parts[6],
                     HighestScoreStartTime = DateTime.TryParse(parts[7], out var hsTime) ? hsTime : DateTime.MinValue,
                     KillsPerMinute = killsPerMinute,

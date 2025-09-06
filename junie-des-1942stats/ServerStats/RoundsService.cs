@@ -1,14 +1,16 @@
 using junie_des_1942stats.PlayerTracking;
 using junie_des_1942stats.ServerStats.Models;
+using junie_des_1942stats.ClickHouse;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace junie_des_1942stats.ServerStats;
 
-public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsService> logger)
+public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsService> logger, PlayerRoundsReadService? clickHouseReader = null)
 {
     private readonly PlayerTrackerDbContext _dbContext = dbContext;
     private readonly ILogger<RoundsService> _logger = logger;
+    private readonly PlayerRoundsReadService? _clickHouseReader = clickHouseReader;
 
     public async Task<List<RoundInfo>> GetRecentRoundsAsync(string serverGuid, int limit)
     {
@@ -253,6 +255,241 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
             TotalItems = totalCount,
             TotalPages = (int)Math.Ceiling((double)totalCount / pageSize)
         };
+    }
+
+    public async Task<SessionRoundReport?> GetRoundReport(string roundId, Gamification.Services.ClickHouseGamificationService gamificationService)
+    {
+        var round = await _dbContext.Rounds
+            .AsNoTracking()
+            .Include(r => r.Sessions)
+            .ThenInclude(s => s.Server)
+            .FirstOrDefaultAsync(r => r.RoundId == roundId);
+
+        if (round == null)
+        {
+            // Try to resolve ClickHouse RoundId to SQLite RoundId
+            var resolvedRoundId = await ResolveClickHouseRoundIdAsync(roundId);
+            if (!string.IsNullOrEmpty(resolvedRoundId) && resolvedRoundId != roundId)
+            {
+                // Retry with resolved RoundId
+                round = await _dbContext.Rounds
+                    .AsNoTracking()
+                    .Include(r => r.Sessions)
+                    .ThenInclude(s => s.Server)
+                    .FirstOrDefaultAsync(r => r.RoundId == resolvedRoundId);
+            }
+        }
+
+        if (round == null)
+            return null;
+
+        // Get all observations for the round with player names
+        var roundObservations = await _dbContext.PlayerObservations
+            .Include(o => o.Session)
+            .Where(o => round.Sessions.Select(s => s.SessionId).Contains(o.SessionId))
+            .OrderBy(o => o.Timestamp)
+            .Select(o => new
+            {
+                o.Timestamp,
+                o.Score,
+                o.Kills,
+                o.Deaths,
+                o.Ping,
+                o.Team,
+                o.TeamLabel,
+                PlayerName = o.Session.PlayerName
+            })
+            .ToListAsync();
+
+        // Create leaderboard snapshots starting from round start
+        var leaderboardSnapshots = new List<ServerStats.Models.LeaderboardSnapshot>();
+        var currentTime = round.StartTime;
+        var endTime = round.EndTime ?? DateTime.UtcNow;
+
+        while (currentTime <= endTime)
+        {
+            // Get the latest score for each player at this time
+            var playerScores = roundObservations
+                .Where(o => o.Timestamp <= currentTime)
+                .GroupBy(o => o.PlayerName)
+                .Select(g =>
+                {
+                    var obs = g.OrderByDescending(x => x.Timestamp).First();
+                    return new
+                    {
+                        PlayerName = g.Key,
+                        Score = obs.Score,
+                        Kills = obs.Kills,
+                        Deaths = obs.Deaths,
+                        Ping = obs.Ping,
+                        Team = obs.Team,
+                        TeamLabel = obs.TeamLabel,
+                        LastSeen = obs.Timestamp
+                    };
+                })
+                .Where(x => x.LastSeen >= currentTime.AddMinutes(-1)) // Only include players seen in last minute
+                .OrderByDescending(x => x.Score)
+                .Select((x, i) => new ServerStats.Models.LeaderboardEntry
+                {
+                    Rank = i + 1,
+                    PlayerName = x.PlayerName,
+                    Score = x.Score,
+                    Kills = x.Kills,
+                    Deaths = x.Deaths,
+                    Ping = x.Ping,
+                    Team = x.Team,
+                    TeamLabel = x.TeamLabel
+                })
+                .ToList();
+
+            leaderboardSnapshots.Add(new ServerStats.Models.LeaderboardSnapshot
+            {
+                Timestamp = currentTime,
+                Entries = playerScores
+            });
+
+            currentTime = currentTime.AddMinutes(1);
+        }
+
+        // Filter out empty snapshots
+        leaderboardSnapshots = leaderboardSnapshots
+            .Where(snapshot => snapshot.Entries.Any())
+            .ToList();
+
+        // Get achievements for this round using the dedicated method
+        List<Gamification.Models.Achievement> achievements = new();
+        try
+        {
+            achievements = await gamificationService.GetRoundAchievementsAsync(roundId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get achievements for round {RoundId}", roundId);
+        }
+
+        // Use the first session as representative session
+        var representativeSession = round.Sessions.FirstOrDefault();
+        if (representativeSession == null)
+            return null;
+
+        return new SessionRoundReport
+        {
+            Session = new ServerStats.Models.SessionInfo
+            {
+                SessionId = representativeSession.SessionId,
+                RoundId = representativeSession.RoundId,
+                PlayerName = representativeSession.PlayerName,
+                ServerName = representativeSession.Server.Name,
+                ServerGuid = representativeSession.ServerGuid,
+                GameId = representativeSession.Server.GameId,
+                Kills = representativeSession.TotalKills,
+                Deaths = representativeSession.TotalDeaths,
+                Score = representativeSession.TotalScore,
+                ServerIp = representativeSession.Server.Ip,
+                ServerPort = representativeSession.Server.Port
+            },
+            Round = new ServerStats.Models.RoundReportInfo
+            {
+                MapName = round.MapName,
+                GameType = round.GameType,
+                StartTime = round.StartTime,
+                EndTime = round.EndTime ?? DateTime.UtcNow,
+                TotalParticipants = round.ParticipantCount ?? round.Sessions.Count,
+                IsActive = round.IsActive
+            },
+            LeaderboardSnapshots = leaderboardSnapshots,
+            Achievements = achievements
+        };
+    }
+
+    /// <summary>
+    /// Attempts to resolve a ClickHouse RoundId to a SQLite RoundId by looking up round details from ClickHouse
+    /// and finding the corresponding SQLite Round
+    /// </summary>
+    private async Task<string?> ResolveClickHouseRoundIdAsync(string clickHouseRoundId)
+    {
+        if (_clickHouseReader == null)
+        {
+            _logger.LogDebug("ClickHouse reader not available for RoundId resolution: {RoundId}", clickHouseRoundId);
+            return null;
+        }
+
+        try
+        {
+            // Query ClickHouse for round details
+            var query = $@"
+SELECT 
+    server_guid,
+    map_name,
+    round_start_time,
+    round_end_time
+FROM player_rounds
+WHERE round_id = '{clickHouseRoundId.Replace("'", "''")}'
+LIMIT 1
+FORMAT TabSeparated";
+
+            var result = await _clickHouseReader.ExecuteQueryAsync(query);
+            if (string.IsNullOrWhiteSpace(result) || result.Trim().Length == 0)
+            {
+                _logger.LogDebug("No data found in ClickHouse for RoundId: {RoundId}", clickHouseRoundId);
+                return null;
+            }
+
+            var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            if (lines.Length == 0)
+            {
+                return null;
+            }
+
+            var parts = lines[0].Split('\t');
+            if (parts.Length < 4)
+            {
+                _logger.LogWarning("Invalid data format from ClickHouse for RoundId: {RoundId}", clickHouseRoundId);
+                return null;
+            }
+
+            var serverGuid = parts[0];
+            var mapName = parts[1];
+            var roundStartTime = DateTime.TryParse(parts[2], out var startTime) ? startTime : DateTime.MinValue;
+            var roundEndTime = DateTime.TryParse(parts[3], out var endTime) ? endTime : DateTime.MinValue;
+
+            if (startTime == DateTime.MinValue)
+            {
+                _logger.LogWarning("Invalid start time from ClickHouse for RoundId: {RoundId}", clickHouseRoundId);
+                return null;
+            }
+
+            // Find the corresponding SQLite Round by server, map, and time range
+            // Allow some tolerance for timing differences (±10 minutes)
+            var timeTolerance = TimeSpan.FromMinutes(10);
+            var searchStartTime = startTime - timeTolerance;
+            var searchEndTime = startTime + timeTolerance;
+
+            var sqliteRound = (await _dbContext.Rounds
+                .AsNoTracking()
+                .Where(r => r.ServerGuid == serverGuid 
+                           && r.MapName == mapName
+                           && r.StartTime >= searchStartTime 
+                           && r.StartTime <= searchEndTime)
+                .ToListAsync()) // Load data from database first
+                .OrderBy(r => Math.Abs((r.StartTime - startTime).Ticks)) // Then sort in memory
+                .FirstOrDefault();
+
+            if (sqliteRound != null)
+            {
+                _logger.LogDebug("Resolved ClickHouse RoundId {ClickHouseRoundId} to SQLite RoundId {SQLiteRoundId}", 
+                    clickHouseRoundId, sqliteRound.RoundId);
+                return sqliteRound.RoundId;
+            }
+
+            _logger.LogDebug("Could not resolve ClickHouse RoundId {ClickHouseRoundId} to SQLite RoundId", clickHouseRoundId);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resolving ClickHouse RoundId {ClickHouseRoundId} to SQLite RoundId", clickHouseRoundId);
+            return null;
+        }
     }
 }
 

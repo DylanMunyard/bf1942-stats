@@ -128,4 +128,30 @@ public class RoundsController : ControllerBase
             return StatusCode(500, "An internal server error occurred while retrieving rounds");
         }
     }
+
+    // Get round report by round ID
+    [HttpGet("{roundId}/report")]
+    public async Task<ActionResult<SessionRoundReport>> GetRoundReport(
+        string roundId,
+        [FromServices] Gamification.Services.ClickHouseGamificationService gamificationService)
+    {
+        if (string.IsNullOrWhiteSpace(roundId))
+            return BadRequest("Round ID is required");
+
+        try
+        {
+            var roundReport = await _roundsService.GetRoundReport(roundId, gamificationService);
+
+            if (roundReport == null)
+                return NotFound($"Round '{roundId}' not found");
+
+            return Ok(roundReport);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving round report for round {RoundId}", roundId);
+            return StatusCode(500, $"Error retrieving round report: {ex.Message}");
+        }
+    }
+
 }

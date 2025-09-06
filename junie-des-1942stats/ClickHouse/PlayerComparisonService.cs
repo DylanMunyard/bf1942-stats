@@ -305,7 +305,7 @@ GROUP BY map_name, player_name";
 SELECT p1.round_start_time, p1.round_end_time, p1.server_guid, p1.map_name,
        p1.final_score, p1.final_kills, p1.final_deaths,
        p2.final_score, p2.final_kills, p2.final_deaths,
-       p2.round_start_time, p2.round_end_time
+       p2.round_start_time, p2.round_end_time, p1.round_id
 FROM player_rounds p1
 JOIN player_rounds p2 ON p1.server_guid = p2.server_guid 
     AND p1.map_name = p2.map_name
@@ -317,7 +317,7 @@ LIMIT 50";
 
         var sessions = new List<HeadToHeadSession>();
         var serverGuids = new HashSet<string>();
-        var sessionData = new List<(DateTime, string, string, int?, int?, int?, int?, int?, int?, DateTime?)>();
+        var sessionData = new List<(DateTime, string, string, int?, int?, int?, int?, int?, int?, DateTime?, string?)>();
 
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
@@ -337,7 +337,8 @@ LIMIT 50";
                 reader.IsDBNull(7) ? null : Convert.ToInt32(reader.GetValue(7)),
                 reader.IsDBNull(8) ? null : Convert.ToInt32(reader.GetValue(8)),
                 reader.IsDBNull(9) ? null : Convert.ToInt32(reader.GetValue(9)),
-                reader.IsDBNull(10) ? null : reader.GetDateTime(10)
+                reader.IsDBNull(10) ? null : reader.GetDateTime(10),
+                reader.IsDBNull(12) ? null : reader.GetString(12) // round_id
             ));
         }
 
@@ -355,12 +356,14 @@ LIMIT 50";
                 Player2Score = data.Item7 ?? 0,
                 Player2Kills = data.Item8 ?? 0,
                 Player2Deaths = data.Item9 ?? 0,
-                Player2Timestamp = data.Item10 ?? DateTime.MinValue
+                Player2Timestamp = data.Item10 ?? DateTime.MinValue,
+                RoundId = data.Item11 // Round ID for UI linking
             });
         }
 
         return (sessions, serverGuids);
     }
+
 
     private async Task<(List<ServerDetails> servers, HashSet<string> serverGuids)> GetCommonServersData(string player1, string player2)
     {
@@ -1578,6 +1581,7 @@ public class HeadToHeadSession
     public int Player2Kills { get; set; }
     public int Player2Deaths { get; set; }
     public DateTime Player2Timestamp { get; set; }
+    public string? RoundId { get; set; } // For UI linking to round details
 }
 
 public class ServerDetails

@@ -316,6 +316,59 @@ public class ClickHouseGamificationService : IDisposable
         }
     }
 
+    public async Task<List<Achievement>> GetRoundAchievementsAsync(string roundId)
+    {
+        try
+        {
+            if (_connection.State != System.Data.ConnectionState.Open)
+            {
+                await _connection.OpenAsync();
+            }
+
+            var query = @"
+                SELECT player_name, achievement_type, achievement_id, achievement_name, tier,
+                       value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version
+                FROM player_achievements_deduplicated
+                WHERE round_id = {roundId:String}
+                ORDER BY achieved_at ASC";
+
+            var results = new List<Achievement>();
+
+            await using var command = _connection.CreateCommand();
+            command.CommandText = query;
+
+            command.Parameters.Add(CreateParameter("roundId", roundId));
+
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                results.Add(new Achievement
+                {
+                    PlayerName = reader.GetString(0),
+                    AchievementType = reader.GetString(1),
+                    AchievementId = reader.GetString(2),
+                    AchievementName = reader.GetString(3),
+                    Tier = reader.GetString(4),
+                    Value = Convert.ToUInt32(reader.GetValue(5)),
+                    AchievedAt = reader.GetDateTime(6),
+                    ProcessedAt = reader.GetDateTime(7),
+                    ServerGuid = reader.GetString(8),
+                    MapName = reader.GetString(9),
+                    RoundId = reader.GetString(10),
+                    Metadata = reader.GetString(11),
+                    Version = reader.GetDateTime(12)
+                });
+            }
+
+            return results;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get achievements for round {RoundId}", roundId);
+            throw;
+        }
+    }
+
     public async Task<bool> PlayerHasAchievementAsync(string playerName, string achievementId)
     {
         try

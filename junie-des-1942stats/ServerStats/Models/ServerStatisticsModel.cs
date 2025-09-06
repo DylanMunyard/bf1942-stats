@@ -172,6 +172,7 @@ public class SessionRoundReport
     public RoundReportInfo Round { get; set; } = new();
     public List<RoundParticipant> Participants { get; set; } = new();
     public List<LeaderboardSnapshot> LeaderboardSnapshots { get; set; } = new();
+    public List<Gamification.Models.Achievement> Achievements { get; set; } = new();
 }
 
 public class SessionInfo
