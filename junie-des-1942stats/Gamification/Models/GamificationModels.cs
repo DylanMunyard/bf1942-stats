@@ -14,6 +14,7 @@ public class Achievement
     public string MapName { get; set; } = "";
     public string RoundId { get; set; } = "";
     public string Metadata { get; set; } = ""; // JSON for additional context
+    public DateTime Version { get; set; } // Version field for ReplacingMergeTree deduplication
 }
 
 public class KillStreak

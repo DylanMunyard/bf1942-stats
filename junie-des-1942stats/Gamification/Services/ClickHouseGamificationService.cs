@@ -80,11 +80,12 @@ public class ClickHouseGamificationService : IDisposable
                 ServerGuid = a.ServerGuid,
                 MapName = a.MapName,
                 RoundId = a.RoundId,
-                Metadata = a.Metadata
+                Metadata = a.Metadata,
+                Version = a.Version.ToString("yyyy-MM-dd HH:mm:ss")
             }));
 
             var csvData = stringWriter.ToString();
-            var query = "INSERT INTO player_achievements (player_name, achievement_type, achievement_id, achievement_name, tier, value, achieved_at, processed_at, server_guid, map_name, round_id, metadata) FORMAT CSV";
+            var query = "INSERT INTO player_achievements (player_name, achievement_type, achievement_id, achievement_name, tier, value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version) FORMAT CSV";
             var fullRequest = query + "\n" + csvData;
 
             await ExecuteQueryAsync(fullRequest);
@@ -213,7 +214,7 @@ public class ClickHouseGamificationService : IDisposable
 
             var query = @"
                 SELECT player_name, achievement_type, achievement_id, achievement_name, tier,
-                       value, achieved_at, processed_at, server_guid, map_name, round_id, metadata
+                       value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version
                 FROM player_achievements
                 WHERE player_name = {playerName:String}
                 ORDER BY achieved_at DESC
@@ -243,7 +244,8 @@ public class ClickHouseGamificationService : IDisposable
                     ServerGuid = reader.GetString(8),
                     MapName = reader.GetString(9),
                     RoundId = reader.GetString(10),
-                    Metadata = reader.GetString(11)
+                    Metadata = reader.GetString(11),
+                    Version = reader.GetDateTime(12)
                 });
             }
 
@@ -267,7 +269,7 @@ public class ClickHouseGamificationService : IDisposable
 
             var query = @"
                 SELECT player_name, achievement_type, achievement_id, achievement_name, tier,
-                       value, achieved_at, processed_at, server_guid, map_name, round_id, metadata
+                       value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version
                 FROM player_achievements
                 WHERE player_name = {playerName:String}
                 AND achievement_type = {achievementType:String}
@@ -297,7 +299,8 @@ public class ClickHouseGamificationService : IDisposable
                     ServerGuid = reader.GetString(8),
                     MapName = reader.GetString(9),
                     RoundId = reader.GetString(10),
-                    Metadata = reader.GetString(11)
+                    Metadata = reader.GetString(11),
+                    Version = reader.GetDateTime(12)
                 });
             }
 
@@ -499,7 +502,7 @@ public class ClickHouseGamificationService : IDisposable
             // Get achievements with pagination
             var query = $@"
                 SELECT player_name, achievement_type, achievement_id, achievement_name, tier,
-                       value, achieved_at, processed_at, server_guid, map_name, round_id, metadata
+                       value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version
                 FROM player_achievements
                 {whereClause}
                 ORDER BY {sortField} {orderDirection}

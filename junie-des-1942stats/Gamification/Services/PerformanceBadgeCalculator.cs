@@ -104,7 +104,8 @@ public class PerformanceBadgeCalculator
                                 ServerGuid = round.ServerGuid,
                                 MapName = round.MapName,
                                 RoundId = round.RoundId,
-                                Metadata = $"{{\"kpm\":{kmp:F2},\"rounds_analyzed\":{roundsAnalyzed},\"total_kills\":{totalKills},\"total_minutes\":{totalMinutes:F1}}}"
+                                Metadata = $"{{\"kpm\":{kmp:F2},\"rounds_analyzed\":{roundsAnalyzed},\"total_kills\":{totalKills},\"total_minutes\":{totalMinutes:F1}}}",
+                                Version = DateTime.UtcNow
                             });
 
                             _logger.LogInformation("KPM badge achieved: {PlayerName} earned {BadgeName} with {KPM:F2} KPM over {Rounds} rounds",
@@ -188,7 +189,8 @@ public class PerformanceBadgeCalculator
                                 ServerGuid = round.ServerGuid,
                                 MapName = round.MapName,
                                 RoundId = round.RoundId,
-                                Metadata = $"{{\"kd_ratio\":{kdRatio:F2},\"rounds_analyzed\":{roundsAnalyzed},\"total_kills\":{totalKills},\"total_deaths\":{totalDeaths}}}"
+                                Metadata = $"{{\"kd_ratio\":{kdRatio:F2},\"rounds_analyzed\":{roundsAnalyzed},\"total_kills\":{totalKills},\"total_deaths\":{totalDeaths}}}",
+                                Version = DateTime.UtcNow
                             });
 
                             _logger.LogInformation("KD badge achieved: {PlayerName} earned {BadgeName} with {KDRatio:F2} KD over {Rounds} rounds",
@@ -269,7 +271,8 @@ public class PerformanceBadgeCalculator
                             ServerGuid = latestRound.ServerGuid,
                             MapName = latestRound.MapName,
                             RoundId = latestRound.RoundId,
-                            Metadata = $"{{\"positive_percentage\":{positivePercentage:F1},\"positive_rounds\":{positiveKdRounds},\"total_rounds\":{totalRoundsAnalyzed}}}"
+                            Metadata = $"{{\"positive_percentage\":{positivePercentage:F1},\"positive_rounds\":{positiveKdRounds},\"total_rounds\":{totalRoundsAnalyzed}}}",
+                            Version = DateTime.UtcNow
                         });
 
                         _logger.LogInformation("Consistency badge achieved: {PlayerName} had positive KD in {Percentage:F1}% of last {Rounds} rounds",

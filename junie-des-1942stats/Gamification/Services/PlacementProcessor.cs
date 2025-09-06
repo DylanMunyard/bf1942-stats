@@ -347,7 +347,8 @@ public class PlacementProcessor
                     ServerGuid = round.ServerGuid,
                     MapName = round.MapName,
                     RoundId = round.RoundId,
-                    Metadata = JsonSerializer.Serialize(metadata)
+                    Metadata = JsonSerializer.Serialize(metadata),
+                    Version = processedAt
                 };
                 
                 achievements.Add(achievement);

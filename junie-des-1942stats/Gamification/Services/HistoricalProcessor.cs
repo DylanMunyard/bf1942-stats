@@ -532,7 +532,8 @@ ORDER BY player_name, threshold";
             ServerGuid = "", // Not applicable for milestones
             MapName = "", // Not applicable for milestones
             RoundId = "", // Not applicable for milestones
-            Metadata = $"{{\"category\":\"{category}\",\"threshold\":{value}}}"
+            Metadata = $"{{\"category\":\"{category}\",\"threshold\":{value}}}",
+            Version = DateTime.UtcNow
         };
     }
 
@@ -572,7 +573,8 @@ ORDER BY player_name, threshold";
                             ServerGuid = streak.ServerGuid,
                             MapName = streak.MapName,
                             RoundId = "", // Not available from metrics data
-                            Metadata = $"{{\"actual_streak\":{streak.MaxStreak},\"streak_duration_seconds\":{(streak.StreakEnd - streak.StreakStart).TotalSeconds:F0}}}"
+                            Metadata = $"{{\"actual_streak\":{streak.MaxStreak},\"streak_duration_seconds\":{(streak.StreakEnd - streak.StreakStart).TotalSeconds:F0}}}",
+                            Version = DateTime.UtcNow
                         });
                     }
                 }
