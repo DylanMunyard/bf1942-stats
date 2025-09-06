@@ -143,7 +143,7 @@ public class ClickHouseGamificationService : IDisposable
 
             var query = @"
                 SELECT MAX(processed_at) as last_processed 
-                FROM player_achievements 
+                FROM player_achievements_deduplicated 
                 WHERE achievement_type = {achievementType:String}";
 
             await using var command = _connection.CreateCommand();
@@ -182,7 +182,7 @@ public class ClickHouseGamificationService : IDisposable
             // If one type has no records, it won't affect the other
             var query = @"
                 SELECT MAX(processed_at) as last_processed
-                FROM player_achievements 
+                FROM player_achievements_deduplicated 
                 WHERE achievement_type = {achievementType:String} 
                 AND achievement_id IN ('team_victory', 'team_victory_switched')";
 
@@ -218,7 +218,7 @@ public class ClickHouseGamificationService : IDisposable
             var query = @"
                 SELECT player_name, achievement_type, achievement_id, achievement_name, tier,
                        value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version
-                FROM player_achievements
+                FROM player_achievements_deduplicated_deduplicated
                 WHERE player_name = {playerName:String}
                 ORDER BY achieved_at DESC
                 LIMIT {limit:UInt32}";
@@ -273,7 +273,7 @@ public class ClickHouseGamificationService : IDisposable
             var query = @"
                 SELECT player_name, achievement_type, achievement_id, achievement_name, tier,
                        value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version
-                FROM player_achievements
+                FROM player_achievements_deduplicated
                 WHERE player_name = {playerName:String}
                 AND achievement_type = {achievementType:String}
                 ORDER BY achieved_at DESC";
@@ -327,7 +327,7 @@ public class ClickHouseGamificationService : IDisposable
 
             var query = @"
                 SELECT COUNT(*) as count
-                FROM player_achievements
+                FROM player_achievements_deduplicated
                 WHERE player_name = {playerName:String}
                 AND achievement_id = {achievementId:String}";
 
@@ -358,7 +358,7 @@ public class ClickHouseGamificationService : IDisposable
 
             var query = @"
                 SELECT DISTINCT achievement_id
-                FROM player_achievements
+                FROM player_achievements_deduplicated
                 WHERE player_name = {playerName:String}
                 ORDER BY achievement_id";
 
@@ -483,7 +483,7 @@ public class ClickHouseGamificationService : IDisposable
             // Get total count
             var countQuery = $@"
                 SELECT COUNT(*) as total
-                FROM player_achievements
+                FROM player_achievements_deduplicated
                 {whereClause}";
 
             int totalCount;
@@ -506,7 +506,7 @@ public class ClickHouseGamificationService : IDisposable
             var query = $@"
                 SELECT player_name, achievement_type, achievement_id, achievement_name, tier,
                        value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version
-                FROM player_achievements
+                FROM player_achievements_deduplicated
                 {whereClause}
                 ORDER BY {sortField} {orderDirection}
                 LIMIT {{pageSize:UInt32}} OFFSET {{offset:UInt32}}";
@@ -810,7 +810,7 @@ public class ClickHouseGamificationService : IDisposable
 
             var query = @"
                 SELECT player_name, MAX(value) as best_streak, COUNT(*) as streak_count
-                FROM player_achievements
+                FROM player_achievements_deduplicated
                 WHERE achievement_type = 'kill_streak'
                 GROUP BY player_name
                 ORDER BY best_streak DESC, streak_count DESC
@@ -885,7 +885,7 @@ public class ClickHouseGamificationService : IDisposable
                     sum(if(tier = 'silver', 1, 0)) AS second_places,
                     sum(if(tier = 'bronze', 1, 0)) AS third_places,
                     anyHeavy(JSONExtractString(metadata, 'team_label')) AS any_team_label
-                FROM player_achievements
+                FROM player_achievements_deduplicated
                 WHERE {whereClause}";
 
             await using var command = _connection.CreateCommand();
@@ -907,7 +907,7 @@ public class ClickHouseGamificationService : IDisposable
             // Determine best team by counting occurrences by team_label
             var teamQuery = $@"
                 SELECT JSONExtractString(metadata, 'team_label') AS team_label, count() AS c
-                FROM player_achievements
+                FROM player_achievements_deduplicated
                 WHERE {whereClause}
                 GROUP BY team_label
                 ORDER BY c DESC
@@ -953,7 +953,7 @@ public class ClickHouseGamificationService : IDisposable
                     sum(if(tier = 'silver', 1, 0)) AS second_places,
                     sum(if(tier = 'bronze', 1, 0)) AS third_places,
                     (first_places * 3 + second_places * 2 + third_places) as points
-                FROM player_achievements
+                FROM player_achievements_deduplicated
                 WHERE {whereClause}
                 GROUP BY player_name
                 ORDER BY points DESC, first_places DESC, second_places DESC, third_places DESC

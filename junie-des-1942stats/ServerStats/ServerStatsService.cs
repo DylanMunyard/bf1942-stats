@@ -202,7 +202,7 @@ SELECT
     countIf(tier = 'gold') as first_places,
     countIf(tier = 'silver') as second_places,
     countIf(tier = 'bronze') as third_places
-FROM player_achievements
+FROM player_achievements_deduplicated
 WHERE achievement_type = 'round_placement'
     AND server_guid = '{serverGuid.Replace("'", "''")}'
     AND achieved_at >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
@@ -272,7 +272,7 @@ SELECT
     countIf(tier = 'gold' AND JSONExtract(metadata, 'TotalPlayers', 'Nullable(UInt32)') >= {minPlayerCount}) as first_places,
     countIf(tier = 'silver' AND JSONExtract(metadata, 'TotalPlayers', 'Nullable(UInt32)') >= {minPlayerCount}) as second_places,
     countIf(tier = 'bronze' AND JSONExtract(metadata, 'TotalPlayers', 'Nullable(UInt32)') >= {minPlayerCount}) as third_places
-FROM player_achievements
+FROM player_achievements_deduplicated
 WHERE achievement_type = 'round_placement'
     AND server_guid = '{serverGuid.Replace("'", "''")}'
     AND achieved_at >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'

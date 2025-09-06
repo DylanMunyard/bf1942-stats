@@ -739,7 +739,7 @@ ORDER BY player_name, threshold";
     {
         var query = @"
             SELECT player_name, achievement_id
-            FROM player_achievements 
+            FROM player_achievements_deduplicated 
             WHERE achievement_type = 'milestone'";
 
         var result = await QueryPlayerRoundsAsync(query);
@@ -772,7 +772,7 @@ ORDER BY player_name, threshold";
     {
         var query = @"
             SELECT player_name, achievement_id
-            FROM player_achievements 
+            FROM player_achievements_deduplicated 
             WHERE achievement_type = 'kill_streak'";
 
         var result = await QueryPlayerRoundsAsync(query);

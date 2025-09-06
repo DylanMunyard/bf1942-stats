@@ -19,6 +19,12 @@ CREATE TABLE player_achievements
 ENGINE = ReplacingMergeTree(version)
 PARTITION BY toYYYYMM(achieved_at)
 ORDER BY (player_name, achievement_type, achievement_id, round_id, achieved_at)
+SETTINGS 
+    parts_to_delay_insert = 2,
+    parts_to_throw_insert = 5,
+    merge_selecting_sleep_ms = 1000,
+    min_age_to_force_merge_seconds = 300,
+    max_parts_to_merge_at_once = 10
 COMMENT 'Core gamification achievements including badges, milestones, and kill streaks';
 
 -- Kill streaks table for detailed streak tracking
@@ -78,7 +84,33 @@ CREATE INDEX idx_player_rankings_type_scope ON player_rankings (ranking_type, ra
 -- Recent achievements index
 CREATE INDEX idx_player_achievements_recent ON player_achievements (achieved_at) TYPE minmax GRANULARITY 8192;
 
+-- Deduplicated view for reliable achievement queries
+CREATE VIEW player_achievements_deduplicated AS
+SELECT 
+    player_name,
+    achievement_type, 
+    achievement_id,
+    achievement_name,
+    tier,
+    value,
+    achieved_at,
+    processed_at,
+    server_guid,
+    map_name,
+    round_id,
+    metadata,
+    version
+FROM (
+    SELECT *,
+           ROW_NUMBER() OVER (
+               PARTITION BY player_name, achievement_type, achievement_id, round_id, achieved_at
+               ORDER BY version DESC
+           ) as rn
+    FROM player_achievements
+) 
+WHERE rn = 1;
+
 -- Sample queries for testing tables:
--- SELECT COUNT(*) FROM player_achievements;
--- SELECT player_name, achievement_name, tier FROM player_achievements WHERE achievement_type = 'kill_streak' ORDER BY value DESC LIMIT 10;
+-- SELECT COUNT(*) FROM player_achievements_deduplicated;
+-- SELECT player_name, achievement_name, tier FROM player_achievements_deduplicated WHERE achievement_type = 'kill_streak' ORDER BY value DESC LIMIT 10;
 -- SELECT * FROM player_rankings WHERE ranking_type = 'kills' AND ranking_scope = 'global' ORDER BY rank LIMIT 100; 

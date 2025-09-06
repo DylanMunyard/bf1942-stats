@@ -1437,7 +1437,7 @@ SELECT
     tier,
     value,
     achieved_at
-FROM player_achievements
+FROM player_achievements_deduplicated
 WHERE player_name = {Quote(playerName)} 
   AND achievement_type IN ('milestone', 'badge')
   AND achievement_id NOT LIKE 'kill_streak_%'
