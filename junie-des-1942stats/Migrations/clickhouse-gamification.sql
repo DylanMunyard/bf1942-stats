@@ -1,23 +1,24 @@
 -- Gamification tables for BF1942 Stats System
 -- Run these commands in ClickHouse to create the gamification schema
-
--- Core achievements table with ReplacingMergeTree for overwrite capability
-CREATE TABLE player_achievements (
+CREATE TABLE player_achievements
+(
     player_name String,
-    achievement_type String,        -- 'kill_streak', 'badge', 'milestone', 'ranking'
-    achievement_id String,          -- 'kill_streak_15', 'sharpshooter_gold', etc.
-    achievement_name String,        -- 'Killing Spree', 'Gold Sharpshooter'
-    tier String,                    -- 'bronze', 'silver', 'gold', 'legend'
-    value UInt32,                   -- Achievement threshold (kills, streak, etc.)
+    achievement_type String,
+    achievement_id String,
+    achievement_name String,
+    tier String,
+    value UInt32,
     achieved_at DateTime,
-    processed_at DateTime,          -- For incremental processing tracking
+    processed_at DateTime,
     server_guid String,
     map_name String,
     round_id String,
-    metadata String                 -- JSON for additional context
-) ENGINE = MergeTree()
-ORDER BY (player_name, achievement_type, processed_at)
+    metadata String,
+    version DateTime  -- Version column for ReplacingMergeTree deduplication
+)
+ENGINE = ReplacingMergeTree(version)
 PARTITION BY toYYYYMM(achieved_at)
+ORDER BY (player_name, achievement_type, achievement_id, round_id, achieved_at)
 COMMENT 'Core gamification achievements including badges, milestones, and kill streaks';
 
 -- Kill streaks table for detailed streak tracking

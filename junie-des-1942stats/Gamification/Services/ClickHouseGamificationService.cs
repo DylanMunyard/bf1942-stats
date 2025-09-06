@@ -67,6 +67,9 @@ public class ClickHouseGamificationService : IDisposable
             };
             using var csvWriter = new CsvWriter(stringWriter, config);
 
+            // Use current timestamp for version to ensure each insert has a unique version
+            var insertVersion = DateTime.UtcNow;
+
             csvWriter.WriteRecords(achievements.Select(a => new
             {
                 PlayerName = a.PlayerName,
@@ -81,7 +84,7 @@ public class ClickHouseGamificationService : IDisposable
                 MapName = a.MapName,
                 RoundId = a.RoundId,
                 Metadata = a.Metadata,
-                Version = a.Version.ToString("yyyy-MM-dd HH:mm:ss")
+                Version = insertVersion.ToString("yyyy-MM-dd HH:mm:ss")
             }));
 
             var csvData = stringWriter.ToString();
@@ -89,7 +92,7 @@ public class ClickHouseGamificationService : IDisposable
             var fullRequest = query + "\n" + csvData;
 
             await ExecuteQueryAsync(fullRequest);
-            _logger.LogInformation("Successfully inserted {Count} achievements to ClickHouse", achievements.Count);
+            _logger.LogInformation("Successfully inserted {Count} achievements to ClickHouse with version {Version}", achievements.Count, insertVersion);
         }
         catch (Exception ex)
         {
