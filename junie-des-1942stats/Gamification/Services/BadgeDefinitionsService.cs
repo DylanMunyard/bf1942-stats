@@ -419,10 +419,10 @@ public class BadgeDefinitionsService
                 ["activity_requirement"] = "Active within 2 minutes of round end",
                 ["performance_tiers"] = new Dictionary<string, string>
                 {
-                    [BadgeTiers.Legend] = "Exceptional contribution (120%+ of team average)",
-                    [BadgeTiers.Gold] = "Strong contribution (100%+ of team average)",
-                    [BadgeTiers.Silver] = "Good contribution (70%+ of team average)",
-                    [BadgeTiers.Bronze] = "Team participation (40%+ of team average)"
+                    [BadgeTiers.Legend] = "Exceptional contribution: 120%+ of median teammate activity × loyalty factor. Based on observations during round compared to team median, multiplied by team participation ratio (time spent on winning team).",
+                    [BadgeTiers.Gold] = "Strong contribution: 100%+ of median teammate activity × loyalty factor. Your activity matched or exceeded the median teammate while maintaining good team loyalty.",
+                    [BadgeTiers.Silver] = "Good contribution: 70%+ of median teammate activity × loyalty factor. Solid performance relative to your teammates with reasonable team participation.",
+                    [BadgeTiers.Bronze] = "Team participation: 40%+ of median teammate activity × loyalty factor. Minimum contribution threshold - everyone active within 2 minutes of round end qualifies."
                 }
             }
         };
@@ -443,9 +443,9 @@ public class BadgeDefinitionsService
                 ["activity_requirement"] = "Active within 2 minutes of round end",
                 ["performance_tiers"] = new Dictionary<string, string>
                 {
-                    [BadgeTiers.Gold] = "Exceptional contribution despite switching (100%+)",
-                    [BadgeTiers.Silver] = "Good contribution despite switching (70%+)",
-                    [BadgeTiers.Bronze] = "Recognition for majority time on winning team"
+                    [BadgeTiers.Gold] = "Exceptional contribution despite switching: 100%+ of median teammate activity × loyalty factor. Remarkable performance considering team switching penalty - you spent majority time on winning team and still matched median contribution.",
+                    [BadgeTiers.Silver] = "Good contribution despite switching: 70%+ of median teammate activity × loyalty factor. Solid performance despite team switching - your majority time on winning team contributed meaningfully.",
+                    [BadgeTiers.Bronze] = "Recognition for majority time on winning team: Awarded for spending majority of round time on the winning team, regardless of contribution level. Shows strategic team selection."
                 }
             }
         };

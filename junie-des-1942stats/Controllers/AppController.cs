@@ -53,7 +53,8 @@ public class AppController : ControllerBase
                     Name = b.Name,
                     Description = b.UIDescription, // Use the UI-friendly description
                     Tier = b.Tier,
-                    Category = b.Category
+                    Category = b.Category,
+                    Requirements = b.Requirements
                 }).ToList(),
                 Categories = new[]
                 {
@@ -109,4 +110,5 @@ public class BadgeUIDefinition
     public string Description { get; set; } = ""; // UI-friendly description
     public string Tier { get; set; } = "";
     public string Category { get; set; } = "";
+    public Dictionary<string, object> Requirements { get; set; } = new();
 }
