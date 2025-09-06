@@ -259,34 +259,65 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
 
     public async Task<SessionRoundReport?> GetRoundReport(string roundId, Gamification.Services.ClickHouseGamificationService gamificationService)
     {
-        var round = await _dbContext.Rounds
+        // First, get just the round data we need
+        var roundData = await _dbContext.Rounds
             .AsNoTracking()
-            .Include(r => r.Sessions)
-            .ThenInclude(s => s.Server)
-            .FirstOrDefaultAsync(r => r.RoundId == roundId);
+            .Where(r => r.RoundId == roundId)
+            .Select(r => new
+            {
+                r.RoundId,
+                r.MapName,
+                r.GameType,
+                r.StartTime,
+                r.EndTime,
+                r.IsActive,
+                r.ParticipantCount,
+                r.ServerName,
+                r.Tickets1,
+                r.Tickets2,
+                r.Team1Label,
+                r.Team2Label,
+                SessionIds = r.Sessions.Select(s => s.SessionId).ToList()
+            })
+            .FirstOrDefaultAsync();
 
-        if (round == null)
+        if (roundData == null)
         {
             // Try to resolve ClickHouse RoundId to SQLite RoundId
             var resolvedRoundId = await ResolveClickHouseRoundIdAsync(roundId);
             if (!string.IsNullOrEmpty(resolvedRoundId) && resolvedRoundId != roundId)
             {
                 // Retry with resolved RoundId
-                round = await _dbContext.Rounds
+                roundData = await _dbContext.Rounds
                     .AsNoTracking()
-                    .Include(r => r.Sessions)
-                    .ThenInclude(s => s.Server)
-                    .FirstOrDefaultAsync(r => r.RoundId == resolvedRoundId);
+                    .Where(r => r.RoundId == resolvedRoundId)
+                    .Select(r => new
+                    {
+                        r.RoundId,
+                        r.MapName,
+                        r.GameType,
+                        r.StartTime,
+                        r.EndTime,
+                        r.IsActive,
+                        r.ParticipantCount,
+                        r.ServerName,
+                        r.Tickets1,
+                        r.Tickets2,
+                        r.Team1Label,
+                        r.Team2Label,
+                        SessionIds = r.Sessions.Select(s => s.SessionId).ToList()
+                    })
+                    .FirstOrDefaultAsync();
             }
         }
 
-        if (round == null)
+        if (roundData == null)
             return null;
 
         // Get all observations for the round with player names
         var roundObservations = await _dbContext.PlayerObservations
             .Include(o => o.Session)
-            .Where(o => round.Sessions.Select(s => s.SessionId).Contains(o.SessionId))
+            .Where(o => roundData.SessionIds.Contains(o.SessionId))
             .OrderBy(o => o.Timestamp)
             .Select(o => new
             {
@@ -303,8 +334,8 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
 
         // Create leaderboard snapshots starting from round start
         var leaderboardSnapshots = new List<ServerStats.Models.LeaderboardSnapshot>();
-        var currentTime = round.StartTime;
-        var endTime = round.EndTime ?? DateTime.UtcNow;
+        var currentTime = roundData.StartTime;
+        var endTime = roundData.EndTime ?? DateTime.UtcNow;
 
         while (currentTime <= endTime)
         {
@@ -367,35 +398,22 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
             _logger.LogWarning(ex, "Failed to get achievements for round {RoundId}", roundId);
         }
 
-        // Use the first session as representative session
-        var representativeSession = round.Sessions.FirstOrDefault();
-        if (representativeSession == null)
-            return null;
-
         return new SessionRoundReport
         {
-            Session = new ServerStats.Models.SessionInfo
-            {
-                SessionId = representativeSession.SessionId,
-                RoundId = representativeSession.RoundId,
-                PlayerName = representativeSession.PlayerName,
-                ServerName = representativeSession.Server.Name,
-                ServerGuid = representativeSession.ServerGuid,
-                GameId = representativeSession.Server.GameId,
-                Kills = representativeSession.TotalKills,
-                Deaths = representativeSession.TotalDeaths,
-                Score = representativeSession.TotalScore,
-                ServerIp = representativeSession.Server.Ip,
-                ServerPort = representativeSession.Server.Port
-            },
+            Session = new ServerStats.Models.SessionInfo(), // Empty since UI doesn't use it
             Round = new ServerStats.Models.RoundReportInfo
             {
-                MapName = round.MapName,
-                GameType = round.GameType,
-                StartTime = round.StartTime,
-                EndTime = round.EndTime ?? DateTime.UtcNow,
-                TotalParticipants = round.ParticipantCount ?? round.Sessions.Count,
-                IsActive = round.IsActive
+                MapName = roundData.MapName,
+                GameType = roundData.GameType,
+                ServerName = roundData.ServerName,
+                StartTime = roundData.StartTime,
+                EndTime = roundData.EndTime ?? DateTime.UtcNow,
+                TotalParticipants = roundData.ParticipantCount ?? roundData.SessionIds.Count,
+                IsActive = roundData.IsActive,
+                Tickets1 = roundData.Tickets1,
+                Tickets2 = roundData.Tickets2,
+                Team1Label = roundData.Team1Label,
+                Team2Label = roundData.Team2Label
             },
             LeaderboardSnapshots = leaderboardSnapshots,
             Achievements = achievements

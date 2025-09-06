@@ -194,11 +194,16 @@ public class RoundReportInfo
 {
     public string MapName { get; set; } = "";
     public string GameType { get; set; } = "";
+    public string ServerName { get; set; } = "";
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
     public TimeSpan Duration => EndTime - StartTime;
     public int TotalParticipants { get; set; }
     public bool IsActive { get; set; }
+    public int? Tickets1 { get; set; }
+    public int? Tickets2 { get; set; }
+    public string? Team1Label { get; set; }
+    public string? Team2Label { get; set; }
 }
 
 public class RoundParticipant
