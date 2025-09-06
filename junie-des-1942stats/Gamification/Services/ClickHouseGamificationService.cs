@@ -218,7 +218,7 @@ public class ClickHouseGamificationService : IDisposable
             var query = @"
                 SELECT player_name, achievement_type, achievement_id, achievement_name, tier,
                        value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version
-                FROM player_achievements_deduplicated_deduplicated
+                FROM player_achievements_deduplicated
                 WHERE player_name = {playerName:String}
                 ORDER BY achieved_at DESC
                 LIMIT {limit:UInt32}";
