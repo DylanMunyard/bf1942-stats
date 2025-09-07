@@ -51,12 +51,16 @@ CREATE TABLE IF NOT EXISTS player_metrics
     team_name   String,
     map_name    String,
     game_type   String,
-    is_bot      UInt8
+    is_bot      UInt8,
+    game        String
 )
 ENGINE = ReplacingMergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (timestamp, server_guid, player_name)";
         await ExecuteCommandAsync(createV2);
+        
+        // Add game column if it doesn't exist (for existing tables)
+        await ExecuteCommandAsync("ALTER TABLE player_metrics ADD COLUMN IF NOT EXISTS game String DEFAULT 'unknown'");
     }
 
     private async Task CreateServerOnlineCountsTableAsync()
@@ -178,11 +182,12 @@ PARTITION BY toYYYYMM(timestamp)";
                 TeamName = m.TeamName,
                 MapName = m.MapName,
                 GameType = m.GameType,
-                IsBot = m.IsBot ? 1 : 0
+                IsBot = m.IsBot ? 1 : 0,
+                Game = m.Game
             }));
 
             var csvData = stringWriter.ToString();
-            var query = "INSERT INTO player_metrics (timestamp, server_guid, player_name, server_name, score, kills, deaths, ping, team_name, map_name, game_type, is_bot) FORMAT CSV";
+            var query = "INSERT INTO player_metrics (timestamp, server_guid, player_name, server_name, score, kills, deaths, ping, team_name, map_name, game_type, is_bot, game) FORMAT CSV";
             var fullRequest = query + "\n" + csvData;
             await ExecuteCommandAsync(fullRequest);
 
@@ -211,6 +216,7 @@ public class PlayerMetric
     public string MapName { get; set; } = "";
     public string GameType { get; set; } = "";
     public bool IsBot { get; set; }
+    public string Game { get; set; } = "";
 }
 
 public class ServerOnlineCount

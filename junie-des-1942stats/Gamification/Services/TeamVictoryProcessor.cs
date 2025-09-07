@@ -499,7 +499,8 @@ public class TeamVictoryProcessor
             MapName = round.MapName,
             RoundId = round.RoundId,
             Metadata = JsonSerializer.Serialize(metadata),
-            Version = achievedAt  // Use achieved_at as deterministic version for idempotency
+            Game = round.GameServer?.Game ?? "unknown",
+                        Version = achievedAt  // Use achieved_at as deterministic version for idempotency
         };
     }
 }

@@ -109,6 +109,13 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<Round>()
             .ToTable(t => t.HasCheckConstraint("CK_Round_EndTime", "EndTime IS NULL OR EndTime >= StartTime"));
 
+        // Configure relationship: Round -> GameServer
+        modelBuilder.Entity<Round>()
+            .HasOne(r => r.GameServer)
+            .WithMany()
+            .HasForeignKey(r => r.ServerGuid)
+            .HasPrincipalKey(gs => gs.Guid);
+
         // Configure RoundObservation entity
         modelBuilder.Entity<RoundObservation>()
             .HasKey(ro => ro.Id);
@@ -333,6 +340,7 @@ public class Round
 
     // Navigation properties
     public List<PlayerSession> Sessions { get; set; } = new();
+    public GameServer? GameServer { get; set; } // Navigation property to GameServer
 }
 
 public class RoundObservation

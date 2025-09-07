@@ -9,10 +9,129 @@ public class GameTrendsService : BaseClickHouseService
 {
     private readonly ILogger<GameTrendsService> _logger;
 
-    public GameTrendsService(IClickHouseReader clickHouseReader, ILogger<GameTrendsService> logger)
-        : base(clickHouseReader)
+    public GameTrendsService(HttpClient httpClient, string clickHouseUrl, ILogger<GameTrendsService> logger)
+        : base(httpClient, clickHouseUrl)
     {
         _logger = logger;
+    }
+
+    private async Task<List<T>> ReadAllAsync<T>(string query, params object[] parameters) where T : new()
+    {
+        var formattedQuery = SubstituteParameters(query, parameters) + " FORMAT TabSeparated";
+        var result = await ExecuteQueryInternalAsync(formattedQuery);
+        var items = new List<T>();
+
+        foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = line.Split('\t');
+            var item = ParseTabSeparatedLine<T>(parts);
+            if (item != null)
+                items.Add(item);
+        }
+
+        return items;
+    }
+
+    private async Task<T?> ReadSingleOrDefaultAsync<T>(string query, params object[] parameters) where T : new()
+    {
+        var formattedQuery = SubstituteParameters(query, parameters) + " FORMAT TabSeparated LIMIT 1";
+        var result = await ExecuteQueryInternalAsync(formattedQuery);
+        
+        var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        if (lines.Length == 0)
+            return default(T);
+
+        var parts = lines[0].Split('\t');
+        return ParseTabSeparatedLine<T>(parts);
+    }
+
+    private static string SubstituteParameters(string query, params object[] parameters)
+    {
+        if (parameters == null || parameters.Length == 0)
+            return query;
+
+        var result = query;
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            var paramValue = parameters[i];
+            string substitution;
+            
+            if (paramValue == null)
+            {
+                substitution = "NULL";
+            }
+            else if (paramValue is string stringValue)
+            {
+                // Escape single quotes in strings and wrap in quotes
+                substitution = $"'{stringValue.Replace("'", "''")}'";
+            }
+            else if (paramValue is int || paramValue is long || paramValue is double || paramValue is decimal)
+            {
+                substitution = paramValue.ToString()!;
+            }
+            else if (paramValue is DateTime dateValue)
+            {
+                substitution = $"'{dateValue:yyyy-MM-dd HH:mm:ss}'";
+            }
+            else
+            {
+                // For other types, convert to string and treat as string
+                substitution = $"'{paramValue.ToString()?.Replace("'", "''")}'";
+            }
+            
+            // Replace the first occurrence of ? with the parameter value
+            var questionIndex = result.IndexOf('?');
+            if (questionIndex >= 0)
+            {
+                result = result.Substring(0, questionIndex) + substitution + result.Substring(questionIndex + 1);
+            }
+        }
+        
+        return result;
+    }
+
+    private static T? ParseTabSeparatedLine<T>(string[] parts) where T : new()
+    {
+        var item = new T();
+        var properties = typeof(T).GetProperties();
+
+        for (int i = 0; i < Math.Min(parts.Length, properties.Length); i++)
+        {
+            var property = properties[i];
+            var value = parts[i];
+
+            if (string.IsNullOrEmpty(value))
+                continue;
+
+            try
+            {
+                if (property.PropertyType == typeof(int))
+                {
+                    if (int.TryParse(value, out var intValue))
+                        property.SetValue(item, intValue);
+                }
+                else if (property.PropertyType == typeof(double))
+                {
+                    if (double.TryParse(value, out var doubleValue))
+                        property.SetValue(item, doubleValue);
+                }
+                else if (property.PropertyType == typeof(DateTime))
+                {
+                    if (DateTime.TryParse(value, out var dateValue))
+                        property.SetValue(item, dateValue);
+                }
+                else if (property.PropertyType == typeof(string))
+                {
+                    property.SetValue(item, value);
+                }
+            }
+            catch
+            {
+                // Skip invalid conversions
+            }
+        }
+
+        return item;
     }
 
     /// <summary>

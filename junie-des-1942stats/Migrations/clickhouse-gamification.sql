@@ -14,7 +14,8 @@ CREATE TABLE player_achievements
     map_name String,
     round_id String,
     metadata String,
-    version DateTime  -- Version column for ReplacingMergeTree deduplication
+    version DateTime,  -- Version column for ReplacingMergeTree deduplication
+    game String  -- Game type: bf1942, fh2, bfvietnam
 )
 ENGINE = ReplacingMergeTree(version)
 PARTITION BY toYYYYMM(achieved_at)
@@ -85,6 +86,10 @@ CREATE INDEX idx_player_rankings_type_scope ON player_rankings (ranking_type, ra
 CREATE INDEX idx_player_achievements_recent ON player_achievements (achieved_at) TYPE minmax GRANULARITY 8192;
 
 -- Deduplicated view for reliable achievement queries
+-- Drop the existing view
+DROP VIEW IF EXISTS player_achievements_deduplicated;
+
+-- Recreate the view (this will pick up the game column that now exists in the table)
 CREATE VIEW player_achievements_deduplicated AS
 SELECT 
     player_name,
@@ -99,7 +104,8 @@ SELECT
     map_name,
     round_id,
     metadata,
-    version
+    version,
+    game
 FROM (
     SELECT *,
            ROW_NUMBER() OVER (
@@ -109,6 +115,9 @@ FROM (
     FROM player_achievements
 ) 
 WHERE rn = 1;
+
+-- Add game column to existing tables (run these if tables already exist)
+ALTER TABLE player_achievements ADD COLUMN IF NOT EXISTS game String DEFAULT 'unknown';
 
 -- Sample queries for testing tables:
 -- SELECT COUNT(*) FROM player_achievements_deduplicated;

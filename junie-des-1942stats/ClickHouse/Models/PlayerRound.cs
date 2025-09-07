@@ -20,5 +20,6 @@ public class PlayerRound
     public string RoundId { get; set; } = "";
     public string TeamLabel { get; set; } = "";
     public string GameId { get; set; } = "";
+    public string Game { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
