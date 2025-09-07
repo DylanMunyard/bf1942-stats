@@ -592,6 +592,9 @@ try
         return new PlayerComparisonService(connection, logger, dbContext, cacheService, cacheKeyService, playerInsightsService);
     });
 
+    // Register GameTrendsService (read-only for trend analysis)
+    builder.Services.AddScoped<GameTrendsService>();
+
     var host = builder.Build();
 
     // Configure the HTTP request pipeline
