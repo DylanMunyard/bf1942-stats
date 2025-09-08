@@ -99,6 +99,7 @@ public class TeamVictoryProcessor
 
                 // Get batch of completed rounds with team victory conditions
                 var rounds = await _dbContext.Rounds.AsNoTracking()
+                    .Include(r => r.GameServer)
                     .Where(r => !r.IsActive &&
                                 r.EndTime != null &&
                                r.EndTime >= sinceUtc &&
