@@ -137,16 +137,16 @@ public class GameTrendsService : BaseClickHouseService
     /// <summary>
     /// Gets hourly activity trends for the past month, helping players understand busy periods
     /// </summary>
-    public async Task<List<HourlyActivityTrend>> GetHourlyActivityTrendsAsync(string? gameId = null, int daysPeriod = 30)
+    public async Task<List<HourlyActivityTrend>> GetHourlyActivityTrendsAsync(string? game = null, int daysPeriod = 30)
     {
         var whereClause = new StringBuilder();
         whereClause.Append("WHERE round_start_time >= now() - INTERVAL ? DAY");
         var parameters = new List<object> { daysPeriod };
 
-        if (!string.IsNullOrEmpty(gameId))
+        if (!string.IsNullOrEmpty(game))
         {
-            whereClause.Append(" AND game_id = ?");
-            parameters.Add(gameId);
+            whereClause.Append(" AND game = ?");
+            parameters.Add(game);
         }
 
         // Get hourly activity patterns with timezone handling for display
@@ -170,16 +170,28 @@ public class GameTrendsService : BaseClickHouseService
     /// <summary>
     /// Gets server activity trends to identify which servers are busiest at different times
     /// </summary>
-    public async Task<List<ServerActivityTrend>> GetServerActivityTrendsAsync(string? gameId = null, int daysPeriod = 7)
+    public async Task<List<ServerActivityTrend>> GetServerActivityTrendsAsync(string? game = null, int daysPeriod = 7, string[]? serverGuids = null)
     {
         var whereClause = new StringBuilder();
         whereClause.Append("WHERE round_start_time >= now() - INTERVAL ? DAY");
         var parameters = new List<object> { daysPeriod };
 
-        if (!string.IsNullOrEmpty(gameId))
+        if (!string.IsNullOrEmpty(game))
         {
-            whereClause.Append(" AND game_id = ?");
-            parameters.Add(gameId);
+            whereClause.Append(" AND game = ?");
+            parameters.Add(game);
+        }
+
+        if (serverGuids != null && serverGuids.Length > 0)
+        {
+            whereClause.Append(" AND server_guid IN (");
+            for (int i = 0; i < serverGuids.Length; i++)
+            {
+                if (i > 0) whereClause.Append(", ");
+                whereClause.Append("?");
+                parameters.Add(serverGuids[i]);
+            }
+            whereClause.Append(")");
         }
 
         var query = $@"
@@ -208,7 +220,7 @@ public class GameTrendsService : BaseClickHouseService
         // Look at activity in the last hour to determine "current" status
         var query = @"
             SELECT 
-                game_id,
+                game,
                 server_guid,
                 COUNT(DISTINCT player_name) as current_players,
                 COUNT(*) as active_rounds,
@@ -216,7 +228,7 @@ public class GameTrendsService : BaseClickHouseService
                 uniqExact(map_name) as maps_in_rotation
             FROM player_rounds 
             WHERE round_start_time >= now() - INTERVAL 1 HOUR
-            GROUP BY game_id, server_guid
+            GROUP BY game, server_guid
             HAVING current_players >= 2  -- Only show servers with actual activity
             ORDER BY current_players DESC, latest_activity DESC";
 
@@ -226,16 +238,16 @@ public class GameTrendsService : BaseClickHouseService
     /// <summary>
     /// Gets weekly activity patterns to identify weekend vs weekday differences
     /// </summary>
-    public async Task<List<WeeklyActivityPattern>> GetWeeklyActivityPatternsAsync(string? gameId = null, int daysPeriod = 30)
+    public async Task<List<WeeklyActivityPattern>> GetWeeklyActivityPatternsAsync(string? game = null, int daysPeriod = 30)
     {
         var whereClause = new StringBuilder();
         whereClause.Append("WHERE round_start_time >= now() - INTERVAL ? DAY");
         var parameters = new List<object> { daysPeriod };
 
-        if (!string.IsNullOrEmpty(gameId))
+        if (!string.IsNullOrEmpty(game))
         {
-            whereClause.Append(" AND game_id = ?");
-            parameters.Add(gameId);
+            whereClause.Append(" AND game = ?");
+            parameters.Add(game);
         }
 
         var query = $@"
@@ -260,23 +272,23 @@ public class GameTrendsService : BaseClickHouseService
     /// <summary>
     /// Gets game mode popularity trends (like CTF events mentioned in the issue)
     /// </summary>
-    public async Task<List<GameModeActivityTrend>> GetGameModeActivityTrendsAsync(string? gameId = null, int daysPeriod = 30)
+    public async Task<List<GameModeActivityTrend>> GetGameModeActivityTrendsAsync(string? game = null, int daysPeriod = 30)
     {
         var whereClause = new StringBuilder();
         whereClause.Append("WHERE round_start_time >= now() - INTERVAL ? DAY");
         var parameters = new List<object> { daysPeriod };
 
-        if (!string.IsNullOrEmpty(gameId))
+        if (!string.IsNullOrEmpty(game))
         {
-            whereClause.Append(" AND game_id = ?");
-            parameters.Add(gameId);
+            whereClause.Append(" AND game = ?");
+            parameters.Add(game);
         }
 
         // Use map_name as a proxy for game mode since some maps indicate specific modes like CTF
         var query = $@"
             SELECT 
                 map_name,
-                game_id,
+                game,
                 toDayOfWeek(round_start_time) as day_of_week,
                 toHour(round_start_time) as hour_of_day,
                 COUNT(DISTINCT player_name) as unique_players,
@@ -285,7 +297,7 @@ public class GameTrendsService : BaseClickHouseService
                 COUNT(DISTINCT server_guid) as servers_hosting
             FROM player_rounds 
             {whereClause}
-            GROUP BY map_name, game_id, day_of_week, hour_of_day
+            GROUP BY map_name, game, day_of_week, hour_of_day
             HAVING total_rounds >= 3  -- Filter out one-off activities
             ORDER BY total_rounds DESC, unique_players DESC";
 
@@ -296,7 +308,7 @@ public class GameTrendsService : BaseClickHouseService
     /// Gets trend insights to help players connect when servers are busy
     /// Provides "is it busy now?" and "will it get busier?" insights
     /// </summary>
-    public async Task<TrendInsights> GetTrendInsightsAsync(string? gameId = null, int timeZoneOffsetHours = 0)
+    public async Task<TrendInsights> GetTrendInsightsAsync(string? game = null, int timeZoneOffsetHours = 0)
     {
         var currentHour = DateTime.UtcNow.AddHours(timeZoneOffsetHours).Hour;
         var currentDayOfWeek = (int)DateTime.UtcNow.AddHours(timeZoneOffsetHours).DayOfWeek;
@@ -307,10 +319,10 @@ public class GameTrendsService : BaseClickHouseService
         whereClause.Append("WHERE round_start_time >= now() - INTERVAL 30 DAY");
         var parameters = new List<object>();
 
-        if (!string.IsNullOrEmpty(gameId))
+        if (!string.IsNullOrEmpty(game))
         {
-            whereClause.Append(" AND game_id = ?");
-            parameters.Add(gameId);
+            whereClause.Append(" AND game = ?");
+            parameters.Add(game);
         }
 
         // Get current hour activity
@@ -396,7 +408,7 @@ public class ServerActivityTrend
 
 public class CurrentActivityStatus
 {
-    public string GameId { get; set; } = "";
+    public string Game { get; set; } = "";
     public string ServerGuid { get; set; } = "";
     public int CurrentPlayers { get; set; }
     public int ActiveRounds { get; set; }
@@ -417,7 +429,7 @@ public class WeeklyActivityPattern
 public class GameModeActivityTrend
 {
     public string MapName { get; set; } = "";
-    public string GameId { get; set; } = "";
+    public string Game { get; set; } = "";
     public int DayOfWeek { get; set; }
     public int HourOfDay { get; set; }
     public int UniquePlayers { get; set; }

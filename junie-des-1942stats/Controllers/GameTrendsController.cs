@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using junie_des_1942stats.ClickHouse;
 using junie_des_1942stats.Caching;
 using Microsoft.Extensions.Logging;
+using System.Linq;
 
 namespace junie_des_1942stats.Controllers;
 
@@ -27,38 +28,38 @@ public class GameTrendsController : ControllerBase
     /// Gets hourly activity trends for game activity analysis.
     /// Perfect for understanding peak gaming hours and planning when to play.
     /// </summary>
-    /// <param name="gameId">Optional filter by game (bf1942, fh2, bfv)</param>
+    /// <param name="game">Optional filter by game (bf1942, fh2, bfv)</param>
     /// <param name="daysPeriod">Number of days to analyze (default: 30)</param>
     [HttpGet("hourly-activity")]
     [ResponseCache(Duration = 1800, Location = ResponseCacheLocation.Any)] // 30 minutes cache
     public async Task<ActionResult<List<HourlyActivityTrend>>> GetHourlyActivityTrends(
-        [FromQuery] string? gameId = null, 
+        [FromQuery] string? game = null, 
         [FromQuery] int daysPeriod = 30)
     {
         try
         {
-            var cacheKey = $"trends:hourly:{gameId ?? "all"}:{daysPeriod}";
+            var cacheKey = $"trends:hourly:{game ?? "all"}:{daysPeriod}";
             var cachedData = await _cacheService.GetAsync<List<HourlyActivityTrend>>(cacheKey);
             
             if (cachedData != null)
             {
-                _logger.LogDebug("Returning cached hourly activity trends for game {GameId}", gameId ?? "all");
+                _logger.LogDebug("Returning cached hourly activity trends for game {Game}", game ?? "all");
                 return Ok(cachedData);
             }
 
-            var trends = await _gameTrendsService.GetHourlyActivityTrendsAsync(gameId, daysPeriod);
+            var trends = await _gameTrendsService.GetHourlyActivityTrendsAsync(game, daysPeriod);
             
             // Cache for 30 minutes - trend data doesn't change frequently
             await _cacheService.SetAsync(cacheKey, trends, TimeSpan.FromMinutes(30));
             
-            _logger.LogInformation("Retrieved {TrendCount} hourly activity trends for game {GameId}", 
-                trends.Count, gameId ?? "all");
+            _logger.LogInformation("Retrieved {TrendCount} hourly activity trends for game {Game}", 
+                trends.Count, game ?? "all");
 
             return Ok(trends);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving hourly activity trends for game {GameId}", gameId);
+            _logger.LogError(ex, "Error retrieving hourly activity trends for game {Game}", game);
             return StatusCode(500, "Failed to retrieve hourly activity trends");
         }
     }
@@ -67,38 +68,45 @@ public class GameTrendsController : ControllerBase
     /// Gets server-specific activity trends to identify which servers are busiest at different times.
     /// Helps players find active servers during their preferred gaming hours.
     /// </summary>
-    /// <param name="gameId">Optional filter by game (bf1942, fh2, bfv)</param>
+    /// <param name="game">Optional filter by game (bf1942, fh2, bfv)</param>
     /// <param name="daysPeriod">Number of days to analyze (default: 7)</param>
+    /// <param name="serverGuids">Optional array of server GUIDs to filter results</param>
     [HttpGet("server-activity")]
     [ResponseCache(Duration = 900, Location = ResponseCacheLocation.Any)] // 15 minutes cache
     public async Task<ActionResult<List<ServerActivityTrend>>> GetServerActivityTrends(
-        [FromQuery] string? gameId = null, 
-        [FromQuery] int daysPeriod = 7)
+        [FromQuery] string? game = null, 
+        [FromQuery] int daysPeriod = 7,
+        [FromQuery] string[]? serverGuids = null)
     {
         try
         {
-            var cacheKey = $"trends:server:{gameId ?? "all"}:{daysPeriod}";
+            var serverGuidsKey = serverGuids != null && serverGuids.Length > 0 
+                ? string.Join(",", serverGuids.OrderBy(x => x)) 
+                : "all";
+            var cacheKey = $"trends:server:{game ?? "all"}:{daysPeriod}:{serverGuidsKey}";
             var cachedData = await _cacheService.GetAsync<List<ServerActivityTrend>>(cacheKey);
             
             if (cachedData != null)
             {
-                _logger.LogDebug("Returning cached server activity trends for game {GameId}", gameId ?? "all");
+                _logger.LogDebug("Returning cached server activity trends for game {Game} with {ServerCount} servers", 
+                    game ?? "all", serverGuids?.Length ?? 0);
                 return Ok(cachedData);
             }
 
-            var trends = await _gameTrendsService.GetServerActivityTrendsAsync(gameId, daysPeriod);
+            var trends = await _gameTrendsService.GetServerActivityTrendsAsync(game, daysPeriod, serverGuids);
             
             // Cache for 15 minutes - server activity changes more frequently
             await _cacheService.SetAsync(cacheKey, trends, TimeSpan.FromMinutes(15));
             
-            _logger.LogInformation("Retrieved {TrendCount} server activity trends for game {GameId}", 
-                trends.Count, gameId ?? "all");
+            _logger.LogInformation("Retrieved {TrendCount} server activity trends for game {Game} with {ServerCount} servers", 
+                trends.Count, game ?? "all", serverGuids?.Length ?? 0);
 
             return Ok(trends);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving server activity trends for game {GameId}", gameId);
+            _logger.LogError(ex, "Error retrieving server activity trends for game {Game} with {ServerCount} servers", 
+                game, serverGuids?.Length ?? 0);
             return StatusCode(500, "Failed to retrieve server activity trends");
         }
     }
@@ -143,38 +151,38 @@ public class GameTrendsController : ControllerBase
     /// Gets weekly activity patterns showing weekend vs weekday differences.
     /// Helps identify when servers are most active throughout the week.
     /// </summary>
-    /// <param name="gameId">Optional filter by game (bf1942, fh2, bfv)</param>
+    /// <param name="game">Optional filter by game (bf1942, fh2, bfv)</param>
     /// <param name="daysPeriod">Number of days to analyze (default: 30)</param>
     [HttpGet("weekly-patterns")]
     [ResponseCache(Duration = 3600, Location = ResponseCacheLocation.Any)] // 1 hour cache
     public async Task<ActionResult<List<WeeklyActivityPattern>>> GetWeeklyActivityPatterns(
-        [FromQuery] string? gameId = null, 
+        [FromQuery] string? game = null, 
         [FromQuery] int daysPeriod = 30)
     {
         try
         {
-            var cacheKey = $"trends:weekly:{gameId ?? "all"}:{daysPeriod}";
+            var cacheKey = $"trends:weekly:{game ?? "all"}:{daysPeriod}";
             var cachedData = await _cacheService.GetAsync<List<WeeklyActivityPattern>>(cacheKey);
             
             if (cachedData != null)
             {
-                _logger.LogDebug("Returning cached weekly activity patterns for game {GameId}", gameId ?? "all");
+                _logger.LogDebug("Returning cached weekly activity patterns for game {GameId}", game ?? "all");
                 return Ok(cachedData);
             }
 
-            var patterns = await _gameTrendsService.GetWeeklyActivityPatternsAsync(gameId, daysPeriod);
+            var patterns = await _gameTrendsService.GetWeeklyActivityPatternsAsync(game, daysPeriod);
             
             // Cache for 1 hour - weekly patterns are stable
             await _cacheService.SetAsync(cacheKey, patterns, TimeSpan.FromHours(1));
             
             _logger.LogInformation("Retrieved {PatternCount} weekly activity patterns for game {GameId}", 
-                patterns.Count, gameId ?? "all");
+                patterns.Count, game ?? "all");
 
             return Ok(patterns);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving weekly activity patterns for game {GameId}", gameId);
+            _logger.LogError(ex, "Error retrieving weekly activity patterns for game {GameId}", game);
             return StatusCode(500, "Failed to retrieve weekly activity patterns");
         }
     }
@@ -183,38 +191,38 @@ public class GameTrendsController : ControllerBase
     /// Gets game mode activity trends including special events like CTF nights.
     /// Identifies when specific maps/modes are most popular.
     /// </summary>
-    /// <param name="gameId">Optional filter by game (bf1942, fh2, bfv)</param>
+    /// <param name="game">Optional filter by game (bf1942, fh2, bfv)</param>
     /// <param name="daysPeriod">Number of days to analyze (default: 30)</param>
     [HttpGet("gamemode-activity")]
     [ResponseCache(Duration = 1800, Location = ResponseCacheLocation.Any)] // 30 minutes cache
     public async Task<ActionResult<List<GameModeActivityTrend>>> GetGameModeActivityTrends(
-        [FromQuery] string? gameId = null, 
+        [FromQuery] string? game = null, 
         [FromQuery] int daysPeriod = 30)
     {
         try
         {
-            var cacheKey = $"trends:gamemode:{gameId ?? "all"}:{daysPeriod}";
+            var cacheKey = $"trends:gamemode:{game ?? "all"}:{daysPeriod}";
             var cachedData = await _cacheService.GetAsync<List<GameModeActivityTrend>>(cacheKey);
             
             if (cachedData != null)
             {
-                _logger.LogDebug("Returning cached game mode activity trends for game {GameId}", gameId ?? "all");
+                _logger.LogDebug("Returning cached game mode activity trends for game {GameId}", game ?? "all");
                 return Ok(cachedData);
             }
 
-            var trends = await _gameTrendsService.GetGameModeActivityTrendsAsync(gameId, daysPeriod);
+            var trends = await _gameTrendsService.GetGameModeActivityTrendsAsync(game, daysPeriod);
             
             // Cache for 30 minutes - game mode trends change moderately
             await _cacheService.SetAsync(cacheKey, trends, TimeSpan.FromMinutes(30));
             
             _logger.LogInformation("Retrieved {TrendCount} game mode activity trends for game {GameId}", 
-                trends.Count, gameId ?? "all");
+                trends.Count, game ?? "all");
 
             return Ok(trends);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving game mode activity trends for game {GameId}", gameId);
+            _logger.LogError(ex, "Error retrieving game mode activity trends for game {GameId}", game);
             return StatusCode(500, "Failed to retrieve game mode activity trends");
         }
     }
@@ -223,39 +231,39 @@ public class GameTrendsController : ControllerBase
     /// Gets personalized trend insights to help players decide when to play.
     /// Answers "is it busy now?" and "will it get busier?" based on player's timezone.
     /// </summary>
-    /// <param name="gameId">Optional filter by game (bf1942, fh2, bfv)</param>
+    /// <param name="game">Optional filter by game (bf1942, fh2, bfv)</param>
     /// <param name="timeZoneOffsetHours">Player's timezone offset from UTC (e.g., +14 for Australia/Sydney)</param>
     [HttpGet("insights")]
     [ResponseCache(Duration = 900, Location = ResponseCacheLocation.Any)] // 15 minutes cache
     public async Task<ActionResult<TrendInsights>> GetTrendInsights(
-        [FromQuery] string? gameId = null, 
+        [FromQuery] string? game = null, 
         [FromQuery] int timeZoneOffsetHours = 0)
     {
         try
         {
-            var cacheKey = $"trends:insights:{gameId ?? "all"}:{timeZoneOffsetHours}";
+            var cacheKey = $"trends:insights:{game ?? "all"}:{timeZoneOffsetHours}";
             var cachedData = await _cacheService.GetAsync<TrendInsights>(cacheKey);
             
             if (cachedData != null)
             {
                 _logger.LogDebug("Returning cached trend insights for game {GameId} with timezone offset {Offset}", 
-                    gameId ?? "all", timeZoneOffsetHours);
+                    game ?? "all", timeZoneOffsetHours);
                 return Ok(cachedData);
             }
 
-            var insights = await _gameTrendsService.GetTrendInsightsAsync(gameId, timeZoneOffsetHours);
+            var insights = await _gameTrendsService.GetTrendInsightsAsync(game, timeZoneOffsetHours);
             
             // Cache for 15 minutes - insights should be relatively current
             await _cacheService.SetAsync(cacheKey, insights, TimeSpan.FromMinutes(15));
             
             _logger.LogInformation("Generated trend insights for game {GameId} with timezone offset {Offset}", 
-                gameId ?? "all", timeZoneOffsetHours);
+                game ?? "all", timeZoneOffsetHours);
 
             return Ok(insights);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error generating trend insights for game {GameId}", gameId);
+            _logger.LogError(ex, "Error generating trend insights for game {GameId}", game);
             return StatusCode(500, "Failed to generate trend insights");
         }
     }
@@ -264,29 +272,29 @@ public class GameTrendsController : ControllerBase
     /// Gets comprehensive trend summary optimized for landing page display.
     /// Combines multiple trend data points into a single fast-loading response.
     /// </summary>
-    /// <param name="gameId">Optional filter by game (bf1942, fh2, bfv)</param>
+    /// <param name="game">Optional filter by game (bf1942, fh2, bfv)</param>
     /// <param name="timeZoneOffsetHours">Player's timezone offset from UTC</param>
     [HttpGet("landing-summary")]
     [ResponseCache(Duration = 600, Location = ResponseCacheLocation.Any)] // 10 minutes cache
     public async Task<ActionResult<LandingPageTrendSummary>> GetLandingPageTrendSummary(
-        [FromQuery] string? gameId = null, 
+        [FromQuery] string? game = null, 
         [FromQuery] int timeZoneOffsetHours = 0)
     {
         try
         {
-            var cacheKey = $"trends:landing:{gameId ?? "all"}:{timeZoneOffsetHours}";
+            var cacheKey = $"trends:landing:{game ?? "all"}:{timeZoneOffsetHours}";
             var cachedData = await _cacheService.GetAsync<LandingPageTrendSummary>(cacheKey);
             
             if (cachedData != null)
             {
-                _logger.LogDebug("Returning cached landing page trend summary for game {GameId}", gameId ?? "all");
+                _logger.LogDebug("Returning cached landing page trend summary for game {GameId}", game ?? "all");
                 return Ok(cachedData);
             }
 
             // Fetch multiple trend data points in parallel for fast response
             var currentActivityTask = _gameTrendsService.GetCurrentActivityStatusAsync();
-            var trendsInsightsTask = _gameTrendsService.GetTrendInsightsAsync(gameId, timeZoneOffsetHours);
-            var hourlyTrendsTask = _gameTrendsService.GetHourlyActivityTrendsAsync(gameId, 7); // Last week only for landing page
+            var trendsInsightsTask = _gameTrendsService.GetTrendInsightsAsync(game, timeZoneOffsetHours);
+            var hourlyTrendsTask = _gameTrendsService.GetHourlyActivityTrendsAsync(game, 7); // Last week only for landing page
 
             await Task.WhenAll(currentActivityTask, trendsInsightsTask, hourlyTrendsTask);
 
@@ -301,13 +309,13 @@ public class GameTrendsController : ControllerBase
             // Cache for 10 minutes - landing page data should be fresh but not too frequent
             await _cacheService.SetAsync(cacheKey, summary, TimeSpan.FromMinutes(10));
             
-            _logger.LogInformation("Generated landing page trend summary for game {GameId}", gameId ?? "all");
+            _logger.LogInformation("Generated landing page trend summary for game {GameId}", game ?? "all");
 
             return Ok(summary);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error generating landing page trend summary for game {GameId}", gameId);
+            _logger.LogError(ex, "Error generating landing page trend summary for game {GameId}", game);
             return StatusCode(500, "Failed to generate landing page trend summary");
         }
     }
