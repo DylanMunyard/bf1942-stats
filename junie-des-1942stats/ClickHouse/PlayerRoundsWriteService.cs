@@ -76,7 +76,8 @@ CREATE TABLE IF NOT EXISTS player_rounds (
     team_label String,
     game_id String,
     is_bot UInt8,
-    created_at DateTime DEFAULT now()
+    created_at DateTime DEFAULT now(),
+    game String
 ) ENGINE = ReplacingMergeTree()
 ORDER BY round_id
 PARTITION BY toYYYYMM(round_start_time)
@@ -84,8 +85,9 @@ SETTINGS index_granularity = 8192";
 
         await ExecuteCommandAsync(createTableQuery);
 
-        // Add the is_bot column if it doesn't exist (for existing tables)
+        // Add columns if they don't exist (for existing tables)
         await ExecuteCommandAsync("ALTER TABLE player_rounds ADD COLUMN IF NOT EXISTS is_bot UInt8 DEFAULT 0");
+        await ExecuteCommandAsync("ALTER TABLE player_rounds ADD COLUMN IF NOT EXISTS game String DEFAULT 'unknown'");
 
         // Create indexes for common query patterns
         var indexQueries = new[]
@@ -221,6 +223,7 @@ SETTINGS index_granularity = 8192";
                         ps.GameType,
                         ps.RoundId,
                         AiBot = (bool?)ps.Player.AiBot,
+                        Game = ps.Server.Game,
                         TeamLabel = ps.Observations
                             .OrderByDescending(o => o.Timestamp)
                             .Select(o => o.TeamLabel)
@@ -247,6 +250,7 @@ SETTINGS index_granularity = 8192";
                     RoundId = r.RoundId ?? GenerateRoundId(r.PlayerName, r.ServerGuid, r.MapName, r.StartTime, r.SessionId),
                     TeamLabel = r.TeamLabel ?? string.Empty,
                     GameId = r.GameType,
+                    Game = r.Game ?? "unknown",
                     IsBot = r.AiBot ?? false,
                     CreatedAt = DateTime.UtcNow
                 }).ToList();
@@ -327,11 +331,12 @@ SETTINGS index_granularity = 8192";
                 TeamLabel = r.TeamLabel,
                 GameId = r.GameId,
                 IsBot = r.IsBot ? 1 : 0,
-                CreatedAt = r.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")
+                CreatedAt = r.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss"),
+                Game = r.Game
             }));
 
             var csvData = stringWriter.ToString();
-            var query = "INSERT INTO player_rounds (round_id, player_name, server_guid, map_name, round_start_time, round_end_time, final_score, final_kills, final_deaths, play_time_minutes, team_label, game_id, is_bot, created_at) FORMAT CSV";
+            var query = "INSERT INTO player_rounds (round_id, player_name, server_guid, map_name, round_start_time, round_end_time, final_score, final_kills, final_deaths, play_time_minutes, team_label, game_id, is_bot, created_at, game) FORMAT CSV";
             var fullRequest = query + "\n" + csvData;
 
             await ExecuteCommandAsync(fullRequest);

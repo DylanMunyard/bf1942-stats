@@ -43,6 +43,7 @@ public record RoundData(
     string RoundId,
     string ServerGuid,
     string MapName,
+    string Game,
     DateTime? EndTime,
     int? ParticipantCount
 );
@@ -110,6 +111,7 @@ public class PlacementProcessor
                         r.RoundId,
                         r.ServerGuid,
                         r.MapName,
+                        r.GameServer!.Game,
                         r.EndTime,
                         r.ParticipantCount
                     ))
@@ -348,7 +350,8 @@ public class PlacementProcessor
                     MapName = round.MapName,
                     RoundId = round.RoundId,
                     Metadata = JsonSerializer.Serialize(metadata),
-                    Version = achievedAt  // Use achieved_at as deterministic version for idempotency
+                    Game = round.Game ?? "unknown",
+                        Version = achievedAt  // Use achieved_at as deterministic version for idempotency
                 };
                 
                 achievements.Add(achievement);

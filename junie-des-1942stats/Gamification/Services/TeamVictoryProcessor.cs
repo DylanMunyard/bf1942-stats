@@ -99,6 +99,7 @@ public class TeamVictoryProcessor
 
                 // Get batch of completed rounds with team victory conditions
                 var rounds = await _dbContext.Rounds.AsNoTracking()
+                    .Include(r => r.GameServer)
                     .Where(r => !r.IsActive &&
                                 r.EndTime != null &&
                                r.EndTime >= sinceUtc &&
@@ -499,7 +500,8 @@ public class TeamVictoryProcessor
             MapName = round.MapName,
             RoundId = round.RoundId,
             Metadata = JsonSerializer.Serialize(metadata),
-            Version = achievedAt  // Use achieved_at as deterministic version for idempotency
+            Game = round.GameServer?.Game ?? "unknown",
+                        Version = achievedAt  // Use achieved_at as deterministic version for idempotency
         };
     }
 }

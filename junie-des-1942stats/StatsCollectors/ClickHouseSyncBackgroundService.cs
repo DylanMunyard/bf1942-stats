@@ -188,7 +188,8 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
                             TeamLabel = po.TeamLabel,
                             MapName = ps.MapName,
                             GameType = ps.GameType,
-                            IsBot = p.AiBot
+                            IsBot = p.AiBot,
+                            Game = s.Game
                         };
 
         if (afterTimestamp.HasValue)
@@ -221,7 +222,8 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
                 TeamName = x.TeamLabel ?? "",
                 MapName = x.MapName,
                 GameType = x.GameType,
-                IsBot = x.IsBot
+                IsBot = x.IsBot,
+                Game = x.Game ?? "unknown"
             }
         }).ToList();
     }

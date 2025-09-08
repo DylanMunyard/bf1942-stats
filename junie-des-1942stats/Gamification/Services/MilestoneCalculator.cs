@@ -107,6 +107,7 @@ public class MilestoneCalculator
                         MapName = round.MapName,
                         RoundId = round.RoundId,
                         Metadata = $"{{\"previous_kills\":{previousStats.TotalKills},\"new_kills\":{newStats.TotalKills}}}",
+                        Game = round.Game ?? "unknown",
                         Version = round.RoundEndTime  // Use round end time as deterministic version for idempotency
                     });
 
@@ -149,6 +150,7 @@ public class MilestoneCalculator
                         MapName = round.MapName,
                         RoundId = round.RoundId,
                         Metadata = $"{{\"previous_hours\":{previousStats.TotalPlayTimeMinutes / 60.0:F1},\"new_hours\":{newStats.TotalPlayTimeMinutes / 60.0:F1}}}",
+                        Game = round.Game ?? "unknown",
                         Version = round.RoundEndTime  // Use round end time as deterministic version for idempotency
                     });
 
@@ -188,6 +190,7 @@ public class MilestoneCalculator
                         MapName = round.MapName,
                         RoundId = round.RoundId,
                         Metadata = $"{{\"previous_score\":{previousStats.TotalScore},\"new_score\":{newStats.TotalScore}}}",
+                        Game = round.Game ?? "unknown",
                         Version = round.RoundEndTime  // Use round end time as deterministic version for idempotency
                     });
 

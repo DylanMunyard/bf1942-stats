@@ -84,11 +84,12 @@ public class ClickHouseGamificationService : IDisposable
                 MapName = a.MapName,
                 RoundId = a.RoundId,
                 Metadata = a.Metadata,
-                Version = insertVersion.ToString("yyyy-MM-dd HH:mm:ss")
+                Version = insertVersion.ToString("yyyy-MM-dd HH:mm:ss"),
+                Game = a.Game ?? "unknown"
             }));
 
             var csvData = stringWriter.ToString();
-            var query = "INSERT INTO player_achievements (player_name, achievement_type, achievement_id, achievement_name, tier, value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version) FORMAT CSV";
+            var query = "INSERT INTO player_achievements (player_name, achievement_type, achievement_id, achievement_name, tier, value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version, game) FORMAT CSV";
             var fullRequest = query + "\n" + csvData;
 
             await ExecuteQueryAsync(fullRequest);
@@ -217,7 +218,7 @@ public class ClickHouseGamificationService : IDisposable
 
             var query = @"
                 SELECT player_name, achievement_type, achievement_id, achievement_name, tier,
-                       value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version
+                       value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version, game
                 FROM player_achievements_deduplicated
                 WHERE player_name = {playerName:String}
                 ORDER BY achieved_at DESC
@@ -248,7 +249,8 @@ public class ClickHouseGamificationService : IDisposable
                     MapName = reader.GetString(9),
                     RoundId = reader.GetString(10),
                     Metadata = reader.GetString(11),
-                    Version = reader.GetDateTime(12)
+                    Version = reader.GetDateTime(12),
+                    Game = reader.GetString(13)
                 });
             }
 
@@ -272,7 +274,7 @@ public class ClickHouseGamificationService : IDisposable
 
             var query = @"
                 SELECT player_name, achievement_type, achievement_id, achievement_name, tier,
-                       value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version
+                       value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version, game
                 FROM player_achievements_deduplicated
                 WHERE player_name = {playerName:String}
                 AND achievement_type = {achievementType:String}
@@ -303,7 +305,8 @@ public class ClickHouseGamificationService : IDisposable
                     MapName = reader.GetString(9),
                     RoundId = reader.GetString(10),
                     Metadata = reader.GetString(11),
-                    Version = reader.GetDateTime(12)
+                    Version = reader.GetDateTime(12),
+                    Game = reader.GetString(13)
                 });
             }
 
@@ -327,7 +330,7 @@ public class ClickHouseGamificationService : IDisposable
 
             var query = @"
                 SELECT player_name, achievement_type, achievement_id, achievement_name, tier,
-                       value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version
+                       value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version, game
                 FROM player_achievements_deduplicated
                 WHERE round_id = {roundId:String}
                 ORDER BY achieved_at ASC";
@@ -356,7 +359,8 @@ public class ClickHouseGamificationService : IDisposable
                     MapName = reader.GetString(9),
                     RoundId = reader.GetString(10),
                     Metadata = reader.GetString(11),
-                    Version = reader.GetDateTime(12)
+                    Version = reader.GetDateTime(12),
+                    Game = reader.GetString(13)
                 });
             }
 
@@ -558,7 +562,7 @@ public class ClickHouseGamificationService : IDisposable
             // Get achievements with pagination
             var query = $@"
                 SELECT player_name, achievement_type, achievement_id, achievement_name, tier,
-                       value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version
+                       value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version, game
                 FROM player_achievements_deduplicated
                 {whereClause}
                 ORDER BY {sortField} {orderDirection}
@@ -713,7 +717,7 @@ public class ClickHouseGamificationService : IDisposable
 
             var query = @"
                 SELECT player_name, round_id, server_guid, map_name, final_kills as kills, final_deaths as deaths, final_score as score, 
-                       play_time_minutes, round_start_time, round_end_time
+                       play_time_minutes, round_start_time, round_end_time, game
                 FROM player_rounds
                 WHERE round_end_time >= {sinceTime:DateTime}
                 ORDER BY round_end_time ASC";
@@ -738,7 +742,8 @@ public class ClickHouseGamificationService : IDisposable
                     FinalScore = Convert.ToInt32(reader.GetValue(6)),
                     PlayTimeMinutes = (int)Math.Round(Convert.ToDouble(reader.GetValue(7))),
                     RoundStartTime = reader.GetDateTime(8),
-                    RoundEndTime = reader.GetDateTime(9)
+                    RoundEndTime = reader.GetDateTime(9),
+                    Game = reader.GetString(10)
                 });
             }
 
@@ -762,7 +767,7 @@ public class ClickHouseGamificationService : IDisposable
 
             var query = @"
                 SELECT player_name, round_id, server_guid, map_name, final_kills as kills, final_deaths as deaths, final_score as score, 
-                       play_time_minutes, round_end_time
+                       play_time_minutes, round_end_time, game
                 FROM player_rounds
                 WHERE round_end_time >= {startTime:DateTime}
                 AND round_end_time <= {endTime:DateTime}
@@ -788,7 +793,8 @@ public class ClickHouseGamificationService : IDisposable
                     FinalDeaths = Convert.ToUInt32(reader.GetValue(5)),
                     FinalScore = Convert.ToInt32(reader.GetValue(6)),
                     PlayTimeMinutes = (int)Math.Round(Convert.ToDouble(reader.GetValue(7))),
-                    RoundEndTime = reader.GetDateTime(8)
+                    RoundEndTime = reader.GetDateTime(8),
+                    Game = reader.GetString(9)
                 });
             }
 
@@ -812,7 +818,7 @@ public class ClickHouseGamificationService : IDisposable
 
             var query = @"
                 SELECT player_name, round_id, server_guid, map_name, final_kills as kills, final_deaths as deaths, final_score as score, 
-                       play_time_minutes, round_end_time
+                       play_time_minutes, round_end_time, game
                 FROM player_rounds
                 WHERE player_name = {playerName:String}
                 ORDER BY round_end_time DESC
@@ -838,7 +844,8 @@ public class ClickHouseGamificationService : IDisposable
                     FinalDeaths = Convert.ToUInt32(reader.GetValue(5)),
                     FinalScore = Convert.ToInt32(reader.GetValue(6)),
                     PlayTimeMinutes = (int)Math.Round(Convert.ToDouble(reader.GetValue(7))),
-                    RoundEndTime = reader.GetDateTime(8)
+                    RoundEndTime = reader.GetDateTime(8),
+                    Game = reader.GetString(9)
                 });
             }
 
