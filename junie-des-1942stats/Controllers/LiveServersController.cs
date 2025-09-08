@@ -167,11 +167,13 @@ public class LiveServersController : ControllerBase
     /// </summary>
     /// <param name="game">Game type: bf1942, fh2, or bfvietnam</param>
     /// <param name="period">Time period: 1d, 3d, 7d, 1month, 3months, thisyear, alltime (default: 7d)</param>
+    /// <param name="rollingWindow">Rolling average window size in data points (default: 7, min: 3, max: 50)</param>
     /// <returns>Players online history data with trend insights</returns>
     [HttpGet("{game}/players-online-history")]
     public async Task<ActionResult<PlayersOnlineHistoryResponse>> GetPlayersOnlineHistory(
         string game, 
-        [FromQuery] string period = "7d")
+        [FromQuery] string period = "7d",
+        [FromQuery] int rollingWindow = 7)
     {
         if (!ValidGames.Contains(game.ToLower()))
         {
@@ -184,9 +186,14 @@ public class LiveServersController : ControllerBase
             return BadRequest($"Invalid period. Valid periods: {string.Join(", ", validPeriods)}");
         }
 
+        if (rollingWindow < 3 || rollingWindow > 50)
+        {
+            return BadRequest("Rolling window must be between 3 and 50 data points");
+        }
+
         try
         {
-            var history = await GetPlayersOnlineHistoryFromClickHouse(game.ToLower(), period.ToLower());
+            var history = await GetPlayersOnlineHistoryFromClickHouse(game.ToLower(), period.ToLower(), rollingWindow);
             return Ok(history);
         }
         catch (Exception ex)
@@ -196,7 +203,7 @@ public class LiveServersController : ControllerBase
         }
     }
 
-    private async Task<PlayersOnlineHistoryResponse> GetPlayersOnlineHistoryFromClickHouse(string game, string period)
+    private async Task<PlayersOnlineHistoryResponse> GetPlayersOnlineHistoryFromClickHouse(string game, string period, int rollingWindow)
     {
         var (days, timeInterval, useAllTime) = period switch
         {
@@ -252,7 +259,7 @@ FORMAT TabSeparated";
             }
         }
 
-        var insights = CalculatePlayerTrendsInsights(dataPoints.ToArray(), period);
+        var insights = CalculatePlayerTrendsInsights(dataPoints.ToArray(), period, rollingWindow);
 
         return new PlayersOnlineHistoryResponse
         {
@@ -278,7 +285,7 @@ FORMAT TabSeparated";
         };
     }
 
-    private static PlayerTrendsInsights? CalculatePlayerTrendsInsights(PlayersOnlineDataPoint[] dataPoints, string period)
+    private static PlayerTrendsInsights? CalculatePlayerTrendsInsights(PlayersOnlineDataPoint[] dataPoints, string period, int rollingWindow)
     {
         if (dataPoints.Length == 0) return null;
 
@@ -302,7 +309,7 @@ FORMAT TabSeparated";
         };
 
         // Calculate rolling average for longer periods (7+ days)
-        var rollingAverage = CalculateRollingAverage(dataPoints, period);
+        var rollingAverage = CalculateRollingAverage(dataPoints, period, rollingWindow);
 
         var calculationMethod = GetCalculationMethodDescription(period);
         
@@ -320,20 +327,24 @@ FORMAT TabSeparated";
         };
     }
 
-    private static RollingAverageDataPoint[] CalculateRollingAverage(PlayersOnlineDataPoint[] dataPoints, string period)
+    private static RollingAverageDataPoint[] CalculateRollingAverage(PlayersOnlineDataPoint[] dataPoints, string period, int rollingWindow)
     {
+        Console.WriteLine($"CalculateRollingAverage called with period='{period}', rollingWindow={rollingWindow}, dataPoints.Length={dataPoints.Length}");
+        
         // Only calculate rolling average for periods longer than 7 days
-        if (period is "1d" or "3d" or "7d" || dataPoints.Length < 7)
+        if (period is "1d" or "3d" || dataPoints.Length < rollingWindow)
         {
+            Console.WriteLine($"Early return: period='{period}' is short period or dataPoints.Length ({dataPoints.Length}) < rollingWindow ({rollingWindow})");
             return [];
         }
 
-        var rollingPoints = new List<RollingAverageDataPoint>();
-        const int windowSize = 7; // 7-point rolling average
+        Console.WriteLine($"Proceeding with rolling average calculation for period='{period}'");
 
-        for (int i = windowSize - 1; i < dataPoints.Length; i++)
+        var rollingPoints = new List<RollingAverageDataPoint>();
+
+        for (int i = rollingWindow - 1; i < dataPoints.Length; i++)
         {
-            var windowData = dataPoints.Skip(i - windowSize + 1).Take(windowSize);
+            var windowData = dataPoints.Skip(i - rollingWindow + 1).Take(rollingWindow);
             var average = windowData.Average(dp => dp.TotalPlayers);
 
             rollingPoints.Add(new RollingAverageDataPoint
@@ -343,6 +354,7 @@ FORMAT TabSeparated";
             });
         }
 
+        Console.WriteLine($"Calculated {rollingPoints.Count} rolling average points");
         return rollingPoints.ToArray();
     }
 
