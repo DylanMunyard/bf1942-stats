@@ -167,84 +167,6 @@ public class GameTrendsService : BaseClickHouseService
     }
 
     /// <summary>
-    /// Gets hourly activity trends for the past month, helping players understand busy periods
-    /// </summary>
-    public async Task<List<HourlyActivityTrend>> GetHourlyActivityTrendsAsync(string? game = null, int daysPeriod = 30)
-    {
-        var whereClause = new StringBuilder();
-        whereClause.Append("WHERE round_start_time >= now() - INTERVAL ? DAY");
-        var parameters = new List<object> { daysPeriod };
-
-        if (!string.IsNullOrEmpty(game))
-        {
-            whereClause.Append(" AND game = ?");
-            parameters.Add(game);
-        }
-
-        // Get hourly activity patterns with timezone handling for display
-        var query = $@"
-            SELECT 
-                toHour(round_start_time) as hour_of_day,
-                toDayOfWeek(round_start_time) as day_of_week,
-                COUNT(DISTINCT player_name) as unique_players,
-                COUNT(*) as total_rounds,
-                AVG(play_time_minutes) as avg_round_duration,
-                COUNT(DISTINCT server_guid) as active_servers,
-                uniqExact(map_name) as unique_maps
-            FROM player_rounds 
-            {whereClause}
-            GROUP BY hour_of_day, day_of_week
-            ORDER BY day_of_week, hour_of_day";
-
-        return await ReadAllAsync<HourlyActivityTrend>(query, parameters.ToArray());
-    }
-
-    /// <summary>
-    /// Gets server activity trends to identify which servers are busiest at different times
-    /// </summary>
-    public async Task<List<ServerActivityTrend>> GetServerActivityTrendsAsync(string? game = null, int daysPeriod = 7, string[]? serverGuids = null)
-    {
-        var whereClause = new StringBuilder();
-        whereClause.Append("WHERE round_start_time >= now() - INTERVAL ? DAY");
-        var parameters = new List<object> { daysPeriod };
-
-        if (!string.IsNullOrEmpty(game))
-        {
-            whereClause.Append(" AND game = ?");
-            parameters.Add(game);
-        }
-
-        if (serverGuids != null && serverGuids.Length > 0)
-        {
-            whereClause.Append(" AND server_guid IN (");
-            for (int i = 0; i < serverGuids.Length; i++)
-            {
-                if (i > 0) whereClause.Append(", ");
-                whereClause.Append("?");
-                parameters.Add(serverGuids[i]);
-            }
-            whereClause.Append(")");
-        }
-
-        var query = $@"
-            SELECT 
-                server_guid,
-                toHour(round_start_time) as hour_of_day,
-                COUNT(DISTINCT player_name) as unique_players,
-                COUNT(*) as total_rounds,
-                AVG(play_time_minutes) as avg_round_duration,
-                uniqExact(map_name) as unique_maps,
-                max(round_start_time) as last_activity
-            FROM player_rounds 
-            {whereClause}
-            GROUP BY server_guid, hour_of_day
-            HAVING unique_players >= 4  -- Only include servers with meaningful activity
-            ORDER BY hour_of_day, unique_players DESC";
-
-        return await ReadAllAsync<ServerActivityTrend>(query, parameters.ToArray());
-    }
-
-    /// <summary>
     /// Gets current activity status across games and servers using live SQLite sessions
     /// </summary>
     public async Task<List<CurrentActivityStatus>> GetCurrentActivityStatusAsync(string? game = null)
@@ -315,41 +237,6 @@ public class GameTrendsService : BaseClickHouseService
             ORDER BY day_of_week, hour_of_day";
 
         return await ReadAllAsync<WeeklyActivityPattern>(query, parameters.ToArray());
-    }
-
-    /// <summary>
-    /// Gets game mode popularity trends (like CTF events mentioned in the issue)
-    /// </summary>
-    public async Task<List<GameModeActivityTrend>> GetGameModeActivityTrendsAsync(string? game = null, int daysPeriod = 30)
-    {
-        var whereClause = new StringBuilder();
-        whereClause.Append("WHERE round_start_time >= now() - INTERVAL ? DAY");
-        var parameters = new List<object> { daysPeriod };
-
-        if (!string.IsNullOrEmpty(game))
-        {
-            whereClause.Append(" AND game = ?");
-            parameters.Add(game);
-        }
-
-        // Use map_name as a proxy for game mode since some maps indicate specific modes like CTF
-        var query = $@"
-            SELECT 
-                map_name,
-                game,
-                toDayOfWeek(round_start_time) as day_of_week,
-                toHour(round_start_time) as hour_of_day,
-                COUNT(DISTINCT player_name) as unique_players,
-                COUNT(*) as total_rounds,
-                AVG(play_time_minutes) as avg_round_duration,
-                COUNT(DISTINCT server_guid) as servers_hosting
-            FROM player_rounds 
-            {whereClause}
-            GROUP BY map_name, game, day_of_week, hour_of_day
-            HAVING total_rounds >= 3  -- Filter out one-off activities
-            ORDER BY total_rounds DESC, unique_players DESC";
-
-        return await ReadAllAsync<GameModeActivityTrend>(query, parameters.ToArray());
     }
 
     /// <summary>
@@ -723,30 +610,179 @@ public async Task<BusyIndicatorResult> GetBusyIndicatorAsync(string? game = null
         GeneratedAt = DateTime.UtcNow
     };
 }
+
+public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(string[] serverGuids, int timeZoneOffsetHours = 0)
+{
+    var currentTime = DateTime.UtcNow.AddHours(timeZoneOffsetHours);
+    var currentHour = currentTime.Hour;
+    var currentDayOfWeek = (int)currentTime.DayOfWeek;
+    var clickHouseDayOfWeek = currentDayOfWeek == 0 ? 7 : currentDayOfWeek;
+
+    var serverResults = new List<ServerBusyIndicatorResult>();
+
+    foreach (var serverGuid in serverGuids)
+    {
+        // Get current activity for this specific server
+        var currentActivityQuery = $@"
+            SELECT 
+                COUNT(DISTINCT player_name) as current_players
+            FROM player_metrics 
+            WHERE timestamp >= now() - INTERVAL 1 MINUTE
+                AND is_bot = 0
+                AND server_guid = ?";
+
+        var currentActivity = await ReadSingleOrDefaultAsync<CurrentBusyMetrics>(currentActivityQuery, serverGuid);
+        var currentPlayers = currentActivity?.CurrentPlayers ?? 0;
+
+        // Get server info
+        var serverInfoQuery = $@"
+            SELECT DISTINCT
+                server_guid,
+                server_name,
+                game
+            FROM player_metrics
+            WHERE server_guid = ?
+            ORDER BY timestamp DESC
+            LIMIT 1";
+
+        var serverInfo = await ReadSingleOrDefaultAsync<GameTrendsServerInfo>(serverInfoQuery, serverGuid);
+
+        // Get historical data for this server
+        var historicalQuery = $@"
+            SELECT 
+                groupArray(hourly_avg) as daily_averages
+            FROM (
+                SELECT 
+                    toDate(timestamp) as date_key,
+                    toHour(timestamp) as hour_key,
+                    AVG(argMax(players_online, timestamp)) as hourly_avg
+                FROM server_online_counts
+                WHERE timestamp >= now() - INTERVAL 60 DAY 
+                    AND server_guid = ?
+                    AND toHour(timestamp) = ?
+                    AND toDayOfWeek(timestamp) = ?
+                GROUP BY date_key, hour_key, toStartOfInterval(timestamp, INTERVAL 15 MINUTE)
+                HAVING hourly_avg > 0
+            )
+            GROUP BY hour_key";
+
+        var dailyTotalsResult = await ReadSingleOrDefaultAsync<DailyAveragesResult>(historicalQuery, serverGuid, currentHour, clickHouseDayOfWeek);
+
+        BusyIndicatorResult busyIndicator;
+
+        if (dailyTotalsResult?.DailyAverages == null || dailyTotalsResult.DailyAverages.Length < 3)
+        {
+            busyIndicator = new BusyIndicatorResult
+            {
+                BusyLevel = "unknown",
+                BusyText = "Not enough data",
+                CurrentPlayers = currentPlayers,
+                TypicalPlayers = 0,
+                Percentile = 0,
+                GeneratedAt = DateTime.UtcNow
+            };
+        }
+        else
+        {
+            // Calculate statistics
+            var averages = dailyTotalsResult.DailyAverages.OrderBy(x => x).ToArray();
+            var count = averages.Length;
+            
+            var avgPlayers = averages.Average();
+            var minPlayers = averages.Min();
+            var maxPlayers = averages.Max();
+            var medianPlayers = count % 2 == 0 
+                ? (averages[count / 2 - 1] + averages[count / 2]) / 2.0
+                : averages[count / 2];
+            var q25Players = averages[(int)(count * 0.25)];
+            var q75Players = averages[(int)(count * 0.75)];
+            var q90Players = averages[(int)(count * 0.90)];
+
+            // Calculate percentile and busy level
+            string busyLevel;
+            string busyText;
+            double percentile = 0;
+
+            if (currentPlayers >= q90Players)
+            {
+                busyLevel = "very_busy";
+                busyText = "Busier than usual";
+                percentile = 90;
+            }
+            else if (currentPlayers >= q75Players)
+            {
+                busyLevel = "busy";
+                busyText = "Busy";
+                percentile = 75;
+            }
+            else if (currentPlayers >= medianPlayers)
+            {
+                busyLevel = "moderate";
+                busyText = "As busy as usual";
+                percentile = 50;
+            }
+            else if (currentPlayers >= q25Players)
+            {
+                busyLevel = "quiet";
+                busyText = "Not too busy";
+                percentile = 25;
+            }
+            else
+            {
+                busyLevel = "very_quiet";
+                busyText = "Quieter than usual";
+                percentile = 10;
+            }
+
+            // Add context for extreme cases
+            if (currentPlayers >= maxPlayers * 0.95)
+            {
+                busyText = "Extremely busy - peak activity!";
+            }
+            else if (currentPlayers <= minPlayers * 1.1 && minPlayers > 0)
+            {
+                busyText = "Very quiet right now";
+            }
+
+            busyIndicator = new BusyIndicatorResult
+            {
+                BusyLevel = busyLevel,
+                BusyText = busyText,
+                CurrentPlayers = currentPlayers,
+                TypicalPlayers = avgPlayers,
+                Percentile = percentile,
+                HistoricalRange = new HistoricalRange
+                {
+                    Min = minPlayers,
+                    Q25 = q25Players,
+                    Median = medianPlayers,
+                    Q75 = q75Players,
+                    Q90 = q90Players,
+                    Max = maxPlayers,
+                    Average = avgPlayers
+                },
+                GeneratedAt = DateTime.UtcNow
+            };
+        }
+
+        serverResults.Add(new ServerBusyIndicatorResult
+        {
+            ServerGuid = serverGuid,
+            ServerName = serverInfo?.ServerName ?? "Unknown Server",
+            Game = serverInfo?.Game ?? "Unknown",
+            BusyIndicator = busyIndicator
+        });
+    }
+
+    return new GroupedServerBusyIndicatorResult
+    {
+        ServerResults = serverResults,
+        GeneratedAt = DateTime.UtcNow
+    };
+}
 }
 
 // Data models for trend analysis
-public class HourlyActivityTrend
-{
-    public int HourOfDay { get; set; }
-    public int DayOfWeek { get; set; }  // 1=Monday, 7=Sunday (ClickHouse format)
-    public int UniquePlayers { get; set; }
-    public int TotalRounds { get; set; }
-    public double AvgRoundDuration { get; set; }
-    public int ActiveServers { get; set; }
-    public int UniqueMaps { get; set; }
-}
-
-public class ServerActivityTrend
-{
-    public string ServerGuid { get; set; } = "";
-    public int HourOfDay { get; set; }
-    public int UniquePlayers { get; set; }
-    public int TotalRounds { get; set; }
-    public double AvgRoundDuration { get; set; }
-    public int UniqueMaps { get; set; }
-    public DateTime LastActivity { get; set; }
-}
 
 public class CurrentActivityStatus
 {
@@ -765,18 +801,6 @@ public class WeeklyActivityPattern
     public int TotalRounds { get; set; }
     public double AvgRoundDuration { get; set; }
     public string PeriodType { get; set; } = ""; // Weekend/Weekday
-}
-
-public class GameModeActivityTrend
-{
-    public string MapName { get; set; } = "";
-    public string Game { get; set; } = "";
-    public int DayOfWeek { get; set; }
-    public int HourOfDay { get; set; }
-    public int UniquePlayers { get; set; }
-    public int TotalRounds { get; set; }
-    public double AvgRoundDuration { get; set; }
-    public int ServersHosting { get; set; }
 }
 
 public class TrendInsights
@@ -835,6 +859,27 @@ public class BusyIndicatorResult
     public double Percentile { get; set; } // What percentile the current activity falls into
     public HistoricalRange? HistoricalRange { get; set; }
     public DateTime GeneratedAt { get; set; }
+}
+
+public class ServerBusyIndicatorResult
+{
+    public string ServerGuid { get; set; } = "";
+    public string ServerName { get; set; } = "";
+    public string Game { get; set; } = "";
+    public BusyIndicatorResult BusyIndicator { get; set; } = new();
+}
+
+public class GroupedServerBusyIndicatorResult
+{
+    public List<ServerBusyIndicatorResult> ServerResults { get; set; } = new();
+    public DateTime GeneratedAt { get; set; }
+}
+
+public class GameTrendsServerInfo
+{
+    public string ServerGuid { get; set; } = "";
+    public string ServerName { get; set; } = "";
+    public string Game { get; set; } = "";
 }
 
 public class HistoricalRange

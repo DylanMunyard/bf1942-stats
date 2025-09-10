@@ -116,9 +116,8 @@ public class AppController : ControllerBase
             var badgeDefinitionsTask = Task.FromResult(_badgeDefinitionsService.GetAllBadges());
             var currentActivityTask = _gameTrendsService.GetCurrentActivityStatusAsync();
             var trendInsightsTask = _gameTrendsService.GetSmartPredictionInsightsAsync(null, timeZoneOffsetHours);
-            var hourlyTrendsTask = _gameTrendsService.GetHourlyActivityTrendsAsync(null, 7);
 
-            await Task.WhenAll(badgeDefinitionsTask, currentActivityTask, trendInsightsTask, hourlyTrendsTask);
+            await Task.WhenAll(badgeDefinitionsTask, currentActivityTask, trendInsightsTask);
 
             var landingData = new LandingPageData
             {
@@ -150,7 +149,6 @@ public class AppController : ControllerBase
                 {
                     CurrentActivity = currentActivityTask.Result.Take(5).ToList(),
                     Insights = trendInsightsTask.Result,
-                    HourlyTrends = hourlyTrendsTask.Result.Take(24).ToList(),
                     GeneratedAt = DateTime.UtcNow
                 },
                 GeneratedAt = DateTime.UtcNow
