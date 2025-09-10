@@ -503,7 +503,8 @@ public async Task<BusyIndicatorResult> GetBusyIndicatorAsync(string? game = null
         )";
 
     var histParams = parameters.Concat(new object[] { currentHour, clickHouseDayOfWeek }).ToArray();
-    var dailyTotalsResult = await ReadSingleOrDefaultAsync<DailyAveragesResult>(historicalQuery, histParams);
+    var dailyTotalsResults = await ReadAllAsync<DailyAveragesResult>(historicalQuery, histParams);
+    var dailyTotalsResult = dailyTotalsResults.FirstOrDefault();
     
     if (dailyTotalsResult?.DailyAverages == null || dailyTotalsResult.DailyAverages.Length < 3)
     {
@@ -618,59 +619,70 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
     var currentDayOfWeek = (int)currentTime.DayOfWeek;
     var clickHouseDayOfWeek = currentDayOfWeek == 0 ? 7 : currentDayOfWeek;
 
+    // Create server GUID list for IN clause
+    var serverGuidList = string.Join(",", serverGuids.Select(sg => $"'{sg}'"));
+
+    // Single query to get current activity for all servers
+    var currentActivityQuery = $@"
+        SELECT 
+            server_guid,
+            COUNT(DISTINCT player_name) as current_players
+        FROM player_metrics 
+        WHERE timestamp >= now() - INTERVAL 1 MINUTE
+            AND is_bot = 0
+            AND server_guid IN ({serverGuidList})
+        GROUP BY server_guid";
+
+    var currentActivities = await ReadAllAsync<ServerCurrentActivity>(currentActivityQuery);
+
+    // Single query to get server info for all servers
+    var serverInfoQuery = $@"
+        SELECT DISTINCT
+            server_guid,
+            argMax(server_name, timestamp) as server_name,
+            argMax(game, timestamp) as game
+        FROM player_metrics
+        WHERE server_guid IN ({serverGuidList})
+        GROUP BY server_guid";
+
+    var serverInfos = await ReadAllAsync<GameTrendsServerInfo>(serverInfoQuery);
+
+    // Single query to get historical data for all servers
+    var historicalQuery = $@"
+        SELECT 
+            server_guid,
+            groupArray(hourly_avg) as daily_averages
+        FROM (
+            SELECT 
+                server_guid,
+                toDate(timestamp) as date_key,
+                AVG(players_online) as hourly_avg
+            FROM server_online_counts
+            WHERE timestamp >= now() - INTERVAL 60 DAY 
+                AND server_guid IN ({serverGuidList})
+                AND toHour(timestamp) = ?
+                AND toDayOfWeek(timestamp) = ?
+            GROUP BY server_guid, date_key, toStartOfInterval(timestamp, INTERVAL 15 MINUTE)
+            HAVING hourly_avg > 0
+        )
+        GROUP BY server_guid";
+
+    var historicalData = await ReadAllAsync<ServerHistoricalData>(historicalQuery, new object[] { currentHour, clickHouseDayOfWeek });
+
+    // Build results
     var serverResults = new List<ServerBusyIndicatorResult>();
 
     foreach (var serverGuid in serverGuids)
     {
-        // Get current activity for this specific server
-        var currentActivityQuery = $@"
-            SELECT 
-                COUNT(DISTINCT player_name) as current_players
-            FROM player_metrics 
-            WHERE timestamp >= now() - INTERVAL 1 MINUTE
-                AND is_bot = 0
-                AND server_guid = ?";
+        var currentActivity = currentActivities.FirstOrDefault(ca => ca.ServerGuid == serverGuid);
+        var serverInfo = serverInfos.FirstOrDefault(si => si.ServerGuid == serverGuid);
+        var historical = historicalData.FirstOrDefault(hd => hd.ServerGuid == serverGuid);
 
-        var currentActivity = await ReadSingleOrDefaultAsync<CurrentBusyMetrics>(currentActivityQuery, serverGuid);
         var currentPlayers = currentActivity?.CurrentPlayers ?? 0;
-
-        // Get server info
-        var serverInfoQuery = $@"
-            SELECT DISTINCT
-                server_guid,
-                server_name,
-                game
-            FROM player_metrics
-            WHERE server_guid = ?
-            ORDER BY timestamp DESC
-            LIMIT 1";
-
-        var serverInfo = await ReadSingleOrDefaultAsync<GameTrendsServerInfo>(serverInfoQuery, serverGuid);
-
-        // Get historical data for this server
-        var historicalQuery = $@"
-            SELECT 
-                groupArray(hourly_avg) as daily_averages
-            FROM (
-                SELECT 
-                    toDate(timestamp) as date_key,
-                    toHour(timestamp) as hour_key,
-                    AVG(argMax(players_online, timestamp)) as hourly_avg
-                FROM server_online_counts
-                WHERE timestamp >= now() - INTERVAL 60 DAY 
-                    AND server_guid = ?
-                    AND toHour(timestamp) = ?
-                    AND toDayOfWeek(timestamp) = ?
-                GROUP BY date_key, hour_key, toStartOfInterval(timestamp, INTERVAL 15 MINUTE)
-                HAVING hourly_avg > 0
-            )
-            GROUP BY hour_key";
-
-        var dailyTotalsResult = await ReadSingleOrDefaultAsync<DailyAveragesResult>(historicalQuery, serverGuid, currentHour, clickHouseDayOfWeek);
 
         BusyIndicatorResult busyIndicator;
 
-        if (dailyTotalsResult?.DailyAverages == null || dailyTotalsResult.DailyAverages.Length < 3)
+        if (historical?.DailyAverages == null || historical.DailyAverages.Length < 3)
         {
             busyIndicator = new BusyIndicatorResult
             {
@@ -685,7 +697,7 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
         else
         {
             // Calculate statistics
-            var averages = dailyTotalsResult.DailyAverages.OrderBy(x => x).ToArray();
+            var averages = historical.DailyAverages.OrderBy(x => x).ToArray();
             var count = averages.Length;
             
             var avgPlayers = averages.Average();
@@ -912,5 +924,17 @@ public class HistoricalBusyStats
 
 public class DailyAveragesResult
 {
+    public double[] DailyAverages { get; set; } = Array.Empty<double>();
+}
+
+public class ServerCurrentActivity
+{
+    public string ServerGuid { get; set; } = "";
+    public double CurrentPlayers { get; set; }
+}
+
+public class ServerHistoricalData
+{
+    public string ServerGuid { get; set; } = "";
     public double[] DailyAverages { get; set; } = Array.Empty<double>();
 }
