@@ -280,46 +280,14 @@ public class GameTrendsService : BaseClickHouseService
 
     var fourHourForecastQuery = $@"
         SELECT 
-            hour_of_day,
-            day_of_week,
-            AVG(hourly_total) as predicted_players,
+            toHour(timestamp) as hour_of_day,
+            toDayOfWeek(timestamp) as day_of_week,
+            AVG(players_online) as predicted_players,
             COUNT(*) as data_points
-        FROM (
-            SELECT 
-                date_key,
-                hour_of_day,
-                day_of_week,
-                -- Sum the most recent player count from each server in each 15-minute window
-                -- Then average all time windows within the hour
-                AVG(players_total) as hourly_total
-            FROM (
-                SELECT 
-                    date_key,
-                    hour_of_day,
-                    day_of_week,
-                    time_window,
-                    -- Sum the most recent count from each server in this time window
-                    SUM(players_online) as players_total
-                FROM (
-                    SELECT 
-                        toDate(timestamp) as date_key,
-                        toHour(timestamp) as hour_of_day,
-                        toDayOfWeek(timestamp) as day_of_week,
-                        toStartOfInterval(timestamp, INTERVAL 15 MINUTE) as time_window,
-                        server_guid,
-                        argMax(players_online, timestamp) as players_online
-                    FROM server_online_counts
-                    {whereClause}
-                        AND (toHour(timestamp), toDayOfWeek(timestamp)) IN ({string.Join(",", forecastEntries.Select(e => $"({e.hour}, {e.dayOfWeek})"))})
-                    GROUP BY date_key, hour_of_day, day_of_week, time_window, server_guid
-                ) server_totals
-                GROUP BY date_key, hour_of_day, day_of_week, time_window
-                HAVING players_total > 0
-            ) time_window_totals
-            GROUP BY date_key, hour_of_day, day_of_week
-            HAVING COUNT(*) >= 2  -- Require at least 2 time windows per hour for reliable data
-        )
-        GROUP BY hour_of_day, day_of_week
+        FROM server_online_counts
+        {whereClause}
+            AND (toHour(timestamp), toDayOfWeek(timestamp)) IN ({string.Join(",", forecastEntries.Select(e => $"({e.hour}, {e.dayOfWeek})"))})
+        GROUP BY toHour(timestamp), toDayOfWeek(timestamp)
         ORDER BY hour_of_day, day_of_week";
 
     var fourHourForecast = await ReadAllAsync<HourlyPrediction>(fourHourForecastQuery, parameters.ToArray());
@@ -339,55 +307,15 @@ public class GameTrendsService : BaseClickHouseService
     var uniqueHourDayCombos = next24Hours.GroupBy(x => new { x.hour, x.dayOfWeek }).ToList();
     
     var peakHoursQuery = $@"
-        WITH hourly_averages AS (
-            SELECT 
-                hour_of_day,
-                day_of_week,
-                AVG(hourly_total) as avg_players
-            FROM (
-                SELECT 
-                    date_key,
-                    hour_of_day,
-                    day_of_week,
-                    -- Sum the most recent player count from each server in each 15-minute window
-                    -- Then average all time windows within the hour
-                    AVG(players_total) as hourly_total
-                FROM (
-                    SELECT 
-                        date_key,
-                        hour_of_day,
-                        day_of_week,
-                        time_window,
-                        -- Sum the most recent count from each server in this time window
-                        SUM(players_online) as players_total
-                    FROM (
-                        SELECT 
-                            toDate(timestamp) as date_key,
-                            toHour(timestamp) as hour_of_day,
-                            toDayOfWeek(timestamp) as day_of_week,
-                            toStartOfInterval(timestamp, INTERVAL 15 MINUTE) as time_window,
-                            server_guid,
-                            argMax(players_online, timestamp) as players_online
-                        FROM server_online_counts
-                        {whereClause}
-                        GROUP BY date_key, hour_of_day, day_of_week, time_window, server_guid
-                    ) server_totals
-                    GROUP BY date_key, hour_of_day, day_of_week, time_window
-                    HAVING players_total > 0
-                ) time_window_totals
-                GROUP BY date_key, hour_of_day, day_of_week
-                HAVING COUNT(*) >= 2  -- Require at least 2 time windows per hour for reliable data
-            )
-            GROUP BY hour_of_day, day_of_week
-            HAVING COUNT(*) >= 3  -- Ensure sufficient data points
-        )
         SELECT 
-            hour_of_day,
-            day_of_week,
-            avg_players as predicted_players
-        FROM hourly_averages
-        WHERE (hour_of_day, day_of_week) IN ({string.Join(",", uniqueHourDayCombos.Select(x => $"({x.Key.hour}, {x.Key.dayOfWeek})"))})
-        ORDER BY avg_players DESC
+            toHour(timestamp) as hour_of_day,
+            toDayOfWeek(timestamp) as day_of_week,
+            AVG(players_online) as predicted_players
+        FROM server_online_counts
+        {whereClause}
+        GROUP BY toHour(timestamp), toDayOfWeek(timestamp)
+        HAVING COUNT(*) >= 3  -- Ensure sufficient data points
+        ORDER BY predicted_players DESC
         LIMIT 3";
 
     var peakHours = await ReadAllAsync<Peak24HourPrediction>(peakHoursQuery, parameters.ToArray());
@@ -517,171 +445,6 @@ private static string GenerateRecommendation(string currentStatus, string trendD
     return string.Join(" ", recommendations);
 }
 
-/// <summary>
-/// Gets Google-style busy indicator comparing current activity to historical patterns
-/// </summary>
-public async Task<BusyIndicatorResult> GetBusyIndicatorAsync(string? game = null)
-{
-    var currentTime = DateTime.UtcNow;
-    var currentHour = currentTime.Hour;
-    var currentDayOfWeek = (int)currentTime.DayOfWeek;
-    var clickHouseDayOfWeek = currentDayOfWeek == 0 ? 7 : currentDayOfWeek;
-
-    var whereClause = new StringBuilder();
-    var parameters = new List<object>();
-
-    if (!string.IsNullOrEmpty(game))
-    {
-        whereClause.Append("AND game = ?");
-        parameters.Add(game);
-    }
-
-    // Get current activity from player_metrics (real-time data within last minute)
-    var currentActivityQuery = $@"
-        SELECT 
-            COUNT(DISTINCT player_name) as current_players
-        FROM player_metrics 
-        WHERE timestamp >= now() - INTERVAL 1 MINUTE
-            AND is_bot = 0
-            {whereClause}";
-
-    var currentActivity = await ReadSingleOrDefaultAsync<CurrentBusyMetrics>(currentActivityQuery, parameters.ToArray());
-    var currentPlayers = currentActivity?.CurrentPlayers ?? 0;
-
-    // Reset whereClause and parameters for historical query using server_online_counts
-    whereClause = new StringBuilder();
-    whereClause.Append("WHERE timestamp >= now() - INTERVAL 60 DAY");
-    parameters = new List<object>();
-
-    if (!string.IsNullOrEmpty(game))
-    {
-        whereClause.Append(" AND game = ?");
-        parameters.Add(game);
-    }
-
-    // Simplified approach using ClickHouse native aggregations
-    var historicalQuery = $@"
-        SELECT 
-            groupArray(hourly_total) as daily_averages
-        FROM (
-            SELECT 
-                date_key,
-                hour_key,
-                -- Sum the most recent player count from each server in each 15-minute window
-                -- Then average all time windows within the hour
-                AVG(players_total) as hourly_total
-            FROM (
-                SELECT 
-                    date_key,
-                    hour_key,
-                    time_window,
-                    -- Sum the most recent count from each server in this time window
-                    SUM(players_online) as players_total
-                FROM (
-                    SELECT 
-                        toDate(timestamp) as date_key,
-                        toHour(timestamp) as hour_key,
-                        toStartOfInterval(timestamp, INTERVAL 15 MINUTE) as time_window,
-                        server_guid,
-                        argMax(players_online, timestamp) as players_online
-                    FROM server_online_counts
-                    {whereClause}
-                        AND toHour(timestamp) = ?
-                        AND toDayOfWeek(timestamp) = ?
-                    GROUP BY date_key, hour_key, time_window, server_guid
-                ) server_totals
-                GROUP BY date_key, hour_key, time_window
-                HAVING players_total > 0
-            ) time_window_totals
-            GROUP BY date_key, hour_key
-            HAVING COUNT(*) >= 2  -- Require at least 2 time windows per hour for reliable data
-        )";
-
-    var histParams = parameters.Concat(new object[] { currentHour, clickHouseDayOfWeek }).ToArray();
-    var dailyTotalsResults = await ReadAllAsync<DailyAveragesResult>(historicalQuery, histParams);
-    var dailyTotalsResult = dailyTotalsResults.FirstOrDefault();
-    
-    if (dailyTotalsResult?.DailyAverages == null || dailyTotalsResult.DailyAverages.Length < 3)
-    {
-        return new BusyIndicatorResult
-        {
-            BusyLevel = "unknown",
-            BusyText = "Not enough data",
-            CurrentPlayers = currentPlayers,
-            TypicalPlayers = 0,
-            Percentile = 0,
-            GeneratedAt = DateTime.UtcNow
-        };
-    }
-
-    // Calculate statistics in application code
-    var averages = dailyTotalsResult.DailyAverages.OrderBy(x => x).ToArray();
-    var count = averages.Length;
-    
-    var avgPlayers = averages.Average();
-    var minPlayers = averages.Min();
-    var maxPlayers = averages.Max();
-    var medianPlayers = count % 2 == 0 
-        ? (averages[count / 2 - 1] + averages[count / 2]) / 2.0
-        : averages[count / 2];
-
-    var historicalStats = new HistoricalBusyStats
-    {
-        AvgPlayers = avgPlayers,
-        MedianPlayers = medianPlayers,
-        MinPlayers = minPlayers,
-        MaxPlayers = maxPlayers,
-        DataPoints = count
-    };
-
-    // Simplified busy level calculation - just compare to average
-    string busyLevel;
-    string busyText;
-    double percentile = 0;
-
-    if (currentPlayers > avgPlayers * 1.5)
-    {
-        busyLevel = "much_busier";
-        busyText = "Much busier than usual";
-        percentile = 80;
-    }
-    else if (currentPlayers > avgPlayers)
-    {
-        busyLevel = "busier";
-        busyText = "Busier than usual";
-        percentile = 60;
-    }
-    else if (currentPlayers >= avgPlayers * 0.5)
-    {
-        busyLevel = "about_average";
-        busyText = "About average activity";
-        percentile = 50;
-    }
-    else
-    {
-        busyLevel = "quieter";
-        busyText = "Quieter than usual";
-        percentile = 30;
-    }
-
-    return new BusyIndicatorResult
-    {
-        BusyLevel = busyLevel,
-        BusyText = busyText,
-        CurrentPlayers = currentPlayers,
-        TypicalPlayers = avgPlayers,
-        Percentile = percentile,
-        HistoricalRange = new HistoricalRange
-        {
-            Min = historicalStats.MinPlayers,
-            Median = historicalStats.MedianPlayers,
-            Max = historicalStats.MaxPlayers,
-            Average = historicalStats.AvgPlayers
-        },
-        GeneratedAt = DateTime.UtcNow
-    };
-}
-
 public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(string[] serverGuids)
 {
     var currentTime = DateTime.UtcNow;
@@ -714,47 +477,24 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
 
     var serverInfos = await ReadAllAsync<GameTrendsServerInfo>(serverInfoQuery);
 
-    // Single query to get historical data for all servers for current hour
-    // Using the same logic as GetBusyIndicatorAsync but adapted for multiple servers
+    // Simplified query to get historical data for all servers for current hour
+    // Directly average players_online by hour - much simpler and more efficient
     var historicalQuery = $@"
         SELECT 
             server_guid,
-            groupArray(hourly_total) as daily_averages
+            groupArray(hourly_avg) as daily_averages
         FROM (
             SELECT 
                 server_guid,
-                date_key,
-                hour_key,
-                -- Sum the most recent player count from each server in each 15-minute window
-                -- Then average all time windows within the hour
-                AVG(players_total) as hourly_total
-            FROM (
-                SELECT 
-                    server_guid,
-                    date_key,
-                    hour_key,
-                    time_window,
-                    -- Sum the most recent count from each server in this time window
-                    SUM(players_online) as players_total
-                FROM (
-                    SELECT 
-                        server_guid,
-                        toDate(timestamp) as date_key,
-                        toHour(timestamp) as hour_key,
-                        toStartOfInterval(timestamp, INTERVAL 15 MINUTE) as time_window,
-                        argMax(players_online, timestamp) as players_online
-                    FROM server_online_counts
-                    WHERE timestamp >= now() - INTERVAL 60 DAY 
-                        AND server_guid IN ({serverGuidList})
-                        AND toHour(timestamp) = ?
-                        AND toDayOfWeek(timestamp) = ?
-                    GROUP BY server_guid, date_key, hour_key, time_window
-                ) server_totals
-                GROUP BY server_guid, date_key, hour_key, time_window
-                HAVING players_total > 0
-            ) time_window_totals
-            GROUP BY server_guid, date_key, hour_key
-            HAVING COUNT(*) >= 2  -- Require at least 2 time windows per hour for reliable data
+                toDate(timestamp) as date_key,
+                AVG(players_online) as hourly_avg
+            FROM server_online_counts
+            WHERE timestamp >= now() - INTERVAL 60 DAY 
+                AND server_guid IN ({serverGuidList})
+                AND toHour(timestamp) = ?
+                AND toDayOfWeek(timestamp) = ?
+            GROUP BY server_guid, date_key
+            HAVING hourly_avg > 0
         )
         GROUP BY server_guid";
 
@@ -770,43 +510,14 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
 
     var timelineQuery = $@"
         SELECT 
-            hour_key as hour,
-            AVG(hourly_total) as avg_players
-        FROM (
-            SELECT 
-                hour_key,
-                date_key,
-                -- Sum the most recent player count from each server in each 15-minute window
-                -- Then average all time windows within the hour
-                AVG(players_total) as hourly_total
-            FROM (
-                SELECT 
-                    hour_key,
-                    date_key,
-                    time_window,
-                    -- Sum the most recent count from each server in this time window
-                    SUM(players_online) as players_total
-                FROM (
-                    SELECT 
-                        toHour(timestamp) as hour_key,
-                        toDate(timestamp) as date_key,
-                        toStartOfInterval(timestamp, INTERVAL 15 MINUTE) as time_window,
-                        server_guid,
-                        argMax(players_online, timestamp) as players_online
-                    FROM server_online_counts
-                    WHERE timestamp >= now() - INTERVAL 30 DAY 
-                        AND server_guid IN ({serverGuidList})
-                        AND toDayOfWeek(timestamp) = ?
-                        AND toHour(timestamp) IN ({string.Join(",", timelineHours)})
-                    GROUP BY hour_key, date_key, time_window, server_guid
-                ) server_totals
-                GROUP BY hour_key, date_key, time_window
-                HAVING players_total > 0
-            ) time_window_totals
-            GROUP BY hour_key, date_key
-            HAVING COUNT(*) >= 2  -- Require at least 2 time windows per hour for reliable data
-        )
-        GROUP BY hour_key
+            toHour(timestamp) as hour,
+            AVG(players_online) as avg_players
+        FROM server_online_counts
+        WHERE timestamp >= now() - INTERVAL 30 DAY 
+            AND server_guid IN ({serverGuidList})
+            AND toDayOfWeek(timestamp) = ?
+            AND toHour(timestamp) IN ({string.Join(",", timelineHours)})
+        GROUP BY toHour(timestamp)
         ORDER BY hour";
 
     var timelineData = await ReadAllAsync<HourlyTimelineData>(timelineQuery, new object[] { clickHouseDayOfWeek });
