@@ -310,9 +310,9 @@ public class GameTrendsService : BaseClickHouseService
 
     var fourHourForecast = await ReadAllAsync<HourlyPrediction>(fourHourForecastQuery, parameters.ToArray());
 
-    // Get 24-hour peak analysis - find top 3 busiest hours in next 24 hours
+    // Get 24-hour peak analysis - find top 3 busiest hours in next 24 hours (including current hour)
     var next24Hours = new List<(int hour, int dayOfWeek)>();
-    for (int i = 1; i <= 24; i++)
+    for (int i = 0; i < 24; i++)
     {
         var futureTime = currentTime.AddHours(i);
         var futureHour = futureTime.Hour;
@@ -357,6 +357,32 @@ public class GameTrendsService : BaseClickHouseService
 
     var peakHours = await ReadAllAsync<Peak24HourPrediction>(peakHoursQuery, parameters.ToArray());
 
+    // Ensure 24-hour peaks include the highest values from 4-hour forecast for logical consistency
+    var fourHourMax = fourHourForecast.Max(f => f?.PredictedPlayers ?? 0);
+    var peakHoursList = peakHours.ToList();
+    
+    // If the 4-hour max is higher than any 24-hour peak, add it to ensure consistency
+    if (fourHourMax > 0 && (!peakHoursList.Any() || fourHourMax > peakHoursList.Max(p => p.PredictedPlayers)))
+    {
+        var maxFourHourEntry = fourHourForecast.FirstOrDefault(f => f.PredictedPlayers == fourHourMax);
+        if (maxFourHourEntry != null)
+        {
+            // Remove any existing entry for this hour/day combination
+            peakHoursList.RemoveAll(p => p.HourOfDay == maxFourHourEntry.HourOfDay && p.DayOfWeek == maxFourHourEntry.DayOfWeek);
+            
+            // Add the 4-hour forecast entry
+            peakHoursList.Add(new Peak24HourPrediction
+            {
+                HourOfDay = maxFourHourEntry.HourOfDay,
+                DayOfWeek = maxFourHourEntry.DayOfWeek,
+                PredictedPlayers = maxFourHourEntry.PredictedPlayers
+            });
+            
+            // Re-sort and take top 3
+            peakHoursList = peakHoursList.OrderByDescending(p => p.PredictedPlayers).Take(3).ToList();
+        }
+    }
+
     // Calculate insights - use current hour prediction from forecast instead of real-time data
     var currentHourPredicted = fourHourForecast.FirstOrDefault(f => f.HourOfDay == currentHour && f.DayOfWeek == clickHouseDayOfWeek)?.PredictedPlayers ?? 0;
     
@@ -390,9 +416,9 @@ public class GameTrendsService : BaseClickHouseService
         NextHourPredictedPlayers = nextHourPredicted,
         FourHourMaxPredictedPlayers = fourHourMaxPredicted,
         FourHourForecast = fourHourForecast.ToList(),
-        Next24HourPeaks = peakHours.ToList(),
+        Next24HourPeaks = peakHoursList,
         GeneratedAt = DateTime.UtcNow,
-        RecommendationMessage = GenerateRecommendation(currentStatus, trendDirection, fourHourMaxPredicted, peakHours.FirstOrDefault())
+        RecommendationMessage = GenerateRecommendation(currentStatus, trendDirection, fourHourMaxPredicted, peakHoursList.FirstOrDefault())
     };
 }
 
