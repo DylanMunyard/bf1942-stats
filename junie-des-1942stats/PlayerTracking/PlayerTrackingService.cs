@@ -237,7 +237,7 @@ public class PlayerTrackingService
                 // Publish events after successful database operations
                 await PublishPlayerEvents(eventsToPublish, server);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 await transaction.RollbackAsync();
                 throw;

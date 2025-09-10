@@ -115,7 +115,7 @@ public class AppController : ControllerBase
             // Generate fresh data - fetch trends and badges in parallel
             var badgeDefinitionsTask = Task.FromResult(_badgeDefinitionsService.GetAllBadges());
             var currentActivityTask = _gameTrendsService.GetCurrentActivityStatusAsync();
-            var trendInsightsTask = _gameTrendsService.GetTrendInsightsAsync(null, timeZoneOffsetHours);
+            var trendInsightsTask = _gameTrendsService.GetSmartPredictionInsightsAsync(null, timeZoneOffsetHours);
             var hourlyTrendsTask = _gameTrendsService.GetHourlyActivityTrendsAsync(null, 7);
 
             await Task.WhenAll(badgeDefinitionsTask, currentActivityTask, trendInsightsTask, hourlyTrendsTask);

@@ -59,5 +59,9 @@ namespace junie_des_1942stats.ServerStats.Models
         public int PeakPlayerCount { get; set; }
         public int TotalPlayTime { get; set; } // Total minutes the map was active
         public double PlayTimePercentage { get; set; } // Percentage of total server time
+        public int Team1Victories { get; set; } // Number of team 1 victories on this map
+        public int Team2Victories { get; set; } // Number of team 2 victories on this map
+        public string? Team1Label { get; set; } // Most common team 1 label on this map
+        public string? Team2Label { get; set; } // Most common team 2 label on this map
     }
 }

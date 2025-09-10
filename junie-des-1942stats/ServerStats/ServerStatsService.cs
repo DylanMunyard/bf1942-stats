@@ -980,6 +980,27 @@ WITH map_data AS (
         AND map_name != ''
     GROUP BY map_name
 ),
+victory_data AS (
+    SELECT 
+        map_name,
+        COUNT(DISTINCT CASE 
+            WHEN JSONExtractInt(metadata, 'WinningTeam') = 1 THEN round_id 
+            ELSE NULL 
+        END) AS team1_victories,
+        COUNT(DISTINCT CASE 
+            WHEN JSONExtractInt(metadata, 'WinningTeam') = 2 THEN round_id 
+            ELSE NULL 
+        END) AS team2_victories,
+        anyIf(JSONExtractString(metadata, 'WinningTeamLabel'), JSONExtractInt(metadata, 'WinningTeam') = 1) AS team1_label,
+        anyIf(JSONExtractString(metadata, 'WinningTeamLabel'), JSONExtractInt(metadata, 'WinningTeam') = 2) AS team2_label
+    FROM player_achievements_deduplicated
+    WHERE server_guid = '{serverGuid.Replace("'", "''")}'
+        AND achievement_type = 'team_victory'
+        AND achieved_at >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
+        AND achieved_at < '{endPeriod:yyyy-MM-dd HH:mm:ss}'
+        AND map_name != ''
+    GROUP BY map_name
+),
 total_data AS (
     SELECT SUM(data_points) AS total_points
     FROM map_data
@@ -989,8 +1010,13 @@ SELECT
     ROUND(md.avg_players, 2) AS avg_players,
     md.peak_players,
     ROUND(md.data_points * 0.5, 0) AS estimated_play_time_minutes, -- 30 seconds per data point = 0.5 minutes
-    ROUND(md.data_points * 100.0 / NULLIF(td.total_points, 0), 2) AS play_time_percentage
+    ROUND(md.data_points * 100.0 / NULLIF(td.total_points, 0), 2) AS play_time_percentage,
+    COALESCE(vd.team1_victories, 0) AS team1_victories,
+    COALESCE(vd.team2_victories, 0) AS team2_victories,
+    vd.team1_label,
+    vd.team2_label
 FROM map_data md
+LEFT JOIN victory_data vd ON md.map_name = vd.map_name
 CROSS JOIN total_data td
 ORDER BY md.data_points DESC, md.avg_players DESC
 FORMAT TabSeparated";
@@ -1010,12 +1036,14 @@ FORMAT TabSeparated";
         foreach (var line in result?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>())
         {
             var parts = line.Split('\t');
-            if (parts.Length >= 5)
+            if (parts.Length >= 9)
             {
                 if (double.TryParse(parts[1], out var avgPlayers) &&
                     int.TryParse(parts[2], out var peakPlayers) &&
                     int.TryParse(parts[3], out var totalPlayTime) &&
-                    double.TryParse(parts[4], out var playTimePercentage))
+                    double.TryParse(parts[4], out var playTimePercentage) &&
+                    int.TryParse(parts[5], out var team1Victories) &&
+                    int.TryParse(parts[6], out var team2Victories))
                 {
                     allMaps.Add(new PopularMapDataPoint
                     {
@@ -1023,7 +1051,11 @@ FORMAT TabSeparated";
                         AveragePlayerCount = Math.Round(avgPlayers, 2),
                         PeakPlayerCount = peakPlayers,
                         TotalPlayTime = totalPlayTime,
-                        PlayTimePercentage = Math.Round(playTimePercentage, 2)
+                        PlayTimePercentage = Math.Round(playTimePercentage, 2),
+                        Team1Victories = team1Victories,
+                        Team2Victories = team2Victories,
+                        Team1Label = string.IsNullOrEmpty(parts[7]) ? null : parts[7],
+                        Team2Label = string.IsNullOrEmpty(parts[8]) ? null : parts[8]
                     });
                 }
             }

@@ -235,14 +235,14 @@ public class GameTrendsController : ControllerBase
     /// <param name="timeZoneOffsetHours">Player's timezone offset from UTC (e.g., +14 for Australia/Sydney)</param>
     [HttpGet("insights")]
     [ResponseCache(Duration = 900, Location = ResponseCacheLocation.Any)] // 15 minutes cache
-    public async Task<ActionResult<TrendInsights>> GetTrendInsights(
+    public async Task<ActionResult<SmartPredictionInsights>> GetTrendInsights(
         [FromQuery] string? game = null, 
         [FromQuery] int timeZoneOffsetHours = 0)
     {
         try
         {
             var cacheKey = $"trends:insights:{game ?? "all"}:{timeZoneOffsetHours}";
-            var cachedData = await _cacheService.GetAsync<TrendInsights>(cacheKey);
+            var cachedData = await _cacheService.GetAsync<SmartPredictionInsights>(cacheKey);
             
             if (cachedData != null)
             {
@@ -251,7 +251,7 @@ public class GameTrendsController : ControllerBase
                 return Ok(cachedData);
             }
 
-            var insights = await _gameTrendsService.GetTrendInsightsAsync(game, timeZoneOffsetHours);
+            var insights = await _gameTrendsService.GetSmartPredictionInsightsAsync(game, timeZoneOffsetHours);
             
             // Cache for 15 minutes - insights should be relatively current
             await _cacheService.SetAsync(cacheKey, insights, TimeSpan.FromMinutes(15));
@@ -265,6 +265,47 @@ public class GameTrendsController : ControllerBase
         {
             _logger.LogError(ex, "Error generating trend insights for game {GameId}", game);
             return StatusCode(500, "Failed to generate trend insights");
+        }
+    }
+
+    /// <summary>
+    /// Gets Google-style busy indicator comparing current activity to historical patterns.
+    /// Shows "Busier than usual", "Busy", "As busy as usual", etc.
+    /// </summary>
+    /// <param name="game">Optional filter by game (bf1942, fh2, bfv)</param>
+    /// <param name="timeZoneOffsetHours">Player's timezone offset from UTC</param>
+    [HttpGet("busy-indicator")]
+    [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Any)] // 5 minutes cache
+    public async Task<ActionResult<BusyIndicatorResult>> GetBusyIndicator(
+        [FromQuery] string? game = null, 
+        [FromQuery] int timeZoneOffsetHours = 0)
+    {
+        try
+        {
+            var cacheKey = $"trends:busy:{game ?? "all"}:{timeZoneOffsetHours}";
+            var cachedData = await _cacheService.GetAsync<BusyIndicatorResult>(cacheKey);
+            
+            if (cachedData != null)
+            {
+                _logger.LogDebug("Returning cached busy indicator for game {GameId} with timezone offset {Offset}", 
+                    game ?? "all", timeZoneOffsetHours);
+                return Ok(cachedData);
+            }
+
+            var busyIndicator = await _gameTrendsService.GetBusyIndicatorAsync(game, timeZoneOffsetHours);
+            
+            // Cache for 5 minutes - busy indicator should be current
+            await _cacheService.SetAsync(cacheKey, busyIndicator, TimeSpan.FromMinutes(5));
+            
+            _logger.LogInformation("Generated busy indicator for game {GameId}: {BusyLevel} - {BusyText}", 
+                game ?? "all", busyIndicator.BusyLevel, busyIndicator.BusyText);
+
+            return Ok(busyIndicator);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating busy indicator for game {GameId}", game);
+            return StatusCode(500, "Failed to generate busy indicator");
         }
     }
 
@@ -293,7 +334,7 @@ public class GameTrendsController : ControllerBase
 
             // Fetch multiple trend data points in parallel for fast response
             var currentActivityTask = _gameTrendsService.GetCurrentActivityStatusAsync();
-            var trendsInsightsTask = _gameTrendsService.GetTrendInsightsAsync(game, timeZoneOffsetHours);
+            var trendsInsightsTask = _gameTrendsService.GetSmartPredictionInsightsAsync(game, timeZoneOffsetHours);
             var hourlyTrendsTask = _gameTrendsService.GetHourlyActivityTrendsAsync(game, 7); // Last week only for landing page
 
             await Task.WhenAll(currentActivityTask, trendsInsightsTask, hourlyTrendsTask);
@@ -327,7 +368,7 @@ public class GameTrendsController : ControllerBase
 public class LandingPageTrendSummary
 {
     public List<CurrentActivityStatus> CurrentActivity { get; set; } = new();
-    public TrendInsights Insights { get; set; } = new();
+    public SmartPredictionInsights Insights { get; set; } = new();
     public List<HourlyActivityTrend> HourlyTrends { get; set; } = new();
     public DateTime GeneratedAt { get; set; }
 }
