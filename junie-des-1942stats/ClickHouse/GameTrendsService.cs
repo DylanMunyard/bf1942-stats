@@ -286,14 +286,23 @@ public class GameTrendsService : BaseClickHouseService
             COUNT(*) as data_points
         FROM (
             SELECT 
-                toHour(timestamp) as hour_of_day,
-                toDayOfWeek(timestamp) as day_of_week,
-                toDate(timestamp) as date_key,
-                SUM(players_online) as hourly_total
-            FROM server_online_counts
-            {whereClause}
-                AND (toHour(timestamp), toDayOfWeek(timestamp)) IN ({string.Join(",", forecastEntries.Select(e => $"({e.hour}, {e.dayOfWeek})"))})
-            GROUP BY toHour(timestamp), toDayOfWeek(timestamp), toDate(timestamp)
+                hour_of_day,
+                day_of_week,
+                date_key,
+                SUM(latest_players_per_server) as hourly_total
+            FROM (
+                SELECT 
+                    toHour(timestamp) as hour_of_day,
+                    toDayOfWeek(timestamp) as day_of_week,
+                    toDate(timestamp) as date_key,
+                    server_guid,
+                    argMax(players_online, timestamp) as latest_players_per_server
+                FROM server_online_counts
+                {whereClause}
+                    AND (toHour(timestamp), toDayOfWeek(timestamp)) IN ({string.Join(",", forecastEntries.Select(e => $"({e.hour}, {e.dayOfWeek})"))})
+                GROUP BY toHour(timestamp), toDayOfWeek(timestamp), toDate(timestamp), server_guid
+            )
+            GROUP BY hour_of_day, day_of_week, date_key
             HAVING hourly_total > 0
         )
         GROUP BY hour_of_day, day_of_week
@@ -322,13 +331,23 @@ public class GameTrendsService : BaseClickHouseService
             AVG(hourly_total) as predicted_players
         FROM (
             SELECT 
-                toHour(timestamp) as hour_of_day,
-                toDayOfWeek(timestamp) as day_of_week,
-                toDate(timestamp) as date_key,
-                SUM(players_online) as hourly_total
-            FROM server_online_counts
-            {whereClause}
-            GROUP BY toHour(timestamp), toDayOfWeek(timestamp), toDate(timestamp)
+                hour_of_day,
+                day_of_week,
+                date_key,
+                SUM(latest_players_per_server) as hourly_total
+            FROM (
+                SELECT 
+                    toHour(timestamp) as hour_of_day,
+                    toDayOfWeek(timestamp) as day_of_week,
+                    toDate(timestamp) as date_key,
+                    server_guid,
+                    argMax(players_online, timestamp) as latest_players_per_server
+                FROM server_online_counts
+                {whereClause}
+                    AND (toHour(timestamp), toDayOfWeek(timestamp)) IN ({string.Join(",", next24Hours.GroupBy(x => new { x.hour, x.dayOfWeek }).Select(g => $"({g.Key.hour}, {g.Key.dayOfWeek})"))})
+                GROUP BY toHour(timestamp), toDayOfWeek(timestamp), toDate(timestamp), server_guid
+            )
+            GROUP BY hour_of_day, day_of_week, date_key
             HAVING hourly_total > 0
         )
         GROUP BY hour_of_day, day_of_week
@@ -338,13 +357,17 @@ public class GameTrendsService : BaseClickHouseService
 
     var peakHours = await ReadAllAsync<Peak24HourPrediction>(peakHoursQuery, parameters.ToArray());
 
-    // Get actual current activity from player_metrics (real-time data)
+    // Get actual current activity from server_online_counts (real-time data)
+    // Use argMax to get the latest player count per server, then sum them
     var realTimeActivityQuery = @"
         SELECT 
-            COUNT(DISTINCT player_name) as predicted_players
-        FROM player_metrics 
-        WHERE timestamp >= now() - INTERVAL 1 MINUTE
-            AND is_bot = 0";
+            SUM(latest_players) as predicted_players
+        FROM (
+            SELECT 
+                server_guid,
+                argMax(players_online, timestamp) as latest_players
+            FROM server_online_counts 
+            WHERE timestamp >= now() - INTERVAL 1 MINUTE";
     
     var realTimeParams = new List<object>();
     if (!string.IsNullOrEmpty(game))
@@ -352,12 +375,22 @@ public class GameTrendsService : BaseClickHouseService
         realTimeActivityQuery += " AND game = ?";
         realTimeParams.Add(game);
     }
+    
+    realTimeActivityQuery += @"
+            GROUP BY server_guid
+        )";
 
     var realTimeActivity = await ReadSingleOrDefaultAsync<HourlyPrediction>(realTimeActivityQuery, realTimeParams.ToArray());
 
     // Calculate insights
     var currentPredicted = realTimeActivity?.PredictedPlayers ?? 0;
-    var nextHourPredicted = fourHourForecast.FirstOrDefault(f => f.HourOfDay == (currentHour + 1) % 24)?.PredictedPlayers ?? 0;
+    
+    // Get next hour prediction - look for the next hour in the forecast
+    var nextHourTime = currentTime.AddHours(1);
+    var nextHourClickHouseDayOfWeek = (int)nextHourTime.DayOfWeek == 0 ? 7 : (int)nextHourTime.DayOfWeek;
+    var nextHourPredicted = fourHourForecast.FirstOrDefault(f => f.HourOfDay == nextHourTime.Hour && f.DayOfWeek == nextHourClickHouseDayOfWeek)?.PredictedPlayers ?? 0;
+    
+    // Get max prediction from the next 4 hours (skip current hour)
     var fourHourMaxPredicted = fourHourForecast.Skip(1).Any() ? fourHourForecast.Skip(1).Max(f => f?.PredictedPlayers ?? 0) : 0;
 
     string currentStatus;
@@ -518,7 +551,7 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
 
     var historicalData = await ReadAllAsync<ServerHistoricalData>(historicalQuery, new object[] { currentHour, clickHouseDayOfWeek });
 
-    // Query to get hourly timeline data (4 hours before and after current hour)
+    // Query to get hourly timeline data per server (4 hours before and after current hour)
     var timelineHours = new List<int>();
     for (int i = -4; i <= 4; i++)
     {
@@ -528,6 +561,7 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
 
     var timelineQuery = $@"
         SELECT 
+            server_guid,
             toHour(timestamp) as hour,
             AVG(players_online) as avg_players
         FROM server_online_counts
@@ -535,34 +569,10 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
             AND server_guid IN ({serverGuidList})
             AND toDayOfWeek(timestamp) = ?
             AND toHour(timestamp) IN ({string.Join(",", timelineHours)})
-        GROUP BY toHour(timestamp)
-        ORDER BY hour";
+        GROUP BY server_guid, toHour(timestamp)
+        ORDER BY server_guid, hour";
 
-    var timelineData = await ReadAllAsync<HourlyTimelineData>(timelineQuery, new object[] { clickHouseDayOfWeek });
-
-    // Build hourly timeline
-    var hourlyTimeline = new List<HourlyBusyData>();
-    foreach (var hour in timelineHours)
-    {
-        var hourData = timelineData.FirstOrDefault(td => td.Hour == hour);
-        var avgPlayers = hourData?.AvgPlayers ?? 0;
-        
-        // Calculate busy level based on percentile logic (consistent with main calculation)
-        string busyLevel;
-        if (avgPlayers >= 20) busyLevel = "very_busy";
-        else if (avgPlayers >= 15) busyLevel = "busy";
-        else if (avgPlayers >= 10) busyLevel = "moderate";
-        else if (avgPlayers >= 5) busyLevel = "quiet";
-        else busyLevel = "very_quiet";
-
-        hourlyTimeline.Add(new HourlyBusyData
-        {
-            Hour = hour,
-            TypicalPlayers = avgPlayers,
-            BusyLevel = busyLevel,
-            IsCurrentHour = hour == currentHour
-        });
-    }
+    var timelineData = await ReadAllAsync<ServerHourlyTimelineData>(timelineQuery, new object[] { clickHouseDayOfWeek });
 
     // Build results
     var serverResults = new List<ServerBusyIndicatorResult>();
@@ -572,8 +582,33 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
         var currentActivity = currentActivities.FirstOrDefault(ca => ca.ServerGuid == serverGuid);
         var serverInfo = serverInfos.FirstOrDefault(si => si.ServerGuid == serverGuid);
         var historical = historicalData.FirstOrDefault(hd => hd.ServerGuid == serverGuid);
+        var serverTimelineData = timelineData.Where(td => td.ServerGuid == serverGuid).ToList();
 
         var currentPlayers = currentActivity?.CurrentPlayers ?? 0;
+
+        // Build hourly timeline for this server
+        var serverHourlyTimeline = new List<HourlyBusyData>();
+        foreach (var hour in timelineHours)
+        {
+            var hourData = serverTimelineData.FirstOrDefault(td => td.Hour == hour);
+            var avgPlayers = hourData?.AvgPlayers ?? 0;
+            
+            // Calculate busy level based on percentile logic (consistent with main calculation)
+            string busyLevel;
+            if (avgPlayers >= 20) busyLevel = "very_busy";
+            else if (avgPlayers >= 15) busyLevel = "busy";
+            else if (avgPlayers >= 10) busyLevel = "moderate";
+            else if (avgPlayers >= 5) busyLevel = "quiet";
+            else busyLevel = "very_quiet";
+
+            serverHourlyTimeline.Add(new HourlyBusyData
+            {
+                Hour = hour,
+                TypicalPlayers = avgPlayers,
+                BusyLevel = busyLevel,
+                IsCurrentHour = hour == currentHour
+            });
+        }
 
         BusyIndicatorResult busyIndicator;
 
@@ -677,14 +712,14 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
             ServerGuid = serverGuid,
             ServerName = serverInfo?.ServerName ?? "Unknown Server",
             Game = serverInfo?.Game ?? "Unknown",
-            BusyIndicator = busyIndicator
+            BusyIndicator = busyIndicator,
+            HourlyTimeline = serverHourlyTimeline
         });
     }
 
     return new GroupedServerBusyIndicatorResult
     {
         ServerResults = serverResults,
-        HourlyTimeline = hourlyTimeline,
         GeneratedAt = DateTime.UtcNow
     };
 }
@@ -744,6 +779,7 @@ public class SmartPredictionInsights
 public class HourlyPrediction
 {
     public int HourOfDay { get; set; }
+    public int DayOfWeek { get; set; }
     public double PredictedPlayers { get; set; }
     public int DataPoints { get; set; }
 }
@@ -764,6 +800,13 @@ public class Peak24HourPrediction
 /// </summary>
 internal class HourlyTimelineData
 {
+    public int Hour { get; set; }
+    public double AvgPlayers { get; set; }
+}
+
+internal class ServerHourlyTimelineData
+{
+    public string ServerGuid { get; set; } = "";
     public int Hour { get; set; }
     public double AvgPlayers { get; set; }
 }
@@ -793,12 +836,12 @@ public class ServerBusyIndicatorResult
     public string ServerName { get; set; } = "";
     public string Game { get; set; } = "";
     public BusyIndicatorResult BusyIndicator { get; set; } = new();
+    public List<HourlyBusyData> HourlyTimeline { get; set; } = new();
 }
 
 public class GroupedServerBusyIndicatorResult
 {
     public List<ServerBusyIndicatorResult> ServerResults { get; set; } = new();
-    public List<HourlyBusyData> HourlyTimeline { get; set; } = new(); // 9 hours total (4 before, current, 4 after)
     public DateTime GeneratedAt { get; set; }
 }
 
