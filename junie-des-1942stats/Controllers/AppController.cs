@@ -113,10 +113,8 @@ public class AppController : ControllerBase
 
             // Generate fresh data - fetch trends and badges in parallel
             var badgeDefinitionsTask = Task.FromResult(_badgeDefinitionsService.GetAllBadges());
-            var currentActivityTask = _gameTrendsService.GetCurrentActivityStatusAsync();
-            var trendInsightsTask = _gameTrendsService.GetSmartPredictionInsightsAsync(null);
 
-            await Task.WhenAll(badgeDefinitionsTask, currentActivityTask, trendInsightsTask);
+            await Task.WhenAll(badgeDefinitionsTask);
 
             var landingData = new LandingPageData
             {
@@ -143,12 +141,6 @@ public class AppController : ControllerBase
                     "silver",
                     "gold", 
                     "legend"
-                },
-                TrendSummary = new LandingPageTrendSummary
-                {
-                    CurrentActivity = currentActivityTask.Result.Take(5).ToList(),
-                    Insights = trendInsightsTask.Result,
-                    GeneratedAt = DateTime.UtcNow
                 },
                 GeneratedAt = DateTime.UtcNow
             };

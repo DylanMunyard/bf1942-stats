@@ -257,6 +257,23 @@ public class GameTrendsService : BaseClickHouseService
     // Convert to ClickHouse day format (Monday = 1, Sunday = 7)
     var clickHouseDayOfWeek = currentDayOfWeek == 0 ? 7 : currentDayOfWeek;
 
+    // Get current player count from SQLite using the same logic as GetCurrentActivityStatusAsync
+    var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
+    var currentPlayerQuery = _dbContext.PlayerSessions
+        .Include(ps => ps.Server)
+        .Include(ps => ps.Player)
+        .Where(ps => ps.IsActive && 
+                    ps.LastSeenTime >= oneMinuteAgo &&
+                    !ps.Player.AiBot); // Exclude bots from current activity
+    
+    // Add game filter if specified
+    if (!string.IsNullOrEmpty(game))
+    {
+        currentPlayerQuery = currentPlayerQuery.Where(ps => ps.Server.Game == game);
+    }
+
+    var currentActualPlayers = await currentPlayerQuery.CountAsync();
+
     var whereClause = new StringBuilder();
     whereClause.Append("WHERE timestamp >= now() - INTERVAL 60 DAY");
     var parameters = new List<object>();
@@ -394,11 +411,25 @@ public class GameTrendsService : BaseClickHouseService
     // Get max prediction from the next 4 hours (skip current hour)
     var fourHourMaxPredicted = fourHourForecast.Skip(1).Any() ? fourHourForecast.Skip(1).Max(f => f?.PredictedPlayers ?? 0) : 0;
 
+    // Compare actual vs predicted to determine activity status
+    string activityComparison;
+    if (currentHourPredicted > 0)
+    {
+        var ratio = (double)currentActualPlayers / currentHourPredicted;
+        if (ratio > 1.3) activityComparison = "busier_than_usual";
+        else if (ratio < 0.7) activityComparison = "quieter_than_usual";
+        else activityComparison = "as_usual";
+    }
+    else
+    {
+        activityComparison = currentActualPlayers > 5 ? "busier_than_usual" : "as_usual";
+    }
+
     string currentStatus;
-    if (currentHourPredicted < 5) currentStatus = "very_quiet";
-    else if (currentHourPredicted < 15) currentStatus = "quiet";
-    else if (currentHourPredicted < 30) currentStatus = "moderate";
-    else if (currentHourPredicted < 50) currentStatus = "busy";
+    if (currentActualPlayers < 5) currentStatus = "very_quiet";
+    else if (currentActualPlayers < 15) currentStatus = "quiet";
+    else if (currentActualPlayers < 30) currentStatus = "moderate";
+    else if (currentActualPlayers < 50) currentStatus = "busy";
     else currentStatus = "very_busy";
 
     string trendDirection;
@@ -411,6 +442,8 @@ public class GameTrendsService : BaseClickHouseService
     return new SmartPredictionInsights
     {
         CurrentHourPredictedPlayers = currentHourPredicted,
+        CurrentActualPlayers = currentActualPlayers,
+        ActivityComparisonStatus = activityComparison,
         CurrentStatus = currentStatus,
         TrendDirection = trendDirection,
         NextHourPredictedPlayers = nextHourPredicted,
@@ -677,16 +710,6 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
                 percentile = 10;
             }
 
-            // Add context for extreme cases
-            if (currentPlayers >= maxPlayers * 0.95)
-            {
-                busyText = "Busiest this hour has been recently";
-            }
-            else if (currentPlayers <= minPlayers * 1.1 && minPlayers > 0)
-            {
-                busyText = "Very quiet right now";
-            }
-
             busyIndicator = new BusyIndicatorResult
             {
                 BusyLevel = busyLevel,
@@ -767,6 +790,8 @@ public class ActivityMetrics
 public class SmartPredictionInsights
 {
     public double CurrentHourPredictedPlayers { get; set; }
+    public int CurrentActualPlayers { get; set; }
+    public string ActivityComparisonStatus { get; set; } = ""; // busier_than_usual, quieter_than_usual, as_usual
     public string CurrentStatus { get; set; } = ""; // very_quiet, quiet, moderate, busy, very_busy
     public string TrendDirection { get; set; } = ""; // increasing_significantly, increasing, stable, decreasing, decreasing_significantly
     public double NextHourPredictedPlayers { get; set; }

@@ -155,45 +155,41 @@ public class GameTrendsController : ControllerBase
     [HttpGet("landing-summary")]
     [ResponseCache(Duration = 600, Location = ResponseCacheLocation.Any)] // 10 minutes cache
     public async Task<ActionResult<LandingPageTrendSummary>> GetLandingPageTrendSummary(
-        [FromQuery] string? game = null)
+    [FromQuery] string? game = null)
+{
+    try
     {
-        try
+        var cacheKey = $"trends:landing:{game ?? "all"}";
+        var cachedData = await _cacheService.GetAsync<LandingPageTrendSummary>(cacheKey);
+        
+        if (cachedData != null)
         {
-            var cacheKey = $"trends:landing:{game ?? "all"}";
-            var cachedData = await _cacheService.GetAsync<LandingPageTrendSummary>(cacheKey);
-            
-            if (cachedData != null)
-            {
-                _logger.LogDebug("Returning cached landing page trend summary for game {GameId}", game ?? "all");
-                return Ok(cachedData);
-            }
-
-            // Fetch multiple trend data points in parallel for fast response
-            var currentActivityTask = _gameTrendsService.GetCurrentActivityStatusAsync(game);
-            var trendsInsightsTask = _gameTrendsService.GetSmartPredictionInsightsAsync(game);
-
-            await Task.WhenAll(currentActivityTask, trendsInsightsTask);
-
-            var summary = new LandingPageTrendSummary
-            {
-                CurrentActivity = currentActivityTask.Result.Take(5).ToList(), // Top 5 active servers
-                Insights = trendsInsightsTask.Result,
-                GeneratedAt = DateTime.UtcNow
-            };
-            
-            // Cache for 10 minutes - landing page data should be fresh but not too frequent
-            await _cacheService.SetAsync(cacheKey, summary, TimeSpan.FromMinutes(10));
-            
-            _logger.LogInformation("Generated landing page trend summary for game {GameId}", game ?? "all");
-
-            return Ok(summary);
+            _logger.LogDebug("Returning cached landing page trend summary for game {GameId}", game ?? "all");
+            return Ok(cachedData);
         }
-        catch (Exception ex)
+
+        // Get insights which now includes current player count and comparison
+        var insights = await _gameTrendsService.GetSmartPredictionInsightsAsync(game);
+
+        var summary = new LandingPageTrendSummary
         {
-            _logger.LogError(ex, "Error generating landing page trend summary for game {GameId}", game);
-            return StatusCode(500, "Failed to generate landing page trend summary");
-        }
+            Insights = insights,
+            GeneratedAt = DateTime.UtcNow
+        };
+        
+        // Cache for 10 minutes - landing page data should be fresh but not too frequent
+        await _cacheService.SetAsync(cacheKey, summary, TimeSpan.FromMinutes(10));
+        
+        _logger.LogInformation("Generated landing page trend summary for game {GameId}", game ?? "all");
+
+        return Ok(summary);
     }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Error generating landing page trend summary for game {GameId}", game);
+        return StatusCode(500, "Failed to generate landing page trend summary");
+    }
+}
 }
 
 /// <summary>
@@ -201,7 +197,6 @@ public class GameTrendsController : ControllerBase
 /// </summary>
 public class LandingPageTrendSummary
 {
-    public List<CurrentActivityStatus> CurrentActivity { get; set; } = new();
     public SmartPredictionInsights Insights { get; set; } = new();
     public DateTime GeneratedAt { get; set; }
 }
