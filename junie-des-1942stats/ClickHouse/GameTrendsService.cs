@@ -357,33 +357,8 @@ public class GameTrendsService : BaseClickHouseService
 
     var peakHours = await ReadAllAsync<Peak24HourPrediction>(peakHoursQuery, parameters.ToArray());
 
-    // Get actual current activity from server_online_counts (real-time data)
-    // Use argMax to get the latest player count per server, then sum them
-    var realTimeActivityQuery = @"
-        SELECT 
-            SUM(latest_players) as predicted_players
-        FROM (
-            SELECT 
-                server_guid,
-                argMax(players_online, timestamp) as latest_players
-            FROM server_online_counts 
-            WHERE timestamp >= now() - INTERVAL 1 MINUTE";
-    
-    var realTimeParams = new List<object>();
-    if (!string.IsNullOrEmpty(game))
-    {
-        realTimeActivityQuery += " AND game = ?";
-        realTimeParams.Add(game);
-    }
-    
-    realTimeActivityQuery += @"
-            GROUP BY server_guid
-        )";
-
-    var realTimeActivity = await ReadSingleOrDefaultAsync<HourlyPrediction>(realTimeActivityQuery, realTimeParams.ToArray());
-
-    // Calculate insights
-    var currentPredicted = realTimeActivity?.PredictedPlayers ?? 0;
+    // Calculate insights - use current hour prediction from forecast instead of real-time data
+    var currentHourPredicted = fourHourForecast.FirstOrDefault(f => f.HourOfDay == currentHour && f.DayOfWeek == clickHouseDayOfWeek)?.PredictedPlayers ?? 0;
     
     // Get next hour prediction - look for the next hour in the forecast
     var nextHourTime = currentTime.AddHours(1);
@@ -394,22 +369,22 @@ public class GameTrendsService : BaseClickHouseService
     var fourHourMaxPredicted = fourHourForecast.Skip(1).Any() ? fourHourForecast.Skip(1).Max(f => f?.PredictedPlayers ?? 0) : 0;
 
     string currentStatus;
-    if (currentPredicted < 5) currentStatus = "very_quiet";
-    else if (currentPredicted < 15) currentStatus = "quiet";
-    else if (currentPredicted < 30) currentStatus = "moderate";
-    else if (currentPredicted < 50) currentStatus = "busy";
+    if (currentHourPredicted < 5) currentStatus = "very_quiet";
+    else if (currentHourPredicted < 15) currentStatus = "quiet";
+    else if (currentHourPredicted < 30) currentStatus = "moderate";
+    else if (currentHourPredicted < 50) currentStatus = "busy";
     else currentStatus = "very_busy";
 
     string trendDirection;
-    if (nextHourPredicted > currentPredicted * 1.2) trendDirection = "increasing_significantly";
-    else if (nextHourPredicted > currentPredicted * 1.05) trendDirection = "increasing";
-    else if (nextHourPredicted < currentPredicted * 0.8) trendDirection = "decreasing_significantly";
-    else if (nextHourPredicted < currentPredicted * 0.95) trendDirection = "decreasing";
+    if (nextHourPredicted > currentHourPredicted * 1.2) trendDirection = "increasing_significantly";
+    else if (nextHourPredicted > currentHourPredicted * 1.05) trendDirection = "increasing";
+    else if (nextHourPredicted < currentHourPredicted * 0.8) trendDirection = "decreasing_significantly";
+    else if (nextHourPredicted < currentHourPredicted * 0.95) trendDirection = "decreasing";
     else trendDirection = "stable";
 
     return new SmartPredictionInsights
     {
-        CurrentHourPredictedPlayers = currentPredicted,
+        CurrentHourPredictedPlayers = currentHourPredicted,
         CurrentStatus = currentStatus,
         TrendDirection = trendDirection,
         NextHourPredictedPlayers = nextHourPredicted,
