@@ -169,7 +169,7 @@ public class GameTrendsService : BaseClickHouseService
     /// <summary>
     /// Gets current activity status across games and servers using live SQLite sessions
     /// </summary>
-    public async Task<List<CurrentActivityStatus>> GetCurrentActivityStatusAsync(string? game = null)
+    public async Task<List<CurrentActivityStatus>> GetCurrentActivityStatusAsync(string? game = null, string[]? serverGuids = null)
 {
     // Use SQLite PlayerSessions for real-time data (sessions within last minute)
     var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
@@ -185,6 +185,12 @@ public class GameTrendsService : BaseClickHouseService
     if (!string.IsNullOrEmpty(game))
     {
         query = query.Where(ps => ps.Server.Game == game);
+    }
+    
+    // Add server GUIDs filter if specified
+    if (serverGuids != null && serverGuids.Length > 0)
+    {
+        query = query.Where(ps => serverGuids.Contains(ps.ServerGuid));
     }
     
     var currentActivity = await query
@@ -243,9 +249,9 @@ public class GameTrendsService : BaseClickHouseService
     /// Gets trend insights to help players connect when servers are busy
     /// Provides "is it busy now?" and "will it get busier?" insights
     /// </summary>
-    public async Task<SmartPredictionInsights> GetSmartPredictionInsightsAsync(string? game = null, int timeZoneOffsetHours = 0)
+    public async Task<SmartPredictionInsights> GetSmartPredictionInsightsAsync(string? game = null)
 {
-    var currentTime = DateTime.UtcNow.AddHours(timeZoneOffsetHours);
+    var currentTime = DateTime.UtcNow;
     var currentHour = currentTime.Hour;
     var currentDayOfWeek = (int)currentTime.DayOfWeek;
     // Convert to ClickHouse day format (Monday = 1, Sunday = 7)
@@ -383,7 +389,6 @@ public class GameTrendsService : BaseClickHouseService
         FourHourMaxPredictedPlayers = fourHourMaxPredicted,
         FourHourForecast = fourHourForecast.ToList(),
         Next24HourPeaks = peakHours.ToList(),
-        PlayerTimeZoneOffsetHours = timeZoneOffsetHours,
         GeneratedAt = DateTime.UtcNow,
         RecommendationMessage = GenerateRecommendation(currentStatus, trendDirection, fourHourMaxPredicted, peakHours.FirstOrDefault())
     };
@@ -433,9 +438,9 @@ private static string GenerateRecommendation(string currentStatus, string trendD
 /// <summary>
 /// Gets Google-style busy indicator comparing current activity to historical patterns
 /// </summary>
-public async Task<BusyIndicatorResult> GetBusyIndicatorAsync(string? game = null, int timeZoneOffsetHours = 0)
+public async Task<BusyIndicatorResult> GetBusyIndicatorAsync(string? game = null)
 {
-    var currentTime = DateTime.UtcNow.AddHours(timeZoneOffsetHours);
+    var currentTime = DateTime.UtcNow;
     var currentHour = currentTime.Hour;
     var currentDayOfWeek = (int)currentTime.DayOfWeek;
     var clickHouseDayOfWeek = currentDayOfWeek == 0 ? 7 : currentDayOfWeek;
@@ -612,28 +617,25 @@ public async Task<BusyIndicatorResult> GetBusyIndicatorAsync(string? game = null
     };
 }
 
-public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(string[] serverGuids, int timeZoneOffsetHours = 0)
+public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(string[] serverGuids)
 {
-    var currentTime = DateTime.UtcNow.AddHours(timeZoneOffsetHours);
+    var currentTime = DateTime.UtcNow;
     var currentHour = currentTime.Hour;
     var currentDayOfWeek = (int)currentTime.DayOfWeek;
     var clickHouseDayOfWeek = currentDayOfWeek == 0 ? 7 : currentDayOfWeek;
 
+    // Get current activity using the GetCurrentActivityStatusAsync method
+    var currentActivityStatuses = await GetCurrentActivityStatusAsync(serverGuids: serverGuids);
+    
+    // Convert to the format expected by the rest of the method
+    var currentActivities = currentActivityStatuses.Select(cas => new ServerCurrentActivity
+    {
+        ServerGuid = cas.ServerGuid,
+        CurrentPlayers = cas.CurrentPlayers
+    }).ToList();
+
     // Create server GUID list for IN clause
     var serverGuidList = string.Join(",", serverGuids.Select(sg => $"'{sg}'"));
-
-    // Single query to get current activity for all servers
-    var currentActivityQuery = $@"
-        SELECT 
-            server_guid,
-            COUNT(DISTINCT player_name) as current_players
-        FROM player_metrics 
-        WHERE timestamp >= now() - INTERVAL 1 MINUTE
-            AND is_bot = 0
-            AND server_guid IN ({serverGuidList})
-        GROUP BY server_guid";
-
-    var currentActivities = await ReadAllAsync<ServerCurrentActivity>(currentActivityQuery);
 
     // Single query to get server info for all servers
     var serverInfoQuery = $@"
@@ -822,7 +824,6 @@ public class TrendInsights
     public double NextHourAvgPlayers { get; set; }
     public double NextHourAvgRounds { get; set; }
     public string TrendDirection { get; set; } = ""; // "increasing" or "decreasing"
-    public int PlayerTimeZoneOffsetHours { get; set; }
     public DateTime GeneratedAt { get; set; }
 }
 
@@ -842,7 +843,6 @@ public class SmartPredictionInsights
     public double FourHourMaxPredictedPlayers { get; set; }
     public List<HourlyPrediction> FourHourForecast { get; set; } = new();
     public List<Peak24HourPrediction> Next24HourPeaks { get; set; } = new();
-    public int PlayerTimeZoneOffsetHours { get; set; }
     public DateTime GeneratedAt { get; set; }
     public string RecommendationMessage { get; set; } = "";
 }

@@ -97,25 +97,24 @@ public class AppController : ControllerBase
     /// </summary>
     [HttpGet("landingdata")]
     [ResponseCache(Duration = 600, Location = ResponseCacheLocation.Any, VaryByHeader = "Accept")]
-    public async Task<ActionResult<LandingPageData>> GetLandingPageData([FromQuery] int timeZoneOffsetHours = 0)
+    public async Task<ActionResult<LandingPageData>> GetLandingPageData()
     {
         const string cacheKey = "app:landing:data:v1";
-        var cacheKeyWithTz = $"{cacheKey}:{timeZoneOffsetHours}";
 
         try
         {
             // Try to get from cache first
-            var cachedData = await _cacheService.GetAsync<LandingPageData>(cacheKeyWithTz);
+            var cachedData = await _cacheService.GetAsync<LandingPageData>(cacheKey);
             if (cachedData != null)
             {
-                _logger.LogDebug("Returning cached landing page data for timezone offset {Offset}", timeZoneOffsetHours);
+                _logger.LogDebug("Returning cached landing page data");
                 return Ok(cachedData);
             }
 
             // Generate fresh data - fetch trends and badges in parallel
             var badgeDefinitionsTask = Task.FromResult(_badgeDefinitionsService.GetAllBadges());
             var currentActivityTask = _gameTrendsService.GetCurrentActivityStatusAsync();
-            var trendInsightsTask = _gameTrendsService.GetSmartPredictionInsightsAsync(null, timeZoneOffsetHours);
+            var trendInsightsTask = _gameTrendsService.GetSmartPredictionInsightsAsync(null);
 
             await Task.WhenAll(badgeDefinitionsTask, currentActivityTask, trendInsightsTask);
 
@@ -155,16 +154,16 @@ public class AppController : ControllerBase
             };
 
             // Cache for 10 minutes - landing page data should be fresh but not too frequent
-            await _cacheService.SetAsync(cacheKeyWithTz, landingData, TimeSpan.FromMinutes(10));
+            await _cacheService.SetAsync(cacheKey, landingData, TimeSpan.FromMinutes(10));
 
-            _logger.LogInformation("Generated and cached fresh landing page data with {BadgeCount} badges and trend data for timezone offset {Offset}", 
-                badgeDefinitionsTask.Result.Count, timeZoneOffsetHours);
+            _logger.LogInformation("Generated and cached fresh landing page data with {BadgeCount} badges and trend data", 
+                badgeDefinitionsTask.Result.Count);
 
             return Ok(landingData);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error generating landing page data for timezone offset {Offset}", timeZoneOffsetHours);
+            _logger.LogError(ex, "Error generating landing page data");
             return StatusCode(500, "An internal server error occurred while retrieving landing page data.");
         }
     }
