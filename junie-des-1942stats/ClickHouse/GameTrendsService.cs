@@ -282,18 +282,42 @@ public class GameTrendsService : BaseClickHouseService
         SELECT 
             hour_of_day,
             day_of_week,
-            AVG(total_players) as predicted_players,
+            AVG(hourly_total) as predicted_players,
             COUNT(*) as data_points
         FROM (
             SELECT 
-                toHour(timestamp) as hour_of_day,
-                toDayOfWeek(timestamp) as day_of_week,
-                toDate(timestamp) as date,
-                SUM(players_online) as total_players
-            FROM server_online_counts 
-            {whereClause}
-            AND (hour_of_day, day_of_week) IN ({string.Join(",", forecastEntries.Select(e => $"({e.hour}, {e.dayOfWeek})"))})
-            GROUP BY hour_of_day, day_of_week, date
+                date_key,
+                hour_of_day,
+                day_of_week,
+                -- Sum the most recent player count from each server in each 15-minute window
+                -- Then average all time windows within the hour
+                AVG(players_total) as hourly_total
+            FROM (
+                SELECT 
+                    date_key,
+                    hour_of_day,
+                    day_of_week,
+                    time_window,
+                    -- Sum the most recent count from each server in this time window
+                    SUM(players_online) as players_total
+                FROM (
+                    SELECT 
+                        toDate(timestamp) as date_key,
+                        toHour(timestamp) as hour_of_day,
+                        toDayOfWeek(timestamp) as day_of_week,
+                        toStartOfInterval(timestamp, INTERVAL 15 MINUTE) as time_window,
+                        server_guid,
+                        argMax(players_online, timestamp) as players_online
+                    FROM server_online_counts
+                    {whereClause}
+                        AND (toHour(timestamp), toDayOfWeek(timestamp)) IN ({string.Join(",", forecastEntries.Select(e => $"({e.hour}, {e.dayOfWeek})"))})
+                    GROUP BY date_key, hour_of_day, day_of_week, time_window, server_guid
+                ) server_totals
+                GROUP BY date_key, hour_of_day, day_of_week, time_window
+                HAVING players_total > 0
+            ) time_window_totals
+            GROUP BY date_key, hour_of_day, day_of_week
+            HAVING COUNT(*) >= 2  -- Require at least 2 time windows per hour for reliable data
         )
         GROUP BY hour_of_day, day_of_week
         ORDER BY hour_of_day, day_of_week";
@@ -319,16 +343,40 @@ public class GameTrendsService : BaseClickHouseService
             SELECT 
                 hour_of_day,
                 day_of_week,
-                AVG(total_players) as avg_players
+                AVG(hourly_total) as avg_players
             FROM (
                 SELECT 
-                    toHour(timestamp) as hour_of_day,
-                    toDayOfWeek(timestamp) as day_of_week,
-                    toDate(timestamp) as date,
-                    SUM(players_online) as total_players
-                FROM server_online_counts 
-                {whereClause}
-                GROUP BY hour_of_day, day_of_week, date
+                    date_key,
+                    hour_of_day,
+                    day_of_week,
+                    -- Sum the most recent player count from each server in each 15-minute window
+                    -- Then average all time windows within the hour
+                    AVG(players_total) as hourly_total
+                FROM (
+                    SELECT 
+                        date_key,
+                        hour_of_day,
+                        day_of_week,
+                        time_window,
+                        -- Sum the most recent count from each server in this time window
+                        SUM(players_online) as players_total
+                    FROM (
+                        SELECT 
+                            toDate(timestamp) as date_key,
+                            toHour(timestamp) as hour_of_day,
+                            toDayOfWeek(timestamp) as day_of_week,
+                            toStartOfInterval(timestamp, INTERVAL 15 MINUTE) as time_window,
+                            server_guid,
+                            argMax(players_online, timestamp) as players_online
+                        FROM server_online_counts
+                        {whereClause}
+                        GROUP BY date_key, hour_of_day, day_of_week, time_window, server_guid
+                    ) server_totals
+                    GROUP BY date_key, hour_of_day, day_of_week, time_window
+                    HAVING players_total > 0
+                ) time_window_totals
+                GROUP BY date_key, hour_of_day, day_of_week
+                HAVING COUNT(*) >= 2  -- Require at least 2 time windows per hour for reliable data
             )
             GROUP BY hour_of_day, day_of_week
             HAVING COUNT(*) >= 3  -- Ensure sufficient data points
@@ -483,24 +531,32 @@ public async Task<BusyIndicatorResult> GetBusyIndicatorAsync(string? game = null
             groupArray(hourly_total) as daily_averages
         FROM (
             SELECT 
-                toDate(timestamp) as date_key,
-                toHour(timestamp) as hour_key,
-                -- Use argMax to get the most recent player count for each server in each 15-minute window
-                -- Then sum across all servers to get total players for that time window
-                -- Finally average all time windows within the hour
+                date_key,
+                hour_key,
+                -- Sum the most recent player count from each server in each 15-minute window
+                -- Then average all time windows within the hour
                 AVG(players_total) as hourly_total
             FROM (
                 SELECT 
-                    toDate(timestamp) as date_key,
-                    toHour(timestamp) as hour_key,
-                    toStartOfInterval(timestamp, INTERVAL 15 MINUTE) as time_window,
-                    -- Sum the most recent count from each server in this 15-minute window
-                    SUM(argMax(players_online, timestamp)) as players_total
-                FROM server_online_counts
-                {whereClause}
-                    AND toHour(timestamp) = ?
-                    AND toDayOfWeek(timestamp) = ?
-                GROUP BY date_key, hour_key, time_window, server_guid
+                    date_key,
+                    hour_key,
+                    time_window,
+                    -- Sum the most recent count from each server in this time window
+                    SUM(players_online) as players_total
+                FROM (
+                    SELECT 
+                        toDate(timestamp) as date_key,
+                        toHour(timestamp) as hour_key,
+                        toStartOfInterval(timestamp, INTERVAL 15 MINUTE) as time_window,
+                        server_guid,
+                        argMax(players_online, timestamp) as players_online
+                    FROM server_online_counts
+                    {whereClause}
+                        AND toHour(timestamp) = ?
+                        AND toDayOfWeek(timestamp) = ?
+                    GROUP BY date_key, hour_key, time_window, server_guid
+                ) server_totals
+                GROUP BY date_key, hour_key, time_window
                 HAVING players_total > 0
             ) time_window_totals
             GROUP BY date_key, hour_key
@@ -534,66 +590,44 @@ public async Task<BusyIndicatorResult> GetBusyIndicatorAsync(string? game = null
     var medianPlayers = count % 2 == 0 
         ? (averages[count / 2 - 1] + averages[count / 2]) / 2.0
         : averages[count / 2];
-    var q25Players = averages[(int)(count * 0.25)];
-    var q75Players = averages[(int)(count * 0.75)];
-    var q90Players = averages[(int)(count * 0.90)];
 
     var historicalStats = new HistoricalBusyStats
     {
         AvgPlayers = avgPlayers,
-        Q25Players = q25Players,
         MedianPlayers = medianPlayers,
-        Q75Players = q75Players,
-        Q90Players = q90Players,
         MinPlayers = minPlayers,
         MaxPlayers = maxPlayers,
         DataPoints = count
     };
 
-    // Calculate percentile and busy level
+    // Simplified busy level calculation - just compare to average
     string busyLevel;
     string busyText;
     double percentile = 0;
 
-    if (currentPlayers >= historicalStats.Q90Players)
+    if (currentPlayers > avgPlayers * 1.5)
     {
-        busyLevel = "very_busy";
+        busyLevel = "much_busier";
+        busyText = "Much busier than usual";
+        percentile = 80;
+    }
+    else if (currentPlayers > avgPlayers)
+    {
+        busyLevel = "busier";
         busyText = "Busier than usual";
-        percentile = 90;
+        percentile = 60;
     }
-    else if (currentPlayers >= historicalStats.Q75Players)
+    else if (currentPlayers >= avgPlayers * 0.5)
     {
-        busyLevel = "busy";
-        busyText = "Busy";
-        percentile = 75;
-    }
-    else if (currentPlayers >= historicalStats.MedianPlayers)
-    {
-        busyLevel = "moderate";
-        busyText = "As busy as usual";
+        busyLevel = "about_average";
+        busyText = "About average activity";
         percentile = 50;
-    }
-    else if (currentPlayers >= historicalStats.Q25Players)
-    {
-        busyLevel = "quiet";
-        busyText = "Not too busy";
-        percentile = 25;
     }
     else
     {
-        busyLevel = "very_quiet";
+        busyLevel = "quieter";
         busyText = "Quieter than usual";
-        percentile = 10;
-    }
-
-    // Add context for extreme cases
-    if (currentPlayers >= historicalStats.MaxPlayers * 0.95)
-    {
-        busyText = "Extremely busy - peak activity!";
-    }
-    else if (currentPlayers <= historicalStats.MinPlayers * 1.1 && historicalStats.MinPlayers > 0)
-    {
-        busyText = "Very quiet right now";
+        percentile = 30;
     }
 
     return new BusyIndicatorResult
@@ -601,15 +635,12 @@ public async Task<BusyIndicatorResult> GetBusyIndicatorAsync(string? game = null
         BusyLevel = busyLevel,
         BusyText = busyText,
         CurrentPlayers = currentPlayers,
-        TypicalPlayers = historicalStats.AvgPlayers,
+        TypicalPlayers = avgPlayers,
         Percentile = percentile,
         HistoricalRange = new HistoricalRange
         {
             Min = historicalStats.MinPlayers,
-            Q25 = historicalStats.Q25Players,
             Median = historicalStats.MedianPlayers,
-            Q75 = historicalStats.Q75Players,
-            Q90 = historicalStats.Q90Players,
             Max = historicalStats.MaxPlayers,
             Average = historicalStats.AvgPlayers
         },
@@ -649,7 +680,7 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
 
     var serverInfos = await ReadAllAsync<GameTrendsServerInfo>(serverInfoQuery);
 
-    // Single query to get historical data for all servers
+    // Single query to get historical data for all servers for current hour
     var historicalQuery = $@"
         SELECT 
             server_guid,
@@ -670,6 +701,52 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
         GROUP BY server_guid";
 
     var historicalData = await ReadAllAsync<ServerHistoricalData>(historicalQuery, new object[] { currentHour, clickHouseDayOfWeek });
+
+    // Query to get hourly timeline data (4 hours before and after current hour)
+    var timelineHours = new List<int>();
+    for (int i = -4; i <= 4; i++)
+    {
+        var hour = (currentHour + i + 24) % 24;
+        timelineHours.Add(hour);
+    }
+
+    var timelineQuery = $@"
+        SELECT 
+            toHour(timestamp) as hour,
+            AVG(players_online) as avg_players
+        FROM server_online_counts
+        WHERE timestamp >= now() - INTERVAL 30 DAY 
+            AND server_guid IN ({serverGuidList})
+            AND toDayOfWeek(timestamp) = ?
+            AND toHour(timestamp) IN ({string.Join(",", timelineHours)})
+        GROUP BY toHour(timestamp)
+        ORDER BY hour";
+
+    var timelineData = await ReadAllAsync<HourlyTimelineData>(timelineQuery, new object[] { clickHouseDayOfWeek });
+
+    // Build hourly timeline
+    var hourlyTimeline = new List<HourlyBusyData>();
+    foreach (var hour in timelineHours)
+    {
+        var hourData = timelineData.FirstOrDefault(td => td.Hour == hour);
+        var avgPlayers = hourData?.AvgPlayers ?? 0;
+        
+        // Simple busy level calculation based on average
+        string busyLevel;
+        if (avgPlayers >= 20) busyLevel = "very_busy";
+        else if (avgPlayers >= 15) busyLevel = "busy";
+        else if (avgPlayers >= 10) busyLevel = "moderate";
+        else if (avgPlayers >= 5) busyLevel = "quiet";
+        else busyLevel = "very_quiet";
+
+        hourlyTimeline.Add(new HourlyBusyData
+        {
+            Hour = hour,
+            TypicalPlayers = avgPlayers,
+            BusyLevel = busyLevel,
+            IsCurrentHour = hour == currentHour
+        });
+    }
 
     // Build results
     var serverResults = new List<ServerBusyIndicatorResult>();
@@ -751,7 +828,7 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
             // Add context for extreme cases
             if (currentPlayers >= maxPlayers * 0.95)
             {
-                busyText = "Extremely busy - peak activity!";
+                busyText = "Busiest this hour has been recently";
             }
             else if (currentPlayers <= minPlayers * 1.1 && minPlayers > 0)
             {
@@ -791,6 +868,7 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
     return new GroupedServerBusyIndicatorResult
     {
         ServerResults = serverResults,
+        HourlyTimeline = hourlyTimeline,
         GeneratedAt = DateTime.UtcNow
     };
 }
@@ -862,6 +940,26 @@ public class Peak24HourPrediction
 }
 
 // Google-style busy indicator data models
+/// <summary>
+/// Represents hourly busyness data for timeline visualization
+/// </summary>
+/// <summary>
+/// Data structure for querying hourly timeline data from ClickHouse
+/// </summary>
+internal class HourlyTimelineData
+{
+    public int Hour { get; set; }
+    public double AvgPlayers { get; set; }
+}
+
+public class HourlyBusyData
+{
+    public int Hour { get; set; } // 0-23 UTC hour
+    public double TypicalPlayers { get; set; }
+    public string BusyLevel { get; set; } = ""; // very_quiet, quiet, moderate, busy, very_busy
+    public bool IsCurrentHour { get; set; }
+}
+
 public class BusyIndicatorResult
 {
     public string BusyLevel { get; set; } = ""; // very_quiet, quiet, moderate, busy, very_busy, unknown
@@ -884,6 +982,7 @@ public class ServerBusyIndicatorResult
 public class GroupedServerBusyIndicatorResult
 {
     public List<ServerBusyIndicatorResult> ServerResults { get; set; } = new();
+    public List<HourlyBusyData> HourlyTimeline { get; set; } = new(); // 9 hours total (4 before, current, 4 after)
     public DateTime GeneratedAt { get; set; }
 }
 
