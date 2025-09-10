@@ -280,14 +280,23 @@ public class GameTrendsService : BaseClickHouseService
 
     var fourHourForecastQuery = $@"
         SELECT 
-            toHour(timestamp) as hour_of_day,
-            toDayOfWeek(timestamp) as day_of_week,
-            AVG(players_online) as predicted_players,
+            hour_of_day,
+            day_of_week,
+            AVG(hourly_total) as predicted_players,
             COUNT(*) as data_points
-        FROM server_online_counts
-        {whereClause}
-            AND (toHour(timestamp), toDayOfWeek(timestamp)) IN ({string.Join(",", forecastEntries.Select(e => $"({e.hour}, {e.dayOfWeek})"))})
-        GROUP BY toHour(timestamp), toDayOfWeek(timestamp)
+        FROM (
+            SELECT 
+                toHour(timestamp) as hour_of_day,
+                toDayOfWeek(timestamp) as day_of_week,
+                toDate(timestamp) as date_key,
+                SUM(players_online) as hourly_total
+            FROM server_online_counts
+            {whereClause}
+                AND (toHour(timestamp), toDayOfWeek(timestamp)) IN ({string.Join(",", forecastEntries.Select(e => $"({e.hour}, {e.dayOfWeek})"))})
+            GROUP BY toHour(timestamp), toDayOfWeek(timestamp), toDate(timestamp)
+            HAVING hourly_total > 0
+        )
+        GROUP BY hour_of_day, day_of_week
         ORDER BY hour_of_day, day_of_week";
 
     var fourHourForecast = await ReadAllAsync<HourlyPrediction>(fourHourForecastQuery, parameters.ToArray());
@@ -308,12 +317,21 @@ public class GameTrendsService : BaseClickHouseService
     
     var peakHoursQuery = $@"
         SELECT 
-            toHour(timestamp) as hour_of_day,
-            toDayOfWeek(timestamp) as day_of_week,
-            AVG(players_online) as predicted_players
-        FROM server_online_counts
-        {whereClause}
-        GROUP BY toHour(timestamp), toDayOfWeek(timestamp)
+            hour_of_day,
+            day_of_week,
+            AVG(hourly_total) as predicted_players
+        FROM (
+            SELECT 
+                toHour(timestamp) as hour_of_day,
+                toDayOfWeek(timestamp) as day_of_week,
+                toDate(timestamp) as date_key,
+                SUM(players_online) as hourly_total
+            FROM server_online_counts
+            {whereClause}
+            GROUP BY toHour(timestamp), toDayOfWeek(timestamp), toDate(timestamp)
+            HAVING hourly_total > 0
+        )
+        GROUP BY hour_of_day, day_of_week
         HAVING COUNT(*) >= 3  -- Ensure sufficient data points
         ORDER BY predicted_players DESC
         LIMIT 3";
@@ -477,7 +495,7 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
 
     var serverInfos = await ReadAllAsync<GameTrendsServerInfo>(serverInfoQuery);
 
-    // Simplified query to get historical data for all servers for current hour
+    // Single query to get historical data for all servers for current hour
     // Directly average players_online by hour - much simpler and more efficient
     var historicalQuery = $@"
         SELECT 
