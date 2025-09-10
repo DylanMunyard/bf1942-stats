@@ -1,5 +1,7 @@
 using junie_des_1942stats.ClickHouse.Base;
 using junie_des_1942stats.ClickHouse.Interfaces;
+using junie_des_1942stats.PlayerTracking;
+using Microsoft.EntityFrameworkCore;
 using System.Text;
 using Microsoft.Extensions.Logging;
 
@@ -8,11 +10,13 @@ namespace junie_des_1942stats.ClickHouse;
 public class GameTrendsService : BaseClickHouseService
 {
     private readonly ILogger<GameTrendsService> _logger;
+    private readonly PlayerTrackerDbContext _dbContext;
 
-    public GameTrendsService(HttpClient httpClient, string clickHouseUrl, ILogger<GameTrendsService> logger)
+    public GameTrendsService(HttpClient httpClient, string clickHouseUrl, ILogger<GameTrendsService> logger, PlayerTrackerDbContext dbContext)
         : base(httpClient, clickHouseUrl)
     {
         _logger = logger;
+        _dbContext = dbContext;
     }
 
     private async Task<List<T>> ReadAllAsync<T>(string query, params object[] parameters) where T : new()
@@ -241,28 +245,43 @@ public class GameTrendsService : BaseClickHouseService
     }
 
     /// <summary>
-    /// Gets current activity status across games and servers
+    /// Gets current activity status across games and servers using live SQLite sessions
     /// </summary>
-    public async Task<List<CurrentActivityStatus>> GetCurrentActivityStatusAsync()
+    public async Task<List<CurrentActivityStatus>> GetCurrentActivityStatusAsync(string? game = null)
+{
+    // Use SQLite PlayerSessions for real-time data (sessions within last minute)
+    var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
+    
+    var query = _dbContext.PlayerSessions
+        .Include(ps => ps.Server)
+        .Include(ps => ps.Player)
+        .Where(ps => ps.IsActive && 
+                    ps.LastSeenTime >= oneMinuteAgo &&
+                    !ps.Player.AiBot); // Exclude bots from current activity
+    
+    // Add game filter if specified
+    if (!string.IsNullOrEmpty(game))
     {
-        // Use player_metrics to get actual real-time online players (within last minute)
-        var query = @"
-            SELECT 
-                game,
-                server_guid,
-                COUNT(DISTINCT player_name) as current_players,
-                COUNT(*) as active_rounds,
-                max(timestamp) as latest_activity,
-                any(map_name) as current_map_name
-            FROM player_metrics 
-            WHERE timestamp >= now() - INTERVAL 1 MINUTE
-                AND is_bot = 0  -- Exclude bots from current activity
-            GROUP BY game, server_guid
-            HAVING current_players >= 2  -- Only show servers with actual activity
-            ORDER BY current_players DESC, latest_activity DESC";
-
-        return await ReadAllAsync<CurrentActivityStatus>(query);
+        query = query.Where(ps => ps.Server.Game == game);
     }
+    
+    var currentActivity = await query
+        .GroupBy(ps => new { ps.Server.Game, ps.ServerGuid })
+        .Where(g => g.Count() >= 2) // Only show servers with actual activity
+        .Select(g => new CurrentActivityStatus
+        {
+            Game = g.Key.Game ?? "",
+            ServerGuid = g.Key.ServerGuid,
+            CurrentPlayers = g.Count(),
+            LatestActivity = g.Max(ps => ps.LastSeenTime),
+            CurrentMapName = g.OrderByDescending(ps => ps.LastSeenTime).First().MapName
+        })
+        .OrderByDescending(ca => ca.CurrentPlayers)
+        .ThenByDescending(ca => ca.LatestActivity)
+        .ToListAsync();
+
+    return currentActivity;
+}
 
     /// <summary>
     /// Gets weekly activity patterns to identify weekend vs weekday differences
@@ -756,7 +775,6 @@ public class CurrentActivityStatus
     public string Game { get; set; } = "";
     public string ServerGuid { get; set; } = "";
     public int CurrentPlayers { get; set; }
-    public int ActiveRounds { get; set; }
     public DateTime LatestActivity { get; set; }
     public string CurrentMapName { get; set; } = "";
 }

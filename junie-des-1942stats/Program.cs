@@ -673,7 +673,7 @@ try
     });
 
     // Register GameTrendsService (read-only for trend analysis)
-    builder.Services.AddSingleton<GameTrendsService>(sp =>
+    builder.Services.AddScoped<GameTrendsService>(sp =>
     {
         var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(GameTrendsService));
 
@@ -682,7 +682,8 @@ try
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] GameTrendsService ClickHouse Read URL: {clickHouseReadUrl}");
 
         var logger = sp.GetRequiredService<ILogger<GameTrendsService>>();
-        return new GameTrendsService(httpClient, clickHouseReadUrl, logger);
+        var dbContext = sp.GetRequiredService<PlayerTrackerDbContext>();
+        return new GameTrendsService(httpClient, clickHouseReadUrl, logger, dbContext);
     });
 
     var host = builder.Build();

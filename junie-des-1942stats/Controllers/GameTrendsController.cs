@@ -133,7 +133,7 @@ public class GameTrendsController : ControllerBase
             var currentActivity = await _gameTrendsService.GetCurrentActivityStatusAsync();
             
             // Cache for 5 minutes - current activity needs to be relatively fresh
-            await _cacheService.SetAsync(cacheKey, currentActivity, TimeSpan.FromMinutes(5));
+            await _cacheService.SetAsync(cacheKey, currentActivity, TimeSpan.FromMinutes(1));
             
             _logger.LogInformation("Retrieved current activity status for {ServerCount} servers", 
                 currentActivity.Count);
