@@ -208,7 +208,7 @@ public class GameTrendsController : ControllerBase
             }
 
             // Fetch multiple trend data points in parallel for fast response
-            var currentActivityTask = _gameTrendsService.GetCurrentActivityStatusAsync();
+            var currentActivityTask = _gameTrendsService.GetCurrentActivityStatusAsync(game);
             var trendsInsightsTask = _gameTrendsService.GetSmartPredictionInsightsAsync(game);
 
             await Task.WhenAll(currentActivityTask, trendsInsightsTask);
