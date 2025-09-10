@@ -471,13 +471,47 @@ private static string GenerateRecommendation(string currentStatus, string trendD
 
     if (nextPeak != null)
     {
-        var peakTime = DateTime.UtcNow.Date.AddHours(nextPeak.HourOfDay);
-        if (nextPeak.DayOfWeek == 7 && DateTime.UtcNow.DayOfWeek != DayOfWeek.Sunday)
-            peakTime = peakTime.AddDays(1);
-        else if ((int)DateTime.UtcNow.DayOfWeek + 1 != nextPeak.DayOfWeek && nextPeak.DayOfWeek != 7)
-            peakTime = peakTime.AddDays(1);
+        var currentTime = DateTime.UtcNow;
+        var currentHour = currentTime.Hour;
+        var currentDayOfWeek = (int)currentTime.DayOfWeek;
+        var clickHouseDayOfWeek = currentDayOfWeek == 0 ? 7 : currentDayOfWeek;
+        
+        // Calculate hours until next peak
+        int hoursUntilPeak;
+        if (nextPeak.DayOfWeek == clickHouseDayOfWeek && nextPeak.HourOfDay > currentHour)
+        {
+            // Peak is later today
+            hoursUntilPeak = nextPeak.HourOfDay - currentHour;
+        }
+        else if (nextPeak.DayOfWeek == clickHouseDayOfWeek && nextPeak.HourOfDay <= currentHour)
+        {
+            // Peak is tomorrow (same day of week)
+            hoursUntilPeak = (24 - currentHour) + nextPeak.HourOfDay;
+        }
+        else
+        {
+            // Peak is on a different day of the week
+            var daysUntilPeak = (nextPeak.DayOfWeek - clickHouseDayOfWeek + 7) % 7;
+            if (daysUntilPeak == 0) daysUntilPeak = 7; // Next week
+            hoursUntilPeak = (daysUntilPeak * 24) - currentHour + nextPeak.HourOfDay;
+        }
 
-        recommendations.Add($"⏰ Peak activity expected around {peakTime:HH:mm} with ~{nextPeak.PredictedPlayers:F0} players.");
+        string timeReference;
+        if (hoursUntilPeak < 1)
+            timeReference = "very soon";
+        else if (hoursUntilPeak < 24)
+            timeReference = $"in {hoursUntilPeak} hour{(hoursUntilPeak == 1 ? "" : "s")}";
+        else
+        {
+            var days = hoursUntilPeak / 24;
+            var remainingHours = hoursUntilPeak % 24;
+            if (remainingHours == 0)
+                timeReference = $"in {days} day{(days == 1 ? "" : "s")}";
+            else
+                timeReference = $"in {days} day{(days == 1 ? "" : "s")} and {remainingHours} hour{(remainingHours == 1 ? "" : "s")}";
+        }
+
+        recommendations.Add($"⏰ Peak activity expected {timeReference} with ~{nextPeak.PredictedPlayers:F0} players.");
     }
 
     return string.Join(" ", recommendations);
@@ -681,22 +715,46 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
     var serverInfos = await ReadAllAsync<GameTrendsServerInfo>(serverInfoQuery);
 
     // Single query to get historical data for all servers for current hour
+    // Using the same logic as GetBusyIndicatorAsync but adapted for multiple servers
     var historicalQuery = $@"
         SELECT 
             server_guid,
-            groupArray(hourly_avg) as daily_averages
+            groupArray(hourly_total) as daily_averages
         FROM (
             SELECT 
                 server_guid,
-                toDate(timestamp) as date_key,
-                AVG(players_online) as hourly_avg
-            FROM server_online_counts
-            WHERE timestamp >= now() - INTERVAL 60 DAY 
-                AND server_guid IN ({serverGuidList})
-                AND toHour(timestamp) = ?
-                AND toDayOfWeek(timestamp) = ?
-            GROUP BY server_guid, date_key, toStartOfInterval(timestamp, INTERVAL 15 MINUTE)
-            HAVING hourly_avg > 0
+                date_key,
+                hour_key,
+                -- Sum the most recent player count from each server in each 15-minute window
+                -- Then average all time windows within the hour
+                AVG(players_total) as hourly_total
+            FROM (
+                SELECT 
+                    server_guid,
+                    date_key,
+                    hour_key,
+                    time_window,
+                    -- Sum the most recent count from each server in this time window
+                    SUM(players_online) as players_total
+                FROM (
+                    SELECT 
+                        server_guid,
+                        toDate(timestamp) as date_key,
+                        toHour(timestamp) as hour_key,
+                        toStartOfInterval(timestamp, INTERVAL 15 MINUTE) as time_window,
+                        argMax(players_online, timestamp) as players_online
+                    FROM server_online_counts
+                    WHERE timestamp >= now() - INTERVAL 60 DAY 
+                        AND server_guid IN ({serverGuidList})
+                        AND toHour(timestamp) = ?
+                        AND toDayOfWeek(timestamp) = ?
+                    GROUP BY server_guid, date_key, hour_key, time_window
+                ) server_totals
+                GROUP BY server_guid, date_key, hour_key, time_window
+                HAVING players_total > 0
+            ) time_window_totals
+            GROUP BY server_guid, date_key, hour_key
+            HAVING COUNT(*) >= 2  -- Require at least 2 time windows per hour for reliable data
         )
         GROUP BY server_guid";
 
@@ -712,14 +770,43 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
 
     var timelineQuery = $@"
         SELECT 
-            toHour(timestamp) as hour,
-            AVG(players_online) as avg_players
-        FROM server_online_counts
-        WHERE timestamp >= now() - INTERVAL 30 DAY 
-            AND server_guid IN ({serverGuidList})
-            AND toDayOfWeek(timestamp) = ?
-            AND toHour(timestamp) IN ({string.Join(",", timelineHours)})
-        GROUP BY toHour(timestamp)
+            hour_key as hour,
+            AVG(hourly_total) as avg_players
+        FROM (
+            SELECT 
+                hour_key,
+                date_key,
+                -- Sum the most recent player count from each server in each 15-minute window
+                -- Then average all time windows within the hour
+                AVG(players_total) as hourly_total
+            FROM (
+                SELECT 
+                    hour_key,
+                    date_key,
+                    time_window,
+                    -- Sum the most recent count from each server in this time window
+                    SUM(players_online) as players_total
+                FROM (
+                    SELECT 
+                        toHour(timestamp) as hour_key,
+                        toDate(timestamp) as date_key,
+                        toStartOfInterval(timestamp, INTERVAL 15 MINUTE) as time_window,
+                        server_guid,
+                        argMax(players_online, timestamp) as players_online
+                    FROM server_online_counts
+                    WHERE timestamp >= now() - INTERVAL 30 DAY 
+                        AND server_guid IN ({serverGuidList})
+                        AND toDayOfWeek(timestamp) = ?
+                        AND toHour(timestamp) IN ({string.Join(",", timelineHours)})
+                    GROUP BY hour_key, date_key, time_window, server_guid
+                ) server_totals
+                GROUP BY hour_key, date_key, time_window
+                HAVING players_total > 0
+            ) time_window_totals
+            GROUP BY hour_key, date_key
+            HAVING COUNT(*) >= 2  -- Require at least 2 time windows per hour for reliable data
+        )
+        GROUP BY hour_key
         ORDER BY hour";
 
     var timelineData = await ReadAllAsync<HourlyTimelineData>(timelineQuery, new object[] { clickHouseDayOfWeek });
@@ -731,7 +818,7 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
         var hourData = timelineData.FirstOrDefault(td => td.Hour == hour);
         var avgPlayers = hourData?.AvgPlayers ?? 0;
         
-        // Simple busy level calculation based on average
+        // Calculate busy level based on percentile logic (consistent with main calculation)
         string busyLevel;
         if (avgPlayers >= 20) busyLevel = "very_busy";
         else if (avgPlayers >= 15) busyLevel = "busy";
