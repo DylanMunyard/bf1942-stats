@@ -116,33 +116,34 @@ public class GameTrendsController : ControllerBase
     /// Shows real-time activity to answer "is it busy right now?"
     /// </summary>
     [HttpGet("current-activity")]
-    [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Any)] // 5 minutes cache
-    public async Task<ActionResult<List<CurrentActivityStatus>>> GetCurrentActivityStatus()
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Any)] // 1 minute cache
+    public async Task<ActionResult<List<CurrentActivityStatus>>> GetCurrentActivityStatus(
+        [FromQuery] string? game = null)
     {
         try
         {
-            const string cacheKey = "trends:current:activity";
+            var cacheKey = $"trends:current:activity:{game ?? "all"}";
             var cachedData = await _cacheService.GetAsync<List<CurrentActivityStatus>>(cacheKey);
             
             if (cachedData != null)
             {
-                _logger.LogDebug("Returning cached current activity status");
+                _logger.LogDebug("Returning cached current activity status for game {Game}", game ?? "all");
                 return Ok(cachedData);
             }
 
-            var currentActivity = await _gameTrendsService.GetCurrentActivityStatusAsync();
+            var currentActivity = await _gameTrendsService.GetCurrentActivityStatusAsync(game);
             
             // Cache for 5 minutes - current activity needs to be relatively fresh
             await _cacheService.SetAsync(cacheKey, currentActivity, TimeSpan.FromMinutes(1));
             
-            _logger.LogInformation("Retrieved current activity status for {ServerCount} servers", 
-                currentActivity.Count);
+            _logger.LogInformation("Retrieved current activity status for {ServerCount} servers, game {Game}", 
+                currentActivity.Count, game ?? "all");
 
             return Ok(currentActivity);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving current activity status");
+            _logger.LogError(ex, "Error retrieving current activity status for game {Game}", game);
             return StatusCode(500, "Failed to retrieve current activity status");
         }
     }

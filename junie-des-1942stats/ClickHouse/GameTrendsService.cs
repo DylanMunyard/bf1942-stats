@@ -585,60 +585,38 @@ public async Task<BusyIndicatorResult> GetBusyIndicatorAsync(string? game = null
         parameters.Add(game);
     }
 
-    // Fixed approach: Take ONE representative sample per server per sample period, then sum across servers, then average the sample totals
-    var allDailyTotalsQuery = $@"
+    // Simplified approach using ClickHouse native aggregations
+    var historicalQuery = $@"
         SELECT 
-            groupArray(avg_hourly_total) as daily_averages
+            groupArray(hourly_total) as daily_averages
         FROM (
             SELECT 
-                date_key,
-                hour_key,
-                AVG(sample_total) as avg_hourly_total
+                toDate(timestamp) as date_key,
+                toHour(timestamp) as hour_key,
+                -- Use argMax to get the most recent player count for each server in each 15-minute window
+                -- Then sum across all servers to get total players for that time window
+                -- Finally average all time windows within the hour
+                AVG(players_total) as hourly_total
             FROM (
                 SELECT 
-                    date_key,
-                    hour_key,
-                    sample_minute,
-                    SUM(players_online) as sample_total
-                FROM (
-                    SELECT 
-                        toDate(timestamp) as date_key,
-                        toHour(timestamp) as hour_key,
-                        CASE 
-                            WHEN toMinute(timestamp) < 8 THEN 0
-                            WHEN toMinute(timestamp) < 23 THEN 15
-                            WHEN toMinute(timestamp) < 38 THEN 30
-                            WHEN toMinute(timestamp) < 53 THEN 45
-                            ELSE 0
-                        END as sample_minute,
-                        server_guid,
-                        players_online,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY toDate(timestamp), toHour(timestamp), server_guid,
-                                CASE 
-                                    WHEN toMinute(timestamp) < 8 THEN 0
-                                    WHEN toMinute(timestamp) < 23 THEN 15
-                                    WHEN toMinute(timestamp) < 38 THEN 30
-                                    WHEN toMinute(timestamp) < 53 THEN 45
-                                    ELSE 0
-                                END
-                            ORDER BY timestamp DESC
-                        ) as rn
-                    FROM server_online_counts 
-                    {whereClause}
+                    toDate(timestamp) as date_key,
+                    toHour(timestamp) as hour_key,
+                    toStartOfInterval(timestamp, INTERVAL 15 MINUTE) as time_window,
+                    -- Sum the most recent count from each server in this 15-minute window
+                    SUM(argMax(players_online, timestamp)) as players_total
+                FROM server_online_counts
+                {whereClause}
                     AND toHour(timestamp) = ?
                     AND toDayOfWeek(timestamp) = ?
-                ) ranked
-                WHERE rn = 1  -- Take only the most recent entry per server per sample period
-                GROUP BY date_key, hour_key, sample_minute
-                HAVING sample_total > 0
-            ) sample_totals
+                GROUP BY date_key, hour_key, time_window, server_guid
+                HAVING players_total > 0
+            ) time_window_totals
             GROUP BY date_key, hour_key
-            HAVING COUNT(*) >= 2  -- Require at least 2 sample periods per hour
+            HAVING COUNT(*) >= 2  -- Require at least 2 time windows per hour for reliable data
         )";
 
     var histParams = parameters.Concat(new object[] { currentHour, clickHouseDayOfWeek }).ToArray();
-    var dailyTotalsResult = await ReadSingleOrDefaultAsync<DailyAveragesResult>(allDailyTotalsQuery, histParams);
+    var dailyTotalsResult = await ReadSingleOrDefaultAsync<DailyAveragesResult>(historicalQuery, histParams);
     
     if (dailyTotalsResult?.DailyAverages == null || dailyTotalsResult.DailyAverages.Length < 3)
     {
