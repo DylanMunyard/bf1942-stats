@@ -102,45 +102,6 @@ public class GameTrendsController : ControllerBase
     }
 
     /// <summary>
-    /// Gets personalized trend insights to help players decide when to play.
-    /// Answers "is it busy now?" and "will it get busier?" based on current UTC time.
-    /// </summary>
-    /// <param name="game">Optional filter by game (bf1942, fh2, bfv)</param>
-    [HttpGet("insights")]
-    [ResponseCache(Duration = 900, Location = ResponseCacheLocation.Any)] // 15 minutes cache
-    public async Task<ActionResult<SmartPredictionInsights>> GetTrendInsights(
-        [FromQuery] string? game = null)
-    {
-        try
-        {
-            var cacheKey = $"trends:insights:{game ?? "all"}";
-            var cachedData = await _cacheService.GetAsync<SmartPredictionInsights>(cacheKey);
-            
-            if (cachedData != null)
-            {
-                _logger.LogDebug("Returning cached trend insights for game {GameId}", 
-                    game ?? "all");
-                return Ok(cachedData);
-            }
-
-            var insights = await _gameTrendsService.GetSmartPredictionInsightsAsync(game);
-            
-            // Cache for 15 minutes - insights should be relatively current
-            await _cacheService.SetAsync(cacheKey, insights, TimeSpan.FromMinutes(15));
-            
-            _logger.LogInformation("Generated trend insights for game {GameId}", 
-                game ?? "all");
-
-            return Ok(insights);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error generating trend insights for game {GameId}", game);
-            return StatusCode(500, "Failed to generate trend insights");
-        }
-    }
-
-    /// <summary>
     /// Gets Google-style busy indicator comparing current activity to historical patterns, grouped by server.
     /// Shows "Busier than usual", "Busy", "As busy as usual", etc. for each specified server.
     /// </summary>
