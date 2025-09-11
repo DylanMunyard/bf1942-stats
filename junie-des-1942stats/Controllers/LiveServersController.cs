@@ -45,23 +45,15 @@ public class LiveServersController : ControllerBase
 
         try
         {
-            var servers = await _bfListApiService.FetchAllServerSummariesWithCacheStatusAsync(game);
-
-            // Enrich servers with geo location data from database
-            var enrichedServers = await EnrichServersWithGeoLocationAsync(servers);
+            var servers = await GetServersFromDatabaseAsync(game);
 
             var response = new ServerListResponse
             {
-                Servers = enrichedServers,
+                Servers = servers,
                 LastUpdated = DateTime.UtcNow.ToString("O")
             };
 
             return Ok(response);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Failed to fetch all servers from BFList API for game {Game}", game);
-            return StatusCode(502, "Failed to fetch server data from upstream API");
         }
         catch (Exception ex)
         {
@@ -90,34 +82,164 @@ public class LiveServersController : ControllerBase
             return BadRequest("Invalid server details. IP must be valid and port must be 1-65535");
         }
 
-        var serverIdentifier = $"{ip}:{port}";
-
         try
         {
-            var server = await _bfListApiService.FetchSingleServerSummaryAsync(game, serverIdentifier);
+            var server = await GetSingleServerFromDatabaseAsync(game, ip, port);
             if (server == null)
             {
-                return NotFound($"Server {serverIdentifier} not found");
+                return NotFound($"Server {ip}:{port} not found or not seen recently");
             }
 
-            // Enrich server with geo location data from database
-            var enrichedServers = await EnrichServersWithGeoLocationAsync(new[] { server });
-            var enrichedServer = enrichedServers.FirstOrDefault();
-
-            return Ok(enrichedServer ?? server);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Failed to fetch server {ServerIdentifier} from BFList API for game {Game}",
-                serverIdentifier, game);
-            return StatusCode(502, "Failed to fetch server data from upstream API");
+            return Ok(server);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error fetching server {ServerIdentifier} for game {Game}",
-                serverIdentifier, game);
+            _logger.LogError(ex, "Unexpected error fetching server {Ip}:{Port} for game {Game}",
+                ip, port, game);
             return StatusCode(500, "Internal server error");
         }
+    }
+
+    private async Task<ServerSummary[]> GetServersFromDatabaseAsync(string game)
+    {
+        var fiveMinutesAgo = DateTime.UtcNow.AddMinutes(-5);
+        
+        // Get all servers observed in the last 5 minutes for the specified game
+        var servers = await _dbContext.Servers
+            .Where(s => s.Game.ToLower() == game.ToLower())
+            .Join(_dbContext.PlayerSessions,
+                server => server.Guid,
+                session => session.ServerGuid,
+                (server, session) => new { Server = server, Session = session })
+            .Where(joined => joined.Session.LastSeenTime >= fiveMinutesAgo)
+            .Select(joined => joined.Server)
+            .Distinct()
+            .ToListAsync();
+
+        var serverSummaries = new List<ServerSummary>();
+        
+        foreach (var server in servers)
+        {
+            var summary = await BuildServerSummaryAsync(server);
+            serverSummaries.Add(summary);
+        }
+
+        return serverSummaries.OrderByDescending(s => s.NumPlayers).ToArray();
+    }
+
+    private async Task<ServerSummary?> GetSingleServerFromDatabaseAsync(string game, string ip, int port)
+    {
+        var fiveMinutesAgo = DateTime.UtcNow.AddMinutes(-5);
+        
+        // Find the specific server that was observed in the last 5 minutes
+        var server = await _dbContext.Servers
+            .Where(s => s.Game.ToLower() == game.ToLower() && s.Ip == ip && s.Port == port)
+            .Join(_dbContext.PlayerSessions,
+                s => s.Guid,
+                session => session.ServerGuid,
+                (s, session) => new { Server = s, Session = session })
+            .Where(joined => joined.Session.LastSeenTime >= fiveMinutesAgo)
+            .Select(joined => joined.Server)
+            .FirstOrDefaultAsync();
+
+        if (server == null) return null;
+
+        return await BuildServerSummaryAsync(server);
+    }
+
+    private async Task<ServerSummary> BuildServerSummaryAsync(GameServer server)
+    {
+        var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
+        
+        // Get active players from the last minute
+        var activeSessions = await _dbContext.PlayerSessions
+            .Where(ps => ps.ServerGuid == server.Guid 
+                         && ps.IsActive 
+                         && ps.LastSeenTime >= oneMinuteAgo)
+            .Include(ps => ps.Player)
+            .ToListAsync();
+
+        // Get latest observations for each active session
+        var sessionIds = activeSessions.Select(s => s.SessionId).ToList();
+        var latestObservations = new Dictionary<int, PlayerObservation>();
+        
+        if (sessionIds.Any())
+        {
+            var observations = await _dbContext.PlayerObservations
+                .Where(po => sessionIds.Contains(po.SessionId))
+                .GroupBy(po => po.SessionId)
+                .Select(g => g.OrderByDescending(po => po.Timestamp).First())
+                .ToListAsync();
+            
+            latestObservations = observations.ToDictionary(o => o.SessionId);
+        }
+
+        // Build player info from sessions and observations
+        var players = new List<PlayerInfo>();
+        var teams = new List<TeamInfo>();
+        var teamTickets = new Dictionary<int, int>();
+        
+        foreach (var session in activeSessions)
+        {
+            var observation = latestObservations.GetValueOrDefault(session.SessionId);
+            
+            var playerInfo = new PlayerInfo
+            {
+                Name = session.PlayerName,
+                Score = observation?.Score ?? session.TotalScore,
+                Kills = observation?.Kills ?? session.TotalKills,
+                Deaths = observation?.Deaths ?? session.TotalDeaths,
+                Ping = observation?.Ping ?? 0,
+                Team = observation?.Team ?? 1,
+                TeamLabel = observation?.TeamLabel ?? \"\",
+                AiBot = session.Player?.AiBot ?? false
+            };
+            
+            players.Add(playerInfo);
+        }
+
+        // Get team info from current round if available
+        var currentRound = await _dbContext.Rounds
+            .Where(r => r.ServerGuid == server.Guid && r.IsActive)
+            .FirstOrDefaultAsync();
+
+        if (currentRound != null)
+        {
+            if (!string.IsNullOrEmpty(currentRound.Team1Label))
+            {
+                teams.Add(new TeamInfo { Index = 1, Label = currentRound.Team1Label, Tickets = currentRound.Tickets1 ?? 0 });
+            }
+            if (!string.IsNullOrEmpty(currentRound.Team2Label))
+            {
+                teams.Add(new TeamInfo { Index = 2, Label = currentRound.Team2Label, Tickets = currentRound.Tickets2 ?? 0 });
+            }
+        }
+
+        return new ServerSummary
+        {
+            Guid = server.Guid,
+            Name = server.Name,
+            Ip = server.Ip,
+            Port = server.Port,
+            NumPlayers = players.Count,
+            MaxPlayers = server.MaxPlayers ?? 64,
+            MapName = server.MapName ?? \"\",
+            GameType = currentRound?.GameType ?? \"\",
+            JoinLink = server.JoinLink ?? \"\",
+            RoundTimeRemain = currentRound?.RoundTimeRemain ?? 0,
+            Tickets1 = currentRound?.Tickets1 ?? 0,
+            Tickets2 = currentRound?.Tickets2 ?? 0,
+            Players = players.ToArray(),
+            Teams = teams.ToArray(),
+            Country = server.Country,
+            Region = server.Region,
+            City = server.City,
+            Loc = server.Loc,
+            Timezone = server.Timezone,
+            Org = server.Org,
+            Postal = server.Postal,
+            GeoLookupDate = server.GeoLookupDate
+        };
     }
 
     private static bool IsValidServerDetails(string ip, int port)
@@ -127,34 +249,6 @@ public class LiveServersController : ControllerBase
                port > 0 && port <= 65535;
     }
 
-    private async Task<ServerSummary[]> EnrichServersWithGeoLocationAsync(ServerSummary[] servers)
-    {
-        if (servers.Length == 0) return servers;
-
-        // Create lookup table for server geo data by GUID
-        var serverGuids = servers.Select(s => s.Guid).ToArray();
-        var geoData = await _dbContext.Servers
-            .Where(gs => serverGuids.Contains(gs.Guid))
-            .ToDictionaryAsync(gs => gs.Guid, gs => gs);
-
-        // Enrich servers with geo location data
-        foreach (var server in servers)
-        {
-            if (geoData.TryGetValue(server.Guid, out var gameServer))
-            {
-                server.Country = gameServer.Country;
-                server.Region = gameServer.Region;
-                server.City = gameServer.City;
-                server.Loc = gameServer.Loc;
-                server.Timezone = gameServer.Timezone;
-                server.Org = gameServer.Org;
-                server.Postal = gameServer.Postal;
-                server.GeoLookupDate = gameServer.GeoLookupDate;
-            }
-        }
-
-        return servers;
-    }
 
     /// <summary>
     /// Get players online history for a specific game
