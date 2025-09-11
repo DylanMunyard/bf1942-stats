@@ -103,26 +103,73 @@ public class LiveServersController : ControllerBase
     private async Task<ServerSummary[]> GetServersFromDatabaseAsync(string game)
     {
         var fiveMinutesAgo = DateTime.UtcNow.AddMinutes(-5);
+        var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
         
-        // Get all servers observed in the last 5 minutes for the specified game
-        var servers = await _dbContext.Servers
+        // Get all servers with their related data in a single optimized query
+        var serversWithData = await _dbContext.Servers
             .Where(s => s.Game.ToLower() == game.ToLower())
-            .Join(_dbContext.PlayerSessions,
-                server => server.Guid,
-                session => session.ServerGuid,
-                (server, session) => new { Server = server, Session = session })
-            .Where(joined => joined.Session.LastSeenTime >= fiveMinutesAgo)
-            .Select(joined => joined.Server)
-            .Distinct()
+            .Where(s => _dbContext.PlayerSessions
+                .Any(ps => ps.ServerGuid == s.Guid && ps.LastSeenTime >= fiveMinutesAgo))
+            .Select(server => new {
+                Server = server,
+                ActiveSessions = _dbContext.PlayerSessions
+                    .Where(ps => ps.ServerGuid == server.Guid 
+                                 && ps.IsActive 
+                                 && ps.LastSeenTime >= oneMinuteAgo)
+                    .Select(ps => new {
+                        ps.SessionId,
+                        ps.PlayerName,
+                        ps.TotalScore,
+                        ps.TotalKills,
+                        ps.TotalDeaths,
+                        ps.Player.AiBot,
+                        LatestObservation = _dbContext.PlayerObservations
+                            .Where(po => po.SessionId == ps.SessionId)
+                            .OrderByDescending(po => po.Timestamp)
+                            .FirstOrDefault()
+                    })
+                    .ToList(),
+                CurrentRound = _dbContext.Rounds
+                    .Where(r => r.ServerGuid == server.Guid && r.IsActive)
+                    .FirstOrDefault()
+            })
             .ToListAsync();
 
-        var serverSummaries = new List<ServerSummary>();
-        
-        foreach (var server in servers)
+        var serverSummaries = serversWithData.Select(data => new ServerSummary
         {
-            var summary = await BuildServerSummaryAsync(server);
-            serverSummaries.Add(summary);
-        }
+            Guid = data.Server.Guid,
+            Name = data.Server.Name,
+            Ip = data.Server.Ip,
+            Port = data.Server.Port,
+            NumPlayers = data.ActiveSessions.Count,
+            MaxPlayers = data.Server.MaxPlayers ?? 64,
+            MapName = data.Server.MapName ?? "",
+            GameType = data.CurrentRound?.GameType ?? "",
+            JoinLink = data.Server.JoinLink ?? "",
+            RoundTimeRemain = data.CurrentRound?.RoundTimeRemain ?? 0,
+            Tickets1 = data.CurrentRound?.Tickets1 ?? 0,
+            Tickets2 = data.CurrentRound?.Tickets2 ?? 0,
+            Players = data.ActiveSessions.Select(session => new PlayerInfo
+            {
+                Name = session.PlayerName,
+                Score = session.LatestObservation?.Score ?? session.TotalScore,
+                Kills = session.LatestObservation?.Kills ?? session.TotalKills,
+                Deaths = session.LatestObservation?.Deaths ?? session.TotalDeaths,
+                Ping = session.LatestObservation?.Ping ?? 0,
+                Team = session.LatestObservation?.Team ?? 1,
+                TeamLabel = session.LatestObservation?.TeamLabel ?? "",
+                AiBot = session.AiBot ?? false
+            }).ToArray(),
+            Teams = BuildTeamsFromRound(data.CurrentRound),
+            Country = data.Server.Country,
+            Region = data.Server.Region,
+            City = data.Server.City,
+            Loc = data.Server.Loc,
+            Timezone = data.Server.Timezone,
+            Org = data.Server.Org,
+            Postal = data.Server.Postal,
+            GeoLookupDate = data.Server.GeoLookupDate
+        }).ToList();
 
         return serverSummaries.OrderByDescending(s => s.NumPlayers).ToArray();
     }
@@ -130,21 +177,75 @@ public class LiveServersController : ControllerBase
     private async Task<ServerSummary?> GetSingleServerFromDatabaseAsync(string game, string ip, int port)
     {
         var fiveMinutesAgo = DateTime.UtcNow.AddMinutes(-5);
+        var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
         
-        // Find the specific server that was observed in the last 5 minutes
-        var server = await _dbContext.Servers
+        // Get the specific server with all related data in a single optimized query
+        var serverWithData = await _dbContext.Servers
             .Where(s => s.Game.ToLower() == game.ToLower() && s.Ip == ip && s.Port == port)
-            .Join(_dbContext.PlayerSessions,
-                s => s.Guid,
-                session => session.ServerGuid,
-                (s, session) => new { Server = s, Session = session })
-            .Where(joined => joined.Session.LastSeenTime >= fiveMinutesAgo)
-            .Select(joined => joined.Server)
+            .Where(s => _dbContext.PlayerSessions
+                .Any(ps => ps.ServerGuid == s.Guid && ps.LastSeenTime >= fiveMinutesAgo))
+            .Select(server => new {
+                Server = server,
+                ActiveSessions = _dbContext.PlayerSessions
+                    .Where(ps => ps.ServerGuid == server.Guid 
+                                 && ps.IsActive 
+                                 && ps.LastSeenTime >= oneMinuteAgo)
+                    .Select(ps => new {
+                        ps.SessionId,
+                        ps.PlayerName,
+                        ps.TotalScore,
+                        ps.TotalKills,
+                        ps.TotalDeaths,
+                        ps.Player.AiBot,
+                        LatestObservation = _dbContext.PlayerObservations
+                            .Where(po => po.SessionId == ps.SessionId)
+                            .OrderByDescending(po => po.Timestamp)
+                            .FirstOrDefault()
+                    })
+                    .ToList(),
+                CurrentRound = _dbContext.Rounds
+                    .Where(r => r.ServerGuid == server.Guid && r.IsActive)
+                    .FirstOrDefault()
+            })
             .FirstOrDefaultAsync();
 
-        if (server == null) return null;
+        if (serverWithData == null) return null;
 
-        return await BuildServerSummaryAsync(server);
+        return new ServerSummary
+        {
+            Guid = serverWithData.Server.Guid,
+            Name = serverWithData.Server.Name,
+            Ip = serverWithData.Server.Ip,
+            Port = serverWithData.Server.Port,
+            NumPlayers = serverWithData.ActiveSessions.Count,
+            MaxPlayers = serverWithData.Server.MaxPlayers ?? 64,
+            MapName = serverWithData.Server.MapName ?? "",
+            GameType = serverWithData.CurrentRound?.GameType ?? "",
+            JoinLink = serverWithData.Server.JoinLink ?? "",
+            RoundTimeRemain = serverWithData.CurrentRound?.RoundTimeRemain ?? 0,
+            Tickets1 = serverWithData.CurrentRound?.Tickets1 ?? 0,
+            Tickets2 = serverWithData.CurrentRound?.Tickets2 ?? 0,
+            Players = serverWithData.ActiveSessions.Select(session => new PlayerInfo
+            {
+                Name = session.PlayerName,
+                Score = session.LatestObservation?.Score ?? session.TotalScore,
+                Kills = session.LatestObservation?.Kills ?? session.TotalKills,
+                Deaths = session.LatestObservation?.Deaths ?? session.TotalDeaths,
+                Ping = session.LatestObservation?.Ping ?? 0,
+                Team = session.LatestObservation?.Team ?? 1,
+                TeamLabel = session.LatestObservation?.TeamLabel ?? "",
+                AiBot = session.AiBot ?? false
+            }).ToArray(),
+            Teams = BuildTeamsFromRound(serverWithData.CurrentRound),
+            Country = serverWithData.Server.Country,
+            Region = serverWithData.Server.Region,
+            City = serverWithData.Server.City,
+            Loc = serverWithData.Server.Loc,
+            Timezone = serverWithData.Server.Timezone,
+            Org = serverWithData.Server.Org,
+            Postal = serverWithData.Server.Postal,
+            GeoLookupDate = serverWithData.Server.GeoLookupDate
+        };
     }
 
     private async Task<ServerSummary> BuildServerSummaryAsync(GameServer server)
@@ -240,6 +341,24 @@ public class LiveServersController : ControllerBase
             Postal = server.Postal,
             GeoLookupDate = server.GeoLookupDate
         };
+    }
+
+    private static TeamInfo[] BuildTeamsFromRound(Round? currentRound)
+    {
+        if (currentRound == null) return [];
+
+        var teams = new List<TeamInfo>();
+        
+        if (!string.IsNullOrEmpty(currentRound.Team1Label))
+        {
+            teams.Add(new TeamInfo { Index = 1, Label = currentRound.Team1Label, Tickets = currentRound.Tickets1 ?? 0 });
+        }
+        if (!string.IsNullOrEmpty(currentRound.Team2Label))
+        {
+            teams.Add(new TeamInfo { Index = 2, Label = currentRound.Team2Label, Tickets = currentRound.Tickets2 ?? 0 });
+        }
+
+        return teams.ToArray();
     }
 
     private static bool IsValidServerDetails(string ip, int port)
