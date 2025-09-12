@@ -36,19 +36,6 @@ public class GameTrendsService : BaseClickHouseService
         return items;
     }
 
-    private async Task<T?> ReadSingleOrDefaultAsync<T>(string query, params object[] parameters) where T : new()
-    {
-        var formattedQuery = SubstituteParameters(query, parameters) + " LIMIT 1 FORMAT TabSeparated";
-        var result = await ExecuteQueryInternalAsync(formattedQuery);
-        
-        var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        if (lines.Length == 0)
-            return default(T);
-
-        var parts = lines[0].Split('\t');
-        return ParseTabSeparatedLine<T>(parts);
-    }
-
     private static string SubstituteParameters(string query, params object[] parameters)
     {
         if (parameters == null || parameters.Length == 0)
@@ -327,6 +314,21 @@ public class GameTrendsService : BaseClickHouseService
 
     var fourHourForecast = await ReadAllAsync<HourlyPrediction>(fourHourForecastQuery, parameters.ToArray());
 
+    // Populate current hour data and delta for "Now" bucket
+    foreach (var forecast in fourHourForecast)
+    {
+        if (forecast.HourOfDay == currentHour && forecast.DayOfWeek == clickHouseDayOfWeek)
+        {
+            forecast.IsCurrentHour = true;
+            forecast.ActualPlayers = currentActualPlayers;
+            forecast.Delta = currentActualPlayers - forecast.PredictedPlayers;
+        }
+        else
+        {
+            forecast.IsCurrentHour = false;
+        }
+    }
+
     // Get 24-hour peak analysis - find top 3 busiest hours in next 24 hours (including current hour)
     var next24Hours = new List<(int hour, int dayOfWeek)>();
     for (int i = 0; i < 24; i++)
@@ -337,9 +339,6 @@ public class GameTrendsService : BaseClickHouseService
         var futureClickHouseDayOfWeek = futureDayOfWeek == 0 ? 7 : futureDayOfWeek;
         next24Hours.Add((futureHour, futureClickHouseDayOfWeek));
     }
-
-    // Group by unique hour-day combinations for the query
-    var uniqueHourDayCombos = next24Hours.GroupBy(x => new { x.hour, x.dayOfWeek }).ToList();
     
     var peakHoursQuery = $@"
         SELECT 
@@ -375,7 +374,7 @@ public class GameTrendsService : BaseClickHouseService
     var peakHours = await ReadAllAsync<Peak24HourPrediction>(peakHoursQuery, parameters.ToArray());
 
     // Ensure 24-hour peaks include the highest values from 4-hour forecast for logical consistency
-    var fourHourMax = fourHourForecast.Max(f => f?.PredictedPlayers ?? 0);
+    var fourHourMax = fourHourForecast.Max(f => f.PredictedPlayers);
     var peakHoursList = peakHours.ToList();
     
     // If the 4-hour max is higher than any 24-hour peak, add it to ensure consistency
@@ -451,84 +450,80 @@ public class GameTrendsService : BaseClickHouseService
         FourHourForecast = fourHourForecast.ToList(),
         Next24HourPeaks = peakHoursList,
         GeneratedAt = DateTime.UtcNow,
-        RecommendationMessage = GenerateRecommendation(currentStatus, trendDirection, fourHourMaxPredicted, peakHoursList.FirstOrDefault())
+        RecommendationMessage = GenerateFactualRecommendation(
+            currentActualPlayers, 
+            currentHourPredicted, 
+            fourHourForecast.ToList())
     };
 }
 
-private static string GenerateRecommendation(string currentStatus, string trendDirection, double fourHourMax, Peak24HourPrediction? nextPeak)
-{
-    var recommendations = new List<string>();
-
-    switch (currentStatus)
+    private static string GenerateFactualRecommendation(
+        int currentActualPlayers, 
+        double currentPredictedPlayers,
+        List<HourlyPrediction> fourHourForecast)
     {
-        case "very_quiet":
-        case "quiet":
-            if (trendDirection.Contains("increasing"))
-                recommendations.Add("🚀 Servers are quiet now but activity is picking up!");
-            else if (fourHourMax > 20)
-                recommendations.Add("📈 It's quiet now, but expect more players in the next few hours.");
-            else
-                recommendations.Add("😴 Servers are quiet right now.");
-            break;
-        case "moderate":
-            if (trendDirection.Contains("increasing"))
-                recommendations.Add("📈 Good activity level and growing - great time to join!");
-            else
-                recommendations.Add("✅ Decent player activity right now.");
-            break;
-        case "busy":
-        case "very_busy":
-            recommendations.Add("🔥 Servers are buzzing with activity - prime gaming time!");
-            break;
-    }
-
-    if (nextPeak != null)
-    {
-        var currentTime = DateTime.UtcNow;
-        var currentHour = currentTime.Hour;
-        var currentDayOfWeek = (int)currentTime.DayOfWeek;
-        var clickHouseDayOfWeek = currentDayOfWeek == 0 ? 7 : currentDayOfWeek;
+        var recommendations = new List<string>();
         
-        // Calculate hours until next peak
-        int hoursUntilPeak;
-        if (nextPeak.DayOfWeek == clickHouseDayOfWeek && nextPeak.HourOfDay > currentHour)
+        // Start with factual current status
+        var predictionDelta = currentPredictedPlayers > 0 
+            ? currentActualPlayers - currentPredictedPlayers 
+            : 0;
+            
+        if (currentPredictedPlayers > 0)
         {
-            // Peak is later today
-            hoursUntilPeak = nextPeak.HourOfDay - currentHour;
-        }
-        else if (nextPeak.DayOfWeek == clickHouseDayOfWeek && nextPeak.HourOfDay <= currentHour)
-        {
-            // Peak is tomorrow (same day of week)
-            hoursUntilPeak = (24 - currentHour) + nextPeak.HourOfDay;
+            var deltaText = predictionDelta > 0 ? $"+{predictionDelta:F0}" : $"{predictionDelta:F0}";
+            recommendations.Add($"Currently {currentActualPlayers} players online ({deltaText} vs expected)");
         }
         else
         {
-            // Peak is on a different day of the week
-            var daysUntilPeak = (nextPeak.DayOfWeek - clickHouseDayOfWeek + 7) % 7;
-            if (daysUntilPeak == 0) daysUntilPeak = 7; // Next week
-            hoursUntilPeak = (daysUntilPeak * 24) - currentHour + nextPeak.HourOfDay;
+            recommendations.Add($"Currently {currentActualPlayers} players online");
         }
-
-        string timeReference;
-        if (hoursUntilPeak < 1)
-            timeReference = "very soon";
-        else if (hoursUntilPeak < 24)
-            timeReference = $"in {hoursUntilPeak} hour{(hoursUntilPeak == 1 ? "" : "s")}";
-        else
+        
+        // Analyze 4-hour trend
+        if (fourHourForecast.Count >= 2)
         {
-            var days = hoursUntilPeak / 24;
-            var remainingHours = hoursUntilPeak % 24;
-            if (remainingHours == 0)
-                timeReference = $"in {days} day{(days == 1 ? "" : "s")}";
+            var fourHourPeak = fourHourForecast.Skip(1).Max(f => f?.PredictedPlayers ?? 0);
+            
+            string fourHourTrend;
+            if (fourHourPeak > currentActualPlayers * 1.5)
+            {
+                fourHourTrend = "📈 Activity will increase significantly over next 4 hours";
+            }
+            else if (fourHourPeak > currentActualPlayers * 1.2)
+            {
+                fourHourTrend = "↗️ Activity will increase gradually over next 4 hours";
+            }
+            else if (fourHourPeak < currentActualPlayers * 0.7)
+            {
+                fourHourTrend = "📉 Activity will decrease over next 4 hours";
+            }
+            else if (fourHourPeak < currentActualPlayers * 0.9)
+            {
+                fourHourTrend = "↘️ Activity will decrease slightly over next 4 hours";
+            }
             else
-                timeReference = $"in {days} day{(days == 1 ? "" : "s")} and {remainingHours} hour{(remainingHours == 1 ? "" : "s")}";
+            {
+                fourHourTrend = "➡️ Activity will remain stable over next 4 hours";
+            }
+            
+            recommendations.Add($"{fourHourTrend} (peak: ~{fourHourPeak:F0} players)");
         }
-
-        recommendations.Add($"⏰ Peak activity expected {timeReference} with ~{nextPeak.PredictedPlayers:F0} players.");
+        
+        // Add immediate next hour prediction if significantly different
+        if (fourHourForecast.Count >= 2)
+        {
+            var nextHour = fourHourForecast.Skip(1).FirstOrDefault()?.PredictedPlayers ?? 0;
+            var hourChange = nextHour - currentActualPlayers;
+            
+            if (Math.Abs(hourChange) > 5)
+            {
+                var changeText = hourChange > 0 ? $"+{hourChange:F0}" : $"{hourChange:F0}";
+                recommendations.Add($"Next hour: ~{nextHour:F0} players ({changeText})");
+            }
+        }
+        
+        return string.Join(" • ", recommendations);
     }
-
-    return string.Join(" ", recommendations);
-}
 
 public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(string[] serverGuids)
 {
@@ -808,6 +803,9 @@ public class HourlyPrediction
     public int DayOfWeek { get; set; }
     public double PredictedPlayers { get; set; }
     public int DataPoints { get; set; }
+    public bool IsCurrentHour { get; set; }
+    public int? ActualPlayers { get; set; } // Only set for current hour
+    public double? Delta { get; set; } // Actual - Predicted, only for current hour
 }
 
 public class Peak24HourPrediction
