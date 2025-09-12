@@ -283,6 +283,10 @@ public class GameServer
     public string? MapName { get; set; }
     public string? JoinLink { get; set; }
 
+    // Online status tracking
+    public bool IsOnline { get; set; } = true;
+    public DateTime LastSeenTime { get; set; } = DateTime.UtcNow;
+
     // GeoLocation fields (populated via ipinfo.io lookup when IP changes or no geolocation is stored)
     public string? Country { get; set; }
     public string? Region { get; set; }

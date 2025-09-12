@@ -301,6 +301,10 @@ public class PlayerTrackingService
             server.JoinLink = serverInfo.JoinLink;
         }
 
+        // Always update online status and last seen time when server is polled
+        server.IsOnline = true;
+        server.LastSeenTime = DateTime.UtcNow;
+
         // Geo lookup if IP changed or no geolocation stored
         if (ipChanged || server.GeoLookupDate == null)
         {
@@ -357,6 +361,33 @@ public class PlayerTrackingService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error closing timed out player sessions");
+        }
+    }
+
+    public async Task MarkOfflineServersAsync(DateTime currentTime)
+    {
+        try
+        {
+            var offlineThreshold = currentTime.AddMinutes(-5); // Mark servers offline if not seen for 5 minutes
+
+            var serversToMarkOffline = await _dbContext.Servers
+                .Where(s => s.IsOnline && s.LastSeenTime < offlineThreshold)
+                .ToListAsync();
+
+            foreach (var server in serversToMarkOffline)
+            {
+                server.IsOnline = false;
+            }
+
+            if (serversToMarkOffline.Any())
+            {
+                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Marked {serversToMarkOffline.Count} servers as offline");
+                await _dbContext.SaveChangesAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error marking servers as offline");
         }
     }
 

@@ -590,6 +590,16 @@ public class ServerSummary
     /// Date when geo location was last looked up
     /// </summary>
     public DateTime? GeoLookupDate { get; set; }
+
+    /// <summary>
+    /// Whether the server is currently online
+    /// </summary>
+    public bool IsOnline { get; set; } = true;
+
+    /// <summary>
+    /// When the server was last seen online
+    /// </summary>
+    public DateTime LastSeenTime { get; set; } = DateTime.UtcNow;
 }
 
 public class PlayersOnlineHistoryResponse
