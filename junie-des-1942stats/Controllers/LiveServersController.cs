@@ -137,11 +137,12 @@ public class LiveServersController : ControllerBase
 
         var serverGuids = servers.Select(s => s.Guid).ToList();
 
-        // Get active player sessions efficiently
+        // Get active player sessions efficiently (excluding bots)
         var activeSessions = await _dbContext.PlayerSessions
             .Where(ps => serverGuids.Contains(ps.ServerGuid) 
                          && ps.IsActive 
-                         && ps.LastSeenTime >= oneMinuteAgo)
+                         && ps.LastSeenTime >= oneMinuteAgo
+                         && (ps.Player == null || !ps.Player.AiBot))
             .Include(ps => ps.Player)
             .ToListAsync();
 
