@@ -73,8 +73,9 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
                 // 1. Global timeout cleanup
                 var timeoutStopwatch = Stopwatch.StartNew();
                 await playerTrackingService.CloseAllTimedOutSessionsAsync(DateTime.UtcNow);
+                await playerTrackingService.MarkOfflineServersAsync(DateTime.UtcNow);
                 timeoutStopwatch.Stop();
-                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Session cleanup: {timeoutStopwatch.ElapsedMilliseconds}ms");
+                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Session & server cleanup: {timeoutStopwatch.ElapsedMilliseconds}ms");
 
                 // 2. BF1942 stats
                 var bf1942Stopwatch = Stopwatch.StartNew();

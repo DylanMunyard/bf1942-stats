@@ -1,3 +1,4 @@
+using junie_des_1942stats.Bflist;
 using Microsoft.AspNetCore.Mvc;
 using junie_des_1942stats.Services;
 using Microsoft.Extensions.Logging;
@@ -34,9 +35,10 @@ public class LiveServersController : ControllerBase
     /// Get all servers for a specific game
     /// </summary>
     /// <param name="game">Game type: bf1942 or fh2</param>
+    /// <param name="showAll">If true, show all servers including offline ones. If false (default), show only online servers.</param>
     /// <returns>Server list</returns>
     [HttpGet("{game}/servers")]
-    public async Task<ActionResult<ServerListResponse>> GetServers(string game)
+    public async Task<ActionResult<ServerListResponse>> GetServers(string game, [FromQuery] bool showAll = false)
     {
         if (!ValidGames.Contains(game.ToLower()))
         {
@@ -45,23 +47,15 @@ public class LiveServersController : ControllerBase
 
         try
         {
-            var servers = await _bfListApiService.FetchAllServerSummariesWithCacheStatusAsync(game);
-
-            // Enrich servers with geo location data from database
-            var enrichedServers = await EnrichServersWithGeoLocationAsync(servers);
+            var servers = await GetServersFromDatabaseAsync(game, showAll);
 
             var response = new ServerListResponse
             {
-                Servers = enrichedServers,
+                Servers = servers,
                 LastUpdated = DateTime.UtcNow.ToString("O")
             };
 
             return Ok(response);
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "Failed to fetch all servers from BFList API for game {Game}", game);
-            return StatusCode(502, "Failed to fetch server data from upstream API");
         }
         catch (Exception ex)
         {
@@ -120,6 +114,131 @@ public class LiveServersController : ControllerBase
         }
     }
 
+    private async Task<ServerSummary[]> GetServersFromDatabaseAsync(string game, bool showAll = false)
+    {
+        var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
+        
+        // Get servers filtering only by online status
+        var serverQuery = _dbContext.Servers
+            .Where(s => s.Game.ToLower() == game.ToLower());
+
+        // Filter by online status unless showing all servers
+        if (!showAll)
+        {
+            serverQuery = serverQuery.Where(s => s.IsOnline);
+        }
+
+        var servers = await serverQuery.ToListAsync();
+        
+        if (servers.Count == 0)
+        {
+            return Array.Empty<ServerSummary>();
+        }
+
+        var serverGuids = servers.Select(s => s.Guid).ToList();
+
+        // Get active player sessions efficiently (excluding bots)
+        var activeSessions = await _dbContext.PlayerSessions
+            .Where(ps => serverGuids.Contains(ps.ServerGuid) 
+                         && ps.IsActive 
+                         && ps.LastSeenTime >= oneMinuteAgo
+                         && (ps.Player == null || !ps.Player.AiBot))
+            .Include(ps => ps.Player)
+            .ToListAsync();
+
+        var sessionIds = activeSessions.Select(ps => ps.SessionId).ToList();
+
+        // Get latest player observations in a single query
+        Dictionary<int, PlayerObservation> latestObservations = new();
+        if (sessionIds.Count > 0)
+        {
+            var observations = await _dbContext.PlayerObservations
+                .Where(po => sessionIds.Contains(po.SessionId))
+                .OrderByDescending(po => po.Timestamp)
+                .ToListAsync();
+                
+            // Group by SessionId and take the latest (first due to ordering)
+            latestObservations = observations
+                .GroupBy(po => po.SessionId)
+                .ToDictionary(g => g.Key, g => g.First());
+        }
+
+        // Get current rounds efficiently
+        var currentRounds = await _dbContext.Rounds
+            .Where(r => serverGuids.Contains(r.ServerGuid) && r.IsActive)
+            .ToDictionaryAsync(r => r.ServerGuid, r => r);
+
+        // Build response by combining the data
+        var serverSummaries = servers.Select(server =>
+        {
+            var serverSessions = activeSessions.Where(ps => ps.ServerGuid == server.Guid).ToList();
+            currentRounds.TryGetValue(server.Guid, out var currentRound);
+
+            return new ServerSummary
+            {
+                Guid = server.Guid,
+                Name = server.Name,
+                Ip = server.Ip,
+                Port = server.Port,
+                NumPlayers = serverSessions.Count,
+                MaxPlayers = server.MaxPlayers ?? 64,
+                MapName = server.MapName ?? "",
+                GameType = currentRound?.GameType ?? "",
+                JoinLink = server.JoinLink ?? "",
+                RoundTimeRemain = currentRound?.RoundTimeRemain ?? 0,
+                Tickets1 = currentRound?.Tickets1 ?? 0,
+                Tickets2 = currentRound?.Tickets2 ?? 0,
+                Players = serverSessions.Select(session =>
+                {
+                    latestObservations.TryGetValue(session.SessionId, out var latestObs);
+                    
+                    return new PlayerInfo
+                    {
+                        Name = session.PlayerName,
+                        Score = latestObs?.Score ?? session.TotalScore,
+                        Kills = latestObs?.Kills ?? session.TotalKills,
+                        Deaths = latestObs?.Deaths ?? session.TotalDeaths,
+                        Ping = latestObs?.Ping ?? 0,
+                        Team = latestObs?.Team ?? 1,
+                        TeamLabel = latestObs?.TeamLabel ?? "",
+                        AiBot = session.Player?.AiBot ?? false
+                    };
+                }).ToArray(),
+                Teams = BuildTeamsFromRound(currentRound),
+                Country = server.Country,
+                Region = server.Region,
+                City = server.City,
+                Loc = server.Loc,
+                Timezone = server.Timezone,
+                Org = server.Org,
+                Postal = server.Postal,
+                GeoLookupDate = server.GeoLookupDate,
+                IsOnline = server.IsOnline,
+                LastSeenTime = server.LastSeenTime
+            };
+        }).ToList();
+
+        return serverSummaries.OrderByDescending(s => s.NumPlayers).ToArray();
+    }
+
+    private static TeamInfo[] BuildTeamsFromRound(Round? currentRound)
+    {
+        if (currentRound == null) return [];
+
+        var teams = new List<TeamInfo>();
+        
+        if (!string.IsNullOrEmpty(currentRound.Team1Label))
+        {
+            teams.Add(new TeamInfo { Index = 1, Label = currentRound.Team1Label, Tickets = currentRound.Tickets1 ?? 0 });
+        }
+        if (!string.IsNullOrEmpty(currentRound.Team2Label))
+        {
+            teams.Add(new TeamInfo { Index = 2, Label = currentRound.Team2Label, Tickets = currentRound.Tickets2 ?? 0 });
+        }
+
+        return teams.ToArray();
+    }
+
     private static bool IsValidServerDetails(string ip, int port)
     {
         return !string.IsNullOrEmpty(ip) &&
@@ -155,6 +274,7 @@ public class LiveServersController : ControllerBase
 
         return servers;
     }
+
 
     /// <summary>
     /// Get players online history for a specific game
