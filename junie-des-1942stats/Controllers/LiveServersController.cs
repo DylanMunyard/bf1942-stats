@@ -116,10 +116,9 @@ public class LiveServersController : ControllerBase
 
     private async Task<ServerSummary[]> GetServersFromDatabaseAsync(string game, bool showAll = false)
     {
-        var fiveMinutesAgo = DateTime.UtcNow.AddMinutes(-5);
         var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
         
-        // Step 1: Get servers with activity filtering first
+        // Get servers filtering only by online status
         var serverQuery = _dbContext.Servers
             .Where(s => s.Game.ToLower() == game.ToLower());
 
@@ -137,26 +136,8 @@ public class LiveServersController : ControllerBase
         }
 
         var serverGuids = servers.Select(s => s.Guid).ToList();
-        
-        // Step 2: Filter servers by activity (if not showing all)
-        if (!showAll)
-        {
-            var serversWithActivity = await _dbContext.PlayerSessions
-                .Where(ps => serverGuids.Contains(ps.ServerGuid) && ps.LastSeenTime >= fiveMinutesAgo)
-                .Select(ps => ps.ServerGuid)
-                .Distinct()
-                .ToListAsync();
-                
-            servers = servers.Where(s => serversWithActivity.Contains(s.Guid)).ToList();
-            serverGuids = servers.Select(s => s.Guid).ToList();
-        }
 
-        if (servers.Count == 0)
-        {
-            return Array.Empty<ServerSummary>();
-        }
-
-        // Step 3: Get active player sessions efficiently
+        // Get active player sessions efficiently
         var activeSessions = await _dbContext.PlayerSessions
             .Where(ps => serverGuids.Contains(ps.ServerGuid) 
                          && ps.IsActive 
@@ -166,7 +147,7 @@ public class LiveServersController : ControllerBase
 
         var sessionIds = activeSessions.Select(ps => ps.SessionId).ToList();
 
-        // Step 4: Get latest player observations in a single query
+        // Get latest player observations in a single query
         Dictionary<int, PlayerObservation> latestObservations = new();
         if (sessionIds.Count > 0)
         {
@@ -181,12 +162,12 @@ public class LiveServersController : ControllerBase
                 .ToDictionary(g => g.Key, g => g.First());
         }
 
-        // Step 5: Get current rounds efficiently
+        // Get current rounds efficiently
         var currentRounds = await _dbContext.Rounds
             .Where(r => serverGuids.Contains(r.ServerGuid) && r.IsActive)
             .ToDictionaryAsync(r => r.ServerGuid, r => r);
 
-        // Step 6: Build response by combining the data
+        // Build response by combining the data
         var serverSummaries = servers.Select(server =>
         {
             var serverSessions = activeSessions.Where(ps => ps.ServerGuid == server.Guid).ToList();
