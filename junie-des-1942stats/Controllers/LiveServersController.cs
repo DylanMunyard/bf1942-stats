@@ -45,28 +45,38 @@ public class LiveServersController : ControllerBase
             return BadRequest($"Invalid game type. Valid types: {string.Join(", ", ValidGames)}");
         }
 
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var stepStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         try
         {
-            _logger.LogInformation("Starting GetServersFromDatabaseAsync for game {Game}", game);
+            _logger.LogInformation("API REQUEST - Starting GetServers for game {Game}, showAll: {ShowAll}", game, showAll);
+            
+            stepStopwatch.Restart();
             var servers = await GetServersFromDatabaseAsync(game, showAll);
-            stopwatch.Stop();
-            _logger.LogInformation("Completed GetServersFromDatabaseAsync for game {Game} in {ElapsedMs}ms. Retrieved {ServerCount} servers", 
-                game, stopwatch.ElapsedMilliseconds, servers?.Length ?? 0);
+            stepStopwatch.Stop();
+            _logger.LogInformation("API TIMING - Database operations completed in {DatabaseMs}ms. Retrieved {ServerCount} servers", 
+                stepStopwatch.ElapsedMilliseconds, servers?.Length ?? 0);
 
+            stepStopwatch.Restart();
             var response = new ServerListResponse
             {
                 Servers = servers,
                 LastUpdated = DateTime.UtcNow.ToString("O")
             };
+            stepStopwatch.Stop();
+            
+            totalStopwatch.Stop();
+            _logger.LogInformation("API TIMING - Response object creation took {ResponseMs}ms", stepStopwatch.ElapsedMilliseconds);
+            _logger.LogInformation("API COMPLETE - Total GetServers time: {TotalMs}ms for game {Game}", 
+                totalStopwatch.ElapsedMilliseconds, game);
 
             return Ok(response);
         }
         catch (Exception ex)
         {
-            stopwatch.Stop();
-            _logger.LogError(ex, "Unexpected error fetching all servers for game {Game} after {ElapsedMs}ms", game, stopwatch.ElapsedMilliseconds);
+            totalStopwatch.Stop();
+            _logger.LogError(ex, "API ERROR - Unexpected error fetching all servers for game {Game} after {ElapsedMs}ms", game, totalStopwatch.ElapsedMilliseconds);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -163,7 +173,7 @@ public class LiveServersController : ControllerBase
             .Where(ps => serverGuids.Contains(ps.ServerGuid) 
                          && ps.IsActive 
                          && ps.LastSeenTime >= oneMinuteAgo
-                         && (ps.Player == null || !ps.Player.AiBot))
+                         && (!ps.Player.AiBot))
             .Include(ps => ps.Player)
             .ToListAsync();
         stepStopwatch.Stop();
