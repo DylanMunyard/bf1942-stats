@@ -318,6 +318,11 @@ public class PlayerSession
     public string GameType { get; set; } = "";
     public string? RoundId { get; set; }
 
+    // Current live state - updated with each observation for performance
+    public int CurrentPing { get; set; } = 0;
+    public int CurrentTeam { get; set; } = 1;
+    public string CurrentTeamLabel { get; set; } = "";
+
     // Navigation properties
     public Player Player { get; set; } = null!;
     public GameServer Server { get; set; } = null!;

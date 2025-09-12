@@ -190,6 +190,16 @@ namespace junie_des_1942stats.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("CurrentPing")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CurrentTeam")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CurrentTeamLabel")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("GameType")
                         .IsRequired()
                         .HasColumnType("TEXT");

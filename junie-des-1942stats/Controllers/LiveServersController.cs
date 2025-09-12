@@ -167,7 +167,7 @@ public class LiveServersController : ControllerBase
         _logger.LogDebug("Processing {ServerCount} servers with GUIDs: {ServerGuids}", 
             servers.Count, string.Join(", ", serverGuids.Take(5)) + (serverGuids.Count > 5 ? "..." : ""));
 
-        // Get active player sessions efficiently (excluding bots)
+        // Get active player sessions efficiently (excluding bots) - ALL DATA NOW IN ONE QUERY!
         stepStopwatch.Restart();
         var activeSessions = await _dbContext.PlayerSessions
             .Where(ps => serverGuids.Contains(ps.ServerGuid) 
@@ -177,38 +177,11 @@ public class LiveServersController : ControllerBase
             .Include(ps => ps.Player)
             .ToListAsync();
         stepStopwatch.Stop();
-        _logger.LogInformation("Step 2 - Active player sessions query completed in {ElapsedMs}ms. Found {SessionCount} sessions", 
+        _logger.LogInformation("Step 2 - Active player sessions query completed in {ElapsedMs}ms. Found {SessionCount} sessions WITH ALL DATA", 
             stepStopwatch.ElapsedMilliseconds, activeSessions.Count);
 
-        var sessionIds = activeSessions.Select(ps => ps.SessionId).ToList();
-        _logger.LogDebug("Found {SessionCount} active sessions", sessionIds.Count);
-
-        // Get latest player observations in a single query
-        Dictionary<int, PlayerObservation> latestObservations = new();
-        if (sessionIds.Count > 0)
-        {
-            stepStopwatch.Restart();
-            var observations = await _dbContext.PlayerObservations
-                .Where(po => sessionIds.Contains(po.SessionId))
-                .OrderByDescending(po => po.Timestamp)
-                .ToListAsync();
-            stepStopwatch.Stop();
-            _logger.LogInformation("Step 3 - Player observations query completed in {ElapsedMs}ms. Found {ObservationCount} observations", 
-                stepStopwatch.ElapsedMilliseconds, observations.Count);
-                
-            // Group by SessionId and take the latest (first due to ordering)
-            stepStopwatch.Restart();
-            latestObservations = observations
-                .GroupBy(po => po.SessionId)
-                .ToDictionary(g => g.Key, g => g.First());
-            stepStopwatch.Stop();
-            _logger.LogInformation("Step 3a - Observations grouping completed in {ElapsedMs}ms. Grouped into {GroupCount} latest observations", 
-                stepStopwatch.ElapsedMilliseconds, latestObservations.Count);
-        }
-        else
-        {
-            _logger.LogInformation("Step 3 - Skipped player observations query (no active sessions)");
-        }
+        // ELIMINATED: PlayerObservations query - no longer needed!
+        _logger.LogInformation("Step 3 - SKIPPED PlayerObservations query - using denormalized data from PlayerSession!");
 
         // Get current rounds efficiently
         stepStopwatch.Restart();
@@ -219,7 +192,7 @@ public class LiveServersController : ControllerBase
         _logger.LogInformation("Step 4 - Current rounds query completed in {ElapsedMs}ms. Found {RoundCount} active rounds", 
             stepStopwatch.ElapsedMilliseconds, currentRounds.Count);
 
-        // Build response by combining the data
+        // Build response by combining the data - NOW MUCH SIMPLER!
         stepStopwatch.Restart();
         var serverSummaries = servers.Select(server =>
         {
@@ -240,21 +213,16 @@ public class LiveServersController : ControllerBase
                 RoundTimeRemain = currentRound?.RoundTimeRemain ?? 0,
                 Tickets1 = currentRound?.Tickets1 ?? 0,
                 Tickets2 = currentRound?.Tickets2 ?? 0,
-                Players = serverSessions.Select(session =>
+                Players = serverSessions.Select(session => new PlayerInfo
                 {
-                    latestObservations.TryGetValue(session.SessionId, out var latestObs);
-                    
-                    return new PlayerInfo
-                    {
-                        Name = session.PlayerName,
-                        Score = latestObs?.Score ?? session.TotalScore,
-                        Kills = latestObs?.Kills ?? session.TotalKills,
-                        Deaths = latestObs?.Deaths ?? session.TotalDeaths,
-                        Ping = latestObs?.Ping ?? 0,
-                        Team = latestObs?.Team ?? 1,
-                        TeamLabel = latestObs?.TeamLabel ?? "",
-                        AiBot = session.Player?.AiBot ?? false
-                    };
+                    Name = session.PlayerName,
+                    Score = session.TotalScore,
+                    Kills = session.TotalKills,
+                    Deaths = session.TotalDeaths,
+                    Ping = session.CurrentPing,      // From denormalized field
+                    Team = session.CurrentTeam,      // From denormalized field  
+                    TeamLabel = session.CurrentTeamLabel, // From denormalized field
+                    AiBot = session.Player?.AiBot ?? false
                 }).ToArray(),
                 Teams = BuildTeamsFromRound(currentRound),
                 Country = server.Country,
@@ -270,7 +238,7 @@ public class LiveServersController : ControllerBase
             };
         }).ToList();
         stepStopwatch.Stop();
-        _logger.LogInformation("Step 5 - Response building completed in {ElapsedMs}ms", stepStopwatch.ElapsedMilliseconds);
+        _logger.LogInformation("Step 5 - Response building completed in {ElapsedMs}ms (MUCH FASTER - no observation lookups!)", stepStopwatch.ElapsedMilliseconds);
 
         stepStopwatch.Restart();
         var sortedSummaries = serverSummaries.OrderByDescending(s => s.NumPlayers).ToArray();
@@ -278,7 +246,7 @@ public class LiveServersController : ControllerBase
         totalStopwatch.Stop();
         
         _logger.LogInformation("Step 6 - Sorting completed in {ElapsedMs}ms", stepStopwatch.ElapsedMilliseconds);
-        _logger.LogInformation("GetServersFromDatabaseAsync completed. Total time: {TotalMs}ms, returning {ServerCount} servers", 
+        _logger.LogInformation("OPTIMIZED GetServersFromDatabaseAsync completed. Total time: {TotalMs}ms, returning {ServerCount} servers - ELIMINATED 7+ SECOND QUERY!", 
             totalStopwatch.ElapsedMilliseconds, sortedSummaries.Length);
 
         return sortedSummaries;

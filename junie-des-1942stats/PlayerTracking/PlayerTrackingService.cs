@@ -394,6 +394,14 @@ public class PlayerTrackingService
     // Helper methods
     private PlayerSession CreateNewSession(PlayerInfo playerInfo, IGameServer server, DateTime timestamp, string? roundId)
     {
+        // Get team label from Teams array if TeamLabel is empty
+        var teamLabel = playerInfo.TeamLabel;
+        if (string.IsNullOrEmpty(teamLabel) && server.Teams?.Any() == true)
+        {
+            var team = server.Teams.FirstOrDefault(t => t.Index == playerInfo.Team);
+            teamLabel = team?.Label ?? "";
+        }
+
         return new PlayerSession
         {
             PlayerName = playerInfo.Name,
@@ -407,7 +415,11 @@ public class PlayerTrackingService
             TotalDeaths = playerInfo.Deaths,
             MapName = server.MapName,
             GameType = server.GameType,
-            RoundId = roundId
+            RoundId = roundId,
+            // Denormalized current state fields for performance
+            CurrentPing = playerInfo.Ping,
+            CurrentTeam = playerInfo.Team,
+            CurrentTeamLabel = teamLabel
         };
     }
 
@@ -425,6 +437,19 @@ public class PlayerTrackingService
 
         if (!string.IsNullOrEmpty(server.GameType))
             session.GameType = server.GameType;
+
+        // Update denormalized current state fields for live server performance
+        session.CurrentPing = playerInfo.Ping;
+        session.CurrentTeam = playerInfo.Team;
+        
+        // Get team label from Teams array if TeamLabel is empty
+        var teamLabel = playerInfo.TeamLabel;
+        if (string.IsNullOrEmpty(teamLabel) && server.Teams?.Any() == true)
+        {
+            var team = server.Teams.FirstOrDefault(t => t.Index == playerInfo.Team);
+            teamLabel = team?.Label ?? "";
+        }
+        session.CurrentTeamLabel = teamLabel;
     }
 
     private static string ComputeRoundId(string serverGuid, string mapName, DateTime startTimeUtc)
