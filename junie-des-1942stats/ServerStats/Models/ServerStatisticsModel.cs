@@ -17,6 +17,8 @@ public class ServerStatistics
     public DateTime EndPeriod { get; set; }
     public string ServerIp { get; set; } = "";
     public int ServerPort { get; set; }
+    public string? DiscordUrl { get; set; }
+    public string? ForumUrl { get; set; }
 
     // Most active players by time played (1 week)
     public List<PlayerActivity> MostActivePlayersByTimeWeek { get; set; } = new List<PlayerActivity>();
@@ -236,6 +238,8 @@ public class ServerBasicInfo
     public string? CurrentMap { get; set; }
     public bool HasActivePlayers { get; set; }
     public DateTime? LastActivity { get; set; }
+    public string? DiscordUrl { get; set; }
+    public string? ForumUrl { get; set; }
 }
 
 public class ServerFilters

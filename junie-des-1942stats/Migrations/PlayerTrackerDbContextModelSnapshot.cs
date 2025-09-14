@@ -63,6 +63,12 @@ namespace junie_des_1942stats.Migrations
                     b.Property<string>("Country")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("DiscordUrl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ForumUrl")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Game")
                         .IsRequired()
                         .HasColumnType("TEXT");

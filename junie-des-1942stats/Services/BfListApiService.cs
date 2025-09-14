@@ -600,6 +600,16 @@ public class ServerSummary
     /// When the server was last seen online
     /// </summary>
     public DateTime LastSeenTime { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Server Discord invite URL
+    /// </summary>
+    public string? DiscordUrl { get; set; }
+
+    /// <summary>
+    /// Server forum URL
+    /// </summary>
+    public string? ForumUrl { get; set; }
 }
 
 public class PlayersOnlineHistoryResponse

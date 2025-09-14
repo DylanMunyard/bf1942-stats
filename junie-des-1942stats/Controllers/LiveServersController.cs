@@ -234,7 +234,9 @@ public class LiveServersController : ControllerBase
                 Postal = server.Postal,
                 GeoLookupDate = server.GeoLookupDate,
                 IsOnline = server.IsOnline,
-                LastSeenTime = server.LastSeenTime
+                LastSeenTime = server.LastSeenTime,
+                DiscordUrl = server.DiscordUrl,
+                ForumUrl = server.ForumUrl
             };
         }).ToList();
         stepStopwatch.Stop();
@@ -300,6 +302,8 @@ public class LiveServersController : ControllerBase
                 server.Org = gameServer.Org;
                 server.Postal = gameServer.Postal;
                 server.GeoLookupDate = gameServer.GeoLookupDate;
+                server.DiscordUrl = gameServer.DiscordUrl;
+                server.ForumUrl = gameServer.ForumUrl;
             }
         }
 

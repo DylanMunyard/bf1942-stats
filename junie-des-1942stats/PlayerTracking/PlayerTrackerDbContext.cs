@@ -297,6 +297,10 @@ public class GameServer
     public string? Postal { get; set; }
     public DateTime? GeoLookupDate { get; set; } // When this lookup was performed
 
+    // Community links
+    public string? DiscordUrl { get; set; }
+    public string? ForumUrl { get; set; }
+
     // Navigation property
     public List<PlayerSession> Sessions { get; set; } = [];
     public List<ServerPlayerRanking> PlayerRankings { get; set; } = [];

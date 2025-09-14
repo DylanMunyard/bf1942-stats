@@ -88,6 +88,8 @@ public class ServerStatsService(
             Timezone = server.Timezone ?? string.Empty,
             ServerIp = server.Ip,
             ServerPort = server.Port,
+            DiscordUrl = server.DiscordUrl,
+            ForumUrl = server.ForumUrl,
             StartPeriod = startPeriod,
             EndPeriod = endPeriod
         };
@@ -1244,7 +1246,9 @@ FORMAT TabSeparated";
             TotalPlayersAllTime = s.TotalPlayersAllTime,
             CurrentMap = s.CurrentMap,
             HasActivePlayers = s.HasActivePlayers,
-            LastActivity = s.LastActivity
+            LastActivity = s.LastActivity,
+            DiscordUrl = s.Server.DiscordUrl,
+            ForumUrl = s.Server.ForumUrl
         }).ToList();
 
         var result = new PagedResult<ServerBasicInfo>
