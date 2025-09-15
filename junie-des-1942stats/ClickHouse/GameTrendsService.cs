@@ -383,7 +383,7 @@ public class GameTrendsService : BaseClickHouseService
 }
 
 
-public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(string[] serverGuids)
+public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(string[] serverGuids, int timelineHourRange = 4)
 {
     var currentTime = DateTime.UtcNow;
     var currentHour = currentTime.Hour;
@@ -438,9 +438,9 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
 
     var historicalData = await ReadAllAsync<ServerHistoricalData>(historicalQuery, new object[] { currentHour, clickHouseDayOfWeek });
 
-    // Query to get hourly timeline data per server (4 hours before and after current hour)
+    // Query to get hourly timeline data per server (configurable hours before and after current hour)
     var timelineHours = new List<int>();
-    for (int i = -4; i <= 4; i++)
+    for (int i = -timelineHourRange; i <= timelineHourRange; i++)
     {
         var hour = (currentHour + i + 24) % 24;
         timelineHours.Add(hour);

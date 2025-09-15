@@ -76,6 +76,9 @@ public class ServerStatistics
 
     // Current map being played (null if server has no active players)
     public string? CurrentMap { get; set; }
+
+    // Server busy indicator data
+    public ServerBusyIndicator? BusyIndicator { get; set; }
 }
 
 public class PlayerActivity
@@ -255,4 +258,42 @@ public class ServerFilters
     public int? MaxTotalPlayers { get; set; }
     public int? MinActivePlayersLast24h { get; set; }
     public int? MaxActivePlayersLast24h { get; set; }
+}
+
+// Server busy indicator models (reusing from GameTrendsService but simplified for single server)
+public class ServerBusyIndicator
+{
+    public BusyIndicatorData BusyIndicator { get; set; } = new();
+    public List<HourlyBusyData> HourlyTimeline { get; set; } = new(); // 17 hours: 8 before + current + 8 after
+    public DateTime GeneratedAt { get; set; }
+}
+
+public class BusyIndicatorData
+{
+    public string BusyLevel { get; set; } = ""; // very_quiet, quiet, moderate, busy, very_busy, unknown
+    public string BusyText { get; set; } = ""; // Human-readable text like "Busier than usual"
+    public double CurrentPlayers { get; set; }
+    public double TypicalPlayers { get; set; }
+    public double Percentile { get; set; } // What percentile the current activity falls into
+    public HistoricalRange? HistoricalRange { get; set; }
+    public DateTime GeneratedAt { get; set; }
+}
+
+public class HourlyBusyData
+{
+    public int Hour { get; set; } // 0-23 UTC hour
+    public double TypicalPlayers { get; set; }
+    public string BusyLevel { get; set; } = ""; // very_quiet, quiet, moderate, busy, very_busy
+    public bool IsCurrentHour { get; set; }
+}
+
+public class HistoricalRange
+{
+    public double Min { get; set; }
+    public double Q25 { get; set; }
+    public double Median { get; set; }
+    public double Q75 { get; set; }
+    public double Q90 { get; set; }
+    public double Max { get; set; }
+    public double Average { get; set; }
 }

@@ -25,7 +25,8 @@ public class ServerStatsService(
     ICacheKeyService cacheKeyService,
     PlayerRoundsReadService playerRoundsService,
     IClickHouseReader clickHouseReader,
-    RoundsService roundsService)
+    RoundsService roundsService,
+    GameTrendsService gameTrendsService)
 {
     private readonly PlayerTrackerDbContext _dbContext = dbContext;
     private readonly ILogger<ServerStatsService> _logger = logger;
@@ -34,6 +35,7 @@ public class ServerStatsService(
     private readonly PlayerRoundsReadService _playerRoundsService = playerRoundsService;
     private readonly IClickHouseReader _clickHouseReader = clickHouseReader;
     private readonly RoundsService _roundsService = roundsService;
+    private readonly GameTrendsService _gameTrendsService = gameTrendsService;
 
     public async Task<ServerStatistics> GetServerStatistics(
         string serverName,
@@ -175,6 +177,18 @@ public class ServerStatsService(
 
         // Set current map from the combined query
         statistics.CurrentMap = serverWithCurrentMap?.CurrentMap;
+
+        // Get busy indicator data for this server
+        try
+        {
+            var busyIndicatorData = await GetServerBusyIndicatorAsync(server.Guid);
+            statistics.BusyIndicator = busyIndicatorData;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get busy indicator for server {ServerName} ({ServerGuid})", serverName, server.Guid);
+            // Continue without busy indicator data rather than failing the entire request
+        }
 
         // Cache the result for 10 minutes
         await _cacheService.SetAsync(cacheKey, statistics, TimeSpan.FromMinutes(10));
@@ -1264,6 +1278,75 @@ FORMAT TabSeparated";
         _logger.LogDebug("Cached server search results: page {Page}, pageSize {PageSize}", page, pageSize);
 
         return result;
+    }
+
+    /// <summary>
+    /// Get busy indicator data for a single server with 8 hours before/after forecast timeline
+    /// </summary>
+    private async Task<ServerBusyIndicator> GetServerBusyIndicatorAsync(string serverGuid)
+    {
+        var currentTime = DateTime.UtcNow;
+        var currentHour = currentTime.Hour;
+        var currentDayOfWeek = (int)currentTime.DayOfWeek;
+        var clickHouseDayOfWeek = currentDayOfWeek == 0 ? 7 : currentDayOfWeek;
+
+        // Get busy indicator data from GameTrendsService for this single server with 8 hours before/after
+        var busyIndicatorResult = await _gameTrendsService.GetServerBusyIndicatorAsync(new[] { serverGuid }, timelineHourRange: 8);
+        var serverResult = busyIndicatorResult.ServerResults.FirstOrDefault();
+
+        if (serverResult == null)
+        {
+            // Return empty/unknown data if no results
+            return new ServerBusyIndicator
+            {
+                BusyIndicator = new BusyIndicatorData
+                {
+                    BusyLevel = "unknown",
+                    BusyText = "Not enough data",
+                    CurrentPlayers = 0,
+                    TypicalPlayers = 0,
+                    Percentile = 0,
+                    GeneratedAt = DateTime.UtcNow
+                },
+                HourlyTimeline = new List<junie_des_1942stats.ServerStats.Models.HourlyBusyData>(),
+                GeneratedAt = DateTime.UtcNow
+            };
+        }
+
+        // Convert GameTrendsService models to ServerStats models
+        var busyIndicator = new ServerBusyIndicator
+        {
+            BusyIndicator = new BusyIndicatorData
+            {
+                BusyLevel = serverResult.BusyIndicator.BusyLevel,
+                BusyText = serverResult.BusyIndicator.BusyText,
+                CurrentPlayers = serverResult.BusyIndicator.CurrentPlayers,
+                TypicalPlayers = serverResult.BusyIndicator.TypicalPlayers,
+                Percentile = serverResult.BusyIndicator.Percentile,
+                HistoricalRange = serverResult.BusyIndicator.HistoricalRange != null ? 
+                    new junie_des_1942stats.ServerStats.Models.HistoricalRange
+                    {
+                        Min = serverResult.BusyIndicator.HistoricalRange.Min,
+                        Q25 = serverResult.BusyIndicator.HistoricalRange.Q25,
+                        Median = serverResult.BusyIndicator.HistoricalRange.Median,
+                        Q75 = serverResult.BusyIndicator.HistoricalRange.Q75,
+                        Q90 = serverResult.BusyIndicator.HistoricalRange.Q90,
+                        Max = serverResult.BusyIndicator.HistoricalRange.Max,
+                        Average = serverResult.BusyIndicator.HistoricalRange.Average
+                    } : null,
+                GeneratedAt = serverResult.BusyIndicator.GeneratedAt
+            },
+            HourlyTimeline = serverResult.HourlyTimeline?.Select(ht => new junie_des_1942stats.ServerStats.Models.HourlyBusyData
+            {
+                Hour = ht.Hour,
+                TypicalPlayers = ht.TypicalPlayers,
+                BusyLevel = ht.BusyLevel,
+                IsCurrentHour = ht.IsCurrentHour
+            }).ToList() ?? new List<junie_des_1942stats.ServerStats.Models.HourlyBusyData>(),
+            GeneratedAt = busyIndicatorResult.GeneratedAt
+        };
+
+        return busyIndicator;
     }
 
 }
