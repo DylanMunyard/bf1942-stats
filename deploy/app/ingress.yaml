@@ -1,14 +1,2 @@
-apiVersion: traefik.containo.us/v1alpha1
-kind: IngressRoute
-metadata:
-  name: bf42-stats
-  namespace: bf42-stats
-spec:
-  entryPoints:
-    - websecure
-  routes:
-  - match: Host(`1942.home.net`)
-    kind: Rule
-    services:
-    - name: bf42-stats-service
-      port: 80
+# Traefik IngressRoute removed for AKS deployment
+# Use Azure Load Balancer or Application Gateway for ingress if needed

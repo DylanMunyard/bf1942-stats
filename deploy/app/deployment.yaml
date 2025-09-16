@@ -6,10 +6,10 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: local-path
+  storageClassName: managed-premium
   resources:
     requests:
-      storage: 5Gi
+      storage: 30Gi
 
 ---
 apiVersion: apps/v1
@@ -27,11 +27,13 @@ spec:
       labels:
         app: bf42-stats
     spec:
-      nodeSelector:
-        kubernetes.io/hostname: bethany
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsGroup: 1000
       containers:
         - name: nginx
-          image: localhost:30500/bf42-stats:latest
+          image: dylanmunyard/bf1942-stats
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
@@ -133,8 +135,6 @@ spec:
       labels:
         app: redis
     spec:
-      nodeSelector:
-        kubernetes.io/arch: arm64
       containers:
         - name: redis
           image: redis:7-alpine
@@ -184,8 +184,6 @@ spec:
       labels:
         app: redis-commander
     spec:
-      nodeSelector:
-        kubernetes.io/arch: arm64
       containers:
         - name: redis-commander
           image: erikdubbelboer/phpredisadmin:latest
@@ -230,8 +228,6 @@ spec:
       labels:
         app: redis-dev
     spec:
-      nodeSelector:
-        kubernetes.io/arch: arm64
       containers:
         - name: redis
           image: redis:7-alpine
