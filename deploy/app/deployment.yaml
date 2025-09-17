@@ -9,7 +9,7 @@ spec:
   storageClassName: managed-premium
   resources:
     requests:
-      storage: 30Gi
+      storage: 128Gi
 
 ---
 apiVersion: apps/v1
@@ -31,6 +31,41 @@ spec:
         fsGroup: 1000
         runAsUser: 1000
         runAsGroup: 1000
+      initContainers:
+        - name: restore-sqlite
+          image: mcr.microsoft.com/azure-cli:latest
+          command: ["/bin/sh"]
+          args:
+            - -c
+            - |
+              # Check if database already exists
+              if [ -f "/mnt/data/playertracker.db" ]; then
+                echo "Database already exists, skipping restore"
+                exit 0
+              fi
+
+              # Download SQLite backup from Azure Storage
+              echo "Downloading SQLite backup..."
+              az storage blob download \
+                --container-name sqlite \
+                --name playertracker_backup.db \
+                --file /mnt/data/playertracker.db \
+                --connection-string "$AZURE_STORAGE_CONNECTION_STRING"
+
+              # Set correct ownership
+              chown 1000:1000 /mnt/data/playertracker.db
+              echo "SQLite restore completed"
+          env:
+            - name: AZURE_STORAGE_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: storage-secret
+                  key: connection-string
+          volumeMounts:
+            - name: stats-data
+              mountPath: /mnt/data
+          securityContext:
+            runAsUser: 0  # Run as root for chown
       containers:
         - name: nginx
           image: dylanmunyard/bf1942-stats
@@ -42,6 +77,8 @@ spec:
               value: "/mnt/data/playertracker.db"
             - name: ASPNETCORE_URLS
               value: "http://+:8080"
+            - name: SEQ_URL
+              value: "http://seq-service.seq:5341"
 
             - name: CLICKHOUSE_URL
               value: "http://clickhouse-service.clickhouse:8123"
