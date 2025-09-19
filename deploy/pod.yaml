@@ -9,7 +9,7 @@ spec:
       image: docker:dind
       resources:
         requests:
-          cpu: 0.5
+          cpu: 0.1
           memory: 1Gi
       securityContext:
         privileged: true
@@ -23,7 +23,7 @@ spec:
       image: dylanmunyard/jenkins-agent-kubectl:latest
       resources:
         requests:
-          cpu: 0.5
+          cpu: 0.1
           memory: 512Mi
   volumes:
     - name: dind-storage

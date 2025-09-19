@@ -68,7 +68,7 @@ spec:
             runAsUser: 0  # Run as root for chown
       containers:
         - name: nginx
-          image: dylanmunyard/bf1942-stats
+          image: localhost:30500/bf42-stats:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
