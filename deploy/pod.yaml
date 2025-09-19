@@ -20,7 +20,7 @@ spec:
           mountPath: /etc/docker/daemon.json
           subPath: daemon.json
     - name: kubectl
-      image: localhost:30500/jenkins-agent-kubectl:latest
+      image: dylanmunyard/jenkins-agent-kubectl:latest
       resources:
         requests:
           cpu: 0.5

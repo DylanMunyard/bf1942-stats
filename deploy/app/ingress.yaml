@@ -1,2 +1,75 @@
-# Traefik IngressRoute removed for AKS deployment
-# Use Azure Load Balancer or Application Gateway for ingress if needed
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bf42-stats-ingress
+  namespace: bf42-stats
+  annotations:
+    # Use NGINX ingress controller
+    kubernetes.io/ingress.class: "nginx"
+
+    # Enable SSL redirect
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+
+    # Enable CORS for API
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://staging.bfstats.io"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+
+    # Request body size for large payloads
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+
+    # Timeout settings for long-running requests
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+spec:
+  tls:
+    - hosts:
+        - staging.bfstats.io
+      secretName: bf42-stats-tls
+  rules:
+    - host: staging.bfstats.io
+      http:
+        paths:
+          # API routes
+          - path: /stats
+            pathType: Prefix
+            backend:
+              service:
+                name: bf42-stats-service
+                port:
+                  number: 8080
+          # Health check endpoint
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: bf42-stats-service
+                port:
+                  number: 8080
+          # OpenAPI/Swagger documentation
+          - path: /swagger
+            pathType: Prefix
+            backend:
+              service:
+                name: bf42-stats-service
+                port:
+                  number: 8080
+
+---
+# Optional: Certificate for Let's Encrypt (if using cert-manager)
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: bf42-stats-cert
+  namespace: bf42-stats
+spec:
+  secretName: bf42-stats-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - staging.bfstats.io

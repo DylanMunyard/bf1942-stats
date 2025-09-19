@@ -1,6 +1,7 @@
 pipeline {
   agent {
     kubernetes {
+      cloud 'AKS'
       yamlFile 'deploy/pod.yaml'
     }
   }
