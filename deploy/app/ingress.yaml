@@ -58,6 +58,14 @@ spec:
                 name: bf42-stats-service
                 port:
                   number: 8080
+          # SignalR Hub for notifications
+          - path: /hub
+            pathType: Prefix
+            backend:
+              service:
+                name: bf42-notifications-service
+                port:
+                  number: 8080
 
 ---
 # Optional: Certificate for Let's Encrypt (if using cert-manager)

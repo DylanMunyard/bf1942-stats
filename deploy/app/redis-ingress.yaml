@@ -1,2 +1,0 @@
-# Traefik IngressRoutes removed for AKS deployment
-# Redis and Redis Commander are accessible via ClusterIP services within the cluster
