@@ -253,18 +253,63 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: redis-dev
+  name: sqlite-browser
   namespace: bf42-stats
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: redis-dev
+      app: sqlite-browser
   template:
     metadata:
       labels:
-        app: redis-dev
+        app: sqlite-browser
     spec:
+      securityContext:
+        fsGroup: 1000
       containers:
-        - name: redis
-          image: redis:7-alpine
+        - name: sqlite-browser
+          image: alpine:latest
+          ports:
+            - containerPort: 8080
+          command: ["/bin/sh"]
+          args:
+            - -c
+            - |
+              # Install Python and sqlite-web
+              apk add --no-cache python3 py3-pip sqlite
+              pip3 install sqlite-web --break-system-packages
+              # Start the web interface
+              sqlite_web /mnt/data/playertracker.db --host 0.0.0.0 --port 8080 --read-only
+          volumeMounts:
+            - name: stats-data
+              mountPath: /mnt/data
+              readOnly: true
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+      volumes:
+        - name: stats-data
+          persistentVolumeClaim:
+            claimName: bf42-stats-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sqlite-browser-service
+  namespace: bf42-stats
+  labels:
+    app: sqlite-browser
+spec:
+  selector:
+    app: sqlite-browser
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: web
