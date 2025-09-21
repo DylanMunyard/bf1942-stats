@@ -1,15 +1,16 @@
 pipeline {
+  agent none
   stages {
     stage('Build Images') {
-      agent {
-        kubernetes {
-          cloud 'Local k8s'
-          yamlFile 'deploy/pod.yaml'
-          nodeSelector 'k3s.io/hostname=bethany'
-        }
-      }
       parallel {
         stage('Build API Docker Image') {
+          agent {
+            kubernetes {
+              cloud 'Local k8s'
+              yamlFile 'deploy/pod.yaml'
+              nodeSelector 'k3s.io/hostname=bethany'
+            }
+          }
           steps {
             container('dind') {
               withCredentials([usernamePassword(credentialsId: 'jenkins-bf1942-stats-dockerhub-pat', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
@@ -34,6 +35,13 @@ pipeline {
           }
         }
         stage('Build Notifications Docker Image') {
+          agent {
+            kubernetes {
+              cloud 'Local k8s'
+              yamlFile 'deploy/pod.yaml'
+              nodeSelector 'k3s.io/hostname=bethany'
+            }
+          }
           steps {
             container('dind') {
               withCredentials([usernamePassword(credentialsId: 'jenkins-bf1942-stats-dockerhub-pat', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
@@ -60,14 +68,14 @@ pipeline {
       }
     }
     stage('Deploy to AKS') {
-      agent {
-        kubernetes {
-          cloud 'AKS'
-          yamlFile 'deploy/pod.yaml'
-        }
-      }
       parallel {
         stage('Deploy API') {
+          agent {
+            kubernetes {
+              cloud 'AKS'
+              yamlFile 'deploy/pod.yaml'
+            }
+          }
           steps {
             container('kubectl') {
               withKubeConfig([namespace: "bf42-stats"]) {
@@ -93,6 +101,12 @@ pipeline {
           }
         }
         stage('Deploy Notifications') {
+          agent {
+            kubernetes {
+              cloud 'AKS'
+              yamlFile 'deploy/pod.yaml'
+            }
+          }
           steps {
             container('kubectl') {
               withKubeConfig([namespace: "bf42-stats"]) {
