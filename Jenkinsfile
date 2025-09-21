@@ -8,7 +8,7 @@ pipeline {
             kubernetes {
               cloud 'Local k8s'
               yamlFile 'deploy/pod.yaml'
-              nodeSelector 'k3s.io/hostname=bethany'
+              nodeSelector 'kubernetes.io/hostname=bethany'
             }
           }
           steps {
