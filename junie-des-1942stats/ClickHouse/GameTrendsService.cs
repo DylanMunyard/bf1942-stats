@@ -403,17 +403,17 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
     // Create server GUID list for IN clause
     var serverGuidList = string.Join(",", serverGuids.Select(sg => $"'{sg}'"));
 
-    // Single query to get server info for all servers
-    var serverInfoQuery = $@"
-        SELECT DISTINCT
-            server_guid,
-            argMax(server_name, timestamp) as server_name,
-            argMax(game, timestamp) as game
-        FROM player_metrics
-        WHERE server_guid IN ({serverGuidList})
-        GROUP BY server_guid";
-
-    var serverInfos = await ReadAllAsync<GameTrendsServerInfo>(serverInfoQuery);
+    // Get server info from SQLite instead of expensive ClickHouse query
+    // This replaces a potentially expensive scan of player_metrics table
+    var serverInfos = await _dbContext.Servers
+        .Where(s => serverGuids.Contains(s.Guid))
+        .Select(s => new GameTrendsServerInfo
+        {
+            ServerGuid = s.Guid,
+            ServerName = s.Name,
+            Game = s.GameId
+        })
+        .ToListAsync();
 
     // Single query to get historical data for all servers for current hour
     // Directly average players_online by hour - much simpler and more efficient

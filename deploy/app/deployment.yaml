@@ -173,6 +173,7 @@ spec:
       labels:
         app: redis
     spec:
+      priorityClassName: 1942-services
       containers:
         - name: redis
           image: redis:7-alpine
