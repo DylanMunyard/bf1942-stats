@@ -18,17 +18,21 @@ pipeline {
                   # Login to Docker Hub
                   echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
                   
-                  # Setup Docker buildx for cross-platform builds
-                  docker buildx create --name multiarch-builder --use --bootstrap || true
+                  # Setup Docker buildx for cross-platform builds with DinD optimizations
+                  docker buildx create --name multiarch-builder --driver docker-container --use || true
                   docker buildx use multiarch-builder
                   
-                  # Build and push ARM64 image for API
-                  docker buildx build -f deploy/Dockerfile . \
+                  # Build and push ARM64 image for API with DinD optimizations
+                  DOCKER_BUILDKIT=1 docker buildx build -f deploy/Dockerfile . \
                     --platform linux/arm64 \
                     --build-arg PROJECT_PATH=junie-des-1942stats \
                     --build-arg PROJECT_NAME=junie-des-1942stats \
-                    -t dylanmunyard/bf42-stats:latest \
-                    --push
+                    --build-arg BUILDKIT_PROGRESS=plain \
+                    --load \
+                    -t dylanmunyard/bf42-stats:latest
+                  
+                  # Push the built image
+                  docker push dylanmunyard/bf42-stats:latest
                 '''
               }
             }
@@ -49,17 +53,21 @@ pipeline {
                   # Login to Docker Hub
                   echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
                   
-                  # Setup Docker buildx for cross-platform builds
-                  docker buildx create --name multiarch-builder --use --bootstrap || true
-                  docker buildx use multiarch-builder
+                  # Setup Docker buildx for cross-platform builds with DinD optimizations
+                  docker buildx create --name multiarch-builder-notif --driver docker-container --use || true
+                  docker buildx use multiarch-builder-notif
                   
-                  # Build and push ARM64 image for Notifications
-                  docker buildx build -f deploy/Dockerfile . \
+                  # Build and push ARM64 image for Notifications with DinD optimizations
+                  DOCKER_BUILDKIT=1 docker buildx build -f deploy/Dockerfile . \
                     --platform linux/arm64 \
                     --build-arg PROJECT_PATH=junie-des-1942stats.Notifications \
                     --build-arg PROJECT_NAME=junie-des-1942stats.Notifications \
-                    -t dylanmunyard/bf42-notifications:latest \
-                    --push
+                    --build-arg BUILDKIT_PROGRESS=plain \
+                    --load \
+                    -t dylanmunyard/bf42-notifications:latest
+                  
+                  # Push the built image
+                  docker push dylanmunyard/bf42-notifications:latest
                 '''
               }
             }
