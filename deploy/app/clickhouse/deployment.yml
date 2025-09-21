@@ -89,6 +89,7 @@ spec:
       labels:
         app: clickhouse
     spec:
+      priorityClassName: 1942-services
       initContainers:
         - name: restore-clickhouse
           image: mcr.microsoft.com/azure-cli:latest
@@ -171,7 +172,6 @@ spec:
               memory: "12Gi"
             requests:
               memory: "2Gi"
-              cpu: "200m"
           livenessProbe:
             httpGet:
               path: /ping

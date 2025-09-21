@@ -27,6 +27,7 @@ spec:
       labels:
         app: bf42-stats
     spec:
+      priorityClassName: 1942-services
       securityContext:
         fsGroup: 1000
         runAsUser: 1000

@@ -265,7 +265,8 @@ public class PlayerTrackingService
                 Game = game,
                 MaxPlayers = serverInfo.MaxPlayers,
                 MapName = serverInfo.MapName,
-                JoinLink = serverInfo.JoinLink
+                JoinLink = serverInfo.JoinLink,
+                CurrentMap = serverInfo.MapName
             };
             _dbContext.Servers.Add(server);
             ipChanged = true;
@@ -299,6 +300,9 @@ public class PlayerTrackingService
             server.MaxPlayers = serverInfo.MaxPlayers;
             server.MapName = serverInfo.MapName;
             server.JoinLink = serverInfo.JoinLink;
+            
+            // Update current map from active sessions or server info
+            server.CurrentMap = serverInfo.MapName;
         }
 
         // Always update online status and last seen time when server is polled

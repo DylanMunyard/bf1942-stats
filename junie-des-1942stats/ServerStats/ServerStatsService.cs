@@ -58,20 +58,10 @@ public class ServerStatsService(
         var endPeriod = DateTime.UtcNow;
         var startPeriod = endPeriod.AddDays(-daysToAnalyze);
 
-        // Get the server by name and current map in one query
-        var serverWithCurrentMap = await _dbContext.Servers
+        // Get the server by name - CurrentMap is now stored directly on the server
+        var server = await _dbContext.Servers
             .Where(s => s.Name == serverName)
-            .Select(s => new
-            {
-                Server = s,
-                CurrentMap = s.Sessions
-                    .Where(session => session.IsActive)
-                    .Select(session => session.MapName)
-                    .FirstOrDefault()
-            })
             .FirstOrDefaultAsync();
-
-        var server = serverWithCurrentMap?.Server;
 
         if (server == null)
         {
@@ -175,8 +165,8 @@ public class ServerStatsService(
 
         statistics.RecentRounds = await recentRoundsTask;
 
-        // Set current map from the combined query
-        statistics.CurrentMap = serverWithCurrentMap?.CurrentMap;
+        // Set current map from the server record
+        statistics.CurrentMap = server.CurrentMap;
 
         // Get busy indicator data for this server
         try
@@ -1171,10 +1161,7 @@ FORMAT TabSeparated";
                 .Where(session => session.IsActive)
                 .Max(session => (DateTime?)session.StartTime),
             HasActivePlayers = s.Sessions.Any(session => session.IsActive),
-            CurrentMap = s.Sessions
-                .Where(session => session.IsActive)
-                .Select(session => session.MapName)
-                .FirstOrDefault(),
+            CurrentMap = s.CurrentMap,
             TotalPlayersAllTime = s.Sessions.Select(session => session.PlayerName).Distinct().Count(),
             TotalActivePlayersLast24h = s.Sessions
                 .Where(session => session.LastSeenTime >= last24Hours)

@@ -282,6 +282,9 @@ public class GameServer
     public int? MaxPlayers { get; set; }
     public string? MapName { get; set; }
     public string? JoinLink { get; set; }
+    
+    // Current map being played (updated from active player sessions)
+    public string? CurrentMap { get; set; }
 
     // Online status tracking
     public bool IsOnline { get; set; } = true;
