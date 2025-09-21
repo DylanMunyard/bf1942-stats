@@ -5,6 +5,11 @@ spec:
   nodeSelector:
     kubernetes.io/arch: arm64 
   containers:
+    - name: jnlp
+      image: jenkins/inbound-agent:latest
+      resources:
+        requests:
+          cpu: "1m"
     - name: dind
       image: docker:dind
       resources:
