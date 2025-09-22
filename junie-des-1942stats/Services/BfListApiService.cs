@@ -116,9 +116,11 @@ public class BfListApiService : IBfListApiService
 
             _logger.LogDebug("Cache miss for raw servers of game {Game}", game);
             var freshServers = await FetchAllServersFromApiAsync(game);
-            var typedServers = freshServers.Cast<Bf1942ServerInfo>().ToArray();
+            var typedServers = freshServers.Cast<Bf1942ServerInfo>()
+                .Where(server => !IsStuckServer(server.Name))
+                .ToArray();
             await _cacheService.SetAsync(cacheKey, typedServers, TimeSpan.FromSeconds(ServerListCacheSeconds));
-            return freshServers;
+            return typedServers.Cast<object>().ToArray();
         }
         else if (game.ToLower() == "bfvietnam")
         {
@@ -133,9 +135,11 @@ public class BfListApiService : IBfListApiService
 
             _logger.LogDebug("Cache miss for raw servers of game {Game}", game);
             var freshServers = await FetchAllServersFromApiAsync(game);
-            var typedServers = freshServers.Cast<BfvietnamServerInfo>().ToArray();
+            var typedServers = freshServers.Cast<BfvietnamServerInfo>()
+                .Where(server => !IsStuckServer(server.Name))
+                .ToArray();
             await _cacheService.SetAsync(cacheKey, typedServers, TimeSpan.FromSeconds(ServerListCacheSeconds));
-            return freshServers;
+            return typedServers.Cast<object>().ToArray();
         }
         else // fh2
         {
@@ -150,9 +154,11 @@ public class BfListApiService : IBfListApiService
 
             _logger.LogDebug("Cache miss for raw servers of game {Game}", game);
             var freshServers = await FetchAllServersFromApiAsync(game);
-            var typedServers = freshServers.Cast<Fh2ServerInfo>().ToArray();
+            var typedServers = freshServers.Cast<Fh2ServerInfo>()
+                .Where(server => !IsStuckServer(server.Name))
+                .ToArray();
             await _cacheService.SetAsync(cacheKey, typedServers, TimeSpan.FromSeconds(ServerListCacheSeconds));
-            return freshServers;
+            return typedServers.Cast<object>().ToArray();
         }
     }
 
@@ -371,7 +377,6 @@ public class BfListApiService : IBfListApiService
         if (game.ToLower() == "bf1942")
         {
             return servers.Cast<Bf1942ServerInfo>()
-                .Where(server => !IsStuckServer(server.Name))
                 .Select(MapBf1942ToSummary)
                 .OrderByDescending(s => s.NumPlayers)
                 .ToArray();
@@ -379,7 +384,6 @@ public class BfListApiService : IBfListApiService
         else if (game.ToLower() == "bfvietnam")
         {
             return servers.Cast<BfvietnamServerInfo>()
-                .Where(server => !IsStuckServer(server.Name))
                 .Select(MapBfvToSummary)
                 .OrderByDescending(s => s.NumPlayers)
                 .ToArray();
@@ -387,7 +391,6 @@ public class BfListApiService : IBfListApiService
         else // fh2
         {
             return servers.Cast<Fh2ServerInfo>()
-                .Where(server => !IsStuckServer(server.Name))
                 .Select(MapFh2ToSummary)
                 .OrderByDescending(s => s.NumPlayers)
                 .ToArray();
