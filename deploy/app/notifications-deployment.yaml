@@ -23,6 +23,8 @@ spec:
           env:
             - name: ASPNETCORE_URLS
               value: "http://+:8080"
+            - name: SEQ_URL
+              value: "http://seq-service.seq:5341"
             - name: ConnectionStrings__Redis
               value: "redis-service.bf42-stats:6379"
             - name: ApiBaseUrl
