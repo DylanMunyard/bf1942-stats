@@ -15,7 +15,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
-    private readonly TimeSpan _collectionInterval = TimeSpan.FromSeconds(600);
+    private readonly TimeSpan _collectionInterval = TimeSpan.FromSeconds(30);
     private Timer? _timer;
     private int _isRunning = 0;
     private int _cycleCount = 0;
