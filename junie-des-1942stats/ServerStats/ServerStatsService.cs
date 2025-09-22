@@ -489,22 +489,28 @@ FORMAT TabSeparated";
 
     
 
-    public async Task<ServerInsights> GetServerInsights(string serverName, string period = "7d")
+    public async Task<ServerInsights> GetServerInsights(string serverName, int days = 7)
     {
-        // Validate and parse period
-        var (startPeriod, endPeriod, granularity) = ParsePeriod(period);
+        // Validate days parameter
+        if (days <= 0)
+            throw new ArgumentException("Days must be greater than 0", nameof(days));
+
+        // Calculate time periods and granularity based on days
+        var endPeriod = DateTime.UtcNow;
+        var startPeriod = endPeriod.AddDays(-days);
+        var granularity = CalculateGranularity(days);
 
         // Check cache first
-        var cacheKey = _cacheKeyService.GetServerInsightsKey(serverName, period);
+        var cacheKey = _cacheKeyService.GetServerInsightsKey(serverName, days);
         var cachedResult = await _cacheService.GetAsync<ServerInsights>(cacheKey);
 
         if (cachedResult != null)
         {
-            _logger.LogDebug("Cache hit for server insights: {ServerName}, period: {Period}", serverName, period);
+            _logger.LogDebug("Cache hit for server insights: {ServerName}, days: {Days}", serverName, days);
             return cachedResult;
         }
 
-        _logger.LogDebug("Cache miss for server insights: {ServerName}, period: {Period}", serverName, period);
+        _logger.LogDebug("Cache miss for server insights: {ServerName}, days: {Days}", serverName, days);
 
         // Get the server by name
         var server = await _dbContext.Servers
@@ -589,39 +595,16 @@ FORMAT TabSeparated";
         return insights;
     }
 
-    private (DateTime startPeriod, DateTime endPeriod, TimeGranularity granularity) ParsePeriod(string period)
+    private TimeGranularity CalculateGranularity(int days)
     {
-        var endPeriod = DateTime.UtcNow;
-        DateTime startPeriod;
-        TimeGranularity granularity;
-
-        switch (period.ToLowerInvariant())
+        return days switch
         {
-            case "7d":
-                startPeriod = endPeriod.AddDays(-7);
-                granularity = TimeGranularity.Hourly;
-                break;
-            case "1m":
-                startPeriod = endPeriod.AddDays(-30);
-                granularity = TimeGranularity.FourHourly;
-                break;
-            case "3m":
-                startPeriod = endPeriod.AddDays(-90);
-                granularity = TimeGranularity.Daily;
-                break;
-            case "6m":
-                startPeriod = endPeriod.AddDays(-180);
-                granularity = TimeGranularity.Daily;
-                break;
-            case "1y":
-                startPeriod = endPeriod.AddDays(-365);
-                granularity = TimeGranularity.Weekly;
-                break;
-            default:
-                throw new ArgumentException($"Invalid period '{period}'. Valid periods are: 7d, 1m, 3m, 6m, 1y");
-        }
-
-        return (startPeriod, endPeriod, granularity);
+            <= 7 => TimeGranularity.Hourly,
+            <= 30 => TimeGranularity.FourHourly,
+            <= 90 => TimeGranularity.Daily,
+            <= 180 => TimeGranularity.Daily,
+            _ => TimeGranularity.Weekly
+        };
     }
 
 

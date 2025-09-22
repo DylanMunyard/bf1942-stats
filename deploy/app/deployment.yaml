@@ -112,6 +112,9 @@ spec:
               value: "Player"
             - name: BotDetection__DefaultPlayerNames__2
               value: "BFSoldier"
+            # Server Filtering Configuration
+            - name: ServerFiltering__StuckServers__0
+              value: "Tragic! [USA] - Dallas"
             # Refresh token cookie configuration (Secret provided via external secret manager)
             - name: RefreshToken__CookieName
               value: "rt"
