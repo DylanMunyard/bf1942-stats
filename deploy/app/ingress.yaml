@@ -13,7 +13,7 @@ metadata:
 
     # Enable CORS for API
     nginx.ingress.kubernetes.io/enable-cors: "true"
-    nginx.ingress.kubernetes.io/cors-allow-origin: "https://staging.bfstats.io"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://staging.bfstats.io, https://bfstats.io"
     nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
     nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization"
     nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
@@ -29,9 +29,45 @@ spec:
   tls:
     - hosts:
         - staging.bfstats.io
+        - bfstats.io
       secretName: bf42-stats-tls
   rules:
     - host: staging.bfstats.io
+      http:
+        paths:
+          # API routes
+          - path: /stats
+            pathType: Prefix
+            backend:
+              service:
+                name: bf42-stats-service
+                port:
+                  number: 8080
+          # Health check endpoint
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: bf42-stats-service
+                port:
+                  number: 8080
+          # OpenAPI/Swagger documentation
+          - path: /swagger
+            pathType: Prefix
+            backend:
+              service:
+                name: bf42-stats-service
+                port:
+                  number: 8080
+          # SignalR Hub for notifications
+          - path: /hub
+            pathType: Prefix
+            backend:
+              service:
+                name: bf42-notifications-service
+                port:
+                  number: 8080
+    - host: bfstats.io
       http:
         paths:
           # API routes
@@ -81,3 +117,4 @@ spec:
     kind: ClusterIssuer
   dnsNames:
     - staging.bfstats.io
+    - bfstats.io
