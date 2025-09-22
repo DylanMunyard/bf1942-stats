@@ -13,11 +13,10 @@ spec:
       labels:
         app: bf42-notifications
     spec:
-      nodeSelector:
-        kubernetes.io/hostname: bethany
+      priorityClassName: 1942-services
       containers:
         - name: notifications
-          image: localhost:30500/bf42-notifications:latest
+          image: dylanmunyard/bf42-notifications:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080

@@ -84,7 +84,7 @@ public class ServersController : ControllerBase
     [HttpGet("{serverName}/insights")]
     public async Task<ActionResult<ServerInsights>> GetServerInsights(
         string serverName,
-        [FromQuery] string? period)
+        [FromQuery] int? days)
     {
         if (string.IsNullOrWhiteSpace(serverName))
             return BadRequest("Server name cannot be empty");
@@ -92,13 +92,13 @@ public class ServersController : ControllerBase
         // Use modern URL decoding that preserves + signs
         serverName = Uri.UnescapeDataString(serverName);
 
-        _logger.LogInformation("Looking up server insights for server name: '{ServerName}' with period: '{Period}'", serverName, period);
+        _logger.LogInformation("Looking up server insights for server name: '{ServerName}' with days: {Days}", serverName, days);
 
         try
         {
             var insights = await _serverStatsService.GetServerInsights(
                 serverName,
-                period ?? "7d"); // Default to 7 days if not specified
+                days ?? 7); // Default to 7 days if not specified
 
             if (string.IsNullOrEmpty(insights.ServerGuid))
             {

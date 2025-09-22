@@ -1,0 +1,7 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: 1942-services
+value: 1000000
+globalDefault: false
+description: "Don't go breaking my achy-breaky app AKS"

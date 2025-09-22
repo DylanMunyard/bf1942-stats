@@ -436,8 +436,10 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             })
             .ToListAsync();
 
-        // Process each server in parallel for better performance
-        var serverRankingTasks = playerServerStats.Select(async serverStat =>
+        // Process each server sequentially to avoid DbContext threading issues
+        var serverRankings = new List<ServerRanking>();
+
+        foreach (var serverStat in playerServerStats)
         {
             // Get the player's total score for this server
             var playerScore = serverStat.TotalScore;
@@ -456,14 +458,8 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                 .Distinct()
                 .CountAsync();
 
-            // Calculate average ping from the most recent observations
-            var averagePing = await _dbContext.PlayerObservations
-                .Include(o => o.Session)
-                .ThenInclude(s => s.Player)
-                .Where(o => o.Session.Player.Name == playerName && o.Session.ServerGuid == serverStat.ServerGuid)
-                .OrderByDescending(o => o.Timestamp)
-                .Take(50) // Sample size of 50 observations
-                .AverageAsync(o => o.Ping);
+            // Calculate average ping from ClickHouse (much faster than SQLite)
+            var averagePing = await GetAveragePingFromClickHouse(playerName, serverStat.ServerGuid);
 
             // The player's rank is the number of players with higher scores + 1
             var playerRank = higherScoringPlayers + 1;
@@ -471,7 +467,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             // Get historical rankings for this server
             var historicalRankings = await GetPlayerHistoricalRankingsAsync(playerName, serverStat.ServerGuid);
 
-            return new ServerRanking
+            var serverRanking = new ServerRanking
             {
                 ServerGuid = serverStat.ServerGuid,
                 ServerName = serverStat.Name,
@@ -481,16 +477,13 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                 AveragePing = Math.Round(averagePing),
                 HistoricalRankings = historicalRankings
             };
-        });
 
-        // Wait for all server rankings to be processed
-        var serverRankings = (await Task.WhenAll(serverRankingTasks))
-            .OrderBy(r => r.Rank) // Order by rank (best rank first)
-            .ToList();
+            serverRankings.Add(serverRanking);
+        }
 
-
+        // Order by rank (best rank first) and assign to insights
         insights.ServerRankings = serverRankings
-            .OrderBy(r => r.Rank) // Order by rank (best rank first)
+            .OrderBy(r => r.Rank)
             .ToList();
 
         // 3. Calculate activity by hour (when they're usually online)
@@ -706,6 +699,51 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
 
         _logger.LogDebug("Successfully parsed {PointCount} time series points", points.Count);
         return points;
+    }
+
+    private async Task<double> GetAveragePingFromClickHouse(string playerName, string serverGuid)
+    {
+        try
+        {
+            // Query recent ping data from ClickHouse (last 30 days, limit 100 most recent)
+            var query = $@"
+SELECT
+    CASE
+        WHEN COUNT(*) = 0 THEN 0
+        ELSE ROUND(AVG(ping), 2)
+    END as avg_ping
+FROM (
+    SELECT ping
+    FROM player_metrics
+    WHERE player_name = '{playerName.Replace("'", "''")}'
+      AND server_guid = '{serverGuid.Replace("'", "''")}'
+      AND timestamp >= now() - INTERVAL 30 DAY
+      AND ping > 0 AND ping < 10000  -- Filter out unrealistic ping values
+    ORDER BY timestamp DESC
+    LIMIT 100
+)
+FORMAT TabSeparated";
+
+            var result = await _playerInsightsService.ExecuteQueryAsync(query);
+            var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            if (lines.Length > 0 && double.TryParse(lines[0], out var avgPing))
+            {
+                // Check for invalid values that can't be serialized to JSON
+                if (double.IsNaN(avgPing) || double.IsInfinity(avgPing) || avgPing < 0)
+                {
+                    return 0; // Return 0 for invalid ping values
+                }
+                return avgPing;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get average ping from ClickHouse for player {PlayerName} on server {ServerGuid}", playerName, serverGuid);
+        }
+
+        // Fallback to 0 if ClickHouse query fails
+        return 0;
     }
 
 

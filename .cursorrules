@@ -1,0 +1,59 @@
+# BF1942 Stats Project - Cursor Rules
+
+## Code Comments Policy
+
+**NEVER add comments explaining what code used to do or how it was changed.**
+- Do NOT add comments like "// Changed from subquery to direct field access"
+- Do NOT add comments like "// Previously this was done with X, now we do Y"
+- Do NOT add comments explaining refactoring history
+- Comments should only explain WHY something is done, not what was changed
+- Focus on current implementation and business logic, not change history
+
+## C# and ASP.NET Core Standards
+
+- Use nullable reference types consistently
+- Prefer async/await patterns for all database operations
+- Use Entity Framework Core best practices:
+  - Include necessary navigation properties
+  - Use proper indexing for query performance
+  - Create migrations for all schema changes
+- Follow repository/service pattern already established
+- Use dependency injection for all services
+- Implement proper logging with structured logging
+
+## Database and Performance
+
+- Always consider query performance implications
+- Use indexes for frequently queried fields
+- Prefer direct field access over subqueries when possible
+- Use ClickHouse for analytics queries, SQLite/EF Core for transactional data
+- Create Entity Framework migrations for all schema changes
+- Test performance impact of database changes
+
+## Architecture Patterns
+
+- Controllers should be thin, delegate to services
+- Services contain business logic
+- Use background services for data collection/processing
+- Maintain separation between PlayerTracking, ServerStats, and ClickHouse modules
+- Use proper error handling and logging throughout
+
+## Code Quality
+
+- Write self-documenting code with clear variable and method names
+- Avoid magic numbers and strings - use constants
+- Handle exceptions appropriately
+- Use proper validation for API inputs
+- Follow existing naming conventions in the codebase
+
+## Project-Specific Context
+
+This is a Battlefield 1942 server statistics tracking system that:
+- Tracks player sessions across game servers
+- Collects real-time player data from game servers
+- Provides analytics via ClickHouse
+- Supports multiple game variants (BF1942, FH2, BF Vietnam)
+- Uses SignalR for real-time notifications
+- Implements OAuth authentication for users
+
+When making changes, prioritize performance and maintainability over clever solutions.

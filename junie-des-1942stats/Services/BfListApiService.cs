@@ -3,6 +3,7 @@ using junie_des_1942stats.Bflist;
 using junie_des_1942stats.StatsCollectors.Modals;
 using junie_des_1942stats.Caching;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 using junie_des_1942stats.Telemetry;
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
@@ -29,16 +30,18 @@ public class BfListApiService : IBfListApiService
     private readonly ICacheService _cacheService;
     private readonly ILogger<BfListApiService> _logger;
     private readonly PlayerTrackerDbContext _dbContext;
+    private readonly ServerFilteringConfig _serverFilteringConfig;
 
     private const int ServerListCacheSeconds = 30;
     private const int SingleServerCacheSeconds = 8; // 8 seconds for individual server updates
 
-    public BfListApiService(IHttpClientFactory httpClientFactory, ICacheService cacheService, ILogger<BfListApiService> logger, PlayerTrackerDbContext dbContext)
+    public BfListApiService(IHttpClientFactory httpClientFactory, ICacheService cacheService, ILogger<BfListApiService> logger, PlayerTrackerDbContext dbContext, IConfiguration configuration)
     {
         _httpClientFactory = httpClientFactory;
         _cacheService = cacheService;
         _logger = logger;
         _dbContext = dbContext;
+        _serverFilteringConfig = configuration.GetSection("ServerFiltering").Get<ServerFilteringConfig>() ?? new ServerFilteringConfig();
     }
 
     public async Task<object[]> FetchServersAsync(string game, int perPage = 100, string? cursor = null, string? after = null)
@@ -368,6 +371,7 @@ public class BfListApiService : IBfListApiService
         if (game.ToLower() == "bf1942")
         {
             return servers.Cast<Bf1942ServerInfo>()
+                .Where(server => !IsStuckServer(server.Name))
                 .Select(MapBf1942ToSummary)
                 .OrderByDescending(s => s.NumPlayers)
                 .ToArray();
@@ -375,6 +379,7 @@ public class BfListApiService : IBfListApiService
         else if (game.ToLower() == "bfvietnam")
         {
             return servers.Cast<BfvietnamServerInfo>()
+                .Where(server => !IsStuckServer(server.Name))
                 .Select(MapBfvToSummary)
                 .OrderByDescending(s => s.NumPlayers)
                 .ToArray();
@@ -382,14 +387,51 @@ public class BfListApiService : IBfListApiService
         else // fh2
         {
             return servers.Cast<Fh2ServerInfo>()
+                .Where(server => !IsStuckServer(server.Name))
                 .Select(MapFh2ToSummary)
                 .OrderByDescending(s => s.NumPlayers)
                 .ToArray();
         }
     }
 
-    private static ServerSummary MapBf1942ToSummary(Bf1942ServerInfo server)
+    private bool IsStuckServer(string serverName)
     {
+        if (_serverFilteringConfig.StuckServers.Contains(serverName))
+        {
+            _logger.LogDebug("Filtering out stuck server: {ServerName}", serverName);
+            return true;
+        }
+        return false;
+    }
+
+    private PlayerInfo[] FilterDuplicatePlayers(PlayerInfo[] players, string serverName)
+    {
+        if (players == null || players.Length == 0)
+            return players ?? [];
+
+        var groupedPlayers = players.GroupBy(p => p.Name).ToArray();
+        var duplicateGroups = groupedPlayers.Where(g => g.Count() > 1).ToArray();
+
+        if (duplicateGroups.Any())
+        {
+            _logger.LogWarning("Found {DuplicateCount} duplicate player groups in server {ServerName}: {DuplicateNames}",
+                duplicateGroups.Length,
+                serverName,
+                string.Join(", ", duplicateGroups.Select(g => $"{g.Key} (x{g.Count()})")));
+        }
+
+        // For each group, keep only the player with the highest score
+        var filteredPlayers = groupedPlayers
+            .Select(group => group.OrderByDescending(p => p.Score).First())
+            .ToArray();
+
+        return filteredPlayers;
+    }
+
+    private ServerSummary MapBf1942ToSummary(Bf1942ServerInfo server)
+    {
+        var filteredPlayers = FilterDuplicatePlayers(server.Players ?? [], server.Name);
+
         return new ServerSummary
         {
             Guid = server.Guid,
@@ -404,13 +446,15 @@ public class BfListApiService : IBfListApiService
             RoundTimeRemain = server.RoundTimeRemain,
             Tickets1 = server.Tickets1,
             Tickets2 = server.Tickets2,
-            Players = server.Players ?? [],
+            Players = filteredPlayers,
             Teams = server.Teams ?? []
         };
     }
 
-    private static ServerSummary MapBfvToSummary(BfvietnamServerInfo server)
+    private ServerSummary MapBfvToSummary(BfvietnamServerInfo server)
     {
+        var filteredPlayers = FilterDuplicatePlayers(server.Players ?? [], server.Name);
+
         return new ServerSummary
         {
             Guid = server.Guid,
@@ -425,13 +469,15 @@ public class BfListApiService : IBfListApiService
             RoundTimeRemain = 0, // BFV doesn't have this field in the provided sample
             Tickets1 = server.Teams?.FirstOrDefault(t => t.Index == 1)?.Tickets ?? 0,
             Tickets2 = server.Teams?.FirstOrDefault(t => t.Index == 2)?.Tickets ?? 0,
-            Players = server.Players ?? [],
+            Players = filteredPlayers,
             Teams = server.Teams ?? []
         };
     }
 
-    private static ServerSummary MapFh2ToSummary(Fh2ServerInfo server)
+    private ServerSummary MapFh2ToSummary(Fh2ServerInfo server)
     {
+        var filteredPlayers = FilterDuplicatePlayers(server.Players?.ToArray() ?? [], server.Name);
+
         return new ServerSummary
         {
             Guid = server.Guid,
@@ -446,7 +492,7 @@ public class BfListApiService : IBfListApiService
             RoundTimeRemain = server.Timelimit,
             Tickets1 = 0, // FH2 doesn't have tickets in the current model
             Tickets2 = 0,
-            Players = server.Players?.ToArray() ?? [],
+            Players = filteredPlayers,
             Teams = server.Teams?.ToArray() ?? []
         };
     }

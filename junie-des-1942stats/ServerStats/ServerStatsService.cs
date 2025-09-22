@@ -58,20 +58,10 @@ public class ServerStatsService(
         var endPeriod = DateTime.UtcNow;
         var startPeriod = endPeriod.AddDays(-daysToAnalyze);
 
-        // Get the server by name and current map in one query
-        var serverWithCurrentMap = await _dbContext.Servers
+        // Get the server by name - CurrentMap is now stored directly on the server
+        var server = await _dbContext.Servers
             .Where(s => s.Name == serverName)
-            .Select(s => new
-            {
-                Server = s,
-                CurrentMap = s.Sessions
-                    .Where(session => session.IsActive)
-                    .Select(session => session.MapName)
-                    .FirstOrDefault()
-            })
             .FirstOrDefaultAsync();
-
-        var server = serverWithCurrentMap?.Server;
 
         if (server == null)
         {
@@ -175,8 +165,8 @@ public class ServerStatsService(
 
         statistics.RecentRounds = await recentRoundsTask;
 
-        // Set current map from the combined query
-        statistics.CurrentMap = serverWithCurrentMap?.CurrentMap;
+        // Set current map from the server record
+        statistics.CurrentMap = server.CurrentMap;
 
         // Get busy indicator data for this server
         try
@@ -499,22 +489,28 @@ FORMAT TabSeparated";
 
     
 
-    public async Task<ServerInsights> GetServerInsights(string serverName, string period = "7d")
+    public async Task<ServerInsights> GetServerInsights(string serverName, int days = 7)
     {
-        // Validate and parse period
-        var (startPeriod, endPeriod, granularity) = ParsePeriod(period);
+        // Validate days parameter
+        if (days <= 0)
+            throw new ArgumentException("Days must be greater than 0", nameof(days));
+
+        // Calculate time periods and granularity based on days
+        var endPeriod = DateTime.UtcNow;
+        var startPeriod = endPeriod.AddDays(-days);
+        var granularity = CalculateGranularity(days);
 
         // Check cache first
-        var cacheKey = _cacheKeyService.GetServerInsightsKey(serverName, period);
+        var cacheKey = _cacheKeyService.GetServerInsightsKey(serverName, days);
         var cachedResult = await _cacheService.GetAsync<ServerInsights>(cacheKey);
 
         if (cachedResult != null)
         {
-            _logger.LogDebug("Cache hit for server insights: {ServerName}, period: {Period}", serverName, period);
+            _logger.LogDebug("Cache hit for server insights: {ServerName}, days: {Days}", serverName, days);
             return cachedResult;
         }
 
-        _logger.LogDebug("Cache miss for server insights: {ServerName}, period: {Period}", serverName, period);
+        _logger.LogDebug("Cache miss for server insights: {ServerName}, days: {Days}", serverName, days);
 
         // Get the server by name
         var server = await _dbContext.Servers
@@ -533,90 +529,64 @@ FORMAT TabSeparated";
             EndPeriod = endPeriod
         };
 
-        // Get comprehensive player count data from ClickHouse with comparison period
+        // Execute all ClickHouse queries in parallel for maximum performance
+        var playerCountTask = GetPlayerCountDataWithComparisonFromClickHouse(server.Guid, startPeriod, endPeriod, granularity);
+        var mapsTask = GetAllMapsFromClickHouse(server.Guid, startPeriod, endPeriod);
+        var pingStatsTask = GetPingStatisticsFromClickHouse(server.Guid, startPeriod, endPeriod, granularity);
+
+        // Wait for all queries to complete
         try
         {
-            var playerCountData = await GetPlayerCountDataWithComparisonFromClickHouse(server.Guid, startPeriod, endPeriod, granularity);
-            
+            await Task.WhenAll(playerCountTask, mapsTask, pingStatsTask);
+
+            // Assign results from completed tasks
+            var playerCountData = await playerCountTask;
             insights.PlayerCountHistory = playerCountData.History ?? new List<PlayerCountDataPoint>();
             insights.PlayerCountHistoryComparison = playerCountData.HistoryComparison ?? new List<PlayerCountDataPoint>();
             insights.PlayerCountSummary = playerCountData.Summary;
+
+            insights.Maps = await mapsTask;
+            insights.PingByHour = await pingStatsTask;
         }
         catch (Exception ex)
         {
-            // Log the error but continue with empty metrics
-            _logger.LogError(ex, "Error fetching player count data from ClickHouse");
-            insights.PlayerCountHistory = [];
-            insights.PlayerCountHistoryComparison = [];
-            insights.PlayerCountSummary = null;
-        }
+            // Handle partial failures - assign individual results or empty defaults
+            _logger.LogError(ex, "Error during parallel ClickHouse queries execution");
 
-        // Get all maps data
-        try
-        {
-            var allMaps = await GetAllMapsFromClickHouse(server.Guid, startPeriod, endPeriod);
-            insights.Maps = allMaps;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error fetching maps data from ClickHouse");
-            insights.Maps = [];
-        }
-
-        // Use ClickHouse to calculate ping statistics with appropriate granularity
-        try
-        {
-            var timeGrouping = GetTimeGroupingFunction(granularity);
-            var query = $@"
-WITH filtered_pings AS (
-    SELECT 
-        {timeGrouping} as time_period,
-        ping
-    FROM player_metrics
-    WHERE server_guid = '{server.Guid.Replace("'", "''")}'
-        AND timestamp >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
-        AND timestamp <= '{endPeriod:yyyy-MM-dd HH:mm:ss}'
-        AND ping > 0 
-        AND ping < 1000  -- Filter out unrealistic ping values
-)
-SELECT 
-    time_period,
-    round(avg(ping), 2) as avg_ping,
-    round(quantile(0.5)(ping), 2) as median_ping,
-    round(quantile(0.95)(ping), 2) as p95_ping
-FROM filtered_pings
-GROUP BY time_period
-ORDER BY time_period
-FORMAT TabSeparated";
-
-            var result = await _clickHouseReader.ExecuteQueryAsync(query);
-            var pingData = new List<PingDataPoint>();
-
-            foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            // Player count data
+            try
             {
-                var parts = line.Split('\t');
-                if (parts.Length >= 4)
-                {
-                    var timePeriod = ParseTimePeriod(parts[0], granularity);
-                    pingData.Add(new PingDataPoint
-                    {
-                        TimePeriod = timePeriod,
-                        AveragePing = double.Parse(parts[1]),
-                        MedianPing = double.Parse(parts[2]),
-                        P95Ping = Math.Round(double.Parse(parts[3]), 2)
-                    });
-                }
+                var playerCountData = await playerCountTask;
+                insights.PlayerCountHistory = playerCountData.History ?? new List<PlayerCountDataPoint>();
+                insights.PlayerCountHistoryComparison = playerCountData.HistoryComparison ?? new List<PlayerCountDataPoint>();
+                insights.PlayerCountSummary = playerCountData.Summary;
+            }
+            catch
+            {
+                insights.PlayerCountHistory = [];
+                insights.PlayerCountHistoryComparison = [];
+                insights.PlayerCountSummary = null;
             }
 
-            insights.PingByHour = new PingByHourInsight
+            // Maps data
+            try
             {
-                Data = pingData
-            };
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error fetching ping data from ClickHouse");
-            insights.PingByHour = new PingByHourInsight { Data = [] };
+                insights.Maps = await mapsTask;
+            }
+            catch
+            {
+                insights.Maps = [];
+            }
+
+            // Ping data
+            try
+            {
+                insights.PingByHour = await pingStatsTask;
+            }
+            catch
+            {
+                insights.PingByHour = new PingByHourInsight { Data = [] };
+            }
         }
 
         // Cache the result for 20 minutes
@@ -625,39 +595,16 @@ FORMAT TabSeparated";
         return insights;
     }
 
-    private (DateTime startPeriod, DateTime endPeriod, TimeGranularity granularity) ParsePeriod(string period)
+    private TimeGranularity CalculateGranularity(int days)
     {
-        var endPeriod = DateTime.UtcNow;
-        DateTime startPeriod;
-        TimeGranularity granularity;
-
-        switch (period.ToLowerInvariant())
+        return days switch
         {
-            case "7d":
-                startPeriod = endPeriod.AddDays(-7);
-                granularity = TimeGranularity.Hourly;
-                break;
-            case "1m":
-                startPeriod = endPeriod.AddDays(-30);
-                granularity = TimeGranularity.FourHourly;
-                break;
-            case "3m":
-                startPeriod = endPeriod.AddDays(-90);
-                granularity = TimeGranularity.Daily;
-                break;
-            case "6m":
-                startPeriod = endPeriod.AddDays(-180);
-                granularity = TimeGranularity.Daily;
-                break;
-            case "1y":
-                startPeriod = endPeriod.AddDays(-365);
-                granularity = TimeGranularity.Weekly;
-                break;
-            default:
-                throw new ArgumentException($"Invalid period '{period}'. Valid periods are: 7d, 1m, 3m, 6m, 1y");
-        }
-
-        return (startPeriod, endPeriod, granularity);
+            <= 7 => TimeGranularity.Hourly,
+            <= 30 => TimeGranularity.FourHourly,
+            <= 90 => TimeGranularity.Daily,
+            <= 180 => TimeGranularity.Daily,
+            _ => TimeGranularity.Weekly
+        };
     }
 
 
@@ -1171,10 +1118,7 @@ FORMAT TabSeparated";
                 .Where(session => session.IsActive)
                 .Max(session => (DateTime?)session.StartTime),
             HasActivePlayers = s.Sessions.Any(session => session.IsActive),
-            CurrentMap = s.Sessions
-                .Where(session => session.IsActive)
-                .Select(session => session.MapName)
-                .FirstOrDefault(),
+            CurrentMap = s.CurrentMap,
             TotalPlayersAllTime = s.Sessions.Select(session => session.PlayerName).Distinct().Count(),
             TotalActivePlayersLast24h = s.Sessions
                 .Where(session => session.LastSeenTime >= last24Hours)
@@ -1347,6 +1291,69 @@ FORMAT TabSeparated";
         };
 
         return busyIndicator;
+    }
+
+    /// <summary>
+    /// Get ping statistics from ClickHouse for a specific server and time period.
+    /// Extracted from GetServerInsights to enable parallel execution.
+    /// </summary>
+    private async Task<PingByHourInsight> GetPingStatisticsFromClickHouse(
+        string serverGuid, DateTime startPeriod, DateTime endPeriod, TimeGranularity granularity)
+    {
+        try
+        {
+            var timeGrouping = GetTimeGroupingFunction(granularity);
+            var query = $@"
+WITH filtered_pings AS (
+    SELECT
+        {timeGrouping} as time_period,
+        ping
+    FROM player_metrics
+    WHERE server_guid = '{serverGuid.Replace("'", "''")}'
+        AND timestamp >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
+        AND timestamp <= '{endPeriod:yyyy-MM-dd HH:mm:ss}'
+        AND ping > 0
+        AND ping < 1000  -- Filter out unrealistic ping values
+)
+SELECT
+    time_period,
+    round(avg(ping), 2) as avg_ping,
+    round(quantile(0.5)(ping), 2) as median_ping,
+    round(quantile(0.95)(ping), 2) as p95_ping
+FROM filtered_pings
+GROUP BY time_period
+ORDER BY time_period
+FORMAT TabSeparated";
+
+            var result = await _clickHouseReader.ExecuteQueryAsync(query);
+            var pingData = new List<PingDataPoint>();
+
+            foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parts = line.Split('\t');
+                if (parts.Length >= 4)
+                {
+                    var timePeriod = ParseTimePeriod(parts[0], granularity);
+                    pingData.Add(new PingDataPoint
+                    {
+                        TimePeriod = timePeriod,
+                        AveragePing = double.Parse(parts[1]),
+                        MedianPing = double.Parse(parts[2]),
+                        P95Ping = Math.Round(double.Parse(parts[3]), 2)
+                    });
+                }
+            }
+
+            return new PingByHourInsight
+            {
+                Data = pingData
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching ping statistics from ClickHouse for server {ServerGuid}", serverGuid);
+            return new PingByHourInsight { Data = [] };
+        }
     }
 
 }
