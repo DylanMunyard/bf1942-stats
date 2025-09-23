@@ -632,20 +632,6 @@ GROUP BY t.total_kills, t.total_deaths, t.total_play_time_minutes, s.server_guid
         return (null, new HashSet<string>());
     }
 
-    // Original method preserved for backward compatibility
-    private async Task<PlayerSimilarityStats?> GetPlayerStatsForSimilarity(string playerName)
-    {
-        var (stats, serverGuids) = await GetPlayerStatsForSimilarityWithGuids(playerName);
-
-        if (stats != null && serverGuids.Any())
-        {
-            var serverGuidToNameMapping = await GetServerGuidToNameMappingAsync(serverGuids.ToList());
-            ApplyServerGuidToNameMapping(stats, serverGuidToNameMapping);
-        }
-
-        return stats;
-    }
-
     private async Task<List<string>> GetPlayerActiveServers(string playerName)
     {
         var query = $@"

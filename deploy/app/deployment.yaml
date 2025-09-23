@@ -96,6 +96,8 @@ spec:
               value: "true"
             - name: ENABLE_SERVER_ONLINE_COUNTS_SYNCING
               value: "true"
+            - name: GAMIFICATION_MAX_CONCURRENT_ROUNDS
+              value: "10"
             - name: GoogleOAuth__ClientId
               value: "468014767883-2gsdumjjgpgm2fp1qgic82i45k03tj7e.apps.googleusercontent.com"
             - name: Jwt__Issuer

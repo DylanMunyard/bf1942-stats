@@ -3,11 +3,12 @@ using junie_des_1942stats.ClickHouse.Models;
 using junie_des_1942stats.PlayerStats.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using System.Linq;
 
 namespace junie_des_1942stats.Gamification.Services;
 
-public class GamificationService
+public class GamificationService : IDisposable
 {
     private readonly ClickHouseGamificationService _gamificationService;
     private readonly KillStreakDetector _killStreakDetector;
@@ -19,6 +20,8 @@ public class GamificationService
     private readonly PlacementProcessor _placementProcessor;
     private readonly TeamVictoryProcessor _teamVictoryProcessor;
     private readonly ILogger<GamificationService> _logger;
+    private readonly int _maxConcurrentRounds;
+    private readonly SemaphoreSlim _concurrencyThrottle;
 
     public GamificationService(
         ClickHouseGamificationService gamificationService,
@@ -30,6 +33,7 @@ public class GamificationService
         AchievementLabelingService achievementLabelingService,
         PlacementProcessor placementProcessor,
         TeamVictoryProcessor teamVictoryProcessor,
+        IConfiguration configuration,
         ILogger<GamificationService> logger)
     {
         _gamificationService = gamificationService;
@@ -42,6 +46,12 @@ public class GamificationService
         _placementProcessor = placementProcessor;
         _teamVictoryProcessor = teamVictoryProcessor;
         _logger = logger;
+        
+        // Configure concurrency limit from environment variable
+        _maxConcurrentRounds = configuration.GetValue<int>("GAMIFICATION_MAX_CONCURRENT_ROUNDS", 10);
+        _concurrencyThrottle = new SemaphoreSlim(_maxConcurrentRounds, _maxConcurrentRounds);
+        
+        _logger.LogInformation("Gamification service initialized with max concurrent rounds: {MaxConcurrentRounds}", _maxConcurrentRounds);
     }
 
     /// <summary>
@@ -174,11 +184,13 @@ public class GamificationService
 
         try
         {
-            _logger.LogInformation("Using batch processing for {RoundCount} rounds", rounds.Count);
+            _logger.LogInformation("Using batch processing for {RoundCount} rounds with max concurrency: {MaxConcurrency}", 
+                rounds.Count, _maxConcurrentRounds);
 
-            // 1. Process kill streaks individually (they're round-specific)
+            // 1. Process kill streaks individually (they're round-specific) with throttling
             var streakTasks = rounds.Select(async round =>
             {
+                await _concurrencyThrottle.WaitAsync();
                 try
                 {
                     return await _killStreakDetector.CalculateKillStreaksForRoundAsync(round);
@@ -188,14 +200,19 @@ public class GamificationService
                     _logger.LogError(ex, "Error processing kill streaks for round {RoundId}", round.RoundId);
                     return new List<Achievement>();
                 }
+                finally
+                {
+                    _concurrencyThrottle.Release();
+                }
             });
 
             var streakResults = await Task.WhenAll(streakTasks);
             allAchievements.AddRange(streakResults.SelectMany(r => r));
 
-            // 2. Process milestones individually 
+            // 2. Process milestones individually with throttling
             var milestoneTasks = rounds.Select(async round =>
             {
+                await _concurrencyThrottle.WaitAsync();
                 try
                 {
                     return await _milestoneCalculator.CheckMilestoneCrossedAsync(round);
@@ -204,6 +221,10 @@ public class GamificationService
                 {
                     _logger.LogError(ex, "Error processing milestones for round {RoundId}", round.RoundId);
                     return new List<Achievement>();
+                }
+                finally
+                {
+                    _concurrencyThrottle.Release();
                 }
             });
 
@@ -439,5 +460,10 @@ public class GamificationService
             _logger.LogError(ex, "Error getting achievements with player IDs");
             throw;
         }
+    }
+
+    public void Dispose()
+    {
+        _concurrencyThrottle?.Dispose();
     }
 }
