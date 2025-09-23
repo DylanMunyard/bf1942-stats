@@ -284,11 +284,10 @@ spec:
               apk add --no-cache python3 py3-pip sqlite
               pip3 install sqlite-web --break-system-packages
               # Start the web interface
-              sqlite_web /mnt/data/playertracker.db --host 0.0.0.0 --port 8080 --read-only
+              sqlite_web /mnt/data/playertracker.db --host 0.0.0.0 --port 8080
           volumeMounts:
             - name: stats-data
               mountPath: /mnt/data
-              readOnly: true
           resources:
             requests:
               memory: "64Mi"
