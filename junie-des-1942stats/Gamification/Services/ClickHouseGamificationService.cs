@@ -263,7 +263,7 @@ public class ClickHouseGamificationService : IDisposable
         }
     }
 
-    public async Task<List<Achievement>> GetPlayerAchievementsByTypeAsync(string playerName, string achievementType)
+    public async Task<List<Achievement>> GetPlayerAchievementsByTypeAsync(string playerName, string achievementType, int? limit = null, int? offset = null)
     {
         try
         {
@@ -279,6 +279,16 @@ public class ClickHouseGamificationService : IDisposable
                 WHERE player_name = {playerName:String}
                 AND achievement_type = {achievementType:String}
                 ORDER BY achieved_at DESC";
+
+            // Add pagination if specified
+            if (limit.HasValue)
+            {
+                query += $" LIMIT {limit.Value}";
+                if (offset.HasValue)
+                {
+                    query += $" OFFSET {offset.Value}";
+                }
+            }
 
             var results = new List<Achievement>();
 
@@ -315,6 +325,47 @@ public class ClickHouseGamificationService : IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get player achievements by type for {PlayerName}, type {AchievementType}", playerName, achievementType);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Gets only the achievement IDs for a player by type - memory efficient for milestone checking
+    /// </summary>
+    public async Task<HashSet<string>> GetPlayerAchievementIdsByTypeAsync(string playerName, string achievementType)
+    {
+        try
+        {
+            if (_connection.State != System.Data.ConnectionState.Open)
+            {
+                await _connection.OpenAsync();
+            }
+
+            var query = @"
+                SELECT DISTINCT achievement_id
+                FROM player_achievements_deduplicated
+                WHERE player_name = {playerName:String}
+                AND achievement_type = {achievementType:String}";
+
+            var results = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            await using var command = _connection.CreateCommand();
+            command.CommandText = query;
+
+            command.Parameters.Add(CreateParameter("playerName", playerName));
+            command.Parameters.Add(CreateParameter("achievementType", achievementType));
+
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                results.Add(reader.GetString(0));
+            }
+
+            return results;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get player achievement IDs by type for {PlayerName}, type {AchievementType}", playerName, achievementType);
             throw;
         }
     }

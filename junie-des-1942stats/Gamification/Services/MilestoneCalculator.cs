@@ -33,11 +33,9 @@ public class MilestoneCalculator
 
         try
         {
-            // Pull the set of milestone IDs the player already owns so we do not recreate them
-            var existingMilestoneIds = (await _readService.GetPlayerAchievementsByTypeAsync(
-                    round.PlayerName, AchievementTypes.Milestone))
-                .Select(a => a.AchievementId)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            // Pull only the milestone IDs (not full records) the player already owns - much more memory efficient
+            var existingMilestoneIds = await _readService.GetPlayerAchievementIdsByTypeAsync(
+                round.PlayerName, AchievementTypes.Milestone);
 
             // Get player's totals before this round
             var previousStats = await _readService.GetPlayerStatsBeforeTimestampAsync(
