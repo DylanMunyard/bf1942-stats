@@ -158,7 +158,6 @@ public class ServerRanking
     public string ScoreDisplay => $"{TotalScore} points";
 
     public double AveragePing { get; set; }
-    public List<MonthlyServerRanking> HistoricalRankings { get; set; } = new();
 }
 
 public class PlayerInsights

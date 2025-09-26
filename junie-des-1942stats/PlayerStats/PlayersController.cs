@@ -265,35 +265,6 @@ public class PlayersController : ControllerBase
         }
     }
 
-    // NEW: Fast aggregated player statistics using ClickHouse player_rounds table
-    // This demonstrates the performance improvements from the pre-aggregated round data
-    [HttpGet("fast-stats")]
-    public async Task<IActionResult> GetFastPlayerStats(
-        [FromQuery] string? playerName = null,
-        [FromQuery] DateTime? fromDate = null,
-        [FromQuery] DateTime? toDate = null)
-    {
-        try
-        {
-            // Default to last 6 months if no date range specified
-            if (!fromDate.HasValue && !toDate.HasValue)
-            {
-                fromDate = DateTime.UtcNow.AddMonths(-6);
-            }
-
-            var result = await _playerRoundsService.GetPlayerStatsAsync(playerName, fromDate, toDate);
-
-            // Return raw TSV data with proper content type for demonstration
-            // In production, you'd probably parse this into a proper model
-            return Content(result, "text/tab-separated-values");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving fast player stats for player: {PlayerName}", playerName);
-            return StatusCode(500, $"An error occurred while retrieving player statistics: {ex.Message}");
-        }
-    }
-
     [HttpGet("compare/activity-hours")]
     public async Task<IActionResult> ComparePlayersActivityHours([FromQuery] string player1, [FromQuery] string player2)
     {

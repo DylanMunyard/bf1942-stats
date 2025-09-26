@@ -165,38 +165,6 @@ FORMAT TabSeparated";
             }
         }
 
-        // Get server names
-        if (insights.Any())
-        {
-            var serverGuids = string.Join("','", insights.Select(i => i.ServerGuid.Replace("'", "''")));
-            var nameQuery = $@"
-SELECT DISTINCT server_guid, any(game_id) as game_id
-FROM player_rounds
-WHERE server_guid IN ('{serverGuids}')
-  AND is_bot = 0
-GROUP BY server_guid
-FORMAT TabSeparated";
-
-            var nameResult = await ExecuteQueryAsync(nameQuery);
-            var serverInfo = new Dictionary<string, string>();
-
-            foreach (var line in nameResult.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-            {
-                var parts = line.Split('\t');
-                if (parts.Length >= 2)
-                {
-                    serverInfo[parts[0]] = parts[1];
-                }
-            }
-
-            foreach (var insight in insights)
-            {
-                if (serverInfo.TryGetValue(insight.ServerGuid, out var gameId))
-                {
-                    insight.GameId = gameId;
-                }
-            }
-        }
 
         return insights;
     }

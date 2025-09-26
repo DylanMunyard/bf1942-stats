@@ -4,8 +4,10 @@ using junie_des_1942stats.ClickHouse;
 using junie_des_1942stats.Caching;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 using junie_des_1942stats.Telemetry;
 using System.Diagnostics;
+using System.Threading;
 
 namespace junie_des_1942stats.PlayerStats;
 
@@ -13,13 +15,15 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
     PlayerInsightsService playerInsightsService,
     PlayerRoundsReadService playerRoundsReadService,
     ICacheService cacheService,
-    ILogger<PlayerStatsService> logger)
+    ILogger<PlayerStatsService> logger,
+    IConfiguration configuration)
 {
     private readonly PlayerTrackerDbContext _dbContext = dbContext;
     private readonly PlayerInsightsService _playerInsightsService = playerInsightsService;
     private readonly PlayerRoundsReadService _playerRoundsReadService = playerRoundsReadService;
     private readonly ICacheService _cacheService = cacheService;
     private readonly ILogger<PlayerStatsService> _logger = logger;
+    private readonly IConfiguration _configuration = configuration;
 
     // Define a threshold for considering a player "active" (e.g., 5 minutes)
     private readonly TimeSpan _activeThreshold = TimeSpan.FromMinutes(1);
@@ -158,27 +162,6 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         };
     }
 
-    private async Task<List<MonthlyServerRanking>> GetPlayerHistoricalRankingsAsync(string playerName, string serverGuid)
-    {
-        return await _dbContext.ServerPlayerRankings
-            .Where(r => r.PlayerName == playerName && r.ServerGuid == serverGuid)
-            .OrderByDescending(r => r.Year)
-            .ThenByDescending(r => r.Month)
-            .Take(12)
-            .Select(r => new MonthlyServerRanking
-            {
-                Year = r.Year,
-                Month = r.Month,
-                Rank = r.Rank,
-                TotalScore = r.TotalScore,
-                TotalKills = r.TotalKills,
-                TotalDeaths = r.TotalDeaths,
-                KDRatio = r.KDRatio,
-                TotalPlayTimeMinutes = r.TotalPlayTimeMinutes
-            })
-            .ToListAsync();
-    }
-
     public async Task<PlayerTimeStatistics> GetPlayerStatistics(string playerName)
     {
         // First check if the player exists
@@ -237,15 +220,6 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             })
             .ToListAsync();
 
-
-        // Get the current active session if any
-        var activeSession = recentSessions
-            .FirstOrDefault(ps => ps.IsActive);
-
-        // Check if player is currently active (seen within the last 5 minutes)
-        bool isActive = activeSession != null &&
-                        (now - activeSession.LastSeenTime) <= _activeThreshold;
-
         var insights = await GetPlayerInsights(playerName);
 
         List<ServerInsight> serverInsights;
@@ -258,17 +232,35 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             serverInsights = new List<ServerInsight>();
         }
 
-        // Get server names for the insights
-        foreach (var serverInsight in serverInsights)
+        // Get server names for the insights using batch query
+        if (serverInsights.Any())
         {
-            var server = await _dbContext.Servers
-                .FirstOrDefaultAsync(s => s.Guid == serverInsight.ServerGuid);
-            if (server != null)
+            var serverGuids = serverInsights.Select(si => si.ServerGuid).ToList();
+            var servers = await _dbContext.Servers
+                .Where(s => serverGuids.Contains(s.Guid))
+                .Select(s => new { s.Guid, s.Name, s.GameId })
+                .ToListAsync();
+            
+            var serverLookup = servers.ToDictionary(s => s.Guid, s => new { s.Name, s.GameId });
+            
+            foreach (var serverInsight in serverInsights)
             {
-                serverInsight.ServerName = server.Name;
-                serverInsight.GameId = server.GameId;
+                if (serverLookup.TryGetValue(serverInsight.ServerGuid, out var server))
+                {
+                    serverInsight.ServerName = server.Name;
+                    serverInsight.GameId = server.GameId;
+                }
             }
         }
+
+
+        // Get the current active session if any
+        var activeSession = recentSessions
+            .FirstOrDefault(ps => ps.IsActive);
+
+        // Check if player is currently active (seen within the last 5 minutes)
+        bool isActive = activeSession != null &&
+                        (now - activeSession.LastSeenTime) <= _activeThreshold;
 
         var stats = new PlayerTimeStatistics
         {
@@ -423,6 +415,9 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             EndPeriod = endPeriod
         };
 
+        // Get max concurrent queries setting
+        var maxConcurrentQueries = _configuration.GetValue<int>("PLAYER_INSIGHTS_MAX_CONCURRENT_QUERIES", 10);
+
         // 1. Get server rankings with total players per server (aggregated across all months)
         // First get all servers where the player has rankings with their total scores
         var playerServerStats = await _dbContext.ServerPlayerRankings
@@ -436,46 +431,88 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             })
             .ToListAsync();
 
-        // Process each server sequentially to avoid DbContext threading issues
+        // Batch process SQLite queries with concurrency limit
         var serverRankings = new List<ServerRanking>();
+        var semaphore = new SemaphoreSlim(maxConcurrentQueries, maxConcurrentQueries);
 
-        foreach (var serverStat in playerServerStats)
+        // Process SQLite queries in parallel batches
+        var sqliteTasks = playerServerStats.Select(async serverStat =>
         {
-            // Get the player's total score for this server
-            var playerScore = serverStat.TotalScore;
+            await semaphore.WaitAsync();
+            try
+            {
+                // Get the player's total score for this server
+                var playerScore = serverStat.TotalScore;
 
-            // Count how many players have a higher score on this server
-            var higherScoringPlayers = await _dbContext.ServerPlayerRankings
-                .Where(r => r.ServerGuid == serverStat.ServerGuid)
-                .GroupBy(r => r.PlayerName)
-                .Select(g => new { TotalScore = g.Sum(x => x.TotalScore) })
-                .CountAsync(s => s.TotalScore > playerScore);
+                // Count how many players have a higher score on this server
+                var higherScoringPlayers = await _dbContext.ServerPlayerRankings
+                    .Where(r => r.ServerGuid == serverStat.ServerGuid)
+                    .GroupBy(r => r.PlayerName)
+                    .Select(g => new { TotalScore = g.Sum(x => x.TotalScore) })
+                    .CountAsync(s => s.TotalScore > playerScore);
 
-            // Get total number of ranked players on this server
-            var totalPlayers = await _dbContext.ServerPlayerRankings
-                .Where(r => r.ServerGuid == serverStat.ServerGuid)
-                .Select(r => r.PlayerName)
-                .Distinct()
-                .CountAsync();
+                // Get total number of ranked players on this server
+                var totalPlayers = await _dbContext.ServerPlayerRankings
+                    .Where(r => r.ServerGuid == serverStat.ServerGuid)
+                    .Select(r => r.PlayerName)
+                    .Distinct()
+                    .CountAsync();
 
-            // Calculate average ping from ClickHouse (much faster than SQLite)
-            var averagePing = await GetAveragePingFromClickHouse(playerName, serverStat.ServerGuid);
+                // The player's rank is the number of players with higher scores + 1
+                var playerRank = higherScoringPlayers + 1;
 
-            // The player's rank is the number of players with higher scores + 1
-            var playerRank = higherScoringPlayers + 1;
+                return new
+                {
+                    ServerGuid = serverStat.ServerGuid,
+                    ServerName = serverStat.Name,
+                    Rank = playerRank,
+                    TotalScore = serverStat.TotalScore,
+                    TotalPlayers = totalPlayers
+                };
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
 
-            // Get historical rankings for this server
-            var historicalRankings = await GetPlayerHistoricalRankingsAsync(playerName, serverStat.ServerGuid);
+        var sqliteResults = await Task.WhenAll(sqliteTasks);
+
+        // Batch ClickHouse ping queries in parallel
+        var clickhouseServerGuids = sqliteResults.Select(r => r.ServerGuid).ToList();
+        var pingTasks = clickhouseServerGuids.Select(async serverGuid =>
+        {
+            await semaphore.WaitAsync();
+            try
+            {
+                return new
+                {
+                    ServerGuid = serverGuid,
+                    AveragePing = await GetAveragePingFromClickHouse(playerName, serverGuid)
+                };
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+        var pingResults = await Task.WhenAll(pingTasks);
+        var pingLookup = pingResults.ToDictionary(p => p.ServerGuid, p => p.AveragePing);
+
+        // Combine SQLite and ClickHouse results
+        foreach (var sqliteResult in sqliteResults)
+        {
+            var averagePing = pingLookup.GetValueOrDefault(sqliteResult.ServerGuid, 0);
 
             var serverRanking = new ServerRanking
             {
-                ServerGuid = serverStat.ServerGuid,
-                ServerName = serverStat.Name,
-                Rank = playerRank,
-                TotalScore = serverStat.TotalScore,
-                TotalRankedPlayers = totalPlayers,
-                AveragePing = Math.Round(averagePing),
-                HistoricalRankings = historicalRankings
+                ServerGuid = sqliteResult.ServerGuid,
+                ServerName = sqliteResult.ServerName,
+                Rank = sqliteResult.Rank,
+                TotalScore = sqliteResult.TotalScore,
+                TotalRankedPlayers = sqliteResult.TotalPlayers,
+                AveragePing = Math.Round(averagePing)
             };
 
             serverRankings.Add(serverRanking);
@@ -486,56 +523,11 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             .OrderBy(r => r.Rank)
             .ToList();
 
-        // 3. Calculate activity by hour (when they're usually online)
-        // Initialize hourly activity tracker
-        var hourlyActivity = new Dictionary<int, int>();
-        for (int hour = 0; hour < 24; hour++)
-        {
-            hourlyActivity[hour] = 0;
-        }
+        // 3. Calculate activity by hour using native ClickHouse query
+        var activityByHour = await GetActivityByHourFromClickHouse(playerName, startPeriod, endPeriod);
+        insights.ActivityByHour = activityByHour;
 
-        // Process each session's time range and break into hourly chunks
-        foreach (var session in sessions)
-        {
-            var sessionStart = session.StartTime;
-            var sessionEnd = session.LastSeenTime;
-
-            // Track activity by processing continuous blocks of time
-            var currentTime = sessionStart;
-
-            while (currentTime < sessionEnd)
-            {
-                int hour = currentTime.Hour;
-
-                // Calculate how much time was spent in this hour
-                // Either go to the end of the current hour or the end of the session, whichever comes first
-                var hourEnd = new DateTime(
-                    currentTime.Year,
-                    currentTime.Month,
-                    currentTime.Day,
-                    hour,
-                    59,
-                    59,
-                    999);
-
-                if (hourEnd > sessionEnd)
-                {
-                    hourEnd = sessionEnd;
-                }
-
-                // Add the minutes spent in this hour
-                int minutesInHour = (int)Math.Ceiling((hourEnd - currentTime).TotalMinutes);
-                hourlyActivity[hour] += minutesInHour;
-
-                // Move to the next hour
-                currentTime = hourEnd.AddMilliseconds(1);
-            }
-        }
-
-        insights.ActivityByHour = hourlyActivity
-            .Select(kvp => new HourlyActivity { Hour = kvp.Key, MinutesActive = kvp.Value })
-            .OrderByDescending(ha => ha.MinutesActive)
-            .ToList();
+        semaphore.Dispose();
 
         return insights;
     }
@@ -717,7 +709,6 @@ FROM (
     FROM player_metrics
     WHERE player_name = '{playerName.Replace("'", "''")}'
       AND server_guid = '{serverGuid.Replace("'", "''")}'
-      AND timestamp >= now() - INTERVAL 30 DAY
       AND ping > 0 AND ping < 10000  -- Filter out unrealistic ping values
     ORDER BY timestamp DESC
     LIMIT 100
@@ -744,6 +735,170 @@ FORMAT TabSeparated";
 
         // Fallback to 0 if ClickHouse query fails
         return 0;
+    }
+
+    private async Task<List<HourlyActivity>> GetActivityByHourFromClickHouse(string playerName, DateTime startPeriod, DateTime endPeriod)
+    {
+        try
+        {
+            // Use ClickHouse's native time functions to calculate activity by hour
+            // This query aggregates session time directly in the database
+            var query = $@"
+WITH sessions_with_duration AS (
+    SELECT 
+        toHour(round_start_time) as start_hour,
+        toHour(round_end_time) as end_hour,
+        round_start_time as start_time,
+        round_end_time as last_seen_time,
+        CASE 
+            WHEN toHour(round_start_time) = toHour(round_end_time) THEN 
+                -- Session within same hour
+                dateDiff('minute', round_start_time, round_end_time)
+            ELSE 0
+        END as same_hour_minutes
+    FROM player_rounds 
+    WHERE player_name = '{playerName.Replace("'", "''")}'
+      AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
+      AND round_end_time <= '{endPeriod:yyyy-MM-dd HH:mm:ss}'
+),
+hour_breakdown AS (
+    -- Generate all possible hours (0-23)
+    SELECT number as hour
+    FROM numbers(24)
+),
+session_hours AS (
+    SELECT 
+        h.hour,
+        s.start_time,
+        s.last_seen_time,
+        CASE 
+            WHEN s.start_hour = s.end_hour AND s.start_hour = h.hour THEN 
+                -- Entire session in this hour
+                s.same_hour_minutes
+            WHEN s.start_hour <= h.hour AND h.hour <= s.end_hour THEN 
+                CASE 
+                    WHEN h.hour = s.start_hour THEN 
+                        -- First hour of multi-hour session
+                        dateDiff('minute', s.start_time, toStartOfHour(s.start_time) + INTERVAL 1 HOUR)
+                    WHEN h.hour = s.end_hour THEN 
+                        -- Last hour of multi-hour session  
+                        dateDiff('minute', toStartOfHour(s.last_seen_time), s.last_seen_time)
+                    ELSE 
+                        -- Full hour in middle of session
+                        60
+                END
+            ELSE 0
+        END as minutes_in_hour
+    FROM hour_breakdown h
+    CROSS JOIN sessions_with_duration s
+    WHERE s.start_hour <= h.hour AND h.hour <= s.end_hour
+)
+SELECT 
+    hour,
+    SUM(minutes_in_hour) as total_minutes
+FROM session_hours
+WHERE minutes_in_hour > 0
+GROUP BY hour
+ORDER BY total_minutes DESC
+FORMAT TabSeparated";
+
+            var result = await _playerInsightsService.ExecuteQueryAsync(query);
+            var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            
+            var hourlyActivity = new List<HourlyActivity>();
+            
+            foreach (var line in lines)
+            {
+                var parts = line.Split('\t');
+                if (parts.Length == 2 && 
+                    int.TryParse(parts[0], out var hour) && 
+                    int.TryParse(parts[1], out var minutes))
+                {
+                    hourlyActivity.Add(new HourlyActivity 
+                    { 
+                        Hour = hour, 
+                        MinutesActive = minutes 
+                    });
+                }
+            }
+            
+            // Fill in missing hours with 0 minutes
+            var existingHours = hourlyActivity.Select(h => h.Hour).ToHashSet();
+            for (int hour = 0; hour < 24; hour++)
+            {
+                if (!existingHours.Contains(hour))
+                {
+                    hourlyActivity.Add(new HourlyActivity { Hour = hour, MinutesActive = 0 });
+                }
+            }
+            
+            return hourlyActivity.OrderByDescending(h => h.MinutesActive).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get activity by hour from ClickHouse for player {PlayerName}, falling back to SQLite calculation", playerName);
+            
+            // Fallback to original SQLite-based calculation if ClickHouse fails
+            return await GetActivityByHourFromSessions(playerName, startPeriod, endPeriod);
+        }
+    }
+
+    private async Task<List<HourlyActivity>> GetActivityByHourFromSessions(string playerName, DateTime startPeriod, DateTime endPeriod)
+    {
+        // Fallback method using the original SQLite-based calculation
+        var sessions = await _dbContext.PlayerSessions
+            .Where(ps => ps.PlayerName == playerName && ps.StartTime >= startPeriod && ps.LastSeenTime <= endPeriod)
+            .ToListAsync();
+
+        // Initialize hourly activity tracker
+        var hourlyActivity = new Dictionary<int, int>();
+        for (int hour = 0; hour < 24; hour++)
+        {
+            hourlyActivity[hour] = 0;
+        }
+
+        // Process each session's time range and break into hourly chunks
+        foreach (var session in sessions)
+        {
+            var sessionStart = session.StartTime;
+            var sessionEnd = session.LastSeenTime;
+
+            // Track activity by processing continuous blocks of time
+            var currentTime = sessionStart;
+
+            while (currentTime < sessionEnd)
+            {
+                int hour = currentTime.Hour;
+
+                // Calculate how much time was spent in this hour
+                // Either go to the end of the current hour or the end of the session, whichever comes first
+                var hourEnd = new DateTime(
+                    currentTime.Year,
+                    currentTime.Month,
+                    currentTime.Day,
+                    hour,
+                    59,
+                    59,
+                    999);
+
+                if (hourEnd > sessionEnd)
+                {
+                    hourEnd = sessionEnd;
+                }
+
+                // Add the minutes spent in this hour
+                int minutesInHour = (int)Math.Ceiling((hourEnd - currentTime).TotalMinutes);
+                hourlyActivity[hour] += minutesInHour;
+
+                // Move to the next hour
+                currentTime = hourEnd.AddMilliseconds(1);
+            }
+        }
+
+        return hourlyActivity
+            .Select(kvp => new HourlyActivity { Hour = kvp.Key, MinutesActive = kvp.Value })
+            .OrderByDescending(ha => ha.MinutesActive)
+            .ToList();
     }
 
 
