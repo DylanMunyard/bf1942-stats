@@ -310,6 +310,9 @@ metadata:
   namespace: bf42-stats
   labels:
     app: sqlite-browser
+  annotations:
+    tailscale.com/expose: "true"
+    tailscale.com/hostname: sqlite-browser-aks
 spec:
   selector:
     app: sqlite-browser

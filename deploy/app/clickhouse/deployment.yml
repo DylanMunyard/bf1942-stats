@@ -203,6 +203,9 @@ kind: Service
 metadata:
   name: clickhouse-service
   namespace: clickhouse
+  annotations:
+    tailscale.com/expose: "true"
+    tailscale.com/hostname: clickhouse-aks
 spec:
   type: ClusterIP
   selector:

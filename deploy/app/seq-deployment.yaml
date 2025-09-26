@@ -46,6 +46,9 @@ metadata:
   namespace: seq
   labels:
     app: seq
+  annotations:
+    tailscale.com/expose: "true"
+    tailscale.com/hostname: seq-aks
 spec:
   selector:
     app: seq
