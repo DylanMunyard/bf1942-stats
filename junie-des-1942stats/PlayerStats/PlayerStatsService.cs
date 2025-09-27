@@ -402,12 +402,6 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         if (player == null)
             return new PlayerInsights { PlayerName = playerName, StartPeriod = startPeriod, EndPeriod = endPeriod };
 
-        // Get player sessions within the time period
-        var sessions = await _dbContext.PlayerSessions
-            .Where(ps => ps.PlayerName == playerName && ps.StartTime >= startPeriod && ps.LastSeenTime <= endPeriod)
-            .Include(s => s.Server)
-            .ToListAsync();
-
         var insights = new PlayerInsights
         {
             PlayerName = playerName,
@@ -415,119 +409,17 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             EndPeriod = endPeriod
         };
 
-        // Get max concurrent queries setting
-        var maxConcurrentQueries = _configuration.GetValue<int>("PLAYER_INSIGHTS_MAX_CONCURRENT_QUERIES", 10);
-
-        // 1. Get server rankings with total players per server (aggregated across all months)
-        // First get all servers where the player has rankings with their total scores
-        var playerServerStats = await _dbContext.ServerPlayerRankings
-            .Where(r => r.PlayerName == playerName)
-            .GroupBy(r => new { r.ServerGuid, r.Server.Name })
-            .Select(g => new
-            {
-                g.Key.ServerGuid,
-                g.Key.Name,
-                TotalScore = g.Sum(x => x.TotalScore)
-            })
-            .ToListAsync();
-
-        // Batch process SQLite queries with concurrency limit
-        var serverRankings = new List<ServerRanking>();
-        var semaphore = new SemaphoreSlim(maxConcurrentQueries, maxConcurrentQueries);
-
-        // Process SQLite queries in parallel batches
-        var sqliteTasks = playerServerStats.Select(async serverStat =>
-        {
-            await semaphore.WaitAsync();
-            try
-            {
-                // Get the player's total score for this server
-                var playerScore = serverStat.TotalScore;
-
-                // Count how many players have a higher score on this server
-                var higherScoringPlayers = await _dbContext.ServerPlayerRankings
-                    .Where(r => r.ServerGuid == serverStat.ServerGuid)
-                    .GroupBy(r => r.PlayerName)
-                    .Select(g => new { TotalScore = g.Sum(x => x.TotalScore) })
-                    .CountAsync(s => s.TotalScore > playerScore);
-
-                // Get total number of ranked players on this server
-                var totalPlayers = await _dbContext.ServerPlayerRankings
-                    .Where(r => r.ServerGuid == serverStat.ServerGuid)
-                    .Select(r => r.PlayerName)
-                    .Distinct()
-                    .CountAsync();
-
-                // The player's rank is the number of players with higher scores + 1
-                var playerRank = higherScoringPlayers + 1;
-
-                return new
-                {
-                    ServerGuid = serverStat.ServerGuid,
-                    ServerName = serverStat.Name,
-                    Rank = playerRank,
-                    TotalScore = serverStat.TotalScore,
-                    TotalPlayers = totalPlayers
-                };
-            }
-            finally
-            {
-                semaphore.Release();
-            }
-        });
-
-        var sqliteResults = await Task.WhenAll(sqliteTasks);
-
-        // Batch ClickHouse ping queries in parallel
-        var clickhouseServerGuids = sqliteResults.Select(r => r.ServerGuid).ToList();
-        var pingTasks = clickhouseServerGuids.Select(async serverGuid =>
-        {
-            await semaphore.WaitAsync();
-            try
-            {
-                return new
-                {
-                    ServerGuid = serverGuid,
-                    AveragePing = await GetAveragePingFromClickHouse(playerName, serverGuid)
-                };
-            }
-            finally
-            {
-                semaphore.Release();
-            }
-        });
-
-        var pingResults = await Task.WhenAll(pingTasks);
-        var pingLookup = pingResults.ToDictionary(p => p.ServerGuid, p => p.AveragePing);
-
-        // Combine SQLite and ClickHouse results
-        foreach (var sqliteResult in sqliteResults)
-        {
-            var averagePing = pingLookup.GetValueOrDefault(sqliteResult.ServerGuid, 0);
-
-            var serverRanking = new ServerRanking
-            {
-                ServerGuid = sqliteResult.ServerGuid,
-                ServerName = sqliteResult.ServerName,
-                Rank = sqliteResult.Rank,
-                TotalScore = sqliteResult.TotalScore,
-                TotalRankedPlayers = sqliteResult.TotalPlayers,
-                AveragePing = Math.Round(averagePing)
-            };
-
-            serverRankings.Add(serverRanking);
-        }
+        // 1. Get server rankings and average ping
+        var serverRankings = await GetServerRankingsWithPing(playerName);
 
         // Order by rank (best rank first) and assign to insights
         insights.ServerRankings = serverRankings
             .OrderBy(r => r.Rank)
             .ToList();
 
-        // 3. Calculate activity by hour using native ClickHouse query
+        // 2. Calculate activity by hour using native ClickHouse query
         var activityByHour = await GetActivityByHourFromClickHouse(playerName, startPeriod, endPeriod);
         insights.ActivityByHour = activityByHour;
-
-        semaphore.Dispose();
 
         return insights;
     }
@@ -693,48 +585,55 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         return points;
     }
 
-    private async Task<double> GetAveragePingFromClickHouse(string playerName, string serverGuid)
+    private async Task<List<ServerRanking>> GetServerRankingsWithPing(string playerName)
     {
-        try
-        {
-            // Query recent ping data from ClickHouse (last 30 days, limit 100 most recent)
-            var query = $@"
-SELECT
-    CASE
-        WHEN COUNT(*) = 0 THEN 0
-        ELSE ROUND(AVG(ping), 2)
-    END as avg_ping
-FROM (
-    SELECT ping
-    FROM player_metrics
-    WHERE player_name = '{playerName.Replace("'", "''")}'
-      AND server_guid = '{serverGuid.Replace("'", "''")}'
-      AND ping > 0 AND ping < 10000  -- Filter out unrealistic ping values
-    ORDER BY timestamp DESC
-    LIMIT 100
-)
-FORMAT TabSeparated";
+        // Use raw SQL to calculate rankings efficiently in the database
+        var sql = @"
+            WITH PlayerScores AS (
+                SELECT 
+                    ServerGuid,
+                    PlayerName,
+                    SUM(TotalScore) as TotalScore
+                FROM ServerPlayerRankings
+                GROUP BY ServerGuid, PlayerName
+            ),
+            PlayerRankings AS (
+                SELECT 
+                    ps.ServerGuid,
+                    ps.PlayerName,
+                    ps.TotalScore,
+                    RANK() OVER (PARTITION BY ps.ServerGuid ORDER BY ps.TotalScore DESC) as PlayerRank,
+                    COUNT(*) OVER (PARTITION BY ps.ServerGuid) as TotalPlayers
+                FROM PlayerScores ps
+            ),
+            PlayerServerData AS (
+                SELECT 
+                    pr.ServerGuid,
+                    s.Name as ServerName,
+                    pr.PlayerRank,
+                    pr.TotalScore,
+                    pr.TotalPlayers
+                FROM PlayerRankings pr
+                INNER JOIN Servers s ON pr.ServerGuid = s.Guid
+                WHERE pr.PlayerName = @playerName
+            )
+            SELECT 
+                psd.ServerGuid,
+                psd.ServerName,
+                psd.PlayerRank as Rank,
+                psd.TotalScore,
+                psd.TotalPlayers as TotalRankedPlayers,
+                COALESCE(ROUND(AVG(CAST(po.Ping as REAL)), 2), 0) as AveragePing
+            FROM PlayerServerData psd
+            LEFT JOIN PlayerSessions ps ON ps.ServerGuid = psd.ServerGuid AND ps.PlayerName = @playerName
+            LEFT JOIN PlayerObservations po ON po.SessionId = ps.SessionId AND po.Ping > 0 AND po.Ping < 10000
+            GROUP BY psd.ServerGuid, psd.ServerName, psd.PlayerRank, psd.TotalScore, psd.TotalPlayers";
 
-            var result = await _playerInsightsService.ExecuteQueryAsync(query);
-            var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var results = await _dbContext.Database
+            .SqlQueryRaw<ServerRanking>(sql, new Microsoft.Data.Sqlite.SqliteParameter("@playerName", playerName))
+            .ToListAsync();
 
-            if (lines.Length > 0 && double.TryParse(lines[0], out var avgPing))
-            {
-                // Check for invalid values that can't be serialized to JSON
-                if (double.IsNaN(avgPing) || double.IsInfinity(avgPing) || avgPing < 0)
-                {
-                    return 0; // Return 0 for invalid ping values
-                }
-                return avgPing;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to get average ping from ClickHouse for player {PlayerName} on server {ServerGuid}", playerName, serverGuid);
-        }
-
-        // Fallback to 0 if ClickHouse query fails
-        return 0;
+        return results;
     }
 
     private async Task<List<HourlyActivity>> GetActivityByHourFromClickHouse(string playerName, DateTime startPeriod, DateTime endPeriod)
