@@ -607,18 +607,36 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             .Where(s => serverGuids.Contains(s.Guid))
             .ToDictionaryAsync(s => s.Guid, s => s.Name);
 
-        // Get ping data for all servers at once
-        var pingData = await _dbContext.PlayerObservations
-            .Where(po => po.Session.PlayerName == playerName && 
-                        serverGuids.Contains(po.Session.ServerGuid) &&
-                        po.Ping > 0 && po.Ping < 10000)
-            .GroupBy(po => po.Session.ServerGuid)
-            .Select(g => new
-            {
-                ServerGuid = g.Key,
-                AveragePing = g.Average(po => (double)po.Ping)
-            })
-            .ToDictionaryAsync(p => p.ServerGuid, p => p.AveragePing);
+        // Get ping data using optimized raw SQL with sampling of most recent observations
+        // This query samples up to 200 most recent observations per server for better performance
+        var serverGuidsParam = string.Join(",", serverGuids.Select(g => $"'{g}'"));
+        var pingDataSql = $@"
+            WITH RecentObservations AS (
+                SELECT 
+                    ps.ServerGuid,
+                    po.Ping,
+                    ROW_NUMBER() OVER (PARTITION BY ps.ServerGuid ORDER BY po.Timestamp DESC) as rn
+                FROM PlayerObservations po
+                INNER JOIN PlayerSessions ps ON po.SessionId = ps.SessionId
+                WHERE ps.PlayerName = @playerName 
+                    AND ps.ServerGuid IN ({serverGuidsParam})
+                    AND po.Ping > 0 
+                    AND po.Ping < 10000
+            )
+            SELECT 
+                ServerGuid,
+                AVG(CAST(Ping AS REAL)) as AveragePing,
+                COUNT(*) as SampleSize
+            FROM RecentObservations
+            WHERE rn <= 200
+            GROUP BY ServerGuid";
+
+        var pingResults = await _dbContext.Database
+            .SqlQueryRaw<PingSampleResult>(pingDataSql, 
+                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", playerName))
+            .ToListAsync();
+
+        var pingData = pingResults.ToDictionary(p => p.ServerGuid, p => p.AveragePing);
 
         // Calculate rankings using a more efficient approach - one query per server but much faster
         var results = new List<ServerRanking>();
@@ -651,7 +669,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                 Rank = rankingResult.PlayerRank,
                 TotalScore = serverStat.TotalScore,
                 TotalRankedPlayers = rankingResult.TotalPlayers,
-                AveragePing = Math.Round(pingData.GetValueOrDefault(serverStat.ServerGuid, 0), 2)
+                AveragePing = Math.Round(pingData.GetValueOrDefault(serverStat.ServerGuid, 0.0), 2)
             });
         }
 
