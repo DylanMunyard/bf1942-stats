@@ -607,36 +607,8 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             .Where(s => serverGuids.Contains(s.Guid))
             .ToDictionaryAsync(s => s.Guid, s => s.Name);
 
-        // Get ping data using optimized raw SQL with sampling of most recent observations
-        // This query samples up to 200 most recent observations per server for better performance
-        var serverGuidsParam = string.Join(",", serverGuids.Select(g => $"'{g}'"));
-        var pingDataSql = $@"
-            WITH RecentObservations AS (
-                SELECT 
-                    ps.ServerGuid,
-                    po.Ping,
-                    ROW_NUMBER() OVER (PARTITION BY ps.ServerGuid ORDER BY po.Timestamp DESC) as rn
-                FROM PlayerObservations po
-                INNER JOIN PlayerSessions ps ON po.SessionId = ps.SessionId
-                WHERE ps.PlayerName = @playerName 
-                    AND ps.ServerGuid IN ({serverGuidsParam})
-                    AND po.Ping > 0 
-                    AND po.Ping < 10000
-            )
-            SELECT 
-                ServerGuid,
-                AVG(CAST(Ping AS REAL)) as AveragePing,
-                COUNT(*) as SampleSize
-            FROM RecentObservations
-            WHERE rn <= 200
-            GROUP BY ServerGuid";
-
-        var pingResults = await _dbContext.Database
-            .SqlQueryRaw<PingSampleResult>(pingDataSql, 
-                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", playerName))
-            .ToListAsync();
-
-        var pingData = pingResults.ToDictionary(p => p.ServerGuid, p => p.AveragePing);
+        // Get ping data from ClickHouse with native sampling - much more efficient
+        var pingData = await GetAveragePingFromClickHouse(playerName, serverGuids);
 
         // Calculate rankings using a more efficient approach - one query per server but much faster
         var results = new List<ServerRanking>();
@@ -674,6 +646,64 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         }
 
         return results;
+    }
+
+    private async Task<Dictionary<string, double>> GetAveragePingFromClickHouse(string playerName, List<string> serverGuids)
+    {
+        if (!serverGuids.Any())
+            return new Dictionary<string, double>();
+
+        try
+        {
+            // Escape single quotes to prevent SQL injection
+            var escapedPlayerName = playerName.Replace("'", "''");
+            var serverGuidsParam = string.Join("','", serverGuids.Select(g => g.Replace("'", "''")));
+            
+            var query = $@"
+                WITH SampledPings AS (
+                    SELECT 
+                        server_guid,
+                        ping,
+                        ROW_NUMBER() OVER (PARTITION BY server_guid ORDER BY timestamp DESC) as rn
+                    FROM player_metrics
+                    WHERE player_name = '{escapedPlayerName}'
+                        AND server_guid IN ('{serverGuidsParam}')
+                        AND ping > 0 
+                        AND ping < 10000
+                )
+                SELECT 
+                    server_guid,
+                    AVG(ping) as average_ping,
+                    COUNT(*) as sample_size
+                FROM SampledPings
+                WHERE rn <= 200
+                GROUP BY server_guid";
+
+            var result = await _playerRoundsReadService.ExecuteQueryAsync(query);
+            var pingResults = new List<ClickHousePingResult>();
+
+            foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parts = line.Split('\t');
+                if (parts.Length >= 2 && 
+                    double.TryParse(parts[1], out var avgPing))
+                {
+                    pingResults.Add(new ClickHousePingResult
+                    {
+                        server_guid = parts[0],
+                        average_ping = avgPing,
+                        sample_size = parts.Length > 2 && int.TryParse(parts[2], out var size) ? size : 0
+                    });
+                }
+            }
+
+            return pingResults.ToDictionary(r => r.server_guid, r => r.average_ping);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get ping data from ClickHouse for player {PlayerName}", playerName);
+            return new Dictionary<string, double>();
+        }
     }
 
     private async Task<List<HourlyActivity>> GetActivityByHourFromClickHouse(string playerName, DateTime startPeriod, DateTime endPeriod)
