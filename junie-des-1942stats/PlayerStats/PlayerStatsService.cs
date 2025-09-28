@@ -587,51 +587,73 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
 
     private async Task<List<ServerRanking>> GetServerRankingsWithPing(string playerName)
     {
-        // Use raw SQL to calculate rankings efficiently in the database
-        var sql = @"
-            WITH PlayerScores AS (
-                SELECT 
-                    ServerGuid,
-                    PlayerName,
-                    SUM(TotalScore) as TotalScore
-                FROM ServerPlayerRankings
-                GROUP BY ServerGuid, PlayerName
-            ),
-            PlayerRankings AS (
-                SELECT 
-                    ps.ServerGuid,
-                    ps.PlayerName,
-                    ps.TotalScore,
-                    RANK() OVER (PARTITION BY ps.ServerGuid ORDER BY ps.TotalScore DESC) as PlayerRank,
-                    COUNT(*) OVER (PARTITION BY ps.ServerGuid) as TotalPlayers
-                FROM PlayerScores ps
-            ),
-            PlayerServerData AS (
-                SELECT 
-                    pr.ServerGuid,
-                    s.Name as ServerName,
-                    pr.PlayerRank,
-                    pr.TotalScore,
-                    pr.TotalPlayers
-                FROM PlayerRankings pr
-                INNER JOIN Servers s ON pr.ServerGuid = s.Guid
-                WHERE pr.PlayerName = @playerName
-            )
-            SELECT 
-                psd.ServerGuid,
-                psd.ServerName,
-                psd.PlayerRank as Rank,
-                psd.TotalScore,
-                psd.TotalPlayers as TotalRankedPlayers,
-                COALESCE(ROUND(AVG(CAST(po.Ping as REAL)), 2), 0) as AveragePing
-            FROM PlayerServerData psd
-            LEFT JOIN PlayerSessions ps ON ps.ServerGuid = psd.ServerGuid AND ps.PlayerName = @playerName
-            LEFT JOIN PlayerObservations po ON po.SessionId = ps.SessionId AND po.Ping > 0 AND po.Ping < 10000
-            GROUP BY psd.ServerGuid, psd.ServerName, psd.PlayerRank, psd.TotalScore, psd.TotalPlayers";
-
-        var results = await _dbContext.Database
-            .SqlQueryRaw<ServerRanking>(sql, new Microsoft.Data.Sqlite.SqliteParameter("@playerName", playerName))
+        // First, get the player's server stats efficiently
+        var playerServerStats = await _dbContext.ServerPlayerRankings
+            .Where(r => r.PlayerName == playerName)
+            .GroupBy(r => r.ServerGuid)
+            .Select(g => new
+            {
+                ServerGuid = g.Key,
+                TotalScore = g.Sum(x => x.TotalScore)
+            })
             .ToListAsync();
+
+        if (!playerServerStats.Any())
+            return [];
+
+        // Get server names separately
+        var serverGuids = playerServerStats.Select(s => s.ServerGuid).ToList();
+        var servers = await _dbContext.Servers
+            .Where(s => serverGuids.Contains(s.Guid))
+            .ToDictionaryAsync(s => s.Guid, s => s.Name);
+
+        // Get ping data for all servers at once
+        var pingData = await _dbContext.PlayerObservations
+            .Where(po => po.Session.PlayerName == playerName && 
+                        serverGuids.Contains(po.Session.ServerGuid) &&
+                        po.Ping > 0 && po.Ping < 10000)
+            .GroupBy(po => po.Session.ServerGuid)
+            .Select(g => new
+            {
+                ServerGuid = g.Key,
+                AveragePing = g.Average(po => (double)po.Ping)
+            })
+            .ToDictionaryAsync(p => p.ServerGuid, p => p.AveragePing);
+
+        // Calculate rankings using a more efficient approach - one query per server but much faster
+        var results = new List<ServerRanking>();
+
+        foreach (var serverStat in playerServerStats)
+        {
+            // Count players with higher scores + get total players in one query per server
+            var rankingSql = @"
+                SELECT 
+                    (SELECT COUNT(*) + 1 
+                     FROM (SELECT PlayerName, SUM(TotalScore) as Total 
+                           FROM ServerPlayerRankings 
+                           WHERE ServerGuid = @serverGuid 
+                           GROUP BY PlayerName) 
+                     WHERE Total > @playerScore) as PlayerRank,
+                    (SELECT COUNT(DISTINCT PlayerName) 
+                     FROM ServerPlayerRankings 
+                     WHERE ServerGuid = @serverGuid) as TotalPlayers";
+
+            var rankingResult = await _dbContext.Database
+                .SqlQueryRaw<RankingResult>(rankingSql, 
+                    new Microsoft.Data.Sqlite.SqliteParameter("@serverGuid", serverStat.ServerGuid),
+                    new Microsoft.Data.Sqlite.SqliteParameter("@playerScore", serverStat.TotalScore))
+                .FirstAsync();
+
+            results.Add(new ServerRanking
+            {
+                ServerGuid = serverStat.ServerGuid,
+                ServerName = servers.GetValueOrDefault(serverStat.ServerGuid, "Unknown Server"),
+                Rank = rankingResult.PlayerRank,
+                TotalScore = serverStat.TotalScore,
+                TotalRankedPlayers = rankingResult.TotalPlayers,
+                AveragePing = Math.Round(pingData.GetValueOrDefault(serverStat.ServerGuid, 0), 2)
+            });
+        }
 
         return results;
     }

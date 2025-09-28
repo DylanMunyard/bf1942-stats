@@ -347,4 +347,10 @@ public class BestScoreDetail
     public string RoundId { get; set; } = string.Empty;
 }
 
+public class RankingResult
+{
+    public int PlayerRank { get; set; }
+    public int TotalPlayers { get; set; }
+}
+
 
