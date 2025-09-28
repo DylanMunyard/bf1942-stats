@@ -119,6 +119,8 @@ try
                 tracing.AddSource(ActivitySources.Cache.Name);
                 tracing.AddSource(ActivitySources.ClickHouse.Name);
                 tracing.AddSource(ActivitySources.StatsCollection.Name);
+                tracing.AddSource(ActivitySources.ClickHouseSync.Name);
+                tracing.AddSource(ActivitySources.Gamification.Name);
             }
         );
 
