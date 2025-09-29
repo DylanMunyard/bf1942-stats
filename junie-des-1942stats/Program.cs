@@ -28,7 +28,7 @@ using junie_des_1942stats.Telemetry;
 using OpenTelemetry.Exporter;
 
 // Configure Serilog
-var seqUrl = Environment.GetEnvironmentVariable("SEQ_URL") ?? "http://192.168.1.230:5341";
+var seqUrl = Environment.GetEnvironmentVariable("SEQ_URL") ?? "http://100.87.24.27:5341";
 var serviceName = "junie-des-1942stats";
 var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development";
 
@@ -100,6 +100,22 @@ try
                 {
                     options.SetDbStatementForStoredProcedure = true;
                     options.SetDbStatementForText = true;
+                    // Filter out database commands during bulk operations
+                    options.Filter = (connectionString, command) =>
+                    {
+                        // Check if we're in a bulk operation context by looking at current activity
+                        var activity = System.Diagnostics.Activity.Current;
+                        while (activity != null)
+                        {
+                            if (activity.Tags.Any(tag => tag.Key == "bulk_operation" && tag.Value == "true"))
+                            {
+                                return false; // Don't trace this command
+                            }
+                            activity = activity.Parent;
+                        }
+
+                        return true; // Trace this command
+                    };
                 });
                 tracing.AddSqlClientInstrumentation(options =>
                 {

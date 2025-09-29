@@ -16,7 +16,7 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Exporter;
 
 // Configure Serilog
-var seqUrl = Environment.GetEnvironmentVariable("SEQ_URL") ?? "http://192.168.1.230:5341";
+var seqUrl = Environment.GetEnvironmentVariable("SEQ_URL") ?? "http://100.87.24.27:5341";
 var serviceName = "junie-des-1942stats.Notifications";
 var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development";
 

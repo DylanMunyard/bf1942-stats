@@ -79,7 +79,7 @@ spec:
             - name: ASPNETCORE_URLS
               value: "http://+:8080"
             - name: SEQ_URL
-              value: "http://seq-service.seq:5341"
+              value: "http://seq-k3s:5341"
             - name: CLICKHOUSE_URL
               value: "http://clickhouse-service.clickhouse:8123"
             - name: CLICKHOUSE_WRITE_URL

@@ -55,6 +55,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
         using var activity = ActivitySources.StatsCollection.StartActivity("StatsCollection.Cycle");
         activity?.SetTag("cycle_number", currentCycle);
         activity?.SetTag("collection_interval_seconds", _collectionInterval.TotalSeconds);
+        activity?.SetTag("bulk_operation", "true");
 
         var cycleStopwatch = Stopwatch.StartNew();
         Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Starting stats collection cycle #{currentCycle}...");

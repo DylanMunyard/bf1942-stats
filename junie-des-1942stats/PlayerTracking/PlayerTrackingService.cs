@@ -146,10 +146,13 @@ public class PlayerTrackingService
                 sessionsToCreate.Add(newSession);
                 pendingObservations.Add((playerInfo, newSession));
 
-                // Track player online event (true first time online)
-                _logger.LogInformation("TRACKING: Detected player online for {ServerGuid} / {ServerName}: {PlayerName}",
-                    server.Guid, server.Name, playerInfo.Name);
-                eventsToPublish.Add(("player_online", playerInfo, newSession, null));
+                if (!playerInfo.AiBot) 
+                {
+                    // Track player online event (true first time online)
+                    _logger.LogInformation("TRACKING: Detected player online for {PlayerName} on {ServerName}: ",
+                        server.Name, playerInfo.Name);
+                    eventsToPublish.Add(("player_online", playerInfo, newSession, null));
+                }
             }
         }
 

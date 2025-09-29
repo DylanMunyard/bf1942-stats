@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    tailscale.com/tailnet-ip: 100.87.24.27
+  name: seq-k3s
+  namespace: bf42-stats
+spec:
+  externalName: seq-k3s
+  type: ExternalName
