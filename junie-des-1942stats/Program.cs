@@ -95,7 +95,28 @@ try
                     };
                     options.RecordException = true;
                 });
-                tracing.AddHttpClientInstrumentation();
+                tracing.AddHttpClientInstrumentation(options =>
+                {
+                    // Only trace HTTP calls from API requests, not background services
+                    options.FilterHttpRequestMessage = (httpRequestMessage) =>
+                    {
+                        var activity = System.Diagnostics.Activity.Current;
+                        while (activity != null)
+                        {
+                            // Skip tracing if we're in a background service operation
+                            if (activity.Tags.Any(tag =>
+                                (tag.Key == "bulk_operation" && tag.Value == "true") ||
+                                tag.Key == "ClickHouseSync.Cycle" ||
+                                tag.Key == "StatsCollection.Cycle" ||
+                                tag.Key == "Gamification.Processing"))
+                            {
+                                return false;
+                            }
+                            activity = activity.Parent;
+                        }
+                        return true;
+                    };
+                });
                 tracing.AddEntityFrameworkCoreInstrumentation(options =>
                 {
                     options.SetDbStatementForStoredProcedure = true;
@@ -117,26 +138,24 @@ try
                         return true; // Trace this command
                     };
                 });
-                tracing.AddSqlClientInstrumentation(options =>
-                {
-                    options.SetDbStatementForStoredProcedure = true;
-                    options.SetDbStatementForText = true;
-                    options.RecordException = true;
-                });
+                // SqlClient instrumentation removed to reduce telemetry overhead
+                // EF Core instrumentation above already covers most database operations
                 tracing.AddOtlpExporter(opt =>
                 {
                     opt.Endpoint = new Uri($"{seqUrl}/ingest/otlp/v1/traces");
                     opt.Protocol = OtlpExportProtocol.HttpProtobuf;
                 });
+                // Only trace API-related activity sources, exclude background service sources
                 tracing.AddSource("junie-des-1942stats.*");
                 tracing.AddSource(ActivitySources.PlayerStats.Name);
                 tracing.AddSource(ActivitySources.Database.Name);
                 tracing.AddSource(ActivitySources.BfListApi.Name);
                 tracing.AddSource(ActivitySources.Cache.Name);
                 tracing.AddSource(ActivitySources.ClickHouse.Name);
-                tracing.AddSource(ActivitySources.StatsCollection.Name);
-                tracing.AddSource(ActivitySources.ClickHouseSync.Name);
-                tracing.AddSource(ActivitySources.Gamification.Name);
+                // Background service sources commented out to reduce telemetry overhead:
+                // tracing.AddSource(ActivitySources.StatsCollection.Name);
+                // tracing.AddSource(ActivitySources.ClickHouseSync.Name);
+                // tracing.AddSource(ActivitySources.Gamification.Name);
             }
         );
 

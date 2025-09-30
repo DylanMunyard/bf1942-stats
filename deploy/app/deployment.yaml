@@ -78,6 +78,8 @@ spec:
               value: "/mnt/data/playertracker.db"
             - name: ASPNETCORE_URLS
               value: "http://+:8080"
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Production"
             - name: SEQ_URL
               value: "http://seq-k3s:5341"
             - name: CLICKHOUSE_URL
