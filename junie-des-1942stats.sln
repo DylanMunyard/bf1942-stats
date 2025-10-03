@@ -16,7 +16,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "app", "app", "{E9373366-3A5
 		deploy\app\deployment.yaml = deploy\app\deployment.yaml
 		deploy\app\ingress.yaml = deploy\app\ingress.yaml
 		deploy\app\notifications-deployment.yaml = deploy\app\notifications-deployment.yaml
-		deploy\app\redis-ingress.yaml = deploy\app\redis-ingress.yaml
 		deploy\app\service-monitor.yaml = deploy\app\service-monitor.yaml
 	EndProjectSection
 EndProject
