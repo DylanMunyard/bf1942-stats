@@ -11,7 +11,7 @@ spec:
   externalName: bf42-service-aks
   ports:
     - name: metrics
-      port: 9091
+      port: 8080
       protocol: TCP
   type: ExternalName
 ---
@@ -28,8 +28,8 @@ spec:
     tailscale.com/parent-resource-ns: monitoring
   ports:
     - name: metrics
-      port: 9091
-      targetPort: 9091
+      port: 8080
+      targetPort: 8080
       protocol: TCP
   type: ClusterIP
 ---

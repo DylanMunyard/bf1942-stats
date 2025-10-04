@@ -84,7 +84,14 @@ try
             }))
         .WithMetrics(metrics =>
             {
+                // Add built-in ASP.NET Core meters
+                metrics.AddMeter("Microsoft.AspNetCore.Hosting");
+                metrics.AddMeter("Microsoft.AspNetCore.Server.Kestrel");
+                metrics.AddMeter("System.Net.Http");
+
+                // Add runtime instrumentation for GC, thread pool, etc.
                 metrics.AddRuntimeInstrumentation();
+
                 metrics.AddPrometheusExporter();
             })
         .WithTracing(tracing =>

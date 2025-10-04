@@ -167,9 +167,6 @@ spec:
     - port: 8080
       targetPort: 8080
       name: api
-    - port: 9091
-      targetPort: 9091
-      name: metrics
 
 ---
 apiVersion: apps/v1
