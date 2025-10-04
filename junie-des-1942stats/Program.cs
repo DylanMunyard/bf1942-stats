@@ -11,7 +11,6 @@ using junie_des_1942stats.ClickHouse.Interfaces;
 using junie_des_1942stats.ClickHouse.Base;
 using junie_des_1942stats.Caching;
 using junie_des_1942stats.Services;
-using Prometheus;
 using Serilog;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
@@ -24,6 +23,7 @@ using junie_des_1942stats.Services.Auth;
 using System.Diagnostics;
 using OpenTelemetry.Trace;
 using OpenTelemetry.Resources;
+using OpenTelemetry.Metrics;
 using junie_des_1942stats.Telemetry;
 using OpenTelemetry.Exporter;
 
@@ -82,7 +82,11 @@ try
                 ["deployment.environment"] = environment,
                 ["host.name"] = Environment.MachineName
             }))
-
+        .WithMetrics(metrics =>
+            {
+                metrics.AddRuntimeInstrumentation();
+                metrics.AddPrometheusExporter();
+            })
         .WithTracing(tracing =>
             {
                 tracing.AddAspNetCoreInstrumentation(options =>
@@ -352,12 +356,6 @@ try
     builder.Services.AddHostedService<StatsCollectionBackgroundService>();
     builder.Services.AddHostedService<ClickHouseSyncBackgroundService>();
     builder.Services.AddHostedService<RankingCalculationService>();
-
-    // Add HTTP server for Prometheus to scrape
-    builder.Services.AddMetricServer(options =>
-    {
-        options.Port = 9091;
-    });
 
 
     // Add ClickHouse HTTP clients with longer timeout for write operations
@@ -749,6 +747,7 @@ try
         return new Microsoft.IdentityModel.Tokens.RsaSecurityKey(rsa);
     }
     host.MapControllers();
+    host.MapPrometheusScrapingEndpoint();
 
     // Ensure databases are created and migrated
     using (var scope = host.Services.CreateScope())
