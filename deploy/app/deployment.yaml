@@ -156,6 +156,9 @@ metadata:
   namespace: bf42-stats
   labels:
     app: bf42-stats
+  annotations:
+    tailscale.com/expose: "true"
+    tailscale.com/hostname: bf42-stats-service
 spec:
   selector:
     app: bf42-stats
@@ -164,6 +167,9 @@ spec:
     - port: 8080
       targetPort: 8080
       name: api
+    - port: 9091
+      targetPort: 9091
+      name: metrics
 
 ---
 apiVersion: apps/v1

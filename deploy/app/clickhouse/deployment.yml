@@ -58,6 +58,13 @@ data:
         <level>information</level>
         <ttl><![CDATA[DELETE WHERE event_date < today() - INTERVAL 7 DAY]]></ttl>
       </text_log>
+      <prometheus>
+        <endpoint>/metrics</endpoint>
+        <port>9363</port>
+        <metrics>true</metrics>
+        <events>true</events>
+        <asynchronous_metrics>true</asynchronous_metrics>
+      </prometheus>
       <storage_configuration>
         <disks>
           <backups>
@@ -132,6 +139,8 @@ spec:
               name: http
             - containerPort: 9000
               name: native
+            - containerPort: 9363
+              name: metrics
           lifecycle:
             postStart:
               exec:
@@ -218,4 +227,8 @@ spec:
     - name: native
       port: 9000
       targetPort: 9000
+      protocol: TCP
+    - name: metrics
+      port: 9363
+      targetPort: 9363
       protocol: TCP

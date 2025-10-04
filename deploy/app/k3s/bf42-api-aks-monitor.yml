@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    tailscale.com/tailnet-ip: 100.81.158.13
+  name: bf42-service-aks-external
+  namespace: monitoring
+  labels:
+    app: bf42-stats
+spec:
+  externalName: bf42-service-aks
+  ports:
+    - name: metrics
+      port: 9091
+      protocol: TCP
+  type: ExternalName
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bf42-metrics
+  namespace: tailscale
+  labels:
+    app: bf42-stats-aks
+spec:
+  selector:
+    tailscale.com/parent-resource: bf42-service-aks-external
+    tailscale.com/parent-resource-ns: monitoring
+  ports:
+    - name: metrics
+      port: 9091
+      targetPort: 9091
+      protocol: TCP
+  type: ClusterIP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: bf42-stats-aks-external
+  namespace: tailscale
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: bf42-stats-aks
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
