@@ -12,7 +12,7 @@ public class PlayerMetricsMigrationController : ControllerBase
     private readonly ILogger<PlayerMetricsMigrationController> _logger;
 
     public PlayerMetricsMigrationController(
-        PlayerMetricsMigrationService migrationService, 
+        PlayerMetricsMigrationService migrationService,
         ILogger<PlayerMetricsMigrationController> logger)
     {
         _migrationService = migrationService;
@@ -51,18 +51,19 @@ public class PlayerMetricsMigrationController : ControllerBase
     /// </summary>
     [HttpPost("migrate")]
     public async Task<ActionResult<MigrationResponse>> MigrateToReplacingMergeTree(
-        [FromBody] MigrationRequest request, 
+        [FromBody] MigrationRequest request,
         CancellationToken cancellationToken)
     {
         _logger.LogWarning(
-            "PlayerMetricsMigrationController is disabled. Returning 401 Unauthorized. Request: batchSize={BatchSize} delayMs={DelayMs}", 
+            "PlayerMetricsMigrationController is disabled. Returning 401 Unauthorized. Request: batchSize={BatchSize} delayMs={DelayMs}",
             request.BatchSize, request.DelayMs);
 
-        return StatusCode(401, new { 
+        return StatusCode(401, new
+        {
             message = "PlayerMetricsMigrationController is disabled and no longer available. This endpoint has been disabled for security reasons.",
             timestamp = DateTime.UtcNow
         });
-        
+
         /*
         var started = DateTime.UtcNow;
         _logger.LogInformation(
@@ -112,11 +113,12 @@ public class PlayerMetricsMigrationController : ControllerBase
     {
         _logger.LogWarning("PlayerMetricsMigrationController is disabled. Returning 401 Unauthorized.");
 
-        return StatusCode(401, new { 
+        return StatusCode(401, new
+        {
             message = "PlayerMetricsMigrationController is disabled and no longer available. This endpoint has been disabled for security reasons.",
             timestamp = DateTime.UtcNow
         });
-        
+
         /*
         var started = DateTime.UtcNow;
         _logger.LogInformation("API table switch request started");
@@ -154,11 +156,12 @@ public class PlayerMetricsMigrationController : ControllerBase
     {
         _logger.LogWarning("PlayerMetricsMigrationController is disabled. Returning 401 Unauthorized.");
 
-        return StatusCode(401, new { 
+        return StatusCode(401, new
+        {
             message = "PlayerMetricsMigrationController is disabled and no longer available. This endpoint has been disabled for security reasons.",
             timestamp = DateTime.UtcNow
         });
-        
+
         /*
         var started = DateTime.UtcNow;
         _logger.LogInformation("API table rollback request started");
@@ -196,11 +199,12 @@ public class PlayerMetricsMigrationController : ControllerBase
     {
         _logger.LogWarning("PlayerMetricsMigrationController is disabled. Returning 401 Unauthorized.");
 
-        return StatusCode(401, new { 
+        return StatusCode(401, new
+        {
             message = "PlayerMetricsMigrationController is disabled and no longer available. This endpoint has been disabled for security reasons.",
             timestamp = DateTime.UtcNow
         });
-        
+
         /*
         var started = DateTime.UtcNow;
         _logger.LogInformation("API table cleanup request started");

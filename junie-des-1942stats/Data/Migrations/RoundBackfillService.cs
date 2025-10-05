@@ -24,23 +24,23 @@ public class RoundBackfillService
         bool markLatestPerServerActive = false,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("BackfillRoundsAsync started: startTimeUtc={StartTimeUtc}, endTimeUtc={EndTimeUtc}, serverGuid={ServerGuid}", 
+        _logger.LogInformation("BackfillRoundsAsync started: startTimeUtc={StartTimeUtc}, endTimeUtc={EndTimeUtc}, serverGuid={ServerGuid}",
             startTimeUtc, endTimeUtc, serverGuid ?? "ALL");
 
         var startTime = DateTime.UtcNow;
-        
+
         // Set a longer command timeout for bulk operations
         _dbContext.Database.SetCommandTimeout(300); // 5 minute timeout for bulk operations
         _logger.LogInformation("BackfillRoundsAsync: Set command timeout to 300 seconds for bulk operations");
-        
+
         // Apply a guard band of +/- 600 seconds (10 minutes) to avoid cutting rounds at boundaries
         var guardBand = TimeSpan.FromSeconds(600);
         var expandedFrom = startTimeUtc.HasValue ? startTimeUtc.Value - guardBand : (DateTime?)null;
         var expandedTo = endTimeUtc.HasValue ? endTimeUtc.Value + guardBand : (DateTime?)null;
-        
-        _logger.LogInformation("BackfillRoundsAsync: Applied guard band. expandedFrom={ExpandedFrom}, expandedTo={ExpandedTo}", 
+
+        _logger.LogInformation("BackfillRoundsAsync: Applied guard band. expandedFrom={ExpandedFrom}, expandedTo={ExpandedTo}",
             expandedFrom, expandedTo);
-        
+
         // Build base filter for pairs discovery
         // Use intersection semantics so sessions that overlap the window are included
         var baseQuery = _dbContext.PlayerSessions.AsNoTracking().AsQueryable();
@@ -90,10 +90,10 @@ public class RoundBackfillService
                 .OrderBy(s => s.StartTime)
                 .ToListAsync(cancellationToken);
 
-            _logger.LogInformation("Backfill: Loaded {SessionCount} sessions for server={ServerGuid} map={MapName}", 
+            _logger.LogInformation("Backfill: Loaded {SessionCount} sessions for server={ServerGuid} map={MapName}",
                 list.Count, serverGuidKey, mapNameKey);
 
-            if (list.Count == 0) 
+            if (list.Count == 0)
             {
                 _logger.LogInformation("Backfill: No sessions found for server={ServerGuid} map={MapName}, skipping", serverGuidKey, mapNameKey);
                 continue;
@@ -106,14 +106,14 @@ public class RoundBackfillService
 
             void CollectGroup()
             {
-                if (currentGroup.Count == 0) 
+                if (currentGroup.Count == 0)
                 {
                     _logger.LogDebug("CollectGroup: Empty group, skipping");
                     return;
                 }
 
                 var roundId = ComputeRoundId(serverGuidKey, mapNameKey, groupStart.ToUniversalTime());
-                _logger.LogInformation("CollectGroup: Collecting group with {SessionCount} sessions, roundId={RoundId}, groupStart={GroupStart}, groupEnd={GroupEnd}", 
+                _logger.LogInformation("CollectGroup: Collecting group with {SessionCount} sessions, roundId={RoundId}, groupStart={GroupStart}, groupEnd={GroupEnd}",
                     currentGroup.Count, roundId, groupStart, groupEnd);
 
                 // Skip groups that do not intersect the requested [startTimeUtc, endTimeUtc] window when a window is provided
@@ -123,7 +123,7 @@ public class RoundBackfillService
                                      && (!endTimeUtc.HasValue || groupStart <= endTimeUtc.Value);
                     if (!intersects)
                     {
-                        _logger.LogInformation("CollectGroup: Group does not intersect requested time window, skipping. groupStart={GroupStart}, groupEnd={GroupEnd}, startTimeUtc={StartTimeUtc}, endTimeUtc={EndTimeUtc}", 
+                        _logger.LogInformation("CollectGroup: Group does not intersect requested time window, skipping. groupStart={GroupStart}, groupEnd={GroupEnd}, startTimeUtc={StartTimeUtc}, endTimeUtc={EndTimeUtc}",
                             groupStart, groupEnd, startTimeUtc, endTimeUtc);
                         currentGroup.Clear();
                         return;
@@ -136,9 +136,9 @@ public class RoundBackfillService
             }
 
             currentGroup.Add(list[0].SessionId);
-            _logger.LogInformation("Backfill: Starting session grouping for server={ServerGuid} map={MapName}. First session: SessionId={FirstSessionId}, StartTime={FirstStartTime}", 
+            _logger.LogInformation("Backfill: Starting session grouping for server={ServerGuid} map={MapName}. First session: SessionId={FirstSessionId}, StartTime={FirstStartTime}",
                 serverGuidKey, mapNameKey, list[0].SessionId, list[0].StartTime);
-            
+
             for (int i = 1; i < list.Count; i++)
             {
                 var curr = list[i];
@@ -175,7 +175,7 @@ public class RoundBackfillService
                 }
             }
 
-            _logger.LogInformation("Backfill: Collecting final group with {GroupSize} sessions for server={ServerGuid} map={MapName}", 
+            _logger.LogInformation("Backfill: Collecting final group with {GroupSize} sessions for server={ServerGuid} map={MapName}",
                 currentGroup.Count, serverGuidKey, mapNameKey);
             CollectGroup();
         }
@@ -185,12 +185,12 @@ public class RoundBackfillService
         // Get server names for all unique servers
         var uniqueServerGuids = roundsToProcess.Select(r => r.ServerGuid).Distinct().ToList();
         _logger.LogInformation("Backfill: Loading server names for {ServerCount} unique servers", uniqueServerGuids.Count);
-        
+
         var serverNamesList = await _dbContext.Servers
             .Where(s => uniqueServerGuids.Contains(s.Guid))
             .Select(s => new { s.Guid, s.Name })
             .ToListAsync(cancellationToken);
-        
+
         foreach (var server in serverNamesList)
         {
             serverNames[server.Guid] = server.Name;
@@ -202,7 +202,7 @@ public class RoundBackfillService
         for (int batchIndex = 0; batchIndex < roundsToProcess.Count; batchIndex += roundBatchSize)
         {
             var roundBatch = roundsToProcess.Skip(batchIndex).Take(roundBatchSize).ToList();
-            _logger.LogInformation("Backfill: Processing round batch {BatchNumber}/{TotalBatches} with {RoundCount} rounds", 
+            _logger.LogInformation("Backfill: Processing round batch {BatchNumber}/{TotalBatches} with {RoundCount} rounds",
                 (batchIndex / roundBatchSize) + 1, (int)Math.Ceiling((double)roundsToProcess.Count / roundBatchSize), roundBatch.Count);
 
             await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -214,7 +214,7 @@ public class RoundBackfillService
                     .Where(r => roundIds.Contains(r.RoundId))
                     .ToDictionaryAsync(r => r.RoundId, cancellationToken);
 
-                _logger.LogInformation("Backfill: Found {ExistingCount} existing rounds out of {TotalCount} in batch", 
+                _logger.LogInformation("Backfill: Found {ExistingCount} existing rounds out of {TotalCount} in batch",
                     existingRounds.Count, roundBatch.Count);
 
                 // Create/update rounds
@@ -271,12 +271,12 @@ public class RoundBackfillService
 
                 // Save all round changes
                 await _dbContext.SaveChangesAsync(cancellationToken);
-                _logger.LogInformation("Backfill: Successfully saved {NewCount} new and {UpdateCount} updated rounds", 
+                _logger.LogInformation("Backfill: Successfully saved {NewCount} new and {UpdateCount} updated rounds",
                     roundsToAdd.Count, roundsToUpdate.Count);
 
                 // Bulk update PlayerSessions for all rounds in this batch
                 var allSessionIds = roundBatch.SelectMany(r => r.SessionIds).ToList();
-                _logger.LogInformation("Backfill: Updating {SessionCount} PlayerSessions for {RoundCount} rounds", 
+                _logger.LogInformation("Backfill: Updating {SessionCount} PlayerSessions for {RoundCount} rounds",
                     allSessionIds.Count, roundBatch.Count);
 
                 // Create a mapping of SessionId to RoundId
@@ -296,8 +296,8 @@ public class RoundBackfillService
                     var sessionBatch = allSessionIds.Skip(i).Take(sessionBatchSize).ToList();
                     var batchNumber = (i / sessionBatchSize) + 1;
                     var totalBatches = (int)Math.Ceiling((double)allSessionIds.Count / sessionBatchSize);
-                    
-                    _logger.LogInformation("Backfill: Updating session batch {BatchNumber}/{TotalBatches} with {SessionCount} sessions", 
+
+                    _logger.LogInformation("Backfill: Updating session batch {BatchNumber}/{TotalBatches} with {SessionCount} sessions",
                         batchNumber, totalBatches, sessionBatch.Count);
 
                     // Build a single SQL statement with CASE to update all sessions in the batch
@@ -328,24 +328,24 @@ public class RoundBackfillService
                             WHERE SessionId IN ({sessionIdList})";
 
                         await _dbContext.Database.ExecuteSqlRawAsync(updateSql, parameters.ToArray(), cancellationToken);
-                        
-                        _logger.LogInformation("Backfill: Successfully updated {UpdatedCount} sessions in batch {BatchNumber}/{TotalBatches} with single SQL statement", 
+
+                        _logger.LogInformation("Backfill: Successfully updated {UpdatedCount} sessions in batch {BatchNumber}/{TotalBatches} with single SQL statement",
                             caseStatements.Count, batchNumber, totalBatches);
                     }
                     else
                     {
-                        _logger.LogInformation("Backfill: No sessions to update in batch {BatchNumber}/{TotalBatches}", 
+                        _logger.LogInformation("Backfill: No sessions to update in batch {BatchNumber}/{TotalBatches}",
                             batchNumber, totalBatches);
                     }
                 }
 
                 await tx.CommitAsync(cancellationToken);
-                _logger.LogInformation("Backfill: Successfully committed round batch {BatchNumber}/{TotalBatches}", 
+                _logger.LogInformation("Backfill: Successfully committed round batch {BatchNumber}/{TotalBatches}",
                     (batchIndex / roundBatchSize) + 1, (int)Math.Ceiling((double)roundsToProcess.Count / roundBatchSize));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Backfill: Error processing round batch {BatchNumber}/{TotalBatches}. Rolling back transaction. Error: {ErrorMessage}", 
+                _logger.LogError(ex, "Backfill: Error processing round batch {BatchNumber}/{TotalBatches}. Rolling back transaction. Error: {ErrorMessage}",
                     (batchIndex / roundBatchSize) + 1, (int)Math.Ceiling((double)roundsToProcess.Count / roundBatchSize), ex.Message);
                 await tx.RollbackAsync(cancellationToken);
                 throw;
@@ -358,20 +358,20 @@ public class RoundBackfillService
             _logger.LogInformation("Backfill: Marking latest round per server as active across entire database");
             await MarkLatestRoundsPerServerActiveAsync(serverGuid, cancellationToken);
         }
-        
+
         // Calculate participant counts for all rounds in a single SQL query
         _logger.LogInformation("Backfill: Calculating participant counts for all {RoundCount} rounds", roundsToProcess.Count);
-        
+
         var roundIdsForParticipantCount = roundsToProcess.Select(r => r.RoundId).ToList();
         const int participantBatchSize = 100;
-        
+
         for (int i = 0; i < roundIdsForParticipantCount.Count; i += participantBatchSize)
         {
             var roundIdBatch = roundIdsForParticipantCount.Skip(i).Take(participantBatchSize).ToList();
             var batchNumber = (i / participantBatchSize) + 1;
             var totalBatches = (int)Math.Ceiling((double)roundIdsForParticipantCount.Count / participantBatchSize);
-            
-            _logger.LogInformation("Backfill: Calculating participant counts for batch {BatchNumber}/{TotalBatches} with {RoundCount} rounds", 
+
+            _logger.LogInformation("Backfill: Calculating participant counts for batch {BatchNumber}/{TotalBatches} with {RoundCount} rounds",
                 batchNumber, totalBatches, roundIdBatch.Count);
 
             // Use a single SQL query to update participant counts for multiple rounds
@@ -388,23 +388,23 @@ public class RoundBackfillService
                 WHERE RoundId IN ({roundIdList})";
 
             await _dbContext.Database.ExecuteSqlRawAsync(updateSql, cancellationToken: cancellationToken);
-            
-            _logger.LogInformation("Backfill: Successfully updated participant counts for batch {BatchNumber}/{TotalBatches}", 
+
+            _logger.LogInformation("Backfill: Successfully updated participant counts for batch {BatchNumber}/{TotalBatches}",
                 batchNumber, totalBatches);
         }
 
         var endTime = DateTime.UtcNow;
         var duration = endTime - startTime;
-        _logger.LogInformation("BackfillRoundsAsync completed: processed {TotalRounds} rounds in {Duration} ({DurationMs}ms). startTimeUtc={StartTimeUtc}, endTimeUtc={EndTimeUtc}, serverGuid={ServerGuid}", 
+        _logger.LogInformation("BackfillRoundsAsync completed: processed {TotalRounds} rounds in {Duration} ({DurationMs}ms). startTimeUtc={StartTimeUtc}, endTimeUtc={EndTimeUtc}, serverGuid={ServerGuid}",
             createdOrUpdatedRounds, duration, duration.TotalMilliseconds, startTimeUtc, endTimeUtc, serverGuid ?? "ALL");
-        
+
         // Note: To reduce SQL logging noise during bulk operations, consider configuring logging in appsettings.json:
         // "Logging": {
         //   "LogLevel": {
         //     "Microsoft.EntityFrameworkCore.Database.Command": "Warning"
         //   }
         // }
-        
+
         return createdOrUpdatedRounds;
     }
 

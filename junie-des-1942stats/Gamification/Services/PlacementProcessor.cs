@@ -86,7 +86,7 @@ public class PlacementProcessor
     {
         using var activity = ActivitySources.Gamification.StartActivity("PlacementProcessor.ProcessPlacementsSinceAsync");
         activity?.SetTag("since_utc", sinceUtc.ToString("O"));
-        
+
         var now = DateTime.UtcNow;
         var allAchievements = new List<Achievement>();
         const int batchSize = 2_000;
@@ -100,7 +100,7 @@ public class PlacementProcessor
                 using var batchActivity = ActivitySources.Gamification.StartActivity("PlacementProcessor.ProcessBatch");
                 batchActivity?.SetTag("batch_size", batchSize);
                 batchActivity?.SetTag("skip", skip);
-                
+
                 // First, get batch of rounds projected to RoundData
                 var rounds = await _dbContext.Rounds.AsNoTracking()
                     .Where(r => r.EndTime != null && r.EndTime >= sinceUtc)
@@ -122,7 +122,7 @@ public class PlacementProcessor
                     batchActivity?.SetTag("rounds_found", 0);
                     break; // No more rounds to process
                 }
-                
+
                 batchActivity?.SetTag("rounds_found", rounds.Count);
 
                 // Get all round IDs for this batch
@@ -179,16 +179,16 @@ public class PlacementProcessor
 
                 var roundIdParams = string.Join(",", roundIds.Select((_, i) => $"@p{i}"));
                 var fullSql = sql.Replace("{0}", roundIdParams);
-                
+
                 var parameters = roundIds.Select((id, i) => new Microsoft.Data.Sqlite.SqliteParameter($"@p{i}", id)).ToArray();
-                
+
                 using var sqlActivity = ActivitySources.Gamification.StartActivity("PlacementProcessor.GetTopSessions");
                 sqlActivity?.SetTag("round_count", rounds.Count);
-                
+
                 var topSessionsWithObservations = await _dbContext.Database
                     .SqlQueryRaw<TopSessionResult>(fullSql, parameters)
                     .ToListAsync(cancellationToken);
-                    
+
                 sqlActivity?.SetTag("top_sessions_found", topSessionsWithObservations.Count);
 
                 // Group results by round
@@ -225,9 +225,9 @@ public class PlacementProcessor
                 using var processingActivity = ActivitySources.Gamification.StartActivity("PlacementProcessor.ProcessRoundBatch");
                 processingActivity?.SetTag("rounds_to_process", rounds.Count);
                 processingActivity?.SetTag("total_top_sessions", topSessionsWithObservations.Count);
-                
+
                 var batchAchievements = ProcessRoundBatch(roundsWithTopPlayers, serverNamesByGuid, now);
-                
+
                 processingActivity?.SetTag("achievements_generated", batchAchievements.Count);
                 batchActivity?.SetTag("achievements_generated", batchAchievements.Count);
                 allAchievements.AddRange(batchAchievements);
@@ -235,7 +235,7 @@ public class PlacementProcessor
                 totalProcessed += rounds.Count;
                 skip += batchSize;
 
-                _logger.LogDebug("Processed batch of {BatchCount} rounds, total processed: {TotalProcessed}, achievements generated: {AchievementCount}", 
+                _logger.LogDebug("Processed batch of {BatchCount} rounds, total processed: {TotalProcessed}, achievements generated: {AchievementCount}",
                     rounds.Count, totalProcessed, batchAchievements.Count);
 
                 // If we got fewer rounds than batch size, we're done
@@ -247,8 +247,8 @@ public class PlacementProcessor
 
             activity?.SetTag("total_achievements_generated", allAchievements.Count);
             activity?.SetTag("total_rounds_processed", totalProcessed);
-            
-            _logger.LogInformation("Generated {Count} placement achievements from {TotalRounds} rounds since {Since}", 
+
+            _logger.LogInformation("Generated {Count} placement achievements from {TotalRounds} rounds since {Since}",
                 allAchievements.Count, totalProcessed, sinceUtc);
             return allAchievements;
         }
@@ -265,12 +265,12 @@ public class PlacementProcessor
     /// Process a batch of rounds with their top players into achievements
     /// </summary>
     private List<Achievement> ProcessRoundBatch(
-        IEnumerable<RoundWithTopPlayers> roundsWithTopPlayers, 
-        Dictionary<string, string> serverNamesByGuid, 
+        IEnumerable<RoundWithTopPlayers> roundsWithTopPlayers,
+        Dictionary<string, string> serverNamesByGuid,
         DateTime processedAt)
     {
         using var activity = ActivitySources.Gamification.StartActivity("PlacementProcessor.ProcessRoundBatch");
-        
+
         var achievements = new List<Achievement>();
         int roundsProcessed = 0;
         int roundsSkipped = 0;
@@ -280,7 +280,7 @@ public class PlacementProcessor
             using var roundActivity = ActivitySources.Gamification.StartActivity("PlacementProcessor.ProcessRound");
             var round = roundData.Round;
             var topPlayers = roundData.TopPlayers;
-            
+
             roundActivity?.SetTag("round_id", round.RoundId);
             roundActivity?.SetTag("map_name", round.MapName);
             roundActivity?.SetTag("top_players_count", topPlayers.Count);
@@ -299,7 +299,7 @@ public class PlacementProcessor
                 using var placementActivity = ActivitySources.Gamification.StartActivity("PlacementProcessor.CreatePlacementAchievement");
                 var placement = i + 1; // 1, 2, 3
                 var player = topPlayers[i];
-                
+
                 placementActivity?.SetTag("placement", placement);
                 placementActivity?.SetTag("player_name", player.PlayerName);
                 placementActivity?.SetTag("player_score", player.TotalScore);
@@ -351,16 +351,16 @@ public class PlacementProcessor
                     RoundId = round.RoundId,
                     Metadata = JsonSerializer.Serialize(metadata),
                     Game = round.Game ?? "unknown",
-                        Version = achievedAt  // Use achieved_at as deterministic version for idempotency
+                    Version = achievedAt  // Use achieved_at as deterministic version for idempotency
                 };
-                
+
                 achievements.Add(achievement);
                 roundAchievements++;
-                
+
                 placementActivity?.SetTag("achievement_tier", tier.ToString());
                 placementActivity?.SetTag("achievement_name", achievementName);
             }
-            
+
             roundsProcessed++;
             roundActivity?.SetTag("achievements_created", roundAchievements);
         }
@@ -371,7 +371,7 @@ public class PlacementProcessor
         activity?.SetTag("placement_1st", achievements.Count(a => a.AchievementId == "round_placement_1"));
         activity?.SetTag("placement_2nd", achievements.Count(a => a.AchievementId == "round_placement_2"));
         activity?.SetTag("placement_3rd", achievements.Count(a => a.AchievementId == "round_placement_3"));
-        
+
         return achievements;
     }
 }

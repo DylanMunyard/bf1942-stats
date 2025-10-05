@@ -22,8 +22,7 @@ public class ServersController : ControllerBase
     [HttpGet("{serverName}")]
     public async Task<ActionResult<ServerStatistics>> GetServerStats(
         string serverName,
-        [FromQuery] int? days,
-        [FromQuery] int? minPlayersForWeighting)
+        [FromQuery] int? days)
     {
         if (string.IsNullOrWhiteSpace(serverName))
             return BadRequest("Server name cannot be empty");
@@ -35,8 +34,7 @@ public class ServersController : ControllerBase
 
         var stats = await _serverStatsService.GetServerStatistics(
             serverName,
-            days ?? 7, // Default to 7 days if not specified
-            minPlayersForWeighting); // Pass through the weighting parameter
+            days ?? 7); // Default to 7 days if not specified
 
         if (string.IsNullOrEmpty(stats.ServerGuid))
         {
@@ -45,6 +43,42 @@ public class ServersController : ControllerBase
         }
 
         return Ok(stats);
+    }
+
+    // Get server leaderboards for a specific time period
+    [HttpGet("{serverName}/leaderboards")]
+    public async Task<ActionResult<ServerLeaderboards>> GetServerLeaderboards(
+        string serverName,
+        [FromQuery] int days = 7,
+        [FromQuery] int? minPlayersForWeighting = null)
+    {
+        if (string.IsNullOrWhiteSpace(serverName))
+            return BadRequest("Server name cannot be empty");
+
+        // Use modern URL decoding that preserves + signs
+        serverName = Uri.UnescapeDataString(serverName);
+
+        _logger.LogInformation("Getting server leaderboards for '{ServerName}' with {Days} days", serverName, days);
+
+        try
+        {
+            var leaderboards = await _serverStatsService.GetServerLeaderboards(
+                serverName,
+                days,
+                minPlayersForWeighting);
+
+            if (string.IsNullOrEmpty(leaderboards.ServerGuid))
+            {
+                _logger.LogWarning("Server not found in database: '{ServerName}'", serverName);
+                return NotFound($"Server '{serverName}' not found");
+            }
+
+            return Ok(leaderboards);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     // Get server rankings with pagination

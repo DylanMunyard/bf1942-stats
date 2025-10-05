@@ -23,7 +23,7 @@ public class GameTrendsController : ControllerBase
         _cacheService = cacheService;
         _logger = logger;
     }
-    
+
     /// <summary>
     /// Gets current activity status across all games and servers.
     /// Shows real-time activity to answer "is it busy right now?"
@@ -37,7 +37,7 @@ public class GameTrendsController : ControllerBase
         {
             var cacheKey = $"trends:current:activity:{game ?? "all"}";
             var cachedData = await _cacheService.GetAsync<List<CurrentActivityStatus>>(cacheKey);
-            
+
             if (cachedData != null)
             {
                 _logger.LogDebug("Returning cached current activity status for game {Game}", game ?? "all");
@@ -45,11 +45,11 @@ public class GameTrendsController : ControllerBase
             }
 
             var currentActivity = await _gameTrendsService.GetCurrentActivityStatusAsync(game);
-            
+
             // Cache for 5 minutes - current activity needs to be relatively fresh
             await _cacheService.SetAsync(cacheKey, currentActivity, TimeSpan.FromMinutes(1));
-            
-            _logger.LogInformation("Retrieved current activity status for {ServerCount} servers, game {Game}", 
+
+            _logger.LogInformation("Retrieved current activity status for {ServerCount} servers, game {Game}",
                 currentActivity.Count, game ?? "all");
 
             return Ok(currentActivity);
@@ -70,14 +70,14 @@ public class GameTrendsController : ControllerBase
     [HttpGet("weekly-patterns")]
     [ResponseCache(Duration = 3600, Location = ResponseCacheLocation.Any)] // 1 hour cache
     public async Task<ActionResult<List<WeeklyActivityPattern>>> GetWeeklyActivityPatterns(
-        [FromQuery] string? game = null, 
+        [FromQuery] string? game = null,
         [FromQuery] int daysPeriod = 30)
     {
         try
         {
             var cacheKey = $"trends:weekly:{game ?? "all"}:{daysPeriod}";
             var cachedData = await _cacheService.GetAsync<List<WeeklyActivityPattern>>(cacheKey);
-            
+
             if (cachedData != null)
             {
                 _logger.LogDebug("Returning cached weekly activity patterns for game {GameId}", game ?? "all");
@@ -85,11 +85,11 @@ public class GameTrendsController : ControllerBase
             }
 
             var patterns = await _gameTrendsService.GetWeeklyActivityPatternsAsync(game, daysPeriod);
-            
+
             // Cache for 1 hour - weekly patterns are stable
             await _cacheService.SetAsync(cacheKey, patterns, TimeSpan.FromHours(1));
-            
-            _logger.LogInformation("Retrieved {PatternCount} weekly activity patterns for game {GameId}", 
+
+            _logger.LogInformation("Retrieved {PatternCount} weekly activity patterns for game {GameId}",
                 patterns.Count, game ?? "all");
 
             return Ok(patterns);
@@ -110,42 +110,42 @@ public class GameTrendsController : ControllerBase
     [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Any)] // 5 minutes cache
     public async Task<ActionResult<GroupedServerBusyIndicatorResult>> GetBusyIndicator(
     [FromQuery] string[] serverGuids)
-{
-    if (serverGuids == null || serverGuids.Length == 0)
     {
-        return BadRequest("Server GUIDs are required");
-    }
-
-    try
-    {
-        var serverGuidsKey = string.Join(",", serverGuids.OrderBy(x => x));
-        var cacheKey = $"trends:busy:servers:{serverGuidsKey}";
-        var cachedData = await _cacheService.GetAsync<GroupedServerBusyIndicatorResult>(cacheKey);
-        
-        if (cachedData != null)
+        if (serverGuids == null || serverGuids.Length == 0)
         {
-            _logger.LogDebug("Returning cached server busy indicator for {ServerCount} servers", 
-                serverGuids.Length);
-            return Ok(cachedData);
+            return BadRequest("Server GUIDs are required");
         }
 
-        var busyIndicator = await _gameTrendsService.GetServerBusyIndicatorAsync(serverGuids);
-        
-        // Cache for 5 minutes - busy indicator should be current
-        await _cacheService.SetAsync(cacheKey, busyIndicator, TimeSpan.FromMinutes(5));
-        
-        _logger.LogInformation("Generated server busy indicator for {ServerCount} servers", 
-            serverGuids.Length);
+        try
+        {
+            var serverGuidsKey = string.Join(",", serverGuids.OrderBy(x => x));
+            var cacheKey = $"trends:busy:servers:{serverGuidsKey}";
+            var cachedData = await _cacheService.GetAsync<GroupedServerBusyIndicatorResult>(cacheKey);
 
-        return Ok(busyIndicator);
+            if (cachedData != null)
+            {
+                _logger.LogDebug("Returning cached server busy indicator for {ServerCount} servers",
+                    serverGuids.Length);
+                return Ok(cachedData);
+            }
+
+            var busyIndicator = await _gameTrendsService.GetServerBusyIndicatorAsync(serverGuids);
+
+            // Cache for 5 minutes - busy indicator should be current
+            await _cacheService.SetAsync(cacheKey, busyIndicator, TimeSpan.FromMinutes(5));
+
+            _logger.LogInformation("Generated server busy indicator for {ServerCount} servers",
+                serverGuids.Length);
+
+            return Ok(busyIndicator);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating server busy indicator for {ServerCount} servers",
+                serverGuids?.Length ?? 0);
+            return StatusCode(500, "Failed to generate server busy indicator");
+        }
     }
-    catch (Exception ex)
-    {
-        _logger.LogError(ex, "Error generating server busy indicator for {ServerCount} servers", 
-            serverGuids?.Length ?? 0);
-        return StatusCode(500, "Failed to generate server busy indicator");
-    }
-}
 
     /// <summary>
     /// Gets comprehensive trend summary optimized for landing page display.
@@ -156,40 +156,40 @@ public class GameTrendsController : ControllerBase
     [ResponseCache(Duration = 600, Location = ResponseCacheLocation.Any)] // 10 minutes cache
     public async Task<ActionResult<LandingPageTrendSummary>> GetLandingPageTrendSummary(
     [FromQuery] string? game = null)
-{
-    try
     {
-        var cacheKey = $"trends:landing:{game ?? "all"}";
-        var cachedData = await _cacheService.GetAsync<LandingPageTrendSummary>(cacheKey);
-        
-        if (cachedData != null)
+        try
         {
-            _logger.LogDebug("Returning cached landing page trend summary for game {GameId}", game ?? "all");
-            return Ok(cachedData);
+            var cacheKey = $"trends:landing:{game ?? "all"}";
+            var cachedData = await _cacheService.GetAsync<LandingPageTrendSummary>(cacheKey);
+
+            if (cachedData != null)
+            {
+                _logger.LogDebug("Returning cached landing page trend summary for game {GameId}", game ?? "all");
+                return Ok(cachedData);
+            }
+
+            // Get insights which now includes current player count and comparison
+            var insights = await _gameTrendsService.GetSmartPredictionInsightsAsync(game);
+
+            var summary = new LandingPageTrendSummary
+            {
+                Insights = insights,
+                GeneratedAt = DateTime.UtcNow
+            };
+
+            // Cache for 10 minutes - landing page data should be fresh but not too frequent
+            await _cacheService.SetAsync(cacheKey, summary, TimeSpan.FromMinutes(10));
+
+            _logger.LogInformation("Generated landing page trend summary for game {GameId}", game ?? "all");
+
+            return Ok(summary);
         }
-
-        // Get insights which now includes current player count and comparison
-        var insights = await _gameTrendsService.GetSmartPredictionInsightsAsync(game);
-
-        var summary = new LandingPageTrendSummary
+        catch (Exception ex)
         {
-            Insights = insights,
-            GeneratedAt = DateTime.UtcNow
-        };
-        
-        // Cache for 10 minutes - landing page data should be fresh but not too frequent
-        await _cacheService.SetAsync(cacheKey, summary, TimeSpan.FromMinutes(10));
-        
-        _logger.LogInformation("Generated landing page trend summary for game {GameId}", game ?? "all");
-
-        return Ok(summary);
+            _logger.LogError(ex, "Error generating landing page trend summary for game {GameId}", game);
+            return StatusCode(500, "Failed to generate landing page trend summary");
+        }
     }
-    catch (Exception ex)
-    {
-        _logger.LogError(ex, "Error generating landing page trend summary for game {GameId}", game);
-        return StatusCode(500, "Failed to generate landing page trend summary");
-    }
-}
 }
 
 /// <summary>

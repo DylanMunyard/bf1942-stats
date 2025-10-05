@@ -12,7 +12,7 @@ public class PlayerAchievementsMigrationController : ControllerBase
     private readonly ILogger<PlayerAchievementsMigrationController> _logger;
 
     public PlayerAchievementsMigrationController(
-        PlayerAchievementsMigrationService migrationService, 
+        PlayerAchievementsMigrationService migrationService,
         ILogger<PlayerAchievementsMigrationController> logger)
     {
         _migrationService = migrationService;

@@ -46,7 +46,7 @@ public class GameTrendsService : BaseClickHouseService
         {
             var paramValue = parameters[i];
             string substitution;
-            
+
             if (paramValue == null)
             {
                 substitution = "NULL";
@@ -69,7 +69,7 @@ public class GameTrendsService : BaseClickHouseService
                 // For other types, convert to string and treat as string
                 substitution = $"'{paramValue.ToString()?.Replace("'", "''")}'";
             }
-            
+
             // Replace the first occurrence of ? with the parameter value
             var questionIndex = result.IndexOf('?');
             if (questionIndex >= 0)
@@ -77,7 +77,7 @@ public class GameTrendsService : BaseClickHouseService
                 result = result.Substring(0, questionIndex) + substitution + result.Substring(questionIndex + 1);
             }
         }
-        
+
         return result;
     }
 
@@ -125,7 +125,7 @@ public class GameTrendsService : BaseClickHouseService
                         {
                             var elements = arrayContent.Split(',');
                             var doubleArray = new List<double>();
-                            
+
                             foreach (var element in elements)
                             {
                                 var trimmedElement = element.Trim();
@@ -134,7 +134,7 @@ public class GameTrendsService : BaseClickHouseService
                                     doubleArray.Add(doubleElement);
                                 }
                             }
-                            
+
                             property.SetValue(item, doubleArray.ToArray());
                         }
                         else
@@ -157,46 +157,46 @@ public class GameTrendsService : BaseClickHouseService
     /// Gets current activity status across games and servers using live SQLite sessions
     /// </summary>
     public async Task<List<CurrentActivityStatus>> GetCurrentActivityStatusAsync(string? game = null, string[]? serverGuids = null)
-{
-    // Use SQLite PlayerSessions for real-time data (sessions within last minute)
-    var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
-    
-    var query = _dbContext.PlayerSessions
-        .Include(ps => ps.Server)
-        .Include(ps => ps.Player)
-        .Where(ps => ps.IsActive && 
-                    ps.LastSeenTime >= oneMinuteAgo &&
-                    !ps.Player.AiBot); // Exclude bots from current activity
-    
-    // Add game filter if specified
-    if (!string.IsNullOrEmpty(game))
     {
-        query = query.Where(ps => ps.Server.Game == game);
-    }
-    
-    // Add server GUIDs filter if specified
-    if (serverGuids != null && serverGuids.Length > 0)
-    {
-        query = query.Where(ps => serverGuids.Contains(ps.ServerGuid));
-    }
-    
-    var currentActivity = await query
-        .GroupBy(ps => new { ps.Server.Game, ps.ServerGuid })
-        .Where(g => g.Count() >= 2) // Only show servers with actual activity
-        .Select(g => new CurrentActivityStatus
-        {
-            Game = g.Key.Game ?? "",
-            ServerGuid = g.Key.ServerGuid,
-            CurrentPlayers = g.Count(),
-            LatestActivity = g.Max(ps => ps.LastSeenTime),
-            CurrentMapName = g.OrderByDescending(ps => ps.LastSeenTime).First().MapName
-        })
-        .OrderByDescending(ca => ca.CurrentPlayers)
-        .ThenByDescending(ca => ca.LatestActivity)
-        .ToListAsync();
+        // Use SQLite PlayerSessions for real-time data (sessions within last minute)
+        var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
 
-    return currentActivity;
-}
+        var query = _dbContext.PlayerSessions
+            .Include(ps => ps.Server)
+            .Include(ps => ps.Player)
+            .Where(ps => ps.IsActive &&
+                        ps.LastSeenTime >= oneMinuteAgo &&
+                        !ps.Player.AiBot); // Exclude bots from current activity
+
+        // Add game filter if specified
+        if (!string.IsNullOrEmpty(game))
+        {
+            query = query.Where(ps => ps.Server.Game == game);
+        }
+
+        // Add server GUIDs filter if specified
+        if (serverGuids != null && serverGuids.Length > 0)
+        {
+            query = query.Where(ps => serverGuids.Contains(ps.ServerGuid));
+        }
+
+        var currentActivity = await query
+            .GroupBy(ps => new { ps.Server.Game, ps.ServerGuid })
+            .Where(g => g.Count() >= 2) // Only show servers with actual activity
+            .Select(g => new CurrentActivityStatus
+            {
+                Game = g.Key.Game ?? "",
+                ServerGuid = g.Key.ServerGuid,
+                CurrentPlayers = g.Count(),
+                LatestActivity = g.Max(ps => ps.LastSeenTime),
+                CurrentMapName = g.OrderByDescending(ps => ps.LastSeenTime).First().MapName
+            })
+            .OrderByDescending(ca => ca.CurrentPlayers)
+            .ThenByDescending(ca => ca.LatestActivity)
+            .ToListAsync();
+
+        return currentActivity;
+    }
 
     /// <summary>
     /// Gets weekly activity patterns to identify weekend vs weekday differences
@@ -237,52 +237,52 @@ public class GameTrendsService : BaseClickHouseService
     /// Provides "is it busy now?" and "will it get busier?" insights
     /// </summary>
     public async Task<SmartPredictionInsights> GetSmartPredictionInsightsAsync(string? game = null)
-{
-    var currentTime = DateTime.UtcNow;
-    var currentHour = currentTime.Hour;
-    var currentDayOfWeek = (int)currentTime.DayOfWeek;
-    // Convert to ClickHouse day format (Monday = 1, Sunday = 7)
-    var clickHouseDayOfWeek = currentDayOfWeek == 0 ? 7 : currentDayOfWeek;
-
-    // Get current player count from SQLite using the same logic as GetCurrentActivityStatusAsync
-    var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
-    var currentPlayerQuery = _dbContext.PlayerSessions
-        .Include(ps => ps.Server)
-        .Include(ps => ps.Player)
-        .Where(ps => ps.IsActive && 
-                    ps.LastSeenTime >= oneMinuteAgo &&
-                    !ps.Player.AiBot); // Exclude bots from current activity
-    
-    // Add game filter if specified
-    if (!string.IsNullOrEmpty(game))
     {
-        currentPlayerQuery = currentPlayerQuery.Where(ps => ps.Server.Game == game);
-    }
+        var currentTime = DateTime.UtcNow;
+        var currentHour = currentTime.Hour;
+        var currentDayOfWeek = (int)currentTime.DayOfWeek;
+        // Convert to ClickHouse day format (Monday = 1, Sunday = 7)
+        var clickHouseDayOfWeek = currentDayOfWeek == 0 ? 7 : currentDayOfWeek;
 
-    var currentActualPlayers = await currentPlayerQuery.CountAsync();
+        // Get current player count from SQLite using the same logic as GetCurrentActivityStatusAsync
+        var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
+        var currentPlayerQuery = _dbContext.PlayerSessions
+            .Include(ps => ps.Server)
+            .Include(ps => ps.Player)
+            .Where(ps => ps.IsActive &&
+                        ps.LastSeenTime >= oneMinuteAgo &&
+                        !ps.Player.AiBot); // Exclude bots from current activity
 
-    var whereClause = new StringBuilder();
-    whereClause.Append("WHERE timestamp >= now() - INTERVAL 60 DAY");
-    var parameters = new List<object>();
+        // Add game filter if specified
+        if (!string.IsNullOrEmpty(game))
+        {
+            currentPlayerQuery = currentPlayerQuery.Where(ps => ps.Server.Game == game);
+        }
 
-    if (!string.IsNullOrEmpty(game))
-    {
-        whereClause.Append(" AND game = ?");
-        parameters.Add(game);
-    }
+        var currentActualPlayers = await currentPlayerQuery.CountAsync();
 
-    // Get 8-hour forecast: current hour + next 8 hours with correct day-of-week
-    var forecastEntries = new List<(int hour, int dayOfWeek)>();
-    for (int i = 0; i < 9; i++)
-    {
-        var futureTime = currentTime.AddHours(i);
-        var futureHour = futureTime.Hour;
-        var futureDayOfWeek = (int)futureTime.DayOfWeek;
-        var futureClickHouseDayOfWeek = futureDayOfWeek == 0 ? 7 : futureDayOfWeek;
-        forecastEntries.Add((futureHour, futureClickHouseDayOfWeek));
-    }
+        var whereClause = new StringBuilder();
+        whereClause.Append("WHERE timestamp >= now() - INTERVAL 60 DAY");
+        var parameters = new List<object>();
 
-    var forecastQuery = $@"
+        if (!string.IsNullOrEmpty(game))
+        {
+            whereClause.Append(" AND game = ?");
+            parameters.Add(game);
+        }
+
+        // Get 8-hour forecast: current hour + next 8 hours with correct day-of-week
+        var forecastEntries = new List<(int hour, int dayOfWeek)>();
+        for (int i = 0; i < 9; i++)
+        {
+            var futureTime = currentTime.AddHours(i);
+            var futureHour = futureTime.Hour;
+            var futureDayOfWeek = (int)futureTime.DayOfWeek;
+            var futureClickHouseDayOfWeek = futureDayOfWeek == 0 ? 7 : futureDayOfWeek;
+            forecastEntries.Add((futureHour, futureClickHouseDayOfWeek));
+        }
+
+        var forecastQuery = $@"
         SELECT 
             hour_of_day,
             day_of_week,
@@ -311,113 +311,113 @@ public class GameTrendsService : BaseClickHouseService
         GROUP BY hour_of_day, day_of_week
         ORDER BY hour_of_day, day_of_week";
 
-    var forecast = await ReadAllAsync<HourlyPrediction>(forecastQuery, parameters.ToArray());
+        var forecast = await ReadAllAsync<HourlyPrediction>(forecastQuery, parameters.ToArray());
 
-    // Populate current hour data and delta for "Now" bucket
-    foreach (var forecastEntry in forecast)
-    {
-        if (forecastEntry.HourOfDay == currentHour && forecastEntry.DayOfWeek == clickHouseDayOfWeek)
+        // Populate current hour data and delta for "Now" bucket
+        foreach (var forecastEntry in forecast)
         {
-            forecastEntry.IsCurrentHour = true;
-            forecastEntry.ActualPlayers = currentActualPlayers;
-            forecastEntry.Delta = currentActualPlayers - forecastEntry.PredictedPlayers;
+            if (forecastEntry.HourOfDay == currentHour && forecastEntry.DayOfWeek == clickHouseDayOfWeek)
+            {
+                forecastEntry.IsCurrentHour = true;
+                forecastEntry.ActualPlayers = currentActualPlayers;
+                forecastEntry.Delta = currentActualPlayers - forecastEntry.PredictedPlayers;
+            }
+            else
+            {
+                forecastEntry.IsCurrentHour = false;
+            }
+        }
+
+
+        // Calculate insights - use current hour prediction from forecast instead of real-time data
+        var currentHourPredicted = forecast.FirstOrDefault(f => f.HourOfDay == currentHour && f.DayOfWeek == clickHouseDayOfWeek)?.PredictedPlayers ?? 0;
+
+        // Get next hour prediction - look for the next hour in the forecast
+        var nextHourTime = currentTime.AddHours(1);
+        var nextHourClickHouseDayOfWeek = (int)nextHourTime.DayOfWeek == 0 ? 7 : (int)nextHourTime.DayOfWeek;
+        var nextHourPredicted = forecast.FirstOrDefault(f => f.HourOfDay == nextHourTime.Hour && f.DayOfWeek == nextHourClickHouseDayOfWeek)?.PredictedPlayers ?? 0;
+
+        // Get max prediction from the forecast (skip current hour)
+        var maxPredictedPlayers = forecast.Skip(1).Any() ? forecast.Skip(1).Max(f => f?.PredictedPlayers ?? 0) : 0;
+
+        // Compare actual vs predicted to determine activity status
+        string activityComparison;
+        if (currentHourPredicted > 0)
+        {
+            var ratio = (double)currentActualPlayers / currentHourPredicted;
+            if (ratio > 1.3) activityComparison = "busier_than_usual";
+            else if (ratio < 0.7) activityComparison = "quieter_than_usual";
+            else activityComparison = "as_usual";
         }
         else
         {
-            forecastEntry.IsCurrentHour = false;
+            activityComparison = currentActualPlayers > 5 ? "busier_than_usual" : "as_usual";
         }
-    }
 
+        string currentStatus;
+        if (currentActualPlayers < 5) currentStatus = "very_quiet";
+        else if (currentActualPlayers < 15) currentStatus = "quiet";
+        else if (currentActualPlayers < 30) currentStatus = "moderate";
+        else if (currentActualPlayers < 50) currentStatus = "busy";
+        else currentStatus = "very_busy";
 
-    // Calculate insights - use current hour prediction from forecast instead of real-time data
-    var currentHourPredicted = forecast.FirstOrDefault(f => f.HourOfDay == currentHour && f.DayOfWeek == clickHouseDayOfWeek)?.PredictedPlayers ?? 0;
-    
-    // Get next hour prediction - look for the next hour in the forecast
-    var nextHourTime = currentTime.AddHours(1);
-    var nextHourClickHouseDayOfWeek = (int)nextHourTime.DayOfWeek == 0 ? 7 : (int)nextHourTime.DayOfWeek;
-    var nextHourPredicted = forecast.FirstOrDefault(f => f.HourOfDay == nextHourTime.Hour && f.DayOfWeek == nextHourClickHouseDayOfWeek)?.PredictedPlayers ?? 0;
-    
-    // Get max prediction from the forecast (skip current hour)
-    var maxPredictedPlayers = forecast.Skip(1).Any() ? forecast.Skip(1).Max(f => f?.PredictedPlayers ?? 0) : 0;
+        string trendDirection;
+        if (nextHourPredicted > currentHourPredicted * 1.2) trendDirection = "increasing_significantly";
+        else if (nextHourPredicted > currentHourPredicted * 1.05) trendDirection = "increasing";
+        else if (nextHourPredicted < currentHourPredicted * 0.8) trendDirection = "decreasing_significantly";
+        else if (nextHourPredicted < currentHourPredicted * 0.95) trendDirection = "decreasing";
+        else trendDirection = "stable";
 
-    // Compare actual vs predicted to determine activity status
-    string activityComparison;
-    if (currentHourPredicted > 0)
-    {
-        var ratio = (double)currentActualPlayers / currentHourPredicted;
-        if (ratio > 1.3) activityComparison = "busier_than_usual";
-        else if (ratio < 0.7) activityComparison = "quieter_than_usual";
-        else activityComparison = "as_usual";
-    }
-    else
-    {
-        activityComparison = currentActualPlayers > 5 ? "busier_than_usual" : "as_usual";
-    }
-
-    string currentStatus;
-    if (currentActualPlayers < 5) currentStatus = "very_quiet";
-    else if (currentActualPlayers < 15) currentStatus = "quiet";
-    else if (currentActualPlayers < 30) currentStatus = "moderate";
-    else if (currentActualPlayers < 50) currentStatus = "busy";
-    else currentStatus = "very_busy";
-
-    string trendDirection;
-    if (nextHourPredicted > currentHourPredicted * 1.2) trendDirection = "increasing_significantly";
-    else if (nextHourPredicted > currentHourPredicted * 1.05) trendDirection = "increasing";
-    else if (nextHourPredicted < currentHourPredicted * 0.8) trendDirection = "decreasing_significantly";
-    else if (nextHourPredicted < currentHourPredicted * 0.95) trendDirection = "decreasing";
-    else trendDirection = "stable";
-
-    return new SmartPredictionInsights
-    {
-        CurrentHourPredictedPlayers = currentHourPredicted,
-        CurrentActualPlayers = currentActualPlayers,
-        ActivityComparisonStatus = activityComparison,
-        CurrentStatus = currentStatus,
-        TrendDirection = trendDirection,
-        NextHourPredictedPlayers = nextHourPredicted,
-        MaxPredictedPlayers = maxPredictedPlayers,
-        Forecast = forecast.ToList(),
-        GeneratedAt = DateTime.UtcNow
-    };
-}
-
-
-public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(string[] serverGuids, int timelineHourRange = 4)
-{
-    var currentTime = DateTime.UtcNow;
-    var currentHour = currentTime.Hour;
-    var currentDayOfWeek = (int)currentTime.DayOfWeek;
-    var clickHouseDayOfWeek = currentDayOfWeek == 0 ? 7 : currentDayOfWeek;
-
-    // Get current activity using the GetCurrentActivityStatusAsync method
-    var currentActivityStatuses = await GetCurrentActivityStatusAsync(serverGuids: serverGuids);
-    
-    // Convert to the format expected by the rest of the method
-    var currentActivities = currentActivityStatuses.Select(cas => new ServerCurrentActivity
-    {
-        ServerGuid = cas.ServerGuid,
-        CurrentPlayers = cas.CurrentPlayers
-    }).ToList();
-
-    // Create server GUID list for IN clause
-    var serverGuidList = string.Join(",", serverGuids.Select(sg => $"'{sg}'"));
-
-    // Get server info from SQLite instead of expensive ClickHouse query
-    // This replaces a potentially expensive scan of player_metrics table
-    var serverInfos = await _dbContext.Servers
-        .Where(s => serverGuids.Contains(s.Guid))
-        .Select(s => new GameTrendsServerInfo
+        return new SmartPredictionInsights
         {
-            ServerGuid = s.Guid,
-            ServerName = s.Name,
-            Game = s.GameId
-        })
-        .ToListAsync();
+            CurrentHourPredictedPlayers = currentHourPredicted,
+            CurrentActualPlayers = currentActualPlayers,
+            ActivityComparisonStatus = activityComparison,
+            CurrentStatus = currentStatus,
+            TrendDirection = trendDirection,
+            NextHourPredictedPlayers = nextHourPredicted,
+            MaxPredictedPlayers = maxPredictedPlayers,
+            Forecast = forecast.ToList(),
+            GeneratedAt = DateTime.UtcNow
+        };
+    }
 
-    // Single query to get historical data for all servers for current hour
-    // Directly average players_online by hour - much simpler and more efficient
-    var historicalQuery = $@"
+
+    public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(string[] serverGuids, int timelineHourRange = 4)
+    {
+        var currentTime = DateTime.UtcNow;
+        var currentHour = currentTime.Hour;
+        var currentDayOfWeek = (int)currentTime.DayOfWeek;
+        var clickHouseDayOfWeek = currentDayOfWeek == 0 ? 7 : currentDayOfWeek;
+
+        // Get current activity using the GetCurrentActivityStatusAsync method
+        var currentActivityStatuses = await GetCurrentActivityStatusAsync(serverGuids: serverGuids);
+
+        // Convert to the format expected by the rest of the method
+        var currentActivities = currentActivityStatuses.Select(cas => new ServerCurrentActivity
+        {
+            ServerGuid = cas.ServerGuid,
+            CurrentPlayers = cas.CurrentPlayers
+        }).ToList();
+
+        // Create server GUID list for IN clause
+        var serverGuidList = string.Join(",", serverGuids.Select(sg => $"'{sg}'"));
+
+        // Get server info from SQLite instead of expensive ClickHouse query
+        // This replaces a potentially expensive scan of player_metrics table
+        var serverInfos = await _dbContext.Servers
+            .Where(s => serverGuids.Contains(s.Guid))
+            .Select(s => new GameTrendsServerInfo
+            {
+                ServerGuid = s.Guid,
+                ServerName = s.Name,
+                Game = s.GameId
+            })
+            .ToListAsync();
+
+        // Single query to get historical data for all servers for current hour
+        // Directly average players_online by hour - much simpler and more efficient
+        var historicalQuery = $@"
         SELECT 
             server_guid,
             groupArray(hourly_avg) as daily_averages
@@ -436,17 +436,17 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
         )
         GROUP BY server_guid";
 
-    var historicalData = await ReadAllAsync<ServerHistoricalData>(historicalQuery, new object[] { currentHour, clickHouseDayOfWeek });
+        var historicalData = await ReadAllAsync<ServerHistoricalData>(historicalQuery, new object[] { currentHour, clickHouseDayOfWeek });
 
-    // Query to get hourly timeline data per server (configurable hours before and after current hour)
-    var timelineHours = new List<int>();
-    for (int i = -timelineHourRange; i <= timelineHourRange; i++)
-    {
-        var hour = (currentHour + i + 24) % 24;
-        timelineHours.Add(hour);
-    }
+        // Query to get hourly timeline data per server (configurable hours before and after current hour)
+        var timelineHours = new List<int>();
+        for (int i = -timelineHourRange; i <= timelineHourRange; i++)
+        {
+            var hour = (currentHour + i + 24) % 24;
+            timelineHours.Add(hour);
+        }
 
-    var timelineQuery = $@"
+        var timelineQuery = $@"
         SELECT 
             server_guid,
             toHour(timestamp) as hour,
@@ -459,147 +459,147 @@ public async Task<GroupedServerBusyIndicatorResult> GetServerBusyIndicatorAsync(
         GROUP BY server_guid, toHour(timestamp)
         ORDER BY server_guid, hour";
 
-    var timelineData = await ReadAllAsync<ServerHourlyTimelineData>(timelineQuery, new object[] { clickHouseDayOfWeek });
+        var timelineData = await ReadAllAsync<ServerHourlyTimelineData>(timelineQuery, new object[] { clickHouseDayOfWeek });
 
-    // Build results
-    var serverResults = new List<ServerBusyIndicatorResult>();
+        // Build results
+        var serverResults = new List<ServerBusyIndicatorResult>();
 
-    foreach (var serverGuid in serverGuids)
-    {
-        var currentActivity = currentActivities.FirstOrDefault(ca => ca.ServerGuid == serverGuid);
-        var serverInfo = serverInfos.FirstOrDefault(si => si.ServerGuid == serverGuid);
-        var historical = historicalData.FirstOrDefault(hd => hd.ServerGuid == serverGuid);
-        var serverTimelineData = timelineData.Where(td => td.ServerGuid == serverGuid).ToList();
-
-        var currentPlayers = currentActivity?.CurrentPlayers ?? 0;
-
-        // Build hourly timeline for this server
-        var serverHourlyTimeline = new List<HourlyBusyData>();
-        foreach (var hour in timelineHours)
+        foreach (var serverGuid in serverGuids)
         {
-            var hourData = serverTimelineData.FirstOrDefault(td => td.Hour == hour);
-            var avgPlayers = hourData?.AvgPlayers ?? 0;
-            
-            // Calculate busy level based on percentile logic (consistent with main calculation)
-            string busyLevel;
-            if (avgPlayers >= 20) busyLevel = "very_busy";
-            else if (avgPlayers >= 15) busyLevel = "busy";
-            else if (avgPlayers >= 10) busyLevel = "moderate";
-            else if (avgPlayers >= 5) busyLevel = "quiet";
-            else busyLevel = "very_quiet";
+            var currentActivity = currentActivities.FirstOrDefault(ca => ca.ServerGuid == serverGuid);
+            var serverInfo = serverInfos.FirstOrDefault(si => si.ServerGuid == serverGuid);
+            var historical = historicalData.FirstOrDefault(hd => hd.ServerGuid == serverGuid);
+            var serverTimelineData = timelineData.Where(td => td.ServerGuid == serverGuid).ToList();
 
-            serverHourlyTimeline.Add(new HourlyBusyData
+            var currentPlayers = currentActivity?.CurrentPlayers ?? 0;
+
+            // Build hourly timeline for this server
+            var serverHourlyTimeline = new List<HourlyBusyData>();
+            foreach (var hour in timelineHours)
             {
-                Hour = hour,
-                TypicalPlayers = avgPlayers,
-                BusyLevel = busyLevel,
-                IsCurrentHour = hour == currentHour
-            });
-        }
+                var hourData = serverTimelineData.FirstOrDefault(td => td.Hour == hour);
+                var avgPlayers = hourData?.AvgPlayers ?? 0;
 
-        BusyIndicatorResult busyIndicator;
+                // Calculate busy level based on percentile logic (consistent with main calculation)
+                string busyLevel;
+                if (avgPlayers >= 20) busyLevel = "very_busy";
+                else if (avgPlayers >= 15) busyLevel = "busy";
+                else if (avgPlayers >= 10) busyLevel = "moderate";
+                else if (avgPlayers >= 5) busyLevel = "quiet";
+                else busyLevel = "very_quiet";
 
-        if (historical?.DailyAverages == null || historical.DailyAverages.Length < 3)
-        {
-            busyIndicator = new BusyIndicatorResult
-            {
-                BusyLevel = "unknown",
-                BusyText = "Not enough data",
-                CurrentPlayers = currentPlayers,
-                TypicalPlayers = 0,
-                Percentile = 0,
-                GeneratedAt = DateTime.UtcNow
-            };
-        }
-        else
-        {
-            // Calculate statistics
-            var averages = historical.DailyAverages.OrderBy(x => x).ToArray();
-            var count = averages.Length;
-            
-            var avgPlayers = averages.Average();
-            var minPlayers = averages.Min();
-            var maxPlayers = averages.Max();
-            var medianPlayers = count % 2 == 0 
-                ? (averages[count / 2 - 1] + averages[count / 2]) / 2.0
-                : averages[count / 2];
-            var q25Players = averages[(int)(count * 0.25)];
-            var q75Players = averages[(int)(count * 0.75)];
-            var q90Players = averages[(int)(count * 0.90)];
-
-            // Calculate percentile and busy level
-            string busyLevel;
-            string busyText;
-            double percentile = 0;
-
-            if (currentPlayers >= q90Players)
-            {
-                busyLevel = "very_busy";
-                busyText = "Busier than usual";
-                percentile = 90;
+                serverHourlyTimeline.Add(new HourlyBusyData
+                {
+                    Hour = hour,
+                    TypicalPlayers = avgPlayers,
+                    BusyLevel = busyLevel,
+                    IsCurrentHour = hour == currentHour
+                });
             }
-            else if (currentPlayers >= q75Players)
+
+            BusyIndicatorResult busyIndicator;
+
+            if (historical?.DailyAverages == null || historical.DailyAverages.Length < 3)
             {
-                busyLevel = "busy";
-                busyText = "Busy";
-                percentile = 75;
-            }
-            else if (currentPlayers >= medianPlayers)
-            {
-                busyLevel = "moderate";
-                busyText = "As busy as usual";
-                percentile = 50;
-            }
-            else if (currentPlayers >= q25Players)
-            {
-                busyLevel = "quiet";
-                busyText = "Not too busy";
-                percentile = 25;
+                busyIndicator = new BusyIndicatorResult
+                {
+                    BusyLevel = "unknown",
+                    BusyText = "Not enough data",
+                    CurrentPlayers = currentPlayers,
+                    TypicalPlayers = 0,
+                    Percentile = 0,
+                    GeneratedAt = DateTime.UtcNow
+                };
             }
             else
             {
-                busyLevel = "very_quiet";
-                busyText = "Quieter than usual";
-                percentile = 10;
+                // Calculate statistics
+                var averages = historical.DailyAverages.OrderBy(x => x).ToArray();
+                var count = averages.Length;
+
+                var avgPlayers = averages.Average();
+                var minPlayers = averages.Min();
+                var maxPlayers = averages.Max();
+                var medianPlayers = count % 2 == 0
+                    ? (averages[count / 2 - 1] + averages[count / 2]) / 2.0
+                    : averages[count / 2];
+                var q25Players = averages[(int)(count * 0.25)];
+                var q75Players = averages[(int)(count * 0.75)];
+                var q90Players = averages[(int)(count * 0.90)];
+
+                // Calculate percentile and busy level
+                string busyLevel;
+                string busyText;
+                double percentile = 0;
+
+                if (currentPlayers >= q90Players)
+                {
+                    busyLevel = "very_busy";
+                    busyText = "Busier than usual";
+                    percentile = 90;
+                }
+                else if (currentPlayers >= q75Players)
+                {
+                    busyLevel = "busy";
+                    busyText = "Busy";
+                    percentile = 75;
+                }
+                else if (currentPlayers >= medianPlayers)
+                {
+                    busyLevel = "moderate";
+                    busyText = "As busy as usual";
+                    percentile = 50;
+                }
+                else if (currentPlayers >= q25Players)
+                {
+                    busyLevel = "quiet";
+                    busyText = "Not too busy";
+                    percentile = 25;
+                }
+                else
+                {
+                    busyLevel = "very_quiet";
+                    busyText = "Quieter than usual";
+                    percentile = 10;
+                }
+
+                busyIndicator = new BusyIndicatorResult
+                {
+                    BusyLevel = busyLevel,
+                    BusyText = busyText,
+                    CurrentPlayers = currentPlayers,
+                    TypicalPlayers = avgPlayers,
+                    Percentile = percentile,
+                    HistoricalRange = new HistoricalRange
+                    {
+                        Min = minPlayers,
+                        Q25 = q25Players,
+                        Median = medianPlayers,
+                        Q75 = q75Players,
+                        Q90 = q90Players,
+                        Max = maxPlayers,
+                        Average = avgPlayers
+                    },
+                    GeneratedAt = DateTime.UtcNow
+                };
             }
 
-            busyIndicator = new BusyIndicatorResult
+            serverResults.Add(new ServerBusyIndicatorResult
             {
-                BusyLevel = busyLevel,
-                BusyText = busyText,
-                CurrentPlayers = currentPlayers,
-                TypicalPlayers = avgPlayers,
-                Percentile = percentile,
-                HistoricalRange = new HistoricalRange
-                {
-                    Min = minPlayers,
-                    Q25 = q25Players,
-                    Median = medianPlayers,
-                    Q75 = q75Players,
-                    Q90 = q90Players,
-                    Max = maxPlayers,
-                    Average = avgPlayers
-                },
-                GeneratedAt = DateTime.UtcNow
-            };
+                ServerGuid = serverGuid,
+                ServerName = serverInfo?.ServerName ?? "Unknown Server",
+                Game = serverInfo?.Game ?? "Unknown",
+                BusyIndicator = busyIndicator,
+                HourlyTimeline = serverHourlyTimeline
+            });
         }
 
-        serverResults.Add(new ServerBusyIndicatorResult
+        return new GroupedServerBusyIndicatorResult
         {
-            ServerGuid = serverGuid,
-            ServerName = serverInfo?.ServerName ?? "Unknown Server",
-            Game = serverInfo?.Game ?? "Unknown",
-            BusyIndicator = busyIndicator,
-            HourlyTimeline = serverHourlyTimeline
-        });
+            ServerResults = serverResults,
+            GeneratedAt = DateTime.UtcNow
+        };
     }
-
-    return new GroupedServerBusyIndicatorResult
-    {
-        ServerResults = serverResults,
-        GeneratedAt = DateTime.UtcNow
-    };
-}
 }
 
 // Data models for trend analysis

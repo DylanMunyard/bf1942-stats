@@ -7,7 +7,7 @@ namespace junie_des_1942stats.ClickHouse;
 public class PlayerAchievementsMigrationService : BaseClickHouseService
 {
     private readonly ILogger<PlayerAchievementsMigrationService> _logger;
-    
+
     public PlayerAchievementsMigrationService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerAchievementsMigrationService> logger)
         : base(httpClient, clickHouseUrl)
     {
@@ -18,7 +18,7 @@ public class PlayerAchievementsMigrationService : BaseClickHouseService
     {
         var startTime = DateTime.UtcNow;
         var totalMigrated = 0;
-        
+
         try
         {
             _logger.LogInformation("Starting team victory achievements migration to ReplacingMergeTree for idempotency");
@@ -75,7 +75,7 @@ FROM player_achievements";
         {
             var duration = DateTime.UtcNow - startTime;
             _logger.LogError(ex, "Migration failed after {Migrated} records in {Duration}", totalMigrated, duration);
-            
+
             return new MigrationResult
             {
                 Success = false,
@@ -143,10 +143,10 @@ ORDER BY (player_name, achievement_type, achievement_id, round_id, achieved_at)"
         try
         {
             _logger.LogInformation("Switching tables: player_achievements -> player_achievements_backup, player_achievements_v2 -> player_achievements");
-            
+
             await ExecuteCommandAsync("RENAME TABLE player_achievements TO player_achievements_backup");
             await ExecuteCommandAsync("RENAME TABLE player_achievements_v2 TO player_achievements");
-            
+
             _logger.LogInformation("Table switch completed successfully");
             return true;
         }
@@ -162,9 +162,9 @@ ORDER BY (player_name, achievement_type, achievement_id, round_id, achieved_at)"
         try
         {
             _logger.LogInformation("Dropping old backup table player_achievements_backup");
-            
+
             await ExecuteCommandAsync("DROP TABLE IF EXISTS player_achievements_backup");
-            
+
             _logger.LogInformation("Cleanup completed successfully");
             return true;
         }

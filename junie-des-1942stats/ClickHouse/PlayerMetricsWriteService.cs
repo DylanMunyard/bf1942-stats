@@ -199,7 +199,7 @@ PARTITION BY toYYYYMM(timestamp)";
         }
     }
 
-    
+
 }
 
 public class PlayerMetric

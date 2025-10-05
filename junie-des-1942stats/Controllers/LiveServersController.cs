@@ -51,11 +51,11 @@ public class LiveServersController : ControllerBase
         try
         {
             _logger.LogInformation("API REQUEST - Starting GetServers for game {Game}, showAll: {ShowAll}", game, showAll);
-            
+
             stepStopwatch.Restart();
             var servers = await GetServersFromDatabaseAsync(game, showAll);
             stepStopwatch.Stop();
-            _logger.LogInformation("API TIMING - Database operations completed in {DatabaseMs}ms. Retrieved {ServerCount} servers", 
+            _logger.LogInformation("API TIMING - Database operations completed in {DatabaseMs}ms. Retrieved {ServerCount} servers",
                 stepStopwatch.ElapsedMilliseconds, servers?.Length ?? 0);
 
             stepStopwatch.Restart();
@@ -65,10 +65,10 @@ public class LiveServersController : ControllerBase
                 LastUpdated = DateTime.UtcNow.ToString("O")
             };
             stepStopwatch.Stop();
-            
+
             totalStopwatch.Stop();
             _logger.LogInformation("API TIMING - Response object creation took {ResponseMs}ms", stepStopwatch.ElapsedMilliseconds);
-            _logger.LogInformation("API COMPLETE - Total GetServers time: {TotalMs}ms for game {Game}", 
+            _logger.LogInformation("API COMPLETE - Total GetServers time: {TotalMs}ms for game {Game}",
                 totalStopwatch.ElapsedMilliseconds, game);
 
             return Ok(response);
@@ -135,11 +135,11 @@ public class LiveServersController : ControllerBase
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var stepStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        
+
         _logger.LogInformation("Starting GetServersFromDatabaseAsync for game {Game}, showAll: {ShowAll}", game, showAll);
-        
+
         var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
-        
+
         // Get servers filtering only by online status
         stepStopwatch.Restart();
         var serverQuery = _dbContext.Servers
@@ -153,9 +153,9 @@ public class LiveServersController : ControllerBase
 
         var servers = await serverQuery.ToListAsync();
         stepStopwatch.Stop();
-        _logger.LogInformation("Step 1 - Servers query completed in {ElapsedMs}ms. Found {ServerCount} servers", 
+        _logger.LogInformation("Step 1 - Servers query completed in {ElapsedMs}ms. Found {ServerCount} servers",
             stepStopwatch.ElapsedMilliseconds, servers.Count);
-        
+
         if (servers.Count == 0)
         {
             totalStopwatch.Stop();
@@ -164,20 +164,20 @@ public class LiveServersController : ControllerBase
         }
 
         var serverGuids = servers.Select(s => s.Guid).ToList();
-        _logger.LogDebug("Processing {ServerCount} servers with GUIDs: {ServerGuids}", 
+        _logger.LogDebug("Processing {ServerCount} servers with GUIDs: {ServerGuids}",
             servers.Count, string.Join(", ", serverGuids.Take(5)) + (serverGuids.Count > 5 ? "..." : ""));
 
         // Get active player sessions efficiently (excluding bots) - ALL DATA NOW IN ONE QUERY!
         stepStopwatch.Restart();
         var activeSessions = await _dbContext.PlayerSessions
-            .Where(ps => serverGuids.Contains(ps.ServerGuid) 
-                         && ps.IsActive 
+            .Where(ps => serverGuids.Contains(ps.ServerGuid)
+                         && ps.IsActive
                          && ps.LastSeenTime >= oneMinuteAgo
                          && (!ps.Player.AiBot))
             .Include(ps => ps.Player)
             .ToListAsync();
         stepStopwatch.Stop();
-        _logger.LogInformation("Step 2 - Active player sessions query completed in {ElapsedMs}ms. Found {SessionCount} sessions WITH ALL DATA", 
+        _logger.LogInformation("Step 2 - Active player sessions query completed in {ElapsedMs}ms. Found {SessionCount} sessions WITH ALL DATA",
             stepStopwatch.ElapsedMilliseconds, activeSessions.Count);
 
         // ELIMINATED: PlayerObservations query - no longer needed!
@@ -189,7 +189,7 @@ public class LiveServersController : ControllerBase
             .Where(r => serverGuids.Contains(r.ServerGuid) && r.IsActive)
             .ToDictionaryAsync(r => r.ServerGuid, r => r);
         stepStopwatch.Stop();
-        _logger.LogInformation("Step 4 - Current rounds query completed in {ElapsedMs}ms. Found {RoundCount} active rounds", 
+        _logger.LogInformation("Step 4 - Current rounds query completed in {ElapsedMs}ms. Found {RoundCount} active rounds",
             stepStopwatch.ElapsedMilliseconds, currentRounds.Count);
 
         // Build response by combining the data - NOW MUCH SIMPLER!
@@ -246,9 +246,9 @@ public class LiveServersController : ControllerBase
         var sortedSummaries = serverSummaries.OrderByDescending(s => s.NumPlayers).ToArray();
         stepStopwatch.Stop();
         totalStopwatch.Stop();
-        
+
         _logger.LogInformation("Step 6 - Sorting completed in {ElapsedMs}ms", stepStopwatch.ElapsedMilliseconds);
-        _logger.LogInformation("OPTIMIZED GetServersFromDatabaseAsync completed. Total time: {TotalMs}ms, returning {ServerCount} servers - ELIMINATED 7+ SECOND QUERY!", 
+        _logger.LogInformation("OPTIMIZED GetServersFromDatabaseAsync completed. Total time: {TotalMs}ms, returning {ServerCount} servers - ELIMINATED 7+ SECOND QUERY!",
             totalStopwatch.ElapsedMilliseconds, sortedSummaries.Length);
 
         return sortedSummaries;
@@ -259,7 +259,7 @@ public class LiveServersController : ControllerBase
         if (currentRound == null) return [];
 
         var teams = new List<TeamInfo>();
-        
+
         if (!string.IsNullOrEmpty(currentRound.Team1Label))
         {
             teams.Add(new TeamInfo { Index = 1, Label = currentRound.Team1Label, Tickets = currentRound.Tickets1 ?? 0 });
@@ -326,7 +326,7 @@ public class LiveServersController : ControllerBase
     /// <returns>Players online history data with trend insights</returns>
     [HttpGet("{game}/players-online-history")]
     public async Task<ActionResult<PlayersOnlineHistoryResponse>> GetPlayersOnlineHistory(
-        string game, 
+        string game,
         [FromQuery] string period = "7d",
         [FromQuery] int rollingWindowDays = 7)
     {
@@ -372,8 +372,8 @@ public class LiveServersController : ControllerBase
             _ => (7, "INTERVAL 1 HOUR", false)
         };
 
-        var timeCondition = useAllTime 
-            ? "" 
+        var timeCondition = useAllTime
+            ? ""
             : $"AND timestamp >= now() - INTERVAL {days} DAY";
 
         var query = $@"
@@ -467,7 +467,7 @@ FORMAT TabSeparated";
         var rollingAverage = CalculateRollingAverage(dataPoints, period, rollingWindowDays);
 
         var calculationMethod = GetCalculationMethodDescription(period);
-        
+
         return new PlayerTrendsInsights
         {
             OverallAverage = Math.Round(overallAverage, 2),
@@ -485,7 +485,7 @@ FORMAT TabSeparated";
     private static RollingAverageDataPoint[] CalculateRollingAverage(PlayersOnlineDataPoint[] dataPoints, string period, int rollingWindowDays)
     {
         Console.WriteLine($"CalculateRollingAverage called with period='{period}', rollingWindowDays={rollingWindowDays}, dataPoints.Length={dataPoints.Length}");
-        
+
         // Only calculate rolling average for periods of 1month or longer
         if (period is "1d" or "3d" or "7d")
         {
@@ -508,7 +508,7 @@ FORMAT TabSeparated";
         {
             var currentTimestamp = dataPoints[i].Timestamp;
             var windowStart = currentTimestamp.AddTicks(-rollingWindowTicks);
-            
+
             // Find all data points within the rolling window
             var windowData = dataPoints
                 .Where(dp => dp.Timestamp >= windowStart && dp.Timestamp <= currentTimestamp)

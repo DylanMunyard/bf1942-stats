@@ -349,7 +349,7 @@ try
 
     // Register bot detection service
     builder.Services.AddSingleton<IBotDetectionService, BotDetectionService>();
-    
+
     // Register the player tracking service
     builder.Services.AddScoped<PlayerTrackingService>();
     builder.Services.AddScoped<RoundBackfillService>();

@@ -7,7 +7,7 @@ namespace junie_des_1942stats.ClickHouse;
 public class PlayerMetricsGameMigrationService : BaseClickHouseService
 {
     private readonly ILogger<PlayerMetricsGameMigrationService> _logger;
-    
+
     public PlayerMetricsGameMigrationService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerMetricsGameMigrationService> logger)
         : base(httpClient, clickHouseUrl)
     {
@@ -15,12 +15,12 @@ public class PlayerMetricsGameMigrationService : BaseClickHouseService
     }
 
     public async Task<MigrationResult> MigrateToAddGameColumnAsync(
-        int batchSize = 1_000_000, 
+        int batchSize = 1_000_000,
         int delayMs = 5000)
     {
         var startTime = DateTime.UtcNow;
         var totalMigrated = 0;
-        
+
         try
         {
             _logger.LogInformation("Starting player_metrics migration to add game column using server_online_counts JOIN");
@@ -121,7 +121,7 @@ WHERE toYYYYMM(pm.timestamp) = {ym}";
         {
             var duration = DateTime.UtcNow - startTime;
             _logger.LogError(ex, "Migration failed after {Migrated} records in {Duration}", totalMigrated, duration);
-            
+
             return new MigrationResult
             {
                 Success = false,
@@ -178,7 +178,7 @@ SETTINGS index_granularity = 8192";
             var gamePopulatedQuery = "SELECT COUNT(*) FROM player_metrics_v2 WHERE game != 'unknown' AND game != ''";
             var gamePopulated = long.Parse((await ExecuteQueryInternalAsync(gamePopulatedQuery)).Trim());
 
-            _logger.LogInformation("Verification: Old count={OldCount}, New count={NewCount}, Game populated={GamePopulated}", 
+            _logger.LogInformation("Verification: Old count={OldCount}, New count={NewCount}, Game populated={GamePopulated}",
                 oldCount, newCount, gamePopulated);
 
             return oldCount == newCount && gamePopulated > 0;
@@ -195,10 +195,10 @@ SETTINGS index_granularity = 8192";
         try
         {
             _logger.LogInformation("Switching tables: player_metrics -> player_metrics_backup, player_metrics_v2 -> player_metrics");
-            
+
             await ExecuteCommandAsync("RENAME TABLE player_metrics TO player_metrics_backup");
             await ExecuteCommandAsync("RENAME TABLE player_metrics_v2 TO player_metrics");
-            
+
             _logger.LogInformation("Table switch completed successfully");
             return true;
         }
@@ -214,10 +214,10 @@ SETTINGS index_granularity = 8192";
         try
         {
             _logger.LogInformation("Rolling back table switch");
-            
+
             await ExecuteCommandAsync("RENAME TABLE player_metrics TO player_metrics_failed");
             await ExecuteCommandAsync("RENAME TABLE player_metrics_backup TO player_metrics");
-            
+
             _logger.LogInformation("Rollback completed successfully");
             return true;
         }
@@ -233,9 +233,9 @@ SETTINGS index_granularity = 8192";
         try
         {
             _logger.LogInformation("Dropping old backup table player_metrics_backup");
-            
+
             await ExecuteCommandAsync("DROP TABLE IF EXISTS player_metrics_backup");
-            
+
             _logger.LogInformation("Cleanup completed successfully");
             return true;
         }

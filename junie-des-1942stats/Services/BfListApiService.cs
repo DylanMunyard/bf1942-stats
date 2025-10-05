@@ -667,22 +667,22 @@ public class PlayersOnlineHistoryResponse
     /// Array of player count data points over time
     /// </summary>
     public PlayersOnlineDataPoint[] DataPoints { get; set; } = [];
-    
+
     /// <summary>
     /// Trend analysis and insights for the requested period
     /// </summary>
     public PlayerTrendsInsights? Insights { get; set; }
-    
+
     /// <summary>
     /// The period for which the data was requested (e.g., "7d", "3d", "1d", "1month", "3months", "thisyear", "alltime")
     /// </summary>
     public string Period { get; set; } = "";
-    
+
     /// <summary>
     /// The game for which the data was requested
     /// </summary>
     public string Game { get; set; } = "";
-    
+
     /// <summary>
     /// When the data was last updated
     /// </summary>
@@ -695,7 +695,7 @@ public class PlayersOnlineDataPoint
     /// Timestamp of the data point
     /// </summary>
     public DateTime Timestamp { get; set; }
-    
+
     /// <summary>
     /// Total number of players online at this timestamp
     /// </summary>
@@ -708,42 +708,42 @@ public class PlayerTrendsInsights
     /// Overall average players for the entire period
     /// </summary>
     public double OverallAverage { get; set; }
-    
+
     /// <summary>
     /// 7-day rolling average data points (for periods longer than 7 days)
     /// </summary>
     public RollingAverageDataPoint[] RollingAverage { get; set; } = [];
-    
+
     /// <summary>
     /// Trend direction: "increasing", "decreasing", "stable"
     /// </summary>
     public string TrendDirection { get; set; } = "";
-    
+
     /// <summary>
     /// Percentage change from start to end of period
     /// </summary>
     public double PercentageChange { get; set; }
-    
+
     /// <summary>
     /// Peak player count in the period
     /// </summary>
     public int PeakPlayers { get; set; }
-    
+
     /// <summary>
     /// Timestamp when peak was reached
     /// </summary>
     public DateTime PeakTimestamp { get; set; }
-    
+
     /// <summary>
     /// Lowest player count in the period
     /// </summary>
     public int LowestPlayers { get; set; }
-    
+
     /// <summary>
     /// Timestamp when lowest count was reached
     /// </summary>
     public DateTime LowestTimestamp { get; set; }
-    
+
     /// <summary>
     /// Explanation of how player counts are calculated for this time period
     /// </summary>
@@ -756,7 +756,7 @@ public class RollingAverageDataPoint
     /// Timestamp of the rolling average data point
     /// </summary>
     public DateTime Timestamp { get; set; }
-    
+
     /// <summary>
     /// 7-day rolling average of players online
     /// </summary>

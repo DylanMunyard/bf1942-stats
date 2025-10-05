@@ -240,9 +240,9 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                 .Where(s => serverGuids.Contains(s.Guid))
                 .Select(s => new { s.Guid, s.Name, s.GameId })
                 .ToListAsync();
-            
+
             var serverLookup = servers.ToDictionary(s => s.Guid, s => new { s.Name, s.GameId });
-            
+
             foreach (var serverInsight in serverInsights)
             {
                 if (serverLookup.TryGetValue(serverInsight.ServerGuid, out var server))
@@ -629,7 +629,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                      WHERE ServerGuid = @serverGuid) as TotalPlayers";
 
             var rankingResult = await _dbContext.Database
-                .SqlQueryRaw<RankingResult>(rankingSql, 
+                .SqlQueryRaw<RankingResult>(rankingSql,
                     new Microsoft.Data.Sqlite.SqliteParameter("@serverGuid", serverStat.ServerGuid),
                     new Microsoft.Data.Sqlite.SqliteParameter("@playerScore", serverStat.TotalScore))
                 .FirstAsync();
@@ -678,7 +678,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
             {
                 var parts = line.Split('\t');
-                if (parts.Length >= 2 && 
+                if (parts.Length >= 2 &&
                     double.TryParse(parts[1], out var avgPing))
                 {
                     pingResults.Add(new ClickHousePingResult
@@ -766,24 +766,24 @@ FORMAT TabSeparated";
 
             var result = await _playerInsightsService.ExecuteQueryAsync(query);
             var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            
+
             var hourlyActivity = new List<HourlyActivity>();
-            
+
             foreach (var line in lines)
             {
                 var parts = line.Split('\t');
-                if (parts.Length == 2 && 
-                    int.TryParse(parts[0], out var hour) && 
+                if (parts.Length == 2 &&
+                    int.TryParse(parts[0], out var hour) &&
                     int.TryParse(parts[1], out var minutes))
                 {
-                    hourlyActivity.Add(new HourlyActivity 
-                    { 
-                        Hour = hour, 
-                        MinutesActive = minutes 
+                    hourlyActivity.Add(new HourlyActivity
+                    {
+                        Hour = hour,
+                        MinutesActive = minutes
                     });
                 }
             }
-            
+
             // Fill in missing hours with 0 minutes
             var existingHours = hourlyActivity.Select(h => h.Hour).ToHashSet();
             for (int hour = 0; hour < 24; hour++)
@@ -793,13 +793,13 @@ FORMAT TabSeparated";
                     hourlyActivity.Add(new HourlyActivity { Hour = hour, MinutesActive = 0 });
                 }
             }
-            
+
             return hourlyActivity.OrderByDescending(h => h.MinutesActive).ToList();
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to get activity by hour from ClickHouse for player {PlayerName}, falling back to SQLite calculation", playerName);
-            
+
             // Fallback to original SQLite-based calculation if ClickHouse fails
             return await GetActivityByHourFromSessions(playerName, startPeriod, endPeriod);
         }

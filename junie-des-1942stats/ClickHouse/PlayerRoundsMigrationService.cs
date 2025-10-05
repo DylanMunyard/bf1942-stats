@@ -7,7 +7,7 @@ namespace junie_des_1942stats.ClickHouse;
 public class PlayerRoundsMigrationService : BaseClickHouseService
 {
     private readonly ILogger<PlayerRoundsMigrationService> _logger;
-    
+
     public PlayerRoundsMigrationService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerRoundsMigrationService> logger)
         : base(httpClient, clickHouseUrl)
     {
@@ -15,12 +15,12 @@ public class PlayerRoundsMigrationService : BaseClickHouseService
     }
 
     public async Task<MigrationResult> MigrateToAddGameColumnAsync(
-        int batchSize = 1_000_000, 
+        int batchSize = 1_000_000,
         int delayMs = 5000)
     {
         var startTime = DateTime.UtcNow;
         var totalMigrated = 0;
-        
+
         try
         {
             _logger.LogInformation("Starting player_rounds migration to add game column using server_online_counts JOIN");
@@ -123,7 +123,7 @@ WHERE toYYYYMM(pr.round_start_time) = {ym}";
         {
             var duration = DateTime.UtcNow - startTime;
             _logger.LogError(ex, "Migration failed after {Migrated} records in {Duration}", totalMigrated, duration);
-            
+
             return new MigrationResult
             {
                 Success = false,
@@ -184,7 +184,7 @@ SETTINGS index_granularity = 8192";
             var gamePopulatedQuery = "SELECT COUNT(*) FROM player_rounds_v2 WHERE game != 'unknown' AND game != ''";
             var gamePopulated = long.Parse((await ExecuteQueryInternalAsync(gamePopulatedQuery)).Trim());
 
-            _logger.LogInformation("Verification: Old count={OldCount}, New count={NewCount}, Game populated={GamePopulated}", 
+            _logger.LogInformation("Verification: Old count={OldCount}, New count={NewCount}, Game populated={GamePopulated}",
                 oldCount, newCount, gamePopulated);
 
             return oldCount == newCount && gamePopulated > 0;
@@ -201,10 +201,10 @@ SETTINGS index_granularity = 8192";
         try
         {
             _logger.LogInformation("Switching tables: player_rounds -> player_rounds_backup, player_rounds_v2 -> player_rounds");
-            
+
             await ExecuteCommandAsync("RENAME TABLE player_rounds TO player_rounds_backup");
             await ExecuteCommandAsync("RENAME TABLE player_rounds_v2 TO player_rounds");
-            
+
             _logger.LogInformation("Table switch completed successfully");
             return true;
         }
@@ -220,10 +220,10 @@ SETTINGS index_granularity = 8192";
         try
         {
             _logger.LogInformation("Rolling back table switch");
-            
+
             await ExecuteCommandAsync("RENAME TABLE player_rounds TO player_rounds_failed");
             await ExecuteCommandAsync("RENAME TABLE player_rounds_backup TO player_rounds");
-            
+
             _logger.LogInformation("Rollback completed successfully");
             return true;
         }
@@ -239,9 +239,9 @@ SETTINGS index_granularity = 8192";
         try
         {
             _logger.LogInformation("Dropping old backup table player_rounds_backup");
-            
+
             await ExecuteCommandAsync("DROP TABLE IF EXISTS player_rounds_backup");
-            
+
             _logger.LogInformation("Cleanup completed successfully");
             return true;
         }

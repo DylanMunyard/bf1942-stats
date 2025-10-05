@@ -33,18 +33,18 @@ public class PlayerRoundsReadService : BaseClickHouseService, IClickHouseReader
         }
 
         var totalDays = (int)(endPeriod - startPeriod).TotalDays;
-        
+
         if (totalDays <= 7)
         {
-            return 20;  // 7 days or less: 5 rounds minimum
+            return 3;  // 7 days or less: 3 rounds minimum
         }
         else if (totalDays <= 30)
         {
-            return 40; // 30 days or less: 20 rounds minimum
+            return 10; // 30 days or less: 10 rounds minimum
         }
         else
         {
-            return 80; // All time: 40 rounds minimum
+            return 20; // All time: 20 rounds minimum
         }
     }
 
@@ -57,7 +57,7 @@ public class PlayerRoundsReadService : BaseClickHouseService, IClickHouseReader
     {
         if (string.IsNullOrEmpty(value))
             return value;
-        
+
         // Unescape ClickHouse TabSeparated format escaping
         return value
             .Replace("\\'", "'")      // Single quotes

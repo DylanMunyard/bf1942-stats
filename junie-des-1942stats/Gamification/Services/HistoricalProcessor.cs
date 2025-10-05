@@ -534,7 +534,7 @@ ORDER BY player_name, threshold";
             RoundId = "", // Not applicable for milestones
             Metadata = $"{{\"category\":\"{category}\",\"threshold\":{value}}}",
             Game = "unknown", // Not applicable for milestones/historical data
-                        Version = achievedAt  // Use achieved_at as deterministic version for idempotency
+            Version = achievedAt  // Use achieved_at as deterministic version for idempotency
         };
     }
 
@@ -576,7 +576,7 @@ ORDER BY player_name, threshold";
                             RoundId = "", // Not available from metrics data
                             Metadata = $"{{\"actual_streak\":{streak.MaxStreak},\"streak_duration_seconds\":{(streak.StreakEnd - streak.StreakStart).TotalSeconds:F0}}}",
                             Game = "unknown", // Not applicable for milestones/historical data
-                        Version = achievementTime  // Use achievement time as deterministic version for idempotency
+                            Version = achievementTime  // Use achievement time as deterministic version for idempotency
                         });
                     }
                 }

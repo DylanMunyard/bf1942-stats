@@ -269,9 +269,9 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
             for (var t = startMinute; t <= endMinuteExclusive; t = t.AddMinutes(1))
             {
                 // Find the round that was active at this specific minute
-                var activeRound = overlappingRounds.FirstOrDefault(r => 
-                    r.ServerGuid == s.ServerGuid && 
-                    r.StartTime <= t && 
+                var activeRound = overlappingRounds.FirstOrDefault(r =>
+                    r.ServerGuid == s.ServerGuid &&
+                    r.StartTime <= t &&
                     (r.EndTime == null || r.EndTime > t));
 
                 if (activeRound != null)
@@ -296,17 +296,17 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
         {
             var key = kvp.Key;
             var count = kvp.Value;
-            
+
             // Get server info for name and game
             if (!servers.TryGetValue(key.serverGuid, out var serverInfo)) continue;
-            
+
             // Find the round info for this specific minute and map
-            var roundInfo = overlappingRounds.FirstOrDefault(r => 
-                r.ServerGuid == key.serverGuid && 
+            var roundInfo = overlappingRounds.FirstOrDefault(r =>
+                r.ServerGuid == key.serverGuid &&
                 r.MapName == key.mapName &&
-                r.StartTime <= key.minute && 
+                r.StartTime <= key.minute &&
                 (r.EndTime == null || r.EndTime > key.minute));
-            
+
             if (roundInfo != null)
             {
                 results.Add(new ServerOnlineCount

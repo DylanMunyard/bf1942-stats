@@ -106,7 +106,7 @@ public class PerformanceBadgeCalculator
                                 RoundId = round.RoundId,
                                 Metadata = $"{{\"kpm\":{kmp:F2},\"rounds_analyzed\":{roundsAnalyzed},\"total_kills\":{totalKills},\"total_minutes\":{totalMinutes:F1}}}",
                                 Game = round.Game ?? "unknown",
-                        Version = round.RoundEndTime  // Use round end time as deterministic version for idempotency
+                                Version = round.RoundEndTime  // Use round end time as deterministic version for idempotency
                             });
 
                             _logger.LogInformation("KPM badge achieved: {PlayerName} earned {BadgeName} with {KPM:F2} KPM over {Rounds} rounds",
@@ -192,7 +192,7 @@ public class PerformanceBadgeCalculator
                                 RoundId = round.RoundId,
                                 Metadata = $"{{\"kd_ratio\":{kdRatio:F2},\"rounds_analyzed\":{roundsAnalyzed},\"total_kills\":{totalKills},\"total_deaths\":{totalDeaths}}}",
                                 Game = round.Game ?? "unknown",
-                        Version = round.RoundEndTime  // Use round end time as deterministic version for idempotency
+                                Version = round.RoundEndTime  // Use round end time as deterministic version for idempotency
                             });
 
                             _logger.LogInformation("KD badge achieved: {PlayerName} earned {BadgeName} with {KDRatio:F2} KD over {Rounds} rounds",
@@ -275,7 +275,7 @@ public class PerformanceBadgeCalculator
                             RoundId = latestRound.RoundId,
                             Metadata = $"{{\"positive_percentage\":{positivePercentage:F1},\"positive_rounds\":{positiveKdRounds},\"total_rounds\":{totalRoundsAnalyzed}}}",
                             Game = latestRound.Game ?? "unknown",
-                        Version = latestRound.RoundEndTime  // Use round end time as deterministic version for idempotency
+                            Version = latestRound.RoundEndTime  // Use round end time as deterministic version for idempotency
                         });
 
                         _logger.LogInformation("Consistency badge achieved: {PlayerName} had positive KD in {Percentage:F1}% of last {Rounds} rounds",

@@ -33,10 +33,10 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
     }
 
     public async Task<PlayerStats.Models.PagedResult<RoundWithPlayers>> GetRounds(
-        int page, 
-        int pageSize, 
-        string sortBy, 
-        string sortOrder, 
+        int page,
+        int pageSize,
+        string sortBy,
+        string sortOrder,
         RoundFilters filters,
         bool includePlayers = true,
         bool onlySpecifiedPlayers = false)
@@ -142,8 +142,8 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
         // Apply sorting
         query = sortBy.ToLowerInvariant() switch
         {
-            "roundid" => sortOrder.ToLowerInvariant() == "asc" 
-                ? query.OrderBy(r => r.RoundId) 
+            "roundid" => sortOrder.ToLowerInvariant() == "asc"
+                ? query.OrderBy(r => r.RoundId)
                 : query.OrderByDescending(r => r.RoundId),
             "servername" => sortOrder.ToLowerInvariant() == "asc"
                 ? query.OrderBy(r => r.ServerName)
@@ -202,7 +202,7 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
         if (includePlayers && rounds.Any())
         {
             var roundIds = rounds.Select(r => r.RoundId).Where(id => !string.IsNullOrEmpty(id)).ToList();
-            
+
             if (roundIds.Any())
             {
                 var playerQuery = _dbContext.PlayerSessions
@@ -485,9 +485,9 @@ FORMAT TabSeparated";
 
             var sqliteRound = (await _dbContext.Rounds
                 .AsNoTracking()
-                .Where(r => r.ServerGuid == serverGuid 
+                .Where(r => r.ServerGuid == serverGuid
                            && r.MapName == mapName
-                           && r.StartTime >= searchStartTime 
+                           && r.StartTime >= searchStartTime
                            && r.StartTime <= searchEndTime)
                 .ToListAsync()) // Load data from database first
                 .OrderBy(r => Math.Abs((r.StartTime - startTime).Ticks)) // Then sort in memory
@@ -495,7 +495,7 @@ FORMAT TabSeparated";
 
             if (sqliteRound != null)
             {
-                _logger.LogDebug("Resolved ClickHouse RoundId {ClickHouseRoundId} to SQLite RoundId {SQLiteRoundId}", 
+                _logger.LogDebug("Resolved ClickHouse RoundId {ClickHouseRoundId} to SQLite RoundId {SQLiteRoundId}",
                     clickHouseRoundId, sqliteRound.RoundId);
                 return sqliteRound.RoundId;
             }

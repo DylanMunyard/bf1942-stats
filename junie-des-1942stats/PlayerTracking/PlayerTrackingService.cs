@@ -147,7 +147,7 @@ public class PlayerTrackingService
                 sessionsToCreate.Add(newSession);
                 pendingObservations.Add((playerInfo, newSession));
 
-                if (!playerInfo.AiBot) 
+                if (!playerInfo.AiBot)
                 {
                     // Track player online event (true first time online)
                     _logger.LogInformation("TRACKING: Detected player online for {PlayerName} on {ServerName}: ",
@@ -304,7 +304,7 @@ public class PlayerTrackingService
             server.MaxPlayers = serverInfo.MaxPlayers;
             server.MapName = serverInfo.MapName;
             server.JoinLink = serverInfo.JoinLink;
-            
+
             // Update current map from active sessions or server info
             server.CurrentMap = serverInfo.MapName;
         }
@@ -450,7 +450,7 @@ public class PlayerTrackingService
         // Update denormalized current state fields for live server performance
         session.CurrentPing = playerInfo.Ping;
         session.CurrentTeam = playerInfo.Team;
-        
+
         // Get team label from Teams array if TeamLabel is empty
         var teamLabel = playerInfo.TeamLabel;
         if (string.IsNullOrEmpty(teamLabel) && server.Teams?.Any() == true)
@@ -469,7 +469,7 @@ public class PlayerTrackingService
         try
         {
             var sessionIds = sessionsList.Select(s => s.SessionId).ToList();
-            
+
             // Calculate average ping for all sessions in one query
             var avgPings = await _dbContext.PlayerObservations
                 .Where(o => sessionIds.Contains(o.SessionId) && o.Ping > 0)
@@ -482,8 +482,8 @@ public class PlayerTrackingService
             // Update all sessions with their calculated average ping
             foreach (var session in sessionsList)
             {
-                session.AveragePing = avgPingLookup.TryGetValue(session.SessionId, out var avgPing) && avgPing > 0 
-                    ? avgPing 
+                session.AveragePing = avgPingLookup.TryGetValue(session.SessionId, out var avgPing) && avgPing > 0
+                    ? avgPing
                     : null;
             }
         }

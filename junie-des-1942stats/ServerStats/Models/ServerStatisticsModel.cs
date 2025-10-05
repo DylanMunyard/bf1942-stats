@@ -20,57 +20,6 @@ public class ServerStatistics
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
 
-    // Most active players by time played (1 week)
-    public List<PlayerActivity> MostActivePlayersByTimeWeek { get; set; } = new List<PlayerActivity>();
-
-    // Top 10 best scores in the period (1 week)
-    public List<TopScore> TopScoresWeek { get; set; } = new List<TopScore>();
-
-    // Top 10 K/D ratios (1 week)
-    public List<TopKDRatio> TopKDRatiosWeek { get; set; } = new List<TopKDRatio>();
-
-    // Top 10 kill rates (1 week)
-    public List<TopKillRate> TopKillRatesWeek { get; set; } = new List<TopKillRate>();
-
-    // Most active players by time played (1 month)
-    public List<PlayerActivity> MostActivePlayersByTimeMonth { get; set; } = new List<PlayerActivity>();
-
-    // Top 10 best scores in the period (1 month)
-    public List<TopScore> TopScoresMonth { get; set; } = new List<TopScore>();
-
-    // Top 10 K/D ratios (1 month)
-    public List<TopKDRatio> TopKDRatiosMonth { get; set; } = new List<TopKDRatio>();
-
-    // Top 10 kill rates (1 month)
-    public List<TopKillRate> TopKillRatesMonth { get; set; } = new List<TopKillRate>();
-
-    // Most active players by time played (all time)
-    public List<PlayerActivity> MostActivePlayersByTimeAllTime { get; set; } = new List<PlayerActivity>();
-
-    // Top 10 best scores (all time)
-    public List<TopScore> TopScoresAllTime { get; set; } = new List<TopScore>();
-
-    // Top 10 K/D ratios (all time)
-    public List<TopKDRatio> TopKDRatiosAllTime { get; set; } = new List<TopKDRatio>();
-
-    // Top 10 kill rates (all time)
-    public List<TopKillRate> TopKillRatesAllTime { get; set; } = new List<TopKillRate>();
-
-    // Top 10 placement leaderboards (1 week)
-    public List<PlacementLeaderboardEntry> TopPlacementsWeek { get; set; } = new List<PlacementLeaderboardEntry>();
-
-    // Top 10 placement leaderboards (1 month)
-    public List<PlacementLeaderboardEntry> TopPlacementsMonth { get; set; } = new List<PlacementLeaderboardEntry>();
-
-    // Top 10 placement leaderboards (all time)
-    public List<PlacementLeaderboardEntry> TopPlacementsAllTime { get; set; } = new List<PlacementLeaderboardEntry>();
-
-    // Weighted placement leaderboards (only populated when minPlayersForWeighting is specified)
-    public List<PlacementLeaderboardEntry>? WeightedTopPlacementsWeek { get; set; } = [];
-    public List<PlacementLeaderboardEntry>? WeightedTopPlacementsMonth { get; set; } = [];
-    public List<PlacementLeaderboardEntry>? WeightedTopPlacementsAllTime { get; set; } = [];
-    public int? MinPlayersForWeighting { get; set; } // The minimum player count used for weighting
-
     // Recent rounds (typically last 20) with session links
     public List<RoundInfo> RecentRounds { get; set; } = new List<RoundInfo>();
 
@@ -296,4 +245,34 @@ public class HistoricalRange
     public double Q90 { get; set; }
     public double Max { get; set; }
     public double Average { get; set; }
+}
+
+// Server leaderboards for a specific time period
+[DataContract(Name = "ServerStatsServerLeaderboards")]
+public class ServerLeaderboards
+{
+    public string ServerGuid { get; set; } = "";
+    public string ServerName { get; set; } = "";
+    public int Days { get; set; } // Number of days of data included
+    public DateTime StartPeriod { get; set; }
+    public DateTime EndPeriod { get; set; }
+
+    // Most active players by time played
+    public List<PlayerActivity> MostActivePlayersByTime { get; set; } = new List<PlayerActivity>();
+
+    // Top 10 best scores in the period
+    public List<TopScore> TopScores { get; set; } = new List<TopScore>();
+
+    // Top 10 K/D ratios
+    public List<TopKDRatio> TopKDRatios { get; set; } = new List<TopKDRatio>();
+
+    // Top 10 kill rates
+    public List<TopKillRate> TopKillRates { get; set; } = new List<TopKillRate>();
+
+    // Top 10 placement leaderboard
+    public List<PlacementLeaderboardEntry> TopPlacements { get; set; } = new List<PlacementLeaderboardEntry>();
+
+    // Weighted placement leaderboard (only populated when minPlayersForWeighting is specified)
+    public List<PlacementLeaderboardEntry>? WeightedTopPlacements { get; set; } = null;
+    public int? MinPlayersForWeighting { get; set; } // The minimum player count used for weighting
 }

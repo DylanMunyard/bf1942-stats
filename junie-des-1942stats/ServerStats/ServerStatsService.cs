@@ -39,11 +39,10 @@ public class ServerStatsService(
 
     public async Task<ServerStatistics> GetServerStatistics(
         string serverName,
-        int daysToAnalyze = 7,
-        int? minPlayersForWeighting = 10)
+        int daysToAnalyze = 7)
     {
-        // Check cache first - include weighting parameter in cache key for separate caching
-        var cacheKey = $"{_cacheKeyService.GetServerStatisticsKey(serverName, daysToAnalyze)}_weight_{minPlayersForWeighting}";
+        // Check cache first - simplified cache key since we removed all leaderboard queries
+        var cacheKey = _cacheKeyService.GetServerStatisticsKey(serverName, daysToAnalyze);
         var cachedResult = await _cacheService.GetAsync<ServerStatistics>(cacheKey);
 
         if (cachedResult != null)
@@ -69,7 +68,7 @@ public class ServerStatsService(
             return new ServerStatistics { ServerName = serverName, StartPeriod = startPeriod, EndPeriod = endPeriod };
         }
 
-        // Create the statistics object
+        // Create the statistics object with only basic server metadata
         var statistics = new ServerStatistics
         {
             ServerGuid = server.Guid,
@@ -83,90 +82,12 @@ public class ServerStatsService(
             DiscordUrl = server.DiscordUrl,
             ForumUrl = server.ForumUrl,
             StartPeriod = startPeriod,
-            EndPeriod = endPeriod
+            EndPeriod = endPeriod,
+            CurrentMap = server.CurrentMap
         };
 
-        // Define time periods
-        var oneWeekStart = endPeriod.AddDays(-7);
-        var oneMonthStart = endPeriod.AddDays(-30);
-        var allTimeStart = new DateTime(2000, 1, 1); // Start from year 2000
-
-        // Execute all leaderboard queries in parallel for maximum performance
-        var mostActivePlayersWeekTask = _playerRoundsService.GetMostActivePlayersAsync(server.Guid, oneWeekStart, endPeriod, 10);
-        var topScoresWeekTask = _playerRoundsService.GetTopScoresAsync(server.Guid, oneWeekStart, endPeriod, 10);
-        var topKDRatiosWeekTask = _playerRoundsService.GetTopKDRatiosAsync(server.Guid, oneWeekStart, endPeriod, 10);
-        var topKillRatesWeekTask = _playerRoundsService.GetTopKillRatesAsync(server.Guid, oneWeekStart, endPeriod, 10);
-
-        var mostActivePlayersMonthTask = _playerRoundsService.GetMostActivePlayersAsync(server.Guid, oneMonthStart, endPeriod, 10);
-        var topScoresMonthTask = _playerRoundsService.GetTopScoresAsync(server.Guid, oneMonthStart, endPeriod, 10);
-        var topKDRatiosMonthTask = _playerRoundsService.GetTopKDRatiosAsync(server.Guid, oneMonthStart, endPeriod, 10);
-        var topKillRatesMonthTask = _playerRoundsService.GetTopKillRatesAsync(server.Guid, oneMonthStart, endPeriod, 10);
-
-        var mostActivePlayersAllTimeTask = _playerRoundsService.GetMostActivePlayersAsync(server.Guid, allTimeStart, endPeriod, 10);
-        var topScoresAllTimeTask = _playerRoundsService.GetTopScoresAsync(server.Guid, allTimeStart, endPeriod, 10);
-        var topKDRatiosAllTimeTask = _playerRoundsService.GetTopKDRatiosAsync(server.Guid, allTimeStart, endPeriod, 10);
-        var topKillRatesAllTimeTask = _playerRoundsService.GetTopKillRatesAsync(server.Guid, allTimeStart, endPeriod, 10);
-
-        // Execute placement queries in parallel
-        var topPlacementsWeekTask = GetPlacementLeaderboardAsync(server.Guid, oneWeekStart, endPeriod, 10);
-        var topPlacementsMonthTask = GetPlacementLeaderboardAsync(server.Guid, oneMonthStart, endPeriod, 10);
-        var topPlacementsAllTimeTask = GetPlacementLeaderboardAsync(server.Guid, allTimeStart, endPeriod, 10);
-
-        // Execute recent rounds query independently
+        // Execute only recent rounds and busy indicator queries (no leaderboards)
         var recentRoundsTask = _roundsService.GetRecentRoundsAsync(server.Guid, 20);
-
-        // Wait for all queries to complete
-        await Task.WhenAll(
-            mostActivePlayersWeekTask, topScoresWeekTask, topKDRatiosWeekTask, topKillRatesWeekTask,
-            mostActivePlayersMonthTask, topScoresMonthTask, topKDRatiosMonthTask, topKillRatesMonthTask,
-            mostActivePlayersAllTimeTask, topScoresAllTimeTask, topKDRatiosAllTimeTask, topKillRatesAllTimeTask,
-            topPlacementsWeekTask, topPlacementsMonthTask, topPlacementsAllTimeTask,
-            recentRoundsTask
-        );
-
-        // Assign results to statistics object
-        statistics.MostActivePlayersByTimeWeek = await mostActivePlayersWeekTask;
-        statistics.TopScoresWeek = await topScoresWeekTask;
-        statistics.TopKDRatiosWeek = await topKDRatiosWeekTask;
-        statistics.TopKillRatesWeek = await topKillRatesWeekTask;
-
-        statistics.MostActivePlayersByTimeMonth = await mostActivePlayersMonthTask;
-        statistics.TopScoresMonth = await topScoresMonthTask;
-        statistics.TopKDRatiosMonth = await topKDRatiosMonthTask;
-        statistics.TopKillRatesMonth = await topKillRatesMonthTask;
-
-        statistics.MostActivePlayersByTimeAllTime = await mostActivePlayersAllTimeTask;
-        statistics.TopScoresAllTime = await topScoresAllTimeTask;
-        statistics.TopKDRatiosAllTime = await topKDRatiosAllTimeTask;
-        statistics.TopKillRatesAllTime = await topKillRatesAllTimeTask;
-
-        statistics.TopPlacementsWeek = await topPlacementsWeekTask;
-        statistics.TopPlacementsMonth = await topPlacementsMonthTask;
-        statistics.TopPlacementsAllTime = await topPlacementsAllTimeTask;
-
-        // If weighted placement is requested, fetch those as well
-        if (minPlayersForWeighting.HasValue)
-        {
-            var minPlayers = minPlayersForWeighting.Value;
-            statistics.MinPlayersForWeighting = minPlayers;
-
-            var weightedPlacementsWeekTask = GetWeightedPlacementLeaderboardAsync(server.Guid, oneWeekStart, endPeriod, 10, minPlayers);
-            var weightedPlacementsMonthTask = GetWeightedPlacementLeaderboardAsync(server.Guid, oneMonthStart, endPeriod, 10, minPlayers);
-            var weightedPlacementsAllTimeTask = GetWeightedPlacementLeaderboardAsync(server.Guid, allTimeStart, endPeriod, 10, minPlayers);
-
-            await Task.WhenAll(
-                weightedPlacementsWeekTask, weightedPlacementsMonthTask, weightedPlacementsAllTimeTask
-            );
-
-            statistics.WeightedTopPlacementsWeek = await weightedPlacementsWeekTask;
-            statistics.WeightedTopPlacementsMonth = await weightedPlacementsMonthTask;
-            statistics.WeightedTopPlacementsAllTime = await weightedPlacementsAllTimeTask;
-        }
-
-        statistics.RecentRounds = await recentRoundsTask;
-
-        // Set current map from the server record
-        statistics.CurrentMap = server.CurrentMap;
 
         // Get busy indicator data for this server
         try
@@ -180,6 +101,8 @@ public class ServerStatsService(
             // Continue without busy indicator data rather than failing the entire request
         }
 
+        statistics.RecentRounds = await recentRoundsTask;
+
         // Cache the result for 10 minutes
         await _cacheService.SetAsync(cacheKey, statistics, TimeSpan.FromMinutes(10));
         _logger.LogDebug("Cached server statistics: {ServerName}, {Days} days", serverName, daysToAnalyze);
@@ -188,13 +111,135 @@ public class ServerStatsService(
     }
 
     /// <summary>
+    /// Get server leaderboards for a specific time period
+    /// </summary>
+    /// <param name="serverName">Server name</param>
+    /// <param name="days">Number of days to include in the leaderboards (e.g., 7, 30, 365)</param>
+    /// <param name="minPlayersForWeighting">Optional minimum players for weighted placement leaderboards</param>
+    /// <returns>Server leaderboards for the specified time period</returns>
+    public async Task<ServerLeaderboards> GetServerLeaderboards(
+        string serverName,
+        int days = 7,
+        int? minPlayersForWeighting = null)
+    {
+        // Validate days parameter
+        if (days <= 0)
+        {
+            throw new ArgumentException("Days must be greater than 0", nameof(days));
+        }
+
+        // Check cache first
+        var cacheKey = $"{_cacheKeyService.GetServerLeaderboardsKey(serverName, days)}_weight_{minPlayersForWeighting}";
+        var cachedResult = await _cacheService.GetAsync<ServerLeaderboards>(cacheKey);
+
+        if (cachedResult != null)
+        {
+            _logger.LogDebug("Cache hit for server leaderboards: {ServerName}, {Days} days", serverName, days);
+            return cachedResult;
+        }
+
+        _logger.LogDebug("Cache miss for server leaderboards: {ServerName}, {Days} days", serverName, days);
+
+        // Get the server by name
+        var server = await _dbContext.Servers
+            .Where(s => s.Name == serverName)
+            .FirstOrDefaultAsync();
+
+        if (server == null)
+        {
+            _logger.LogWarning("Server not found: '{ServerName}'", serverName);
+            return new ServerLeaderboards
+            {
+                ServerName = serverName,
+                Days = days
+            };
+        }
+
+        // Calculate time range based on days
+        var endPeriod = DateTime.UtcNow;
+        var startPeriod = endPeriod.AddDays(-days);
+
+        _logger.LogInformation("Fetching leaderboards for {ServerName} ({ServerGuid}) from {StartPeriod} to {EndPeriod}", 
+            server.Name, server.Guid, startPeriod, endPeriod);
+
+        // Create the leaderboards object
+        var leaderboards = new ServerLeaderboards
+        {
+            ServerGuid = server.Guid,
+            ServerName = server.Name,
+            Days = days,
+            StartPeriod = startPeriod,
+            EndPeriod = endPeriod
+        };
+
+        // Execute leaderboard queries in parallel for the specified time period
+        try
+        {
+            var mostActivePlayersTask = _playerRoundsService.GetMostActivePlayersAsync(server.Guid, startPeriod, endPeriod, 10);
+            var topScoresTask = _playerRoundsService.GetTopScoresAsync(server.Guid, startPeriod, endPeriod, 10);
+            var topKDRatiosTask = _playerRoundsService.GetTopKDRatiosAsync(server.Guid, startPeriod, endPeriod, 10);
+            var topKillRatesTask = _playerRoundsService.GetTopKillRatesAsync(server.Guid, startPeriod, endPeriod, 10);
+            var topPlacementsTask = GetPlacementLeaderboardAsync(server.Guid, startPeriod, endPeriod, 10);
+
+            // Wait for all queries to complete
+            await Task.WhenAll(
+                mostActivePlayersTask, topScoresTask, topKDRatiosTask, topKillRatesTask, topPlacementsTask
+            );
+
+            // Assign results
+            leaderboards.MostActivePlayersByTime = await mostActivePlayersTask;
+            leaderboards.TopScores = await topScoresTask;
+            leaderboards.TopKDRatios = await topKDRatiosTask;
+            leaderboards.TopKillRates = await topKillRatesTask;
+            leaderboards.TopPlacements = await topPlacementsTask;
+
+            _logger.LogInformation("Leaderboards fetched: MostActive={MostActiveCount}, TopScores={TopScoresCount}, TopKD={TopKDCount}, TopKillRate={TopKillRateCount}, TopPlacements={TopPlacementsCount}",
+                leaderboards.MostActivePlayersByTime.Count,
+                leaderboards.TopScores.Count,
+                leaderboards.TopKDRatios.Count,
+                leaderboards.TopKillRates.Count,
+                leaderboards.TopPlacements.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching leaderboards for server {ServerName} ({ServerGuid})", server.Name, server.Guid);
+            // Return partial results - whatever was initialized will be empty lists
+        }
+
+        // If weighted placement is requested, fetch that as well
+        if (minPlayersForWeighting.HasValue)
+        {
+            try
+            {
+                var minPlayers = minPlayersForWeighting.Value;
+                leaderboards.MinPlayersForWeighting = minPlayers;
+
+                var weightedPlacementsTask = GetWeightedPlacementLeaderboardAsync(server.Guid, startPeriod, endPeriod, 10, minPlayers);
+                leaderboards.WeightedTopPlacements = await weightedPlacementsTask;
+
+                _logger.LogInformation("Weighted placements fetched: Count={Count}", leaderboards.WeightedTopPlacements?.Count ?? 0);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching weighted placements for server {ServerName} ({ServerGuid})", server.Name, server.Guid);
+            }
+        }
+
+        // Cache the result for 10 minutes
+        await _cacheService.SetAsync(cacheKey, leaderboards, TimeSpan.FromMinutes(10));
+        _logger.LogDebug("Cached server leaderboards: {ServerName}, {Days} days", serverName, days);
+
+        return leaderboards;
+    }
+
+    /// <summary>
     /// Get placement leaderboard for a specific server and time period.
     /// Returns players ranked by their placement achievements (gold, silver, bronze).
     /// </summary>
     private async Task<List<PlacementLeaderboardEntry>> GetPlacementLeaderboardAsync(
-        string serverGuid, 
-        DateTime startPeriod, 
-        DateTime endPeriod, 
+        string serverGuid,
+        DateTime startPeriod,
+        DateTime endPeriod,
         int limit = 10)
     {
         try
@@ -219,7 +264,7 @@ ORDER BY first_places DESC, second_places DESC, third_places DESC
 LIMIT {limit}
 FORMAT TabSeparated";
 
-            _logger.LogDebug("Executing placement leaderboard query for server {ServerGuid} from {Start} to {End}", 
+            _logger.LogDebug("Executing placement leaderboard query for server {ServerGuid} from {Start} to {End}",
                 serverGuid, startPeriod, endPeriod);
 
             var result = await _clickHouseReader.ExecuteQueryAsync(query);
@@ -245,7 +290,7 @@ FORMAT TabSeparated";
                 }
             }
 
-            _logger.LogDebug("Found {Count} placement leaderboard entries for server {ServerGuid}", 
+            _logger.LogDebug("Found {Count} placement leaderboard entries for server {ServerGuid}",
                 entries.Count, serverGuid);
 
             return entries;
@@ -262,9 +307,9 @@ FORMAT TabSeparated";
     /// Returns players ranked by their placement achievements with simple point scoring (3,2,1 points).
     /// </summary>
     public async Task<List<PlacementLeaderboardEntry>> GetWeightedPlacementLeaderboardAsync(
-        string serverGuid, 
-        DateTime startPeriod, 
-        DateTime endPeriod, 
+        string serverGuid,
+        DateTime startPeriod,
+        DateTime endPeriod,
         int limit = 10,
         int minPlayerCount = 1)
     {
@@ -289,7 +334,7 @@ ORDER BY first_places DESC, second_places DESC, third_places DESC
 LIMIT {limit}
 FORMAT TabSeparated";
 
-            _logger.LogDebug("Executing weighted placement leaderboard query for server {ServerGuid} from {Start} to {End} with minPlayerCount {MinPlayerCount}", 
+            _logger.LogDebug("Executing weighted placement leaderboard query for server {ServerGuid} from {Start} to {End} with minPlayerCount {MinPlayerCount}",
                 serverGuid, startPeriod, endPeriod, minPlayerCount);
 
             var result = await _clickHouseReader.ExecuteQueryAsync(query);
@@ -315,7 +360,7 @@ FORMAT TabSeparated";
                 }
             }
 
-            _logger.LogDebug("Found {Count} placement leaderboard entries for server {ServerGuid}", 
+            _logger.LogDebug("Found {Count} placement leaderboard entries for server {ServerGuid}",
                 entries.Count, serverGuid);
 
             return entries;
@@ -485,9 +530,9 @@ FORMAT TabSeparated";
     // Removed legacy last rounds method that depended on HistoricalRoundsService
 
 
-    
 
-    
+
+
 
     public async Task<ServerInsights> GetServerInsights(string serverName, int days = 7)
     {
@@ -647,7 +692,7 @@ FORMAT TabSeparated";
         return (history, summary);
     }
 
-    private async Task<(List<PlayerCountDataPoint> History, List<PlayerCountDataPoint> HistoryComparison, PlayerCountSummary Summary)> 
+    private async Task<(List<PlayerCountDataPoint> History, List<PlayerCountDataPoint> HistoryComparison, PlayerCountSummary Summary)>
         GetPlayerCountDataWithComparisonFromClickHouse(string serverGuid, DateTime startPeriod, DateTime endPeriod, TimeGranularity granularity)
     {
         // Use separate queries for reliability
@@ -670,7 +715,7 @@ FORMAT TabSeparated";
         {
             TimeGranularity.Hourly => "toStartOfHour(timestamp)",
             TimeGranularity.FourHourly => "toDateTime(toUnixTimestamp(toStartOfHour(timestamp)) - (toUnixTimestamp(toStartOfHour(timestamp)) % 14400))",
-            TimeGranularity.Daily => "toStartOfDay(timestamp)", 
+            TimeGranularity.Daily => "toStartOfDay(timestamp)",
             TimeGranularity.Weekly => "toMonday(timestamp)",
             TimeGranularity.Monthly => "toStartOfMonth(timestamp)",
             _ => "toStartOfHour(timestamp)"
@@ -714,7 +759,7 @@ FORMAT TabSeparated";
         return history;
     }
 
-    private async Task<(List<PlayerCountDataPoint> Current, List<PlayerCountDataPoint> Comparison)> 
+    private async Task<(List<PlayerCountDataPoint> Current, List<PlayerCountDataPoint> Comparison)>
         GetPlayerCountHistoryWithComparisonFromClickHouse(
             string serverGuid, DateTime startPeriod, DateTime endPeriod, TimeGranularity granularity)
     {
@@ -728,7 +773,7 @@ FORMAT TabSeparated";
         {
             TimeGranularity.Hourly => "toStartOfHour(timestamp)",
             TimeGranularity.FourHourly => "toDateTime(toUnixTimestamp(toStartOfHour(timestamp)) - (toUnixTimestamp(toStartOfHour(timestamp)) % 14400))",
-            TimeGranularity.Daily => "toStartOfDay(timestamp)", 
+            TimeGranularity.Daily => "toStartOfDay(timestamp)",
             TimeGranularity.Weekly => "toMonday(timestamp)",
             TimeGranularity.Monthly => "toStartOfMonth(timestamp)",
             _ => "toStartOfHour(timestamp)"
@@ -821,7 +866,7 @@ FORMAT TabSeparated";
         {
             TimeGranularity.Hourly => "toStartOfHour(timestamp)",
             TimeGranularity.FourHourly => "toDateTime(toUnixTimestamp(toStartOfHour(timestamp)) - (toUnixTimestamp(toStartOfHour(timestamp)) % 14400))",
-            TimeGranularity.Daily => "toStartOfDay(timestamp)", 
+            TimeGranularity.Daily => "toStartOfDay(timestamp)",
             TimeGranularity.Weekly => "toMonday(timestamp)",
             TimeGranularity.Monthly => "toStartOfMonth(timestamp)",
             _ => "toStartOfHour(timestamp)"
@@ -991,9 +1036,9 @@ FORMAT TabSeparated";
         _logger.LogDebug("FULL QUERY:\n{Query}", query);
 
         var result = await _clickHouseReader.ExecuteQueryAsync(query);
-        
+
         _logger.LogDebug("RAW RESULT:\n{Result}", result);
-        
+
         var allMaps = new List<PopularMapDataPoint>();
 
         foreach (var line in result?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>())
@@ -1267,7 +1312,7 @@ FORMAT TabSeparated";
                 CurrentPlayers = serverResult.BusyIndicator.CurrentPlayers,
                 TypicalPlayers = serverResult.BusyIndicator.TypicalPlayers,
                 Percentile = serverResult.BusyIndicator.Percentile,
-                HistoricalRange = serverResult.BusyIndicator.HistoricalRange != null ? 
+                HistoricalRange = serverResult.BusyIndicator.HistoricalRange != null ?
                     new junie_des_1942stats.ServerStats.Models.HistoricalRange
                     {
                         Min = serverResult.BusyIndicator.HistoricalRange.Min,

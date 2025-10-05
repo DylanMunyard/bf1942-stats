@@ -282,7 +282,7 @@ public class GameServer
     public int? MaxPlayers { get; set; }
     public string? MapName { get; set; }
     public string? JoinLink { get; set; }
-    
+
     // Current map being played (updated from active player sessions)
     public string? CurrentMap { get; set; }
 
@@ -329,7 +329,7 @@ public class PlayerSession
     public int CurrentPing { get; set; } = 0;
     public int CurrentTeam { get; set; } = 1;
     public string CurrentTeamLabel { get; set; } = "";
-    
+
     // Average ping for the session (calculated when session ends)
     public double? AveragePing { get; set; }
 

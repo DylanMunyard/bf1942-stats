@@ -10,10 +10,10 @@ namespace junie_des_1942stats.ServerStats.Models
 
         // Current period player count data
         public List<PlayerCountDataPoint> PlayerCountHistory { get; set; } = [];
-        
+
         // Comparison period player count data (for the same time range in the previous period)
         public List<PlayerCountDataPoint> PlayerCountHistoryComparison { get; set; } = [];
-        
+
         public PlayerCountSummary? PlayerCountSummary { get; set; }
 
         // Maps analysis

@@ -153,7 +153,7 @@ SETTINGS index_granularity = 8192";
     {
         var startTime = DateTime.UtcNow;
         var totalProcessedCount = 0;
-        
+
         try
         {
             // Read runtime overrides
@@ -165,7 +165,7 @@ SETTINGS index_granularity = 8192";
             var lastSyncedTime = await GetLastSyncedTimestampAsync();
             var fromDate = lastSyncedTime ?? DateTime.MinValue;
             var mode = lastSyncedTime.HasValue ? "Incremental" : "InitialLoad";
-            
+
             _logger.LogInformation(
                 "Starting sync of completed sessions. Mode={Mode}, BatchSize={BatchSize}, DelayMs={DelayMs}, FromDate={FromDate:o}, LastSynced={LastSynced:o}",
                 mode, effectiveBatchSize, delayMs, fromDate, lastSyncedTime);
@@ -178,7 +178,7 @@ SETTINGS index_granularity = 8192";
             var totalQuery = lastSyncedTime.HasValue
                 ? dbContext.PlayerSessions.AsNoTracking().Where(ps => !ps.IsActive && ps.LastSeenTime > fromDate.AddHours(-1))
                 : dbContext.PlayerSessions.AsNoTracking().Where(ps => !ps.IsActive && ps.LastSeenTime >= fromDate);
-            
+
             var totalCount = await totalQuery.CountAsync();
             if (totalCount == 0)
             {
@@ -200,7 +200,7 @@ SETTINGS index_granularity = 8192";
             {
                 batchNumber++;
                 var batchStartTime = DateTime.UtcNow;
-                
+
                 // Get completed sessions since last sync, ordered consistently
                 var baseQuery = lastSyncedTime.HasValue
                     ? dbContext.PlayerSessions.AsNoTracking().Where(ps => !ps.IsActive && ps.LastSeenTime > fromDate.AddHours(-1))
@@ -262,9 +262,9 @@ SETTINGS index_granularity = 8192";
 
                 processedSoFar += playerRounds.Count;
                 totalProcessedCount += playerRounds.Count;
-                
+
                 var batchDuration = DateTime.UtcNow - batchStartTime;
-                _logger.LogInformation("Batch {BatchNumber}: Synced {BatchCount} sessions ({ProcessedSoFar}/{TotalCount}) in {Duration}ms", 
+                _logger.LogInformation("Batch {BatchNumber}: Synced {BatchCount} sessions ({ProcessedSoFar}/{TotalCount}) in {Duration}ms",
                     batchNumber, playerRounds.Count, processedSoFar, totalCount, batchDuration.TotalMilliseconds);
 
                 // Small delay to prevent overwhelming the database
@@ -275,7 +275,7 @@ SETTINGS index_granularity = 8192";
             }
 
             var duration = DateTime.UtcNow - startTime;
-            _logger.LogInformation("Successfully synced all {Count} completed sessions to ClickHouse in {Duration}ms across {BatchCount} batches", 
+            _logger.LogInformation("Successfully synced all {Count} completed sessions to ClickHouse in {Duration}ms across {BatchCount} batches",
                 totalProcessedCount, duration.TotalMilliseconds, batchNumber);
 
             return new SyncResult

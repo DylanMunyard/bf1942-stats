@@ -130,7 +130,7 @@ public class AppController : ControllerBase
                 Categories = new[]
                 {
                     "performance",
-                    "milestone", 
+                    "milestone",
                     "social",
                     "map_mastery",
                     "consistency"
@@ -139,7 +139,7 @@ public class AppController : ControllerBase
                 {
                     "bronze",
                     "silver",
-                    "gold", 
+                    "gold",
                     "legend"
                 },
                 GeneratedAt = DateTime.UtcNow
@@ -148,7 +148,7 @@ public class AppController : ControllerBase
             // Cache for 10 minutes - landing page data should be fresh but not too frequent
             await _cacheService.SetAsync(cacheKey, landingData, TimeSpan.FromMinutes(10));
 
-            _logger.LogInformation("Generated and cached fresh landing page data with {BadgeCount} badges and trend data", 
+            _logger.LogInformation("Generated and cached fresh landing page data with {BadgeCount} badges and trend data",
                 badgeDefinitionsTask.Result.Count);
 
             return Ok(landingData);

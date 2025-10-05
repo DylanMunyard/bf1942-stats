@@ -46,11 +46,11 @@ public class GamificationService : IDisposable
         _placementProcessor = placementProcessor;
         _teamVictoryProcessor = teamVictoryProcessor;
         _logger = logger;
-        
+
         // Configure concurrency limit from environment variable
         _maxConcurrentRounds = configuration.GetValue<int>("GAMIFICATION_MAX_CONCURRENT_ROUNDS", 10);
         _concurrencyThrottle = new SemaphoreSlim(_maxConcurrentRounds, _maxConcurrentRounds);
-        
+
         _logger.LogInformation("Gamification service initialized with max concurrent rounds: {MaxConcurrentRounds}", _maxConcurrentRounds);
     }
 
@@ -184,7 +184,7 @@ public class GamificationService : IDisposable
 
         try
         {
-            _logger.LogInformation("Using batch processing for {RoundCount} rounds with max concurrency: {MaxConcurrency}", 
+            _logger.LogInformation("Using batch processing for {RoundCount} rounds with max concurrency: {MaxConcurrency}",
                 rounds.Count, _maxConcurrentRounds);
 
             // 1. Process kill streaks individually (they're round-specific) with throttling

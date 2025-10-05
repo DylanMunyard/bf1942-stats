@@ -12,7 +12,7 @@ public class PlayerRoundsMigrationController : ControllerBase
     private readonly ILogger<PlayerRoundsMigrationController> _logger;
 
     public PlayerRoundsMigrationController(
-        PlayerRoundsMigrationService migrationService, 
+        PlayerRoundsMigrationService migrationService,
         ILogger<PlayerRoundsMigrationController> logger)
     {
         _migrationService = migrationService;
@@ -51,16 +51,16 @@ public class PlayerRoundsMigrationController : ControllerBase
     /// </summary>
     [HttpPost("migrate")]
     public async Task<ActionResult<MigrationResponse>> MigrateToAddGameColumn(
-        [FromBody] MigrationRequest request, 
+        [FromBody] MigrationRequest request,
         CancellationToken cancellationToken)
     {
         var started = DateTime.UtcNow;
         _logger.LogInformation(
-            "API migration request started: batchSize={BatchSize} delayMs={DelayMs}", 
+            "API migration request started: batchSize={BatchSize} delayMs={DelayMs}",
             request.BatchSize, request.DelayMs);
 
         var result = await _migrationService.MigrateToAddGameColumnAsync(
-            request.BatchSize, 
+            request.BatchSize,
             request.DelayMs);
 
         var ended = DateTime.UtcNow;

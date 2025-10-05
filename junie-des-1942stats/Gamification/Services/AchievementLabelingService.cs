@@ -164,7 +164,7 @@ public class AchievementLabelingService
             return achievementId switch
             {
                 "round_placement_1" => "1st Place",
-                "round_placement_2" => "2nd Place", 
+                "round_placement_2" => "2nd Place",
                 "round_placement_3" => "3rd Place",
                 _ => "Round Placement"
             };

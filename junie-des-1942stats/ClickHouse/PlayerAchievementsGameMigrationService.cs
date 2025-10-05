@@ -7,7 +7,7 @@ namespace junie_des_1942stats.ClickHouse;
 public class PlayerAchievementsGameMigrationService : BaseClickHouseService
 {
     private readonly ILogger<PlayerAchievementsGameMigrationService> _logger;
-    
+
     public PlayerAchievementsGameMigrationService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerAchievementsGameMigrationService> logger)
         : base(httpClient, clickHouseUrl)
     {
@@ -15,12 +15,12 @@ public class PlayerAchievementsGameMigrationService : BaseClickHouseService
     }
 
     public async Task<MigrationResult> MigrateToAddGameColumnAsync(
-        int batchSize = 1_000_000, 
+        int batchSize = 1_000_000,
         int delayMs = 5000)
     {
         var startTime = DateTime.UtcNow;
         var totalMigrated = 0;
-        
+
         try
         {
             _logger.LogInformation("Starting player_achievements migration to add game column using server_online_counts JOIN");
@@ -122,7 +122,7 @@ WHERE toYYYYMM(pa.achieved_at) = {ym}";
         {
             var duration = DateTime.UtcNow - startTime;
             _logger.LogError(ex, "Migration failed after {Migrated} records in {Duration}", totalMigrated, duration);
-            
+
             return new MigrationResult
             {
                 Success = false,
@@ -179,7 +179,7 @@ ORDER BY (player_name, achievement_type, achievement_id, round_id, achieved_at)"
             var gamePopulatedQuery = "SELECT COUNT(*) FROM player_achievements_v2_with_game WHERE game != 'unknown' AND game != ''";
             var gamePopulated = long.Parse((await ExecuteQueryInternalAsync(gamePopulatedQuery)).Trim());
 
-            _logger.LogInformation("Verification: Old count={OldCount}, New count={NewCount}, Game populated={GamePopulated}", 
+            _logger.LogInformation("Verification: Old count={OldCount}, New count={NewCount}, Game populated={GamePopulated}",
                 oldCount, newCount, gamePopulated);
 
             return oldCount == newCount && gamePopulated > 0;
@@ -196,10 +196,10 @@ ORDER BY (player_name, achievement_type, achievement_id, round_id, achieved_at)"
         try
         {
             _logger.LogInformation("Switching tables: player_achievements -> player_achievements_backup, player_achievements_v2_with_game -> player_achievements");
-            
+
             await ExecuteCommandAsync("RENAME TABLE player_achievements TO player_achievements_backup");
             await ExecuteCommandAsync("RENAME TABLE player_achievements_v2_with_game TO player_achievements");
-            
+
             _logger.LogInformation("Table switch completed successfully");
             return true;
         }
@@ -215,10 +215,10 @@ ORDER BY (player_name, achievement_type, achievement_id, round_id, achieved_at)"
         try
         {
             _logger.LogInformation("Rolling back table switch");
-            
+
             await ExecuteCommandAsync("RENAME TABLE player_achievements TO player_achievements_failed");
             await ExecuteCommandAsync("RENAME TABLE player_achievements_backup TO player_achievements");
-            
+
             _logger.LogInformation("Rollback completed successfully");
             return true;
         }
@@ -234,9 +234,9 @@ ORDER BY (player_name, achievement_type, achievement_id, round_id, achieved_at)"
         try
         {
             _logger.LogInformation("Dropping old backup table player_achievements_backup");
-            
+
             await ExecuteCommandAsync("DROP TABLE IF EXISTS player_achievements_backup");
-            
+
             _logger.LogInformation("Cleanup completed successfully");
             return true;
         }

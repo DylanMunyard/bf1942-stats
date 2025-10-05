@@ -7,7 +7,7 @@ namespace junie_des_1942stats.ClickHouse;
 public class PlayerMetricsMigrationService : BaseClickHouseService
 {
     private readonly ILogger<PlayerMetricsMigrationService> _logger;
-    
+
     public PlayerMetricsMigrationService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerMetricsMigrationService> logger)
         : base(httpClient, clickHouseUrl)
     {
@@ -15,12 +15,12 @@ public class PlayerMetricsMigrationService : BaseClickHouseService
     }
 
     public async Task<MigrationResult> MigrateToReplacingMergeTreeAsync(
-        int batchSize = 1_000_000, 
+        int batchSize = 1_000_000,
         int delayMs = 5000)
     {
         var startTime = DateTime.UtcNow;
         var totalMigrated = 0;
-        
+
         try
         {
             _logger.LogInformation("Starting player_metrics migration to ReplacingMergeTree using composite key and monthly partitions");
@@ -118,7 +118,7 @@ WHERE toYYYYMM(timestamp) = {ym}";
         {
             var duration = DateTime.UtcNow - startTime;
             _logger.LogError(ex, "Migration failed after {Migrated} records in {Duration}", totalMigrated, duration);
-            
+
             return new MigrationResult
             {
                 Success = false,
@@ -186,10 +186,10 @@ ORDER BY (timestamp, server_guid, player_name)";
         try
         {
             _logger.LogInformation("Switching tables: player_metrics -> player_metrics_backup, player_metrics_v2 -> player_metrics");
-            
+
             await ExecuteCommandAsync("RENAME TABLE player_metrics TO player_metrics_backup");
             await ExecuteCommandAsync("RENAME TABLE player_metrics_v2 TO player_metrics");
-            
+
             _logger.LogInformation("Table switch completed successfully");
             return true;
         }
@@ -205,10 +205,10 @@ ORDER BY (timestamp, server_guid, player_name)";
         try
         {
             _logger.LogInformation("Rolling back table switch");
-            
+
             await ExecuteCommandAsync("RENAME TABLE player_metrics TO player_metrics_failed");
             await ExecuteCommandAsync("RENAME TABLE player_metrics_backup TO player_metrics");
-            
+
             _logger.LogInformation("Rollback completed successfully");
             return true;
         }
@@ -224,9 +224,9 @@ ORDER BY (timestamp, server_guid, player_name)";
         try
         {
             _logger.LogInformation("Dropping old backup table player_metrics_backup");
-            
+
             await ExecuteCommandAsync("DROP TABLE IF EXISTS player_metrics_backup");
-            
+
             _logger.LogInformation("Cleanup completed successfully");
             return true;
         }
