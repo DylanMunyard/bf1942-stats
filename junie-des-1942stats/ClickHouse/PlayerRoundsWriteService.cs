@@ -77,7 +77,8 @@ CREATE TABLE IF NOT EXISTS player_rounds (
     game_id String,
     is_bot UInt8,
     created_at DateTime DEFAULT now(),
-    game String
+    game String,
+    average_ping Nullable(Float64)
 ) ENGINE = ReplacingMergeTree()
 ORDER BY round_id
 PARTITION BY toYYYYMM(round_start_time)
@@ -88,6 +89,7 @@ SETTINGS index_granularity = 8192";
         // Add columns if they don't exist (for existing tables)
         await ExecuteCommandAsync("ALTER TABLE player_rounds ADD COLUMN IF NOT EXISTS is_bot UInt8 DEFAULT 0");
         await ExecuteCommandAsync("ALTER TABLE player_rounds ADD COLUMN IF NOT EXISTS game String DEFAULT 'unknown'");
+        await ExecuteCommandAsync("ALTER TABLE player_rounds ADD COLUMN IF NOT EXISTS average_ping Nullable(Float64)");
 
         // Create indexes for common query patterns
         var indexQueries = new[]
@@ -222,6 +224,7 @@ SETTINGS index_granularity = 8192";
                         ps.TotalDeaths,
                         ps.GameType,
                         ps.RoundId,
+                        ps.AveragePing,
                         AiBot = (bool?)ps.Player.AiBot,
                         Game = ps.Server.Game,
                         TeamLabel = ps.Observations
@@ -252,6 +255,7 @@ SETTINGS index_granularity = 8192";
                     GameId = r.GameType,
                     Game = r.Game ?? "unknown",
                     IsBot = r.AiBot ?? false,
+                    AveragePing = r.AveragePing,
                     CreatedAt = DateTime.UtcNow
                 }).ToList();
                 await InsertPlayerRoundsAsync(playerRounds);
@@ -332,11 +336,12 @@ SETTINGS index_granularity = 8192";
                 GameId = r.GameId,
                 IsBot = r.IsBot ? 1 : 0,
                 CreatedAt = r.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss"),
-                Game = r.Game
+                Game = r.Game,
+                AveragePing = r.AveragePing.HasValue ? r.AveragePing.Value.ToString("F2", CultureInfo.InvariantCulture) : ""
             }));
 
             var csvData = stringWriter.ToString();
-            var query = "INSERT INTO player_rounds (round_id, player_name, server_guid, map_name, round_start_time, round_end_time, final_score, final_kills, final_deaths, play_time_minutes, team_label, game_id, is_bot, created_at, game) FORMAT CSV";
+            var query = "INSERT INTO player_rounds (round_id, player_name, server_guid, map_name, round_start_time, round_end_time, final_score, final_kills, final_deaths, play_time_minutes, team_label, game_id, is_bot, created_at, game, average_ping) FORMAT CSV";
             var fullRequest = query + "\n" + csvData;
 
             await ExecuteCommandAsync(fullRequest);

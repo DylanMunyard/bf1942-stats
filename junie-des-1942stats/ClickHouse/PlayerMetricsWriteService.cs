@@ -58,7 +58,7 @@ ENGINE = ReplacingMergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (timestamp, server_guid, player_name)";
         await ExecuteCommandAsync(createV2);
-        
+
         // Add game column if it doesn't exist (for existing tables)
         await ExecuteCommandAsync("ALTER TABLE player_metrics ADD COLUMN IF NOT EXISTS game String DEFAULT 'unknown'");
     }

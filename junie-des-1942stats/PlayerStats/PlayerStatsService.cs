@@ -658,25 +658,18 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             // Escape single quotes to prevent SQL injection
             var escapedPlayerName = playerName.Replace("'", "''");
             var serverGuidsParam = string.Join("','", serverGuids.Select(g => g.Replace("'", "''")));
-            
+
+            // Use pre-aggregated player_rounds table instead of player_metrics
             var query = $@"
-                WITH SampledPings AS (
-                    SELECT 
-                        server_guid,
-                        ping,
-                        ROW_NUMBER() OVER (PARTITION BY server_guid ORDER BY timestamp DESC) as rn
-                    FROM player_metrics
-                    WHERE player_name = '{escapedPlayerName}'
-                        AND server_guid IN ('{serverGuidsParam}')
-                        AND ping > 0 
-                        AND ping < 10000
-                )
-                SELECT 
+                SELECT
                     server_guid,
-                    AVG(ping) as average_ping,
+                    AVG(average_ping) as avg_ping,
                     COUNT(*) as sample_size
-                FROM SampledPings
-                WHERE rn <= 200
+                FROM player_rounds
+                WHERE player_name = '{escapedPlayerName}'
+                    AND server_guid IN ('{serverGuidsParam}')
+                    AND average_ping IS NOT NULL
+                    AND round_start_time >= now() - INTERVAL 6 MONTH
                 GROUP BY server_guid";
 
             var result = await _playerRoundsReadService.ExecuteQueryAsync(query);

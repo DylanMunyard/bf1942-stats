@@ -13,6 +13,9 @@ spec:
     - name: metrics
       port: 9363
       protocol: TCP
+    - name: server
+      port: 9000
+      protocol: TCP
   type: ExternalName
 ---
 apiVersion: v1
@@ -30,6 +33,10 @@ spec:
     - name: metrics
       port: 9363
       targetPort: 9363
+      protocol: TCP
+    - name: server
+      port: 9000
+      targetPort: 9000
       protocol: TCP
   type: ClusterIP
 ---

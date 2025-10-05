@@ -127,6 +127,7 @@ public class PlayerTrackingService
                 else
                 {
                     // Close all existing sessions (map changed)
+                    await CalculateAndSetAveragePingAsync(playerSessions);
                     foreach (var session in playerSessions)
                     {
                         session.IsActive = false;
@@ -355,6 +356,7 @@ public class PlayerTrackingService
                 .Where(s => s.IsActive && s.LastSeenTime < timeoutThreshold)
                 .ToListAsync();
 
+            await CalculateAndSetAveragePingAsync(timedOutSessions);
             foreach (var session in timedOutSessions)
             {
                 session.IsActive = false;
@@ -457,6 +459,43 @@ public class PlayerTrackingService
             teamLabel = team?.Label ?? "";
         }
         session.CurrentTeamLabel = teamLabel;
+    }
+
+    private async Task CalculateAndSetAveragePingAsync(IEnumerable<PlayerSession> sessions)
+    {
+        var sessionsList = sessions.ToList();
+        if (!sessionsList.Any()) return;
+
+        try
+        {
+            var sessionIds = sessionsList.Select(s => s.SessionId).ToList();
+            
+            // Calculate average ping for all sessions in one query
+            var avgPings = await _dbContext.PlayerObservations
+                .Where(o => sessionIds.Contains(o.SessionId) && o.Ping > 0)
+                .GroupBy(o => o.SessionId)
+                .Select(g => new { SessionId = g.Key, AvgPing = g.Average(o => (double)o.Ping) })
+                .ToListAsync();
+
+            var avgPingLookup = avgPings.ToDictionary(x => x.SessionId, x => x.AvgPing);
+
+            // Update all sessions with their calculated average ping
+            foreach (var session in sessionsList)
+            {
+                session.AveragePing = avgPingLookup.TryGetValue(session.SessionId, out var avgPing) && avgPing > 0 
+                    ? avgPing 
+                    : null;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to calculate average ping for {SessionCount} sessions", sessionsList.Count);
+            // Set all sessions to null on error
+            foreach (var session in sessionsList)
+            {
+                session.AveragePing = null;
+            }
+        }
     }
 
     private static string ComputeRoundId(string serverGuid, string mapName, DateTime startTimeUtc)
