@@ -518,13 +518,23 @@ ORDER BY hour_of_day";
             ApplyServerGuidToNameMapping(player, serverGuidToNameMapping);
         }
 
+        // OPTIMIZATION: Bulk calculate temporal overlaps for all candidates at once
+        Dictionary<string, double> bulkTemporalOverlaps = new();
+        if (similarPlayers.Any())
+        {
+            var candidateNames = similarPlayers.Select(p => p.PlayerName).ToList();
+            bulkTemporalOverlaps = await CalculateBulkTemporalOverlap(targetPlayer, candidateNames);
+        }
+
         // Calculate similarity scores and rank them
         var minThreshold = mode == SimilarityMode.AliasDetection ? 0.3 : 0.1; // Higher threshold for alias detection
         var rankedPlayers = new List<SimilarPlayer>();
 
         foreach (var candidate in similarPlayers)
         {
-            var similarPlayer = await CalculateSimilarityScoreAsync(targetStats, candidate, mode);
+            // Use pre-calculated temporal overlap instead of individual query
+            var temporalOverlapMinutes = bulkTemporalOverlaps.GetValueOrDefault(candidate.PlayerName, 0.0);
+            var similarPlayer = CalculateSimilarityScore(targetStats, candidate, mode, temporalOverlapMinutes);
             // For alias detection, also exclude players with zero scores (filtered out by overlap/ping criteria)
             if (similarPlayer.SimilarityScore > minThreshold &&
                 (mode != SimilarityMode.AliasDetection || similarPlayer.SimilarityScore > 0))
@@ -611,20 +621,9 @@ GROUP BY t.total_kills, t.total_deaths, t.total_play_time_minutes, s.server_guid
                 GameIds = gameIds.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList()
             };
 
-            // Get player's active servers first to scope all other queries
-            var activeServers = await GetPlayerActiveServers(playerName);
-            serverGuidsToCollect.UnionWith(activeServers);
-
-            // Get player's typical online hours (for UI display)
-            playerStats.TypicalOnlineHours = await GetPlayerTypicalOnlineHours(playerName, activeServers);
-
-            // Get server-specific ping data (for comparison) - collect GUIDs only
-            var (serverPingsWithGuids, serverPingGuids) = await GetPlayerServerPingsWithGuids(playerName, activeServers);
-            playerStats.ServerPings = serverPingsWithGuids;
-            serverGuidsToCollect.UnionWith(serverPingGuids);
-
-            // Get map dominance scores (for comparison)
-            playerStats.MapDominanceScores = await GetPlayerMapDominanceScores(playerName, activeServers);
+            // Note: All additional player data (online hours, pings, map dominance) 
+            // is now fetched in bulk in FindPlayersBySimilarityWithGuids method
+            // This method only gets basic stats for the target player
 
             return (playerStats, serverGuidsToCollect);
         }
@@ -693,9 +692,8 @@ WHERE player_name = {Quote(playerName)}
         var serverList = string.Join(", ", targetActiveServers.Select(Quote));
         var serverFilter = $" AND server_guid IN ({serverList})";
 
-        // No temporal filtering needed - we calculate actual session overlap instead
-
-        var query = $@"
+        // OPTIMIZATION: Single comprehensive query to get all candidate data at once
+        var bulkQuery = $@"
 WITH player_stats AS (
     SELECT 
         player_name,
@@ -725,6 +723,92 @@ player_game_ids AS (
     FROM player_rounds
     WHERE player_name != {Quote(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH{serverFilter}
     GROUP BY player_name
+),
+-- Get all active servers for all candidates in one query
+candidate_active_servers AS (
+    SELECT 
+        player_name,
+        groupArray(DISTINCT server_guid) as active_servers
+    FROM player_rounds
+    WHERE player_name IN (SELECT player_name FROM player_stats)
+      AND round_start_time >= now() - INTERVAL 6 MONTH
+      AND play_time_minutes > 5
+    GROUP BY player_name
+),
+-- Calculate threshold for each player first
+candidate_hour_thresholds AS (
+    SELECT
+        player_name,
+        quantile(0.95)(total_minutes) * 0.5 as threshold
+    FROM (
+        SELECT
+            player_name,
+            toHour(round_start_time) as hour_of_day,
+            SUM(play_time_minutes) as total_minutes
+        FROM player_rounds
+        WHERE player_name IN (SELECT player_name FROM player_stats)
+          AND round_start_time >= now() - INTERVAL 6 MONTH{serverFilter}
+        GROUP BY player_name, hour_of_day
+    )
+    GROUP BY player_name
+),
+-- Get all typical online hours for all candidates in one query
+candidate_online_hours AS (
+    SELECT
+        h.player_name,
+        groupArray(h.hour_of_day) as typical_hours
+    FROM (
+        SELECT
+            player_name,
+            toHour(round_start_time) as hour_of_day,
+            SUM(play_time_minutes) as total_minutes
+        FROM player_rounds
+        WHERE player_name IN (SELECT player_name FROM player_stats)
+          AND round_start_time >= now() - INTERVAL 6 MONTH{serverFilter}
+        GROUP BY player_name, hour_of_day
+    ) h
+    JOIN candidate_hour_thresholds t ON h.player_name = t.player_name
+    WHERE h.total_minutes >= t.threshold
+    GROUP BY h.player_name
+),
+-- Get all server pings for all candidates in one query
+candidate_server_pings AS (
+    SELECT 
+        player_name,
+        groupArray(concat(server_guid, ':', toString(avg_ping))) as ping_data
+    FROM (
+        SELECT 
+            player_name,
+            server_guid,
+            avg(ping) as avg_ping
+        FROM player_metrics
+        WHERE player_name IN (SELECT player_name FROM player_stats)
+          AND ping > 0 
+          AND ping < 1000{serverFilter}
+          AND timestamp >= now() - INTERVAL 30 DAY
+        GROUP BY player_name, server_guid
+        HAVING count(*) >= 10
+    )
+    GROUP BY player_name
+),
+-- Get map dominance scores for all candidates in one query
+candidate_map_dominance AS (
+    SELECT
+        player_name,
+        groupArray(concat(map_name, ':', toString(dominance_score))) as dominance_data
+    FROM (
+        SELECT
+            player_name,
+            map_name,
+            AVG(final_score / nullIf(play_time_minutes, 0)) as dominance_score
+        FROM player_rounds
+        WHERE player_name IN (SELECT player_name FROM player_stats)
+          AND round_start_time >= now() - INTERVAL 6 MONTH{serverFilter}
+          AND play_time_minutes > 0
+        GROUP BY player_name, map_name
+        HAVING COUNT(*) >= 3
+    )
+    GROUP BY player_name
 )
 SELECT 
     p.player_name,
@@ -734,10 +818,18 @@ SELECT
     p.kdr,
     f.server_guid as favorite_server_guid,
     f.total_minutes as favorite_server_minutes,
-    g.game_ids
+    g.game_ids,
+    cas.active_servers,
+    coh.typical_hours,
+    csp.ping_data,
+    cmd.dominance_data
 FROM player_stats p
 LEFT JOIN favorite_servers f ON p.player_name = f.player_name AND f.rn = 1
 LEFT JOIN player_game_ids g ON p.player_name = g.player_name
+LEFT JOIN candidate_active_servers cas ON p.player_name = cas.player_name
+LEFT JOIN candidate_online_hours coh ON p.player_name = coh.player_name
+LEFT JOIN candidate_server_pings csp ON p.player_name = csp.player_name
+LEFT JOIN candidate_map_dominance cmd ON p.player_name = cmd.player_name
 ORDER BY abs(p.total_play_time_minutes - {targetStats.TotalPlayTimeMinutes}) + 
          abs(p.kdr - {targetStats.KillDeathRatio}) * 100
 LIMIT {limit}";
@@ -745,7 +837,7 @@ LIMIT {limit}";
         var players = new List<PlayerSimilarityStats>();
         var allServerGuids = new HashSet<string>();
         await using var cmd = _connection.CreateCommand();
-        cmd.CommandText = query;
+        cmd.CommandText = bulkQuery;
         await using var reader = await cmd.ExecuteReaderAsync();
 
         while (await reader.ReadAsync())
@@ -758,12 +850,59 @@ LIMIT {limit}";
             var favoriteServerGuid = reader.IsDBNull(5) ? "" : reader.GetString(5);
             var favoriteServerMinutes = reader.IsDBNull(6) ? 0.0 : Convert.ToDouble(reader.GetValue(6));
             var gameIds = reader.IsDBNull(7) ? "" : reader.GetString(7);
+            var activeServersStr = reader.IsDBNull(8) ? "" : reader.GetString(8);
+            var typicalHoursStr = reader.IsDBNull(9) ? "" : reader.GetString(9);
+            var pingDataStr = reader.IsDBNull(10) ? "" : reader.GetString(10);
+            var dominanceDataStr = reader.IsDBNull(11) ? "" : reader.GetString(11);
 
-            // Collect favorite server GUID (will be converted to name later)
+            // Parse active servers
+            var activeServersArray = string.IsNullOrEmpty(activeServersStr) ? 
+                new string[0] : activeServersStr.Trim('[', ']').Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => s.Trim('\'', '"')).ToArray();
+
+            // Parse typical hours
+            var typicalHoursArray = string.IsNullOrEmpty(typicalHoursStr) ? 
+                new string[0] : typicalHoursStr.Trim('[', ']').Split(',', StringSplitOptions.RemoveEmptyEntries);
+
+            // Parse ping data
+            var serverPings = new Dictionary<string, double>();
+            if (!string.IsNullOrEmpty(pingDataStr))
+            {
+                var pingEntries = pingDataStr.Trim('[', ']').Split(',', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var entry in pingEntries)
+                {
+                    var cleanEntry = entry.Trim('\'', '"');
+                    var parts = cleanEntry.Split(':', 2);
+                    if (parts.Length == 2 && double.TryParse(parts[1], out var ping))
+                    {
+                        serverPings[parts[0]] = ping;
+                        allServerGuids.Add(parts[0]);
+                    }
+                }
+            }
+
+            // Parse map dominance data
+            var mapDominance = new Dictionary<string, double>();
+            if (!string.IsNullOrEmpty(dominanceDataStr))
+            {
+                var domEntries = dominanceDataStr.Trim('[', ']').Split(',', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var entry in domEntries)
+                {
+                    var cleanEntry = entry.Trim('\'', '"');
+                    var parts = cleanEntry.Split(':', 2);
+                    if (parts.Length == 2 && double.TryParse(parts[1], out var score))
+                    {
+                        mapDominance[parts[0]] = score;
+                    }
+                }
+            }
+
+            // Collect server GUIDs
             if (!string.IsNullOrEmpty(favoriteServerGuid))
             {
                 allServerGuids.Add(favoriteServerGuid);
             }
+            allServerGuids.UnionWith(activeServersArray);
 
             var playerStats = new PlayerSimilarityStats
             {
@@ -774,38 +913,22 @@ LIMIT {limit}";
                 KillDeathRatio = kdr,
                 FavoriteServerName = favoriteServerGuid, // Will be converted to name later
                 FavoriteServerPlayTimeMinutes = favoriteServerMinutes,
-                GameIds = gameIds.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList()
+                GameIds = gameIds.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList(),
+                TypicalOnlineHours = typicalHoursArray.Select(h => int.TryParse(h, out var hour) ? hour : 0)
+                    .Where(h => h >= 0 && h <= 23).ToList(),
+                ServerPings = serverPings,
+                MapDominanceScores = mapDominance
             };
 
-            // Get candidate player's active servers and find common servers with target
-            var candidateActiveServers = await GetPlayerActiveServers(playerName);
-            var targetPlayerActiveServers = await GetPlayerActiveServers(targetPlayer);
-            var commonServers = candidateActiveServers.Intersect(targetPlayerActiveServers).ToList();
+            // Calculate common servers with target (no additional queries needed)
+            var candidateActiveServers = activeServersArray.ToList();
+            var commonServers = candidateActiveServers.Intersect(targetActiveServers).ToList();
 
-            // Use common servers for more focused comparison, fall back to candidate's servers if no overlap
-            var serversToUse = commonServers.Any() ? commonServers : candidateActiveServers;
-
-            // Get typical online hours for candidates (scoped to relevant servers)
-            playerStats.TypicalOnlineHours = await GetPlayerTypicalOnlineHours(playerName, serversToUse);
-
-            // For alias detection mode, also get additional behavioral data
+            // For alias detection mode, temporal non-overlap will be calculated in bulk later if needed
             if (mode == SimilarityMode.AliasDetection)
             {
-                var (serverPings, pingServerGuids) = await GetPlayerServerPingsWithGuids(playerName, serversToUse);
-                playerStats.ServerPings = serverPings;
-                allServerGuids.UnionWith(pingServerGuids);
-                playerStats.MapDominanceScores = await GetPlayerMapDominanceScores(playerName, serversToUse);
-
-                // Pre-calculate temporal non-overlap score against target player
-                playerStats.TemporalNonOverlapScore = await CalculateTemporalNonOverlap(targetPlayer, playerName);
-            }
-            else
-            {
-                // For default mode, still get basic comparison data
-                var (serverPings, pingServerGuids) = await GetPlayerServerPingsWithGuids(playerName, serversToUse);
-                playerStats.ServerPings = serverPings;
-                allServerGuids.UnionWith(pingServerGuids);
-                playerStats.MapDominanceScores = await GetPlayerMapDominanceScores(playerName, serversToUse);
+                // Temporal non-overlap calculation moved to bulk processing
+                playerStats.TemporalNonOverlapScore = 0.0; // Will be calculated later if needed
             }
 
             players.Add(playerStats);
@@ -814,7 +937,91 @@ LIMIT {limit}";
         return (players, allServerGuids);
     }
 
-    private async Task<SimilarPlayer> CalculateSimilarityScoreAsync(PlayerSimilarityStats target, PlayerSimilarityStats candidate, SimilarityMode mode = SimilarityMode.Default)
+    // OPTIMIZATION: Bulk temporal overlap calculation for all candidates at once
+    private async Task<Dictionary<string, double>> CalculateBulkTemporalOverlap(string targetPlayer, List<string> candidatePlayerNames)
+    {
+        if (!candidatePlayerNames.Any())
+            return new Dictionary<string, double>();
+
+        var candidateList = string.Join(", ", candidatePlayerNames.Select(Quote));
+        
+        var query = $@"
+WITH target_sessions AS (
+    SELECT 
+        round_start_time,
+        round_end_time,
+        server_guid
+    FROM player_rounds
+    WHERE player_name = {Quote(targetPlayer)} 
+      AND round_start_time >= now() - INTERVAL 3 MONTH
+),
+candidate_sessions AS (
+    SELECT 
+        player_name,
+        round_start_time,
+        round_end_time,
+        server_guid
+    FROM player_rounds
+    WHERE player_name IN ({candidateList})
+      AND round_start_time >= now() - INTERVAL 3 MONTH
+),
+overlapping_sessions AS (
+    SELECT 
+        c.player_name,
+        SUM(
+            CASE 
+                WHEN c.server_guid = t.server_guid 
+                     AND c.round_start_time < t.round_end_time 
+                     AND c.round_end_time > t.round_start_time
+                THEN dateDiff('minute', 
+                    greatest(c.round_start_time, t.round_start_time),
+                    least(c.round_end_time, t.round_end_time)
+                )
+                ELSE 0
+            END
+        ) as overlap_minutes
+    FROM candidate_sessions c
+    CROSS JOIN target_sessions t
+    GROUP BY c.player_name
+)
+SELECT 
+    player_name,
+    overlap_minutes
+FROM overlapping_sessions
+WHERE overlap_minutes > 0
+UNION ALL
+SELECT 
+    player_name,
+    0 as overlap_minutes
+FROM (SELECT DISTINCT player_name FROM candidate_sessions) cs
+WHERE player_name NOT IN (SELECT player_name FROM overlapping_sessions)";
+
+        var overlaps = new Dictionary<string, double>();
+        
+        await using var cmd = _connection.CreateCommand();
+        cmd.CommandText = query;
+        await using var reader = await cmd.ExecuteReaderAsync();
+
+        while (await reader.ReadAsync())
+        {
+            var playerName = reader.GetString(0);
+            var overlapMinutes = reader.IsDBNull(1) ? 0.0 : Convert.ToDouble(reader.GetValue(1));
+            overlaps[playerName] = overlapMinutes;
+        }
+
+        // Ensure all candidates are included
+        foreach (var candidate in candidatePlayerNames)
+        {
+            if (!overlaps.ContainsKey(candidate))
+            {
+                overlaps[candidate] = 0.0;
+            }
+        }
+
+        return overlaps;
+    }
+
+    private SimilarPlayer CalculateSimilarityScore(PlayerSimilarityStats target, PlayerSimilarityStats candidate, SimilarityMode mode = SimilarityMode.Default, double? preCalculatedTemporalOverlap = null)
     {
         double score = 0;
         var reasons = new List<string>();
@@ -826,7 +1033,7 @@ LIMIT {limit}";
         if (mode == SimilarityMode.AliasDetection)
         {
             // Check temporal overlap - if more than 30 minutes, ignore this candidate
-            var temporalOverlapMinutes = await CalculateActualTemporalOverlap(target.PlayerName, candidate.PlayerName);
+            var temporalOverlapMinutes = preCalculatedTemporalOverlap ?? 0.0;
             if (temporalOverlapMinutes > 30.0)
             {
                 return new SimilarPlayer
@@ -1009,337 +1216,10 @@ LIMIT {limit}";
             ServerPings = candidate.ServerPings,
             MapDominanceScores = candidate.MapDominanceScores,
             TemporalNonOverlapScore = candidate.TemporalNonOverlapScore,
-            TemporalOverlapMinutes = await CalculateActualTemporalOverlap(target.PlayerName, candidate.PlayerName),
+            TemporalOverlapMinutes = preCalculatedTemporalOverlap ?? 0.0,
             SimilarityScore = score,
             SimilarityReasons = reasons
         };
-    }
-
-    private async Task<List<int>> GetPlayerTypicalOnlineHours(string playerName, List<string>? serverGuids = null)
-    {
-        var serverFilter = "";
-        if (serverGuids != null && serverGuids.Any())
-        {
-            var serverList = string.Join(", ", serverGuids.Select(Quote));
-            serverFilter = $" AND server_guid IN ({serverList})";
-        }
-
-        var query = $@"
-WITH hourly_playtime AS (
-    SELECT 
-        toHour(round_start_time) as hour_of_day,
-        SUM(play_time_minutes) as total_minutes
-    FROM player_rounds
-    WHERE player_name = {Quote(playerName)} 
-      AND round_start_time >= now() - INTERVAL 6 MONTH{serverFilter}
-    GROUP BY hour_of_day
-),
-percentiles AS (
-    SELECT 
-        quantile(0.95)(total_minutes) as p95_minutes
-    FROM hourly_playtime
-)
-SELECT hour_of_day
-FROM hourly_playtime, percentiles
-WHERE total_minutes >= p95_minutes * 0.5  -- Include hours with at least 50% of p95 activity
-ORDER BY hour_of_day";
-
-        var activeHours = new List<int>();
-        await using var cmd = _connection.CreateCommand();
-        cmd.CommandText = query;
-        await using var reader = await cmd.ExecuteReaderAsync();
-
-        while (await reader.ReadAsync())
-        {
-            activeHours.Add(Convert.ToInt32(reader.GetValue(0)));
-        }
-
-        return activeHours;
-    }
-
-    private async Task<Dictionary<string, double>> GetPlayerServerPings(string playerName, List<string>? serverGuids = null)
-    {
-        var serverFilter = "";
-        if (serverGuids != null && serverGuids.Any())
-        {
-            var serverList = string.Join(", ", serverGuids.Select(Quote));
-            serverFilter = $" AND server_guid IN ({serverList})";
-        }
-
-        var query = $@"
-SELECT 
-    server_guid,
-    avg(ping) as avg_ping
-FROM player_metrics
-WHERE player_name = {Quote(playerName)} 
-  AND ping > 0 
-  AND ping < 1000{serverFilter}
-  AND timestamp >= now() - INTERVAL 30 DAY  -- Recent ping data for accuracy
-GROUP BY server_guid
-HAVING count(*) >= 10  -- Require at least 10 measurements for reliability";
-
-        var serverPingsWithGuids = new Dictionary<string, double>();
-        await using var cmd = _connection.CreateCommand();
-        cmd.CommandText = query;
-        await using var reader = await cmd.ExecuteReaderAsync();
-
-        while (await reader.ReadAsync())
-        {
-            var serverGuid = reader.GetString(0);
-            var avgPing = reader.IsDBNull(1) ? 0 : Convert.ToDouble(reader.GetValue(1));
-            serverPingsWithGuids[serverGuid] = avgPing;
-        }
-
-        // Convert GUIDs to names
-        if (serverPingsWithGuids.Any())
-        {
-            var guidToNameMapping = await GetServerGuidToNameMappingAsync(serverPingsWithGuids.Keys.ToList());
-            var serverPingsWithNames = new Dictionary<string, double>();
-
-            foreach (var kvp in serverPingsWithGuids)
-            {
-                var serverName = guidToNameMapping.GetValueOrDefault(kvp.Key, kvp.Key); // Fall back to GUID if name not found
-                serverPingsWithNames[serverName] = kvp.Value;
-            }
-
-            return serverPingsWithNames;
-        }
-
-        return serverPingsWithGuids;
-    }
-
-    private async Task<(Dictionary<string, double> pings, HashSet<string> serverGuids)> GetPlayerServerPingsWithGuids(string playerName, List<string>? serverGuids = null)
-    {
-        var serverFilter = "";
-        if (serverGuids != null && serverGuids.Any())
-        {
-            var serverList = string.Join(", ", serverGuids.Select(Quote));
-            serverFilter = $" AND server_guid IN ({serverList})";
-        }
-
-        var query = $@"
-SELECT 
-    server_guid,
-    avg(ping) as avg_ping
-FROM player_metrics
-WHERE player_name = {Quote(playerName)} 
-  AND ping > 0 
-  AND ping < 1000{serverFilter}
-  AND timestamp >= now() - INTERVAL 30 DAY  -- Recent ping data for accuracy
-GROUP BY server_guid
-HAVING count(*) >= 10  -- Require at least 10 measurements for reliability";
-
-        var serverPingsWithGuids = new Dictionary<string, double>();
-        var collectedServerGuids = new HashSet<string>();
-        await using var cmd = _connection.CreateCommand();
-        cmd.CommandText = query;
-        await using var reader = await cmd.ExecuteReaderAsync();
-
-        while (await reader.ReadAsync())
-        {
-            var serverGuid = reader.GetString(0);
-            var avgPing = reader.IsDBNull(1) ? 0 : Convert.ToDouble(reader.GetValue(1));
-            serverPingsWithGuids[serverGuid] = avgPing; // Use GUID as key for now
-            collectedServerGuids.Add(serverGuid);
-        }
-
-        return (serverPingsWithGuids, collectedServerGuids);
-    }
-
-    private async Task<double> CalculateActualTemporalOverlap(string player1, string player2)
-    {
-        // Return the actual overlap minutes (not the score) for UI display
-        var query = $@"
-WITH player1_sessions AS (
-    SELECT 
-        round_start_time,
-        round_end_time,
-        server_guid
-    FROM player_rounds
-    WHERE player_name = {Quote(player1)} 
-      AND round_start_time >= now() - INTERVAL 3 MONTH
-),
-player2_sessions AS (
-    SELECT 
-        round_start_time,
-        round_end_time,
-        server_guid
-    FROM player_rounds
-    WHERE player_name = {Quote(player2)} 
-      AND round_start_time >= now() - INTERVAL 3 MONTH
-),
-overlapping_sessions AS (
-    SELECT 
-        -- Calculate the actual overlap duration in minutes
-        CASE 
-            WHEN p1.round_start_time <= p2.round_end_time AND p2.round_start_time <= p1.round_end_time THEN
-                dateDiff('minute', 
-                    greatest(p1.round_start_time, p2.round_start_time),
-                    least(p1.round_end_time, p2.round_end_time)
-                )
-            ELSE 0
-        END as overlap_minutes
-    FROM player1_sessions p1
-    JOIN player2_sessions p2 ON p1.server_guid = p2.server_guid
-    WHERE p1.round_start_time <= p2.round_end_time 
-      AND p2.round_start_time <= p1.round_end_time
-)
-SELECT SUM(overlap_minutes) as total_overlap_minutes
-FROM overlapping_sessions";
-
-        await using var cmd = _connection.CreateCommand();
-        cmd.CommandText = query;
-        await using var reader = await cmd.ExecuteReaderAsync();
-
-        if (await reader.ReadAsync())
-        {
-            return reader.IsDBNull(0) ? 0.0 : Convert.ToDouble(reader.GetValue(0));
-        }
-
-        return 0.0;
-    }
-
-    private async Task<double> CalculateTemporalNonOverlap(string player1, string player2)
-    {
-        // Check for simultaneous sessions on same servers - aliases should have zero overlap
-        var query = $@"
-WITH player1_sessions AS (
-    SELECT 
-        round_start_time,
-        round_end_time,
-        server_guid,
-        play_time_minutes
-    FROM player_rounds
-    WHERE player_name = {Quote(player1)} 
-      AND round_start_time >= now() - INTERVAL 3 MONTH
-),
-player2_sessions AS (
-    SELECT 
-        round_start_time,
-        round_end_time,
-        server_guid,
-        play_time_minutes
-    FROM player_rounds
-    WHERE player_name = {Quote(player2)} 
-      AND round_start_time >= now() - INTERVAL 3 MONTH
-),
-overlapping_sessions AS (
-    SELECT 
-        p1.server_guid,
-        p1.round_start_time as p1_start,
-        p1.round_end_time as p1_end,
-        p2.round_start_time as p2_start,
-        p2.round_end_time as p2_end,
-        -- Calculate the actual overlap duration in minutes
-        CASE 
-            WHEN p1.round_start_time <= p2.round_end_time AND p2.round_start_time <= p1.round_end_time THEN
-                dateDiff('minute', 
-                    greatest(p1.round_start_time, p2.round_start_time),
-                    least(p1.round_end_time, p2.round_end_time)
-                )
-            ELSE 0
-        END as overlap_minutes
-    FROM player1_sessions p1
-    JOIN player2_sessions p2 ON p1.server_guid = p2.server_guid
-    WHERE p1.round_start_time <= p2.round_end_time 
-      AND p2.round_start_time <= p1.round_end_time
-),
-total_play_time AS (
-    SELECT 
-        SUM(play_time_minutes) as p1_total_minutes
-    FROM player1_sessions
-    UNION ALL
-    SELECT 
-        SUM(play_time_minutes) as p2_total_minutes
-    FROM player2_sessions
-)
-SELECT 
-    SUM(overlap_minutes) as total_overlap_minutes,
-    (SELECT SUM(p1_total_minutes) FROM total_play_time) as combined_play_time
-FROM overlapping_sessions";
-
-        await using var cmd = _connection.CreateCommand();
-        cmd.CommandText = query;
-        await using var reader = await cmd.ExecuteReaderAsync();
-
-        if (await reader.ReadAsync())
-        {
-            var totalOverlapMinutes = reader.IsDBNull(0) ? 0.0 : Convert.ToDouble(reader.GetValue(0));
-            var combinedPlayTime = reader.IsDBNull(1) ? 0.0 : Convert.ToDouble(reader.GetValue(1));
-
-            if (combinedPlayTime == 0) return 0.0;
-
-            // Calculate non-overlap score: perfect 1.0 for zero overlap, decreases with more overlap
-            var overlapRatio = totalOverlapMinutes / combinedPlayTime;
-
-            // For aliases, even 1% overlap should be heavily penalized
-            // Score: 1.0 = no overlap, 0.8 = 1% overlap, 0.0 = 10%+ overlap
-            return Math.Max(0.0, 1.0 - (overlapRatio * 10.0));
-        }
-
-        return 0.0;
-    }
-
-
-
-    private async Task<Dictionary<string, double>> GetPlayerMapDominanceScores(string playerName, List<string>? serverGuids = null)
-    {
-        // Calculate dominance as the ratio of player's performance vs average performance on each map
-        // Only compare against averages from servers where the target player actually plays
-        var serverFilter = "";
-        if (serverGuids != null && serverGuids.Any())
-        {
-            var serverList = string.Join(", ", serverGuids.Select(Quote));
-            serverFilter = $" AND server_guid IN ({serverList})";
-        }
-
-        var query = $@"
-WITH player_map_stats AS (
-    SELECT 
-        map_name,
-        AVG(final_kills / nullIf(play_time_minutes, 0)) as player_kill_rate,
-        AVG(final_score / nullIf(play_time_minutes, 0)) as player_score_rate,
-        SUM(play_time_minutes) as total_play_time
-    FROM player_rounds
-    WHERE player_name = {Quote(playerName)} 
-      AND round_start_time >= now() - INTERVAL 6 MONTH
-      AND play_time_minutes > 5{serverFilter}
-    GROUP BY map_name
-    HAVING total_play_time >= 60  -- At least 1 hour on the map
-),
-map_averages AS (
-    SELECT 
-        map_name,
-        AVG(final_kills / nullIf(play_time_minutes, 0)) as avg_kill_rate,
-        AVG(final_score / nullIf(play_time_minutes, 0)) as avg_score_rate
-    FROM player_rounds
-    WHERE is_bot = 0 AND round_start_time >= now() - INTERVAL 6 MONTH
-      AND play_time_minutes > 5{serverFilter}
-    GROUP BY map_name
-)
-SELECT 
-    p.map_name,
-    CASE 
-        WHEN a.avg_kill_rate > 0 AND a.avg_score_rate > 0 THEN
-            (p.player_kill_rate / a.avg_kill_rate + p.player_score_rate / a.avg_score_rate) / 2
-        ELSE 1.0 
-    END as dominance_score
-FROM player_map_stats p
-JOIN map_averages a ON p.map_name = a.map_name";
-
-        var mapDominance = new Dictionary<string, double>();
-        await using var cmd = _connection.CreateCommand();
-        cmd.CommandText = query;
-        await using var reader = await cmd.ExecuteReaderAsync();
-
-        while (await reader.ReadAsync())
-        {
-            var mapName = reader.GetString(0);
-            var dominanceScore = reader.IsDBNull(1) ? 1.0 : Convert.ToDouble(reader.GetValue(1));
-            mapDominance[mapName] = dominanceScore;
-        }
-
-        return mapDominance;
     }
 
     private static double CalculatePingSimilarity(Dictionary<string, double> targetPings, Dictionary<string, double> candidatePings)
