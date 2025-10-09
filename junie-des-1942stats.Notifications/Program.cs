@@ -8,15 +8,18 @@ using StackExchange.Redis;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
+using Serilog.Enrichers.Span;
 using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Diagnostics;
 using OpenTelemetry.Trace;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Exporter;
+using Serilog.Sinks.Grafana.Loki;
 
 // Configure Serilog
-var seqUrl = Environment.GetEnvironmentVariable("SEQ_URL") ?? "http://100.87.24.27:5341";
+var lokiUrl = Environment.GetEnvironmentVariable("LOKI_URL") ?? "http://localhost:3100";
+var otlpEndpoint = Environment.GetEnvironmentVariable("OTLP_ENDPOINT") ?? "http://localhost:4318/v1/traces";
 var serviceName = "junie-des-1942stats.Notifications";
 var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development";
 
@@ -45,9 +48,17 @@ Log.Logger = new LoggerConfiguration()
     .Enrich.FromLogContext()
     .Enrich.WithMachineName()
     .Enrich.WithEnvironmentUserName()
+    .Enrich.WithSpan()
     .WriteTo.Console(
         outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj} {Properties:j}{NewLine}{Exception}")
-    .WriteTo.Seq(seqUrl)
+    .WriteTo.GrafanaLoki(lokiUrl,
+        labels: new[]
+        {
+            new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "service", Value = serviceName },
+            new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "environment", Value = environment },
+            new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "host", Value = Environment.MachineName }
+        },
+        textFormatter: new Serilog.Formatting.Compact.RenderedCompactJsonFormatter())
     .CreateLogger();
 
 try
@@ -84,7 +95,7 @@ try
                 tracing.AddHttpClientInstrumentation();
                 tracing.AddOtlpExporter(opt =>
                 {
-                    opt.Endpoint = new Uri($"{seqUrl}/ingest/otlp/v1/traces");
+                    opt.Endpoint = new Uri(otlpEndpoint);
                     opt.Protocol = OtlpExportProtocol.HttpProtobuf;
                 });
                 tracing.AddSource("junie-des-1942stats.Notifications.*");

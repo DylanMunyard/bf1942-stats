@@ -82,6 +82,12 @@ spec:
               value: "Production"
             - name: SEQ_URL
               value: "http://seq-k3s:5341"
+            - name: LOKI_URL
+              value: "http://loki.monitoring:3100"
+            - name: TEMPO_URL
+              value: "http://tempo.monitoring:3200"
+            - name: OTLP_ENDPOINT
+              value: "http://tempo.monitoring:4318"
             - name: CLICKHOUSE_URL
               value: "http://clickhouse-service.clickhouse:8123"
             - name: CLICKHOUSE_WRITE_URL

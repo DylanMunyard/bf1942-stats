@@ -12,6 +12,7 @@ using junie_des_1942stats.ClickHouse.Base;
 using junie_des_1942stats.Caching;
 using junie_des_1942stats.Services;
 using Serilog;
+using Serilog.Enrichers.Span;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -26,9 +27,11 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Metrics;
 using junie_des_1942stats.Telemetry;
 using OpenTelemetry.Exporter;
+using Serilog.Sinks.Grafana.Loki;
 
 // Configure Serilog
-var seqUrl = Environment.GetEnvironmentVariable("SEQ_URL") ?? "http://100.87.24.27:5341";
+var lokiUrl = Environment.GetEnvironmentVariable("LOKI_URL") ?? "http://localhost:3100";
+var otlpEndpoint = Environment.GetEnvironmentVariable("OTLP_ENDPOINT") ?? "http://localhost:4318/v1/traces";
 var serviceName = "junie-des-1942stats";
 var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development";
 
@@ -59,9 +62,17 @@ Log.Logger = new LoggerConfiguration()
     .Enrich.FromLogContext()
     .Enrich.WithMachineName()
     .Enrich.WithEnvironmentUserName()
+    .Enrich.WithSpan()
     .WriteTo.Console(
         outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj} {Properties:j}{NewLine}{Exception}")
-    .WriteTo.Seq(seqUrl)
+    .WriteTo.GrafanaLoki(lokiUrl,
+        labels: new[]
+        {
+            new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "service", Value = serviceName },
+            new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "environment", Value = environment },
+            new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "host", Value = Environment.MachineName }
+        },
+        textFormatter: new Serilog.Formatting.Compact.RenderedCompactJsonFormatter())
     .CreateLogger();
 
 try
@@ -153,7 +164,7 @@ try
                 // EF Core instrumentation above already covers most database operations
                 tracing.AddOtlpExporter(opt =>
                 {
-                    opt.Endpoint = new Uri($"{seqUrl}/ingest/otlp/v1/traces");
+                    opt.Endpoint = new Uri(otlpEndpoint);
                     opt.Protocol = OtlpExportProtocol.HttpProtobuf;
                 });
                 // Only trace API-related activity sources, exclude background service sources

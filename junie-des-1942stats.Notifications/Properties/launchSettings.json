@@ -7,7 +7,10 @@
       "applicationUrl": "http://localhost:9223",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "ConnectionStrings__Redis": "42redis.home.net:6380",
+        "ConnectionStrings__Redis": "localhost:6379",
+        "LOKI_URL": "http://localhost:3100",
+        "TEMPO_URL": "http://localhost:3200",
+        "OTLP_ENDPOINT": "http://localhost:4318/v1/traces",
         "Jwt:Issuer": "https://localhost:9222",
         "Jwt:Audience": "http://localhost:5173",
         "ApiBaseUrl": "http://localhost:9222"
