@@ -87,7 +87,7 @@ spec:
             - name: TEMPO_URL
               value: "http://tempo.monitoring:3200"
             - name: OTLP_ENDPOINT
-              value: "http://tempo.monitoring:4318"
+              value: "http://tempo.monitoring:4318/v1/traces"
             - name: CLICKHOUSE_URL
               value: "http://clickhouse-service.clickhouse:8123"
             - name: CLICKHOUSE_WRITE_URL
