@@ -173,11 +173,10 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
 
         var now = DateTime.UtcNow;
 
-        // Get aggregated stats from ClickHouse for better performance and accuracy
-        var clickHouseStats = await GetPlayerStatsFromClickHouse(playerName);
+        // Execute all independent queries in parallel for better performance
+        var clickHouseStatsTask = GetPlayerStatsFromClickHouse(playerName);
 
-        // Get session-based stats for fields not available in ClickHouse
-        var sessionStats = await _dbContext.PlayerSessions
+        var sessionStatsTask = _dbContext.PlayerSessions
             .Where(ps => ps.PlayerName == playerName)
             .GroupBy(ps => ps.PlayerName)
             .Select(g => new
@@ -187,17 +186,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             })
             .FirstOrDefaultAsync();
 
-        var aggregateStats = new
-        {
-            FirstPlayed = sessionStats?.FirstPlayed ?? DateTime.MinValue,
-            LastPlayed = sessionStats?.LastPlayed ?? DateTime.MinValue,
-            TotalKills = clickHouseStats?.TotalKills ?? 0,
-            TotalDeaths = clickHouseStats?.TotalDeaths ?? 0,
-            TotalPlayTimeMinutes = clickHouseStats?.TotalPlayTimeMinutes ?? 0
-        };
-
-        // Get the most recent 10 sessions with server info
-        var recentSessions = await _dbContext.PlayerSessions
+        var recentSessionsTask = _dbContext.PlayerSessions
             .Where(ps => ps.PlayerName == playerName)
             .OrderByDescending(s => s.LastSeenTime)
             .Include(s => s.Server)
@@ -220,17 +209,60 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             })
             .ToListAsync();
 
-        var insights = await GetPlayerInsights(playerName);
+        var insightsTask = GetPlayerInsights(playerName);
 
-        List<ServerInsight> serverInsights;
-        try
+        var serverInsightsTask = Task.Run(async () =>
         {
-            serverInsights = await _playerInsightsService.GetPlayerServerInsightsAsync(playerName);
-        }
-        catch (Exception)
+            try
+            {
+                return await _playerInsightsService.GetPlayerServerInsightsAsync(playerName);
+            }
+            catch (Exception)
+            {
+                return new List<ServerInsight>();
+            }
+        });
+
+        var timeSeriesTrendTask = CalculateTimeSeriesTrendAsync(playerName);
+
+        var bestScoresTask = Task.Run(async () =>
         {
-            serverInsights = new List<ServerInsight>();
-        }
+            try
+            {
+                return await _playerRoundsReadService.GetPlayerBestScoresAsync(playerName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to get best scores for player: {PlayerName}", playerName);
+                return new PlayerBestScores();
+            }
+        });
+
+        // Wait for all parallel queries to complete
+        await Task.WhenAll(
+            clickHouseStatsTask,
+            sessionStatsTask,
+            recentSessionsTask,
+            insightsTask,
+            serverInsightsTask,
+            timeSeriesTrendTask,
+            bestScoresTask);
+
+        // Extract results
+        var clickHouseStats = await clickHouseStatsTask;
+        var sessionStats = await sessionStatsTask;
+        var recentSessions = await recentSessionsTask;
+        var insights = await insightsTask;
+        var serverInsights = await serverInsightsTask;
+
+        var aggregateStats = new
+        {
+            FirstPlayed = sessionStats?.FirstPlayed ?? DateTime.MinValue,
+            LastPlayed = sessionStats?.LastPlayed ?? DateTime.MinValue,
+            TotalKills = clickHouseStats?.TotalKills ?? 0,
+            TotalDeaths = clickHouseStats?.TotalDeaths ?? 0,
+            TotalPlayTimeMinutes = clickHouseStats?.TotalPlayTimeMinutes ?? 0
+        };
 
         // Get server names for the insights using batch query
         if (serverInsights.Any())
@@ -284,22 +316,10 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                 : null,
             RecentSessions = recentSessions,
             Insights = insights,
-            Servers = serverInsights
+            Servers = serverInsights,
+            RecentStats = await timeSeriesTrendTask,
+            BestScores = await bestScoresTask
         };
-
-        // Calculate time series trend stats over last 6 months
-        stats.RecentStats = await CalculateTimeSeriesTrendAsync(playerName);
-
-        // Get best scores for different time periods
-        try
-        {
-            stats.BestScores = await _playerRoundsReadService.GetPlayerBestScoresAsync(playerName);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to get best scores for player: {PlayerName}", playerName);
-            stats.BestScores = new PlayerBestScores(); // Return empty object instead of null
-        }
 
         return stats;
     }

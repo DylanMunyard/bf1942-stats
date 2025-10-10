@@ -123,17 +123,6 @@ public class PlayersController : ControllerBase
             stats.RecentStats = new Models.RecentStats();
         }
 
-        // Get best scores from ClickHouse
-        try
-        {
-            stats.BestScores = await _playerRoundsService.GetPlayerBestScoresAsync(playerName);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to retrieve best scores for player {PlayerName}", playerName);
-            stats.BestScores = new Models.PlayerBestScores(); // Return empty object instead of null
-        }
-
         return Ok(stats);
     }
 
