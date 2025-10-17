@@ -42,7 +42,15 @@ public class PlayerTrackingService
         {
             _logger.LogInformation("TRACKING: Detected map change for {ServerGuid} / {ServerName}: {OldMap} -> {NewMap}",
                 server.Guid, server.Name, serverMapChangeOldMap, server.MapName);
-            await PublishServerMapChangeEvent(server, serverMapChangeOldMap);
+            try
+            {
+                await PublishServerMapChangeEvent(server, serverMapChangeOldMap);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error publishing server map change event for {ServerName}: {OldMap} -> {NewMap}. Continuing with stats collection.", 
+                    server.Name, serverMapChangeOldMap, server.MapName);
+            }
         }
 
         // Ensure active round and record round observation regardless of player count (if enabled)
@@ -239,7 +247,14 @@ public class PlayerTrackingService
                 await transaction.CommitAsync();
 
                 // Publish events after successful database operations
-                await PublishPlayerEvents(eventsToPublish, server);
+                try
+                {
+                    await PublishPlayerEvents(eventsToPublish, server);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error publishing player events for {ServerName}. Stats collection completed successfully.", server.Name);
+                }
             }
             catch (Exception)
             {

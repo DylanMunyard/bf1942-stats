@@ -236,7 +236,8 @@ public class LiveServersController : ControllerBase
                 IsOnline = server.IsOnline,
                 LastSeenTime = server.LastSeenTime,
                 DiscordUrl = server.DiscordUrl,
-                ForumUrl = server.ForumUrl
+                ForumUrl = server.ForumUrl,
+                GameId = server.GameId
             };
         }).ToList();
         stepStopwatch.Stop();
@@ -304,6 +305,7 @@ public class LiveServersController : ControllerBase
                 server.GeoLookupDate = gameServer.GeoLookupDate;
                 server.DiscordUrl = gameServer.DiscordUrl;
                 server.ForumUrl = gameServer.ForumUrl;
+                server.GameId = gameServer.GameId;
             }
         }
 

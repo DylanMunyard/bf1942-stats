@@ -92,6 +92,12 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                     s.Server.GameId == filters.GameId));
             }
 
+            if (!string.IsNullOrEmpty(filters.Game))
+            {
+                baseQuery = baseQuery.Where(p => p.Sessions.Any(s => s.IsActive &&
+                    s.Server.Game == filters.Game));
+            }
+
             if (!string.IsNullOrEmpty(filters.MapName))
             {
                 baseQuery = baseQuery.Where(p => p.Sessions.Any(s => s.IsActive &&

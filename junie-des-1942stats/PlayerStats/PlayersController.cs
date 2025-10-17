@@ -43,6 +43,7 @@ public class PlayersController : ControllerBase
         [FromQuery] bool? isActive = null,
         [FromQuery] string? serverName = null,
         [FromQuery] string? gameId = null,
+        [FromQuery] string? game = null,
         [FromQuery] string? mapName = null)
     {
         // Validate parameters
@@ -89,6 +90,7 @@ public class PlayersController : ControllerBase
                 IsActive = isActive,
                 ServerName = serverName,
                 GameId = gameId,
+                Game = game,
                 MapName = mapName
             };
 

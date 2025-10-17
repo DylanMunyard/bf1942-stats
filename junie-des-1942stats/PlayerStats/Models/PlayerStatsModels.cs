@@ -19,6 +19,7 @@ public class PlayerFilters
     public bool? IsActive { get; set; }
     public string? ServerName { get; set; }
     public string? GameId { get; set; }
+    public string? Game { get; set; }
     public string? MapName { get; set; }
 
     // Additional session-specific filters

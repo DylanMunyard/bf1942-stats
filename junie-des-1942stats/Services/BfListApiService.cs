@@ -450,7 +450,8 @@ public class BfListApiService : IBfListApiService
             Tickets1 = server.Tickets1,
             Tickets2 = server.Tickets2,
             Players = filteredPlayers,
-            Teams = server.Teams ?? []
+            Teams = server.Teams ?? [],
+            GameId = server.GameId
         };
     }
 
@@ -473,7 +474,8 @@ public class BfListApiService : IBfListApiService
             Tickets1 = server.Teams?.FirstOrDefault(t => t.Index == 1)?.Tickets ?? 0,
             Tickets2 = server.Teams?.FirstOrDefault(t => t.Index == 2)?.Tickets ?? 0,
             Players = filteredPlayers,
-            Teams = server.Teams ?? []
+            Teams = server.Teams ?? [],
+            GameId = server.GameId
         };
     }
 
@@ -496,7 +498,8 @@ public class BfListApiService : IBfListApiService
             Tickets1 = 0, // FH2 doesn't have tickets in the current model
             Tickets2 = 0,
             Players = filteredPlayers,
-            Teams = server.Teams?.ToArray() ?? []
+            Teams = server.Teams?.ToArray() ?? [],
+            GameId = server.GameVariant
         };
     }
 }
@@ -659,6 +662,11 @@ public class ServerSummary
     /// Server forum URL
     /// </summary>
     public string? ForumUrl { get; set; }
+
+    /// <summary>
+    /// Game identifier (bf1942, fh2, bfvietnam)
+    /// </summary>
+    public string GameId { get; set; } = "";
 }
 
 public class PlayersOnlineHistoryResponse
