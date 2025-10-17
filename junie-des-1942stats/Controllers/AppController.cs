@@ -2,6 +2,9 @@ using Microsoft.AspNetCore.Mvc;
 using junie_des_1942stats.Gamification.Services;
 using junie_des_1942stats.Caching;
 using junie_des_1942stats.ClickHouse;
+using junie_des_1942stats.ClickHouse.Interfaces;
+using junie_des_1942stats.PlayerTracking;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace junie_des_1942stats.Controllers;
@@ -14,17 +17,23 @@ public class AppController : ControllerBase
     private readonly GameTrendsService _gameTrendsService;
     private readonly ICacheService _cacheService;
     private readonly ILogger<AppController> _logger;
+    private readonly IClickHouseReader _clickHouseReader;
+    private readonly PlayerTrackerDbContext _dbContext;
 
     public AppController(
         BadgeDefinitionsService badgeDefinitionsService,
         GameTrendsService gameTrendsService,
         ICacheService cacheService,
-        ILogger<AppController> logger)
+        ILogger<AppController> logger,
+        IClickHouseReader clickHouseReader,
+        PlayerTrackerDbContext dbContext)
     {
         _badgeDefinitionsService = badgeDefinitionsService;
         _gameTrendsService = gameTrendsService;
         _cacheService = cacheService;
         _logger = logger;
+        _clickHouseReader = clickHouseReader;
+        _dbContext = dbContext;
     }
 
     /// <summary>
@@ -159,6 +168,93 @@ public class AppController : ControllerBase
             return StatusCode(500, "An internal server error occurred while retrieving landing page data.");
         }
     }
+
+    /// <summary>
+    /// Get system statistics showing data volume metrics from ClickHouse and SQLite
+    /// </summary>
+    [HttpGet("systemstats")]
+    [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Any, VaryByHeader = "Accept")]
+    public async Task<ActionResult<SystemStats>> GetSystemStats()
+    {
+        const string cacheKey = "app:system:stats:v1";
+
+        try
+        {
+            // Try to get from cache first (5 minute cache)
+            var cachedData = await _cacheService.GetAsync<SystemStats>(cacheKey);
+            if (cachedData != null)
+            {
+                _logger.LogDebug("Returning cached system stats");
+                return Ok(cachedData);
+            }
+
+            // Execute all count queries in parallel for maximum performance
+            var roundsCountTask = GetClickHouseCountAsync("player_rounds", "Rounds Tracked");
+            var metricsCountTask = GetClickHouseCountAsync("player_metrics", "Player Metrics Tracked");
+            var serversCountTask = _dbContext.Servers.CountAsync();
+            var playersCountTask = _dbContext.Players.CountAsync();
+
+            await Task.WhenAll(roundsCountTask, metricsCountTask, serversCountTask, playersCountTask);
+
+            var stats = new SystemStats
+            {
+                ClickHouseMetrics = new ClickHouseMetrics
+                {
+                    RoundsTracked = roundsCountTask.Result,
+                    PlayerMetricsTracked = metricsCountTask.Result
+                },
+                SqliteMetrics = new SqliteMetrics
+                {
+                    ServersTracked = serversCountTask.Result,
+                    PlayersTracked = playersCountTask.Result
+                },
+                GeneratedAt = DateTime.UtcNow
+            };
+
+            // Cache for 5 minutes - good balance between freshness and performance
+            await _cacheService.SetAsync(cacheKey, stats, TimeSpan.FromMinutes(5));
+
+            _logger.LogInformation(
+                "Generated system stats: {RoundsCount} rounds, {MetricsCount} metrics, {ServersCount} servers, {PlayersCount} players",
+                stats.ClickHouseMetrics.RoundsTracked,
+                stats.ClickHouseMetrics.PlayerMetricsTracked,
+                stats.SqliteMetrics.ServersTracked,
+                stats.SqliteMetrics.PlayersTracked);
+
+            return Ok(stats);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error generating system stats");
+            return StatusCode(500, "An internal server error occurred while retrieving system statistics.");
+        }
+    }
+
+    /// <summary>
+    /// Helper method to execute COUNT(*) queries against ClickHouse tables
+    /// </summary>
+    private async Task<long> GetClickHouseCountAsync(string tableName, string metricDescription)
+    {
+        try
+        {
+            var query = $"SELECT COUNT(*) FROM {tableName}";
+            var result = await _clickHouseReader.ExecuteQueryAsync(query);
+
+            // ClickHouse returns the count as a plain number in the response
+            if (long.TryParse(result.Trim(), out var count))
+            {
+                return count;
+            }
+
+            _logger.LogWarning("Failed to parse ClickHouse count for {Table}: {Result}", tableName, result);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting count from ClickHouse table {Table}", tableName);
+            return 0;
+        }
+    }
 }
 
 /// <summary>
@@ -195,4 +291,46 @@ public class BadgeUIDefinition
     public string Tier { get; set; } = "";
     public string Category { get; set; } = "";
     public Dictionary<string, object> Requirements { get; set; } = new();
+}
+
+/// <summary>
+/// System statistics showing the scale of data being processed across databases
+/// </summary>
+public class SystemStats
+{
+    public ClickHouseMetrics ClickHouseMetrics { get; set; } = new();
+    public SqliteMetrics SqliteMetrics { get; set; } = new();
+    public DateTime GeneratedAt { get; set; }
+}
+
+/// <summary>
+/// Metrics from ClickHouse analytical database
+/// </summary>
+public class ClickHouseMetrics
+{
+    /// <summary>
+    /// Total number of player rounds tracked in the player_rounds table
+    /// </summary>
+    public long RoundsTracked { get; set; }
+
+    /// <summary>
+    /// Total number of player metrics snapshots in the player_metrics table
+    /// </summary>
+    public long PlayerMetricsTracked { get; set; }
+}
+
+/// <summary>
+/// Metrics from SQLite operational database
+/// </summary>
+public class SqliteMetrics
+{
+    /// <summary>
+    /// Total number of game servers being tracked
+    /// </summary>
+    public int ServersTracked { get; set; }
+
+    /// <summary>
+    /// Total number of unique players tracked
+    /// </summary>
+    public int PlayersTracked { get; set; }
 }
