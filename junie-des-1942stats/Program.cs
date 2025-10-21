@@ -28,6 +28,8 @@ using OpenTelemetry.Metrics;
 using junie_des_1942stats.Telemetry;
 using OpenTelemetry.Exporter;
 using Serilog.Sinks.Grafana.Loki;
+using Microsoft.AspNetCore.ResponseCompression;
+using System.IO.Compression;
 
 // Configure Serilog
 var lokiUrl = Environment.GetEnvironmentVariable("LOKI_URL") ?? "http://localhost:3100";
@@ -185,6 +187,26 @@ try
     builder.Services.AddControllers().AddJsonOptions(o =>
     {
         o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    });
+
+    // Configure response compression for bandwidth optimization
+    builder.Services.AddResponseCompression(options =>
+    {
+        options.EnableForHttps = true;
+        options.Providers.Add<BrotliCompressionProvider>();
+        options.Providers.Add<GzipCompressionProvider>();
+    });
+
+    builder.Services.Configure<BrotliCompressionProviderOptions>(options =>
+    {
+        // Balanced compression level (fast enough for 2 CPU deployment)
+        options.Level = CompressionLevel.Fastest;
+    });
+
+    builder.Services.Configure<GzipCompressionProviderOptions>(options =>
+    {
+        // Optimal compression for speed/size trade-off
+        options.Level = CompressionLevel.Optimal;
     });
 
     // Register OAuth services
@@ -751,6 +773,9 @@ try
             c.RoutePrefix = "swagger";
         });
     }
+
+    // Enable response compression (must be early in pipeline)
+    host.UseResponseCompression();
 
     // Enable routing and controllers
     host.UseRouting();
