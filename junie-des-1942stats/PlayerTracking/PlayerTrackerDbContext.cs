@@ -11,6 +11,8 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<PlayerObservation> PlayerObservations { get; set; }
     public DbSet<Round> Rounds { get; set; }
     public DbSet<RoundObservation> RoundObservations { get; set; }
+    public DbSet<Tournament> Tournaments { get; set; }
+    public DbSet<TournamentRound> TournamentRounds { get; set; }
     public DbSet<ServerPlayerRanking> ServerPlayerRankings { get; set; }
     public DbSet<User> Users { get; set; }
     public DbSet<UserPlayerName> UserPlayerNames { get; set; }
@@ -125,6 +127,48 @@ public class PlayerTrackerDbContext : DbContext
 
         modelBuilder.Entity<RoundObservation>()
             .HasIndex(ro => new { ro.RoundId, ro.Timestamp });
+
+        // Configure Tournament entity
+        modelBuilder.Entity<Tournament>()
+            .HasKey(t => t.TournamentId);
+
+        modelBuilder.Entity<Tournament>()
+            .HasIndex(t => new { t.ServerGuid, t.StartTime });
+
+        modelBuilder.Entity<Tournament>()
+            .HasIndex(t => t.MapName);
+
+        modelBuilder.Entity<Tournament>()
+            .HasIndex(t => t.IsActive);
+
+        // Configure TournamentRound entity
+        modelBuilder.Entity<TournamentRound>()
+            .HasKey(tr => tr.Id);
+
+        modelBuilder.Entity<TournamentRound>()
+            .HasIndex(tr => tr.TournamentId);
+
+        modelBuilder.Entity<TournamentRound>()
+            .HasIndex(tr => tr.RoundId)
+            .IsUnique();
+
+        // Configure Tournament relationships
+        modelBuilder.Entity<Tournament>()
+            .HasOne(t => t.GameServer)
+            .WithMany()
+            .HasForeignKey(t => t.ServerGuid)
+            .HasPrincipalKey(gs => gs.Guid);
+
+        modelBuilder.Entity<TournamentRound>()
+            .HasOne(tr => tr.Tournament)
+            .WithMany(t => t.TournamentRounds)
+            .HasForeignKey(tr => tr.TournamentId);
+
+        modelBuilder.Entity<TournamentRound>()
+            .HasOne(tr => tr.Round)
+            .WithOne()
+            .HasForeignKey<TournamentRound>(tr => tr.RoundId)
+            .HasPrincipalKey<Round>(r => r.RoundId);
 
         // Configure relationships
         modelBuilder.Entity<PlayerSession>()
@@ -357,6 +401,10 @@ public class Round
     public string? Team2Label { get; set; }
     public int? RoundTimeRemain { get; set; }
 
+    // Tournament properties
+    public string? TournamentId { get; set; }
+    public bool IsTournamentRound { get; set; }
+
     // Navigation properties
     public List<PlayerSession> Sessions { get; set; } = new();
     public GameServer? GameServer { get; set; } // Navigation property to GameServer
@@ -473,4 +521,38 @@ public class UserBuddy
     // Navigation properties
     public User User { get; set; } = null!;
     public Player Player { get; set; } = null!;
+}
+
+public class Tournament
+{
+    public string TournamentId { get; set; } = ""; // PK (hash prefix)
+    public string ServerGuid { get; set; } = "";
+    public string ServerName { get; set; } = "";
+    public string MapName { get; set; } = "";
+    public string GameType { get; set; } = "";
+    public DateTime StartTime { get; set; }
+    public DateTime? EndTime { get; set; }
+    public bool IsActive { get; set; }
+    public int TotalRounds { get; set; }
+    public int? ParticipantCount { get; set; }
+    public string? TournamentType { get; set; } // "1v1", "team_vs_team", etc.
+    public string? Name { get; set; }
+    public string? Description { get; set; }
+
+    // Navigation properties
+    public List<TournamentRound> TournamentRounds { get; set; } = new();
+    public GameServer? GameServer { get; set; }
+}
+
+public class TournamentRound
+{
+    public int Id { get; set; }
+    public string TournamentId { get; set; } = "";
+    public string RoundId { get; set; } = "";
+    public int RoundNumber { get; set; } // Sequential round number within tournament
+    public DateTime CreatedAt { get; set; }
+
+    // Navigation properties
+    public Tournament Tournament { get; set; } = null!;
+    public Round Round { get; set; } = null!;
 }

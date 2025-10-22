@@ -537,13 +537,27 @@ public class PlayerTrackingService
         // Detect map change via server update or explicit oldMapName
         var mapChanged = !string.IsNullOrEmpty(oldMapName) || (active != null && !string.Equals(active.MapName, server.MapName, StringComparison.Ordinal));
 
-        if (active != null && mapChanged)
+        // Check for tournament round reset on same map
+        bool isTournamentReset = false;
+        if (active != null && !mapChanged && string.Equals(active.MapName, server.MapName, StringComparison.Ordinal))
+        {
+            isTournamentReset = await DetectTournamentRoundResetAsync(server, active, timestamp);
+        }
+
+        if (active != null && (mapChanged || isTournamentReset))
         {
             active.IsActive = false;
             active.EndTime = timestamp;
             active.DurationMinutes = (int)Math.Max(0, (active.EndTime.Value - active.StartTime).TotalMinutes);
             _dbContext.Rounds.Update(active);
             await _dbContext.SaveChangesAsync();
+            
+            if (isTournamentReset)
+            {
+                _logger.LogInformation("TOURNAMENT: Detected tournament round reset for {ServerName} on {MapName}. Timer: {Timer}",
+                    server.Name, server.MapName, server.RoundTimeRemain);
+            }
+            
             active = null;
         }
 
@@ -566,6 +580,13 @@ public class PlayerTrackingService
             };
             newRound.RoundId = ComputeRoundId(newRound.ServerGuid, newRound.MapName, newRound.StartTime.ToUniversalTime());
 
+            // Check if this should be part of a tournament
+            if (isTournamentReset)
+            {
+                newRound.IsTournamentRound = true;
+                await HandleTournamentRoundAsync(newRound, server, timestamp);
+            }
+
             // Upsert semantics: if a round with same RoundId exists, load it
             var existing = await _dbContext.Rounds.FindAsync(newRound.RoundId);
             if (existing == null)
@@ -580,6 +601,11 @@ public class PlayerTrackingService
                 active = existing;
                 active.IsActive = true;
                 active.EndTime = null;
+                if (isTournamentReset)
+                {
+                    active.IsTournamentRound = true;
+                    active.TournamentId = newRound.TournamentId;
+                }
                 _dbContext.Rounds.Update(active);
                 await _dbContext.SaveChangesAsync();
             }
@@ -694,6 +720,162 @@ public class PlayerTrackingService
         {
             IpInfoSemaphore.Release();
         }
+    }
+
+    private async Task<bool> DetectTournamentRoundResetAsync(IGameServer server, Round activeRound, DateTime timestamp)
+    {
+        try
+        {
+            // Get current active player sessions for this round
+            var activeSessions = await _dbContext.PlayerSessions
+                .Where(ps => ps.RoundId == activeRound.RoundId && ps.IsActive)
+                .ToListAsync();
+
+            if (!activeSessions.Any()) return false;
+
+            // Get the latest observations for each active session to check current scores
+            var sessionIds = activeSessions.Select(s => s.SessionId).ToList();
+            var latestObservations = await _dbContext.PlayerObservations
+                .Where(po => sessionIds.Contains(po.SessionId))
+                .GroupBy(po => po.SessionId)
+                .Select(g => g.OrderByDescending(po => po.Timestamp).FirstOrDefault())
+                .Where(po => po != null)
+                .ToListAsync();
+
+            // Tournament reset criteria from the issue:
+            // 1. Same map but scores have reset to 0 for all players
+            // 2. Timer has increased (if available)
+            // 3. If timer not available, log warning but still detect based on score reset
+
+            bool allScoresReset = latestObservations.Any() && 
+                                  latestObservations.All(obs => obs!.Score == 0 && obs.Kills == 0 && obs.Deaths == 0);
+
+            bool timerProgressed = false;
+            bool timerAvailable = server.RoundTimeRemain.HasValue && activeRound.RoundTimeRemain.HasValue;
+
+            if (timerAvailable)
+            {
+                // Timer should have increased compared to when the round started
+                timerProgressed = server.RoundTimeRemain > activeRound.RoundTimeRemain;
+            }
+            else if (allScoresReset)
+            {
+                // Log warning when all scores reset but no timer available
+                _logger.LogWarning("TOURNAMENT: All player scores reset on same map '{MapName}' but timer not available. Server: {ServerName}",
+                    server.MapName, server.Name);
+            }
+
+            // Tournament round reset detected if:
+            // - All scores are reset AND timer progressed (ideal case)
+            // - OR all scores are reset and timer not available (fallback)
+            bool isTournamentReset = allScoresReset && (timerProgressed || !timerAvailable);
+
+            if (isTournamentReset)
+            {
+                _logger.LogInformation("TOURNAMENT: Tournament round reset detected. Map: {MapName}, Players: {PlayerCount}, Timer: {Timer} -> {NewTimer}",
+                    server.MapName, latestObservations.Count, activeRound.RoundTimeRemain, server.RoundTimeRemain);
+            }
+
+            return isTournamentReset;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error detecting tournament round reset for server {ServerName}", server.Name);
+            return false;
+        }
+    }
+
+    private async Task HandleTournamentRoundAsync(Round newRound, IGameServer server, DateTime timestamp)
+    {
+        try
+        {
+            // Find or create tournament for this server/map combination
+            var tournament = await GetOrCreateTournamentAsync(server, timestamp);
+            
+            if (tournament != null)
+            {
+                newRound.TournamentId = tournament.TournamentId;
+                
+                // Create tournament round relationship
+                var tournamentRound = new TournamentRound
+                {
+                    TournamentId = tournament.TournamentId,
+                    RoundId = newRound.RoundId,
+                    RoundNumber = tournament.TotalRounds + 1,
+                    CreatedAt = timestamp
+                };
+
+                tournament.TotalRounds++;
+                tournament.IsActive = true;
+
+                await _dbContext.TournamentRounds.AddAsync(tournamentRound);
+                _dbContext.Tournaments.Update(tournament);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error handling tournament round for server {ServerName}", server.Name);
+        }
+    }
+
+    private async Task<Tournament?> GetOrCreateTournamentAsync(IGameServer server, DateTime timestamp)
+    {
+        try
+        {
+            // Look for active tournament on this server with same map within last 4 hours
+            var recentTournament = await _dbContext.Tournaments
+                .Where(t => t.ServerGuid == server.Guid 
+                           && t.MapName == server.MapName 
+                           && t.IsActive 
+                           && t.StartTime > timestamp.AddHours(-4))
+                .OrderByDescending(t => t.StartTime)
+                .FirstOrDefaultAsync();
+
+            if (recentTournament != null)
+            {
+                return recentTournament;
+            }
+
+            // Create new tournament
+            var tournament = new Tournament
+            {
+                ServerGuid = server.Guid,
+                ServerName = server.Name,
+                MapName = server.MapName,
+                GameType = server.GameType ?? "",
+                StartTime = timestamp,
+                IsActive = true,
+                TotalRounds = 0,
+                TournamentType = "unknown", // Could be enhanced to detect 1v1 vs team based on player count
+                Name = $"{server.Name} - {server.MapName} Tournament"
+            };
+
+            tournament.TournamentId = ComputeTournamentId(tournament.ServerGuid, tournament.MapName, tournament.StartTime);
+
+            await _dbContext.Tournaments.AddAsync(tournament);
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("TOURNAMENT: Created new tournament {TournamentId} for {ServerName} on {MapName}",
+                tournament.TournamentId, server.Name, server.MapName);
+
+            return tournament;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating tournament for server {ServerName}", server.Name);
+            return null;
+        }
+    }
+
+    private static string ComputeTournamentId(string serverGuid, string mapName, DateTime startTimeUtc)
+    {
+        // Similar to ComputeRoundId but for tournaments
+        var normalized = new DateTime(startTimeUtc.Ticks - (startTimeUtc.Ticks % TimeSpan.TicksPerSecond), DateTimeKind.Utc);
+        var payload = $"TOURNAMENT|{serverGuid}|{mapName}|{normalized:yyyy-MM-ddTHH:mm:ssZ}";
+        using var sha = SHA256.Create();
+        var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(payload));
+        var hex = Convert.ToHexString(hash);
+        return hex[..20].ToLowerInvariant();
     }
 
     private async Task PublishPlayerEvents(List<(string EventType, PlayerInfo PlayerInfo, PlayerSession Session, string? OldMapName)> eventsToPublish, IGameServer server)

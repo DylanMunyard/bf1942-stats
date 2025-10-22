@@ -69,6 +69,17 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
             query = query.Where(r => r.ServerGuid.Contains(filters.GameId));
         }
 
+        // Tournament filters
+        if (!string.IsNullOrWhiteSpace(filters.TournamentId))
+        {
+            query = query.Where(r => r.TournamentId == filters.TournamentId);
+        }
+
+        if (filters.IsTournamentRound.HasValue)
+        {
+            query = query.Where(r => r.IsTournamentRound == filters.IsTournamentRound.Value);
+        }
+
         if (filters.StartTimeFrom.HasValue)
         {
             query = query.Where(r => r.StartTime >= filters.StartTimeFrom.Value);
@@ -180,6 +191,23 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
             .Take(pageSize)
             .ToListAsync();
 
+        // Get tournament data for rounds that are part of tournaments
+        var tournamentRoundIds = rounds.Where(r => !string.IsNullOrEmpty(r.TournamentId)).Select(r => r.RoundId).ToList();
+        var tournamentData = new Dictionary<string, (string Name, int RoundNumber)>();
+        
+        if (tournamentRoundIds.Any())
+        {
+            var tournamentRounds = await _dbContext.TournamentRounds
+                .Include(tr => tr.Tournament)
+                .Where(tr => tournamentRoundIds.Contains(tr.RoundId))
+                .ToListAsync();
+                
+            tournamentData = tournamentRounds.ToDictionary(
+                tr => tr.RoundId,
+                tr => (tr.Tournament.Name ?? "", tr.RoundNumber)
+            );
+        }
+
         // Convert to RoundWithPlayers
         var result = rounds.Select(round => new RoundWithPlayers
         {
@@ -195,6 +223,10 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
             IsActive = round.IsActive,
             Team1Label = round.Team1Label,
             Team2Label = round.Team2Label,
+            TournamentId = round.TournamentId,
+            IsTournamentRound = round.IsTournamentRound,
+            TournamentName = tournamentData.TryGetValue(round.RoundId, out var tData) ? tData.Name : null,
+            TournamentRoundNumber = tournamentData.TryGetValue(round.RoundId, out var tData2) ? tData2.RoundNumber : null,
             Players = new List<PlayerStats.Models.SessionListItem>()
         }).ToList();
 
@@ -508,6 +540,244 @@ FORMAT TabSeparated";
             _logger.LogError(ex, "Error resolving ClickHouse RoundId {ClickHouseRoundId} to SQLite RoundId", clickHouseRoundId);
             return null;
         }
+    }
+
+    public async Task<PlayerStats.Models.PagedResult<TournamentWithRounds>> GetTournaments(
+        int page,
+        int pageSize,
+        string sortBy,
+        string sortOrder,
+        TournamentFilters filters,
+        bool includeRounds = true)
+    {
+        var query = _dbContext.Tournaments.AsNoTracking();
+
+        // Apply filters
+        if (!string.IsNullOrWhiteSpace(filters.ServerName))
+        {
+            query = query.Where(t => t.ServerName.Contains(filters.ServerName));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filters.ServerGuid))
+        {
+            query = query.Where(t => t.ServerGuid == filters.ServerGuid);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filters.MapName))
+        {
+            query = query.Where(t => t.MapName.Contains(filters.MapName));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filters.GameType))
+        {
+            query = query.Where(t => t.GameType == filters.GameType);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filters.TournamentType))
+        {
+            query = query.Where(t => t.TournamentType == filters.TournamentType);
+        }
+
+        if (filters.StartTimeFrom.HasValue)
+        {
+            query = query.Where(t => t.StartTime >= filters.StartTimeFrom.Value);
+        }
+
+        if (filters.StartTimeTo.HasValue)
+        {
+            query = query.Where(t => t.StartTime <= filters.StartTimeTo.Value);
+        }
+
+        if (filters.EndTimeFrom.HasValue)
+        {
+            query = query.Where(t => t.EndTime >= filters.EndTimeFrom.Value);
+        }
+
+        if (filters.EndTimeTo.HasValue)
+        {
+            query = query.Where(t => t.EndTime <= filters.EndTimeTo.Value);
+        }
+
+        if (filters.IsActive.HasValue)
+        {
+            query = query.Where(t => t.IsActive == filters.IsActive.Value);
+        }
+
+        if (filters.MinRounds.HasValue)
+        {
+            query = query.Where(t => t.TotalRounds >= filters.MinRounds.Value);
+        }
+
+        if (filters.MaxRounds.HasValue)
+        {
+            query = query.Where(t => t.TotalRounds <= filters.MaxRounds.Value);
+        }
+
+        // Apply sorting
+        query = sortBy.ToLowerInvariant() switch
+        {
+            "tournamentid" => sortOrder.ToLowerInvariant() == "asc"
+                ? query.OrderBy(t => t.TournamentId)
+                : query.OrderByDescending(t => t.TournamentId),
+            "servername" => sortOrder.ToLowerInvariant() == "asc"
+                ? query.OrderBy(t => t.ServerName)
+                : query.OrderByDescending(t => t.ServerName),
+            "mapname" => sortOrder.ToLowerInvariant() == "asc"
+                ? query.OrderBy(t => t.MapName)
+                : query.OrderByDescending(t => t.MapName),
+            "endtime" => sortOrder.ToLowerInvariant() == "asc"
+                ? query.OrderBy(t => t.EndTime)
+                : query.OrderByDescending(t => t.EndTime),
+            "totalrounds" => sortOrder.ToLowerInvariant() == "asc"
+                ? query.OrderBy(t => t.TotalRounds)
+                : query.OrderByDescending(t => t.TotalRounds),
+            "isactive" => sortOrder.ToLowerInvariant() == "asc"
+                ? query.OrderBy(t => t.IsActive)
+                : query.OrderByDescending(t => t.IsActive),
+            _ => sortOrder.ToLowerInvariant() == "asc"
+                ? query.OrderBy(t => t.StartTime)
+                : query.OrderByDescending(t => t.StartTime)
+        };
+
+        // Get total count
+        var totalCount = await query.CountAsync();
+
+        // Apply pagination and get tournaments
+        var tournaments = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        // Convert to TournamentWithRounds
+        var result = tournaments.Select(tournament => new TournamentWithRounds
+        {
+            TournamentId = tournament.TournamentId,
+            ServerName = tournament.ServerName,
+            ServerGuid = tournament.ServerGuid,
+            MapName = tournament.MapName,
+            GameType = tournament.GameType,
+            StartTime = tournament.StartTime,
+            EndTime = tournament.EndTime,
+            IsActive = tournament.IsActive,
+            TotalRounds = tournament.TotalRounds,
+            ParticipantCount = tournament.ParticipantCount,
+            TournamentType = tournament.TournamentType,
+            Name = tournament.Name,
+            Description = tournament.Description,
+            Rounds = new List<RoundListItem>()
+        }).ToList();
+
+        // If rounds are requested, load them
+        if (includeRounds && tournaments.Any())
+        {
+            var tournamentIds = tournaments.Select(t => t.TournamentId).ToList();
+
+            var tournamentRounds = await _dbContext.TournamentRounds
+                .Include(tr => tr.Round)
+                .Where(tr => tournamentIds.Contains(tr.TournamentId))
+                .OrderBy(tr => tr.TournamentId)
+                .ThenBy(tr => tr.RoundNumber)
+                .ToListAsync();
+
+            var roundsByTournament = tournamentRounds
+                .GroupBy(tr => tr.TournamentId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            foreach (var tournament in result)
+            {
+                if (roundsByTournament.TryGetValue(tournament.TournamentId, out var rounds))
+                {
+                    tournament.Rounds = rounds.Select(tr => new RoundListItem
+                    {
+                        RoundId = tr.Round.RoundId,
+                        ServerName = tr.Round.ServerName,
+                        ServerGuid = tr.Round.ServerGuid,
+                        MapName = tr.Round.MapName,
+                        GameType = tr.Round.GameType,
+                        StartTime = tr.Round.StartTime,
+                        EndTime = tr.Round.EndTime ?? DateTime.UtcNow,
+                        DurationMinutes = tr.Round.DurationMinutes ?? 0,
+                        ParticipantCount = tr.Round.ParticipantCount ?? 0,
+                        IsActive = tr.Round.IsActive,
+                        Team1Label = tr.Round.Team1Label,
+                        Team2Label = tr.Round.Team2Label,
+                        RoundTimeRemain = tr.Round.RoundTimeRemain,
+                        TournamentId = tr.Round.TournamentId,
+                        IsTournamentRound = tr.Round.IsTournamentRound,
+                        TournamentName = tournament.Name,
+                        TournamentRoundNumber = tr.RoundNumber
+                    }).ToList();
+                }
+            }
+        }
+
+        return new PlayerStats.Models.PagedResult<TournamentWithRounds>
+        {
+            Items = result,
+            Page = page,
+            PageSize = pageSize,
+            TotalItems = totalCount,
+            TotalPages = (int)Math.Ceiling((double)totalCount / pageSize)
+        };
+    }
+
+    public async Task<TournamentWithRounds?> GetTournament(string tournamentId, bool includeRounds = true)
+    {
+        var tournament = await _dbContext.Tournaments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.TournamentId == tournamentId);
+
+        if (tournament == null) return null;
+
+        var result = new TournamentWithRounds
+        {
+            TournamentId = tournament.TournamentId,
+            ServerName = tournament.ServerName,
+            ServerGuid = tournament.ServerGuid,
+            MapName = tournament.MapName,
+            GameType = tournament.GameType,
+            StartTime = tournament.StartTime,
+            EndTime = tournament.EndTime,
+            IsActive = tournament.IsActive,
+            TotalRounds = tournament.TotalRounds,
+            ParticipantCount = tournament.ParticipantCount,
+            TournamentType = tournament.TournamentType,
+            Name = tournament.Name,
+            Description = tournament.Description,
+            Rounds = new List<RoundListItem>()
+        };
+
+        if (includeRounds)
+        {
+            var tournamentRounds = await _dbContext.TournamentRounds
+                .Include(tr => tr.Round)
+                .Where(tr => tr.TournamentId == tournamentId)
+                .OrderBy(tr => tr.RoundNumber)
+                .ToListAsync();
+
+            result.Rounds = tournamentRounds.Select(tr => new RoundListItem
+            {
+                RoundId = tr.Round.RoundId,
+                ServerName = tr.Round.ServerName,
+                ServerGuid = tr.Round.ServerGuid,
+                MapName = tr.Round.MapName,
+                GameType = tr.Round.GameType,
+                StartTime = tr.Round.StartTime,
+                EndTime = tr.Round.EndTime ?? DateTime.UtcNow,
+                DurationMinutes = tr.Round.DurationMinutes ?? 0,
+                ParticipantCount = tr.Round.ParticipantCount ?? 0,
+                IsActive = tr.Round.IsActive,
+                Team1Label = tr.Round.Team1Label,
+                Team2Label = tr.Round.Team2Label,
+                RoundTimeRemain = tr.Round.RoundTimeRemain,
+                TournamentId = tr.Round.TournamentId,
+                IsTournamentRound = tr.Round.IsTournamentRound,
+                TournamentName = tournament.Name,
+                TournamentRoundNumber = tr.RoundNumber
+            }).ToList();
+        }
+
+        return result;
     }
 }
 

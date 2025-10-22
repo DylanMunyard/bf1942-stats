@@ -716,6 +716,9 @@ try
 
     // Register Gamification Background Service
     builder.Services.AddHostedService<junie_des_1942stats.Gamification.Services.GamificationBackgroundService>();
+    
+    // Register Tournament Management Service
+    builder.Services.AddHostedService<junie_des_1942stats.Services.TournamentManagementService>();
 
     // Register PlayerComparisonService (read-only)
     builder.Services.AddScoped<PlayerComparisonService>(sp =>
