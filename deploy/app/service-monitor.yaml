@@ -2,6 +2,7 @@
 kind: ServiceMonitor
 metadata:
   name: bf42-stats-prometheus-discovery
+  namespace: bf42-stats
   labels:
     release: kube-prometheus-stack
 spec:
@@ -9,6 +10,6 @@ spec:
     matchLabels:
       app: bf42-stats
   endpoints:
-    - port: metrics
+    - port: api
       path: /metrics
       interval: 50s

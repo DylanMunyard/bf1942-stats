@@ -110,6 +110,16 @@ spec:
               value: "10"
             - name: GoogleOAuth__ClientId
               value: "468014767883-2gsdumjjgpgm2fp1qgic82i45k03tj7e.apps.googleusercontent.com"
+            - name: DiscordOAuth__ClientId
+              valueFrom:
+                secretKeyRef:
+                  name: bf42-stats-secrets
+                  key: discord-client-id
+            - name: DiscordOAuth__ClientSecret
+              valueFrom:
+                secretKeyRef:
+                  name: bf42-stats-secrets
+                  key: discord-client-secret
             - name: Jwt__Issuer
               value: "https://1942.munyard.dev"
             - name: Jwt__Audience

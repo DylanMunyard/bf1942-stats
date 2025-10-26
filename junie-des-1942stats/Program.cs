@@ -211,6 +211,7 @@ try
 
     // Register OAuth services
     builder.Services.AddScoped<junie_des_1942stats.Services.OAuth.IGoogleAuthService, junie_des_1942stats.Services.OAuth.GoogleAuthService>();
+    builder.Services.AddScoped<junie_des_1942stats.Services.OAuth.IDiscordAuthService, junie_des_1942stats.Services.OAuth.DiscordAuthService>();
 
     // CORS
     var allowedOrigin = builder.Configuration["Cors:AllowedOrigins"];

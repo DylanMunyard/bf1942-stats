@@ -18,6 +18,7 @@ public class AuthController : ControllerBase
 {
     private readonly PlayerTrackerDbContext _context;
     private readonly IGoogleAuthService _googleAuthService;
+    private readonly IDiscordAuthService _discordAuthService;
     private readonly ILogger<AuthController> _logger;
     private readonly ITokenService _tokenService;
     private readonly IRefreshTokenService _refreshTokenService;
@@ -26,6 +27,7 @@ public class AuthController : ControllerBase
     public AuthController(
         PlayerTrackerDbContext context,
         IGoogleAuthService googleAuthService,
+        IDiscordAuthService discordAuthService,
         ILogger<AuthController> logger,
         ITokenService tokenService,
         IRefreshTokenService refreshTokenService,
@@ -33,6 +35,7 @@ public class AuthController : ControllerBase
     {
         _context = context;
         _googleAuthService = googleAuthService;
+        _discordAuthService = discordAuthService;
         _logger = logger;
         _tokenService = tokenService;
         _refreshTokenService = refreshTokenService;
@@ -45,9 +48,27 @@ public class AuthController : ControllerBase
         try
         {
             var ipAddress = GetClientIpAddress();
+            string email;
+            string name;
 
-            var googlePayload = await _googleAuthService.ValidateGoogleTokenAsync(request.GoogleIdToken, ipAddress);
-            var user = await CreateOrUpdateUserAsync(googlePayload.Email, googlePayload.Name);
+            if (!string.IsNullOrEmpty(request.DiscordCode) && !string.IsNullOrEmpty(request.RedirectUri))
+            {
+                var discordPayload = await _discordAuthService.ExchangeCodeForUserAsync(request.DiscordCode, request.RedirectUri, ipAddress);
+                email = discordPayload.Email;
+                name = discordPayload.Username;
+            }
+            else if (!string.IsNullOrEmpty(request.GoogleIdToken))
+            {
+                var googlePayload = await _googleAuthService.ValidateGoogleTokenAsync(request.GoogleIdToken, ipAddress);
+                email = googlePayload.Email;
+                name = googlePayload.Name ?? googlePayload.Email;
+            }
+            else
+            {
+                return BadRequest(new { message = "Either Google ID token or Discord code with redirect URI is required" });
+            }
+
+            var user = await CreateOrUpdateUserAsync(email, name);
 
             var (accessToken, expiresAt) = _tokenService.CreateAccessToken(user);
             var (rawRefresh, rtEntity) = await _refreshTokenService.CreateAsync(user, ipAddress, Request.Headers.UserAgent.ToString());
@@ -55,15 +76,15 @@ public class AuthController : ControllerBase
 
             return Ok(new LoginResponse
             {
-                User = new UserDto { Id = user.Id, Email = user.Email, Name = googlePayload.Name ?? user.Email },
+                User = new UserDto { Id = user.Id, Email = user.Email, Name = name },
                 AccessToken = accessToken,
                 ExpiresAt = expiresAt
             });
         }
         catch (UnauthorizedAccessException ex)
         {
-            _logger.LogWarning(ex, "Google token validation failed");
-            return Unauthorized(new { message = "Invalid Google token" });
+            _logger.LogWarning(ex, "Authentication failed");
+            return Unauthorized(new { message = "Invalid authentication credentials" });
         }
         catch (Exception ex)
         {
@@ -746,7 +767,9 @@ public class AuthController : ControllerBase
 // Simple request/response models
 public class LoginRequest
 {
-    public string GoogleIdToken { get; set; } = "";
+    public string? GoogleIdToken { get; set; }
+    public string? DiscordCode { get; set; }
+    public string? RedirectUri { get; set; }
 }
 
 public class LoginResponse

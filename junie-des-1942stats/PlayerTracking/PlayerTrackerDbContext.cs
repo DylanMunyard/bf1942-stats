@@ -17,6 +17,8 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<UserFavoriteServer> UserFavoriteServers { get; set; }
     public DbSet<UserBuddy> UserBuddies { get; set; }
     public DbSet<RefreshToken> RefreshTokens { get; set; }
+    public DbSet<Tournament> Tournaments { get; set; }
+    public DbSet<TournamentRound> TournamentRounds { get; set; }
 
     public PlayerTrackerDbContext(DbContextOptions<PlayerTrackerDbContext> options)
         : base(options)
@@ -251,6 +253,61 @@ public class PlayerTrackerDbContext : DbContext
             .WithMany()
             .HasForeignKey(rt => rt.UserId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // Configure Tournament entity
+        modelBuilder.Entity<Tournament>()
+            .HasKey(t => t.Id);
+
+        modelBuilder.Entity<Tournament>()
+            .HasIndex(t => t.CreatedAt);
+
+        modelBuilder.Entity<Tournament>()
+            .HasIndex(t => t.Organizer);
+
+        // Configure relationship: Tournament -> User (CreatedBy)
+        modelBuilder.Entity<Tournament>()
+            .HasOne(t => t.CreatedByUser)
+            .WithMany()
+            .HasForeignKey(t => t.CreatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Configure relationship: Tournament -> Player (Organizer)
+        modelBuilder.Entity<Tournament>()
+            .HasOne(t => t.OrganizerPlayer)
+            .WithMany()
+            .HasForeignKey(t => t.Organizer)
+            .HasPrincipalKey(p => p.Name)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Configure TournamentRound entity
+        modelBuilder.Entity<TournamentRound>()
+            .HasKey(tr => tr.Id);
+
+        modelBuilder.Entity<TournamentRound>()
+            .HasIndex(tr => tr.TournamentId);
+
+        modelBuilder.Entity<TournamentRound>()
+            .HasIndex(tr => tr.RoundId);
+
+        // Unique constraint: a round can only be in one tournament
+        modelBuilder.Entity<TournamentRound>()
+            .HasIndex(tr => tr.RoundId)
+            .IsUnique();
+
+        // Configure relationship: TournamentRound -> Tournament
+        modelBuilder.Entity<TournamentRound>()
+            .HasOne(tr => tr.Tournament)
+            .WithMany(t => t.TournamentRounds)
+            .HasForeignKey(tr => tr.TournamentId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Configure relationship: TournamentRound -> Round
+        modelBuilder.Entity<TournamentRound>()
+            .HasOne(tr => tr.Round)
+            .WithMany()
+            .HasForeignKey(tr => tr.RoundId)
+            .HasPrincipalKey(r => r.RoundId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
 
@@ -473,4 +530,29 @@ public class UserBuddy
     // Navigation properties
     public User User { get; set; } = null!;
     public Player Player { get; set; } = null!;
+}
+
+public class Tournament
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public string Organizer { get; set; } = ""; // References Player.Name
+    public DateTime CreatedAt { get; set; }
+    public int CreatedByUserId { get; set; }
+
+    // Navigation properties
+    public User CreatedByUser { get; set; } = null!;
+    public Player OrganizerPlayer { get; set; } = null!;
+    public List<TournamentRound> TournamentRounds { get; set; } = [];
+}
+
+public class TournamentRound
+{
+    public int Id { get; set; }
+    public int TournamentId { get; set; }
+    public string RoundId { get; set; } = "";
+
+    // Navigation properties
+    public Tournament Tournament { get; set; } = null!;
+    public Round Round { get; set; } = null!;
 }
