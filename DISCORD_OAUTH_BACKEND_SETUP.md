@@ -73,12 +73,10 @@ For production, Discord OAuth credentials are stored in Kubernetes secrets.
 Add the Discord OAuth credentials to your `bf42-stats-secrets` secret:
 
 ```bash
-kubectl create secret generic bf42-stats-secrets \
+kubectl create secret generic discord-secrets \
   --namespace=bf42-stats \
   --from-literal=discord-client-id='YOUR_DISCORD_CLIENT_ID' \
-  --from-literal=discord-client-secret='YOUR_DISCORD_CLIENT_SECRET' \
-  --from-literal=jwt-private-key='YOUR_JWT_PRIVATE_KEY' \
-  --from-literal=refresh-token-secret='YOUR_REFRESH_TOKEN_SECRET' \
+  --from-literal=discord-client-secret='YOUR_DISCORD_CLIENT_SECRET'
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 

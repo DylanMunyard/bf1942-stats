@@ -209,3 +209,7 @@ public class DiscordUserPayload
     public bool Verified { get; set; }
 }
 
+public class RateLimitData
+{
+    public int Attempts { get; set; }
+}

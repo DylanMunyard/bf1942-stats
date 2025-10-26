@@ -19,8 +19,6 @@
         "PLAYER_INSIGHTS_MAX_CONCURRENT_QUERIES": "10",
         "CLICKHOUSE_URL": "http://localhost:8123",
         "CLICKHOUSE_WRITE_URL": "http://localhost:8123",
-        "GoogleOAuth__ClientId": "468014767883-2gsdumjjgpgm2fp1qgic82i45k03tj7e.apps.googleusercontent.com",
-        "GoogleOAuth__RedirectUri": "http://localhost:5173/auth/callback",
         "Jwt:Issuer": "https://localhost:9222",
         "Jwt:Audience": "http://localhost:5173",
         "RefreshToken:CookieName": "rt",

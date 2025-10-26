@@ -17,7 +17,6 @@ namespace junie_des_1942stats.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly PlayerTrackerDbContext _context;
-    private readonly IGoogleAuthService _googleAuthService;
     private readonly IDiscordAuthService _discordAuthService;
     private readonly ILogger<AuthController> _logger;
     private readonly ITokenService _tokenService;
@@ -26,7 +25,6 @@ public class AuthController : ControllerBase
 
     public AuthController(
         PlayerTrackerDbContext context,
-        IGoogleAuthService googleAuthService,
         IDiscordAuthService discordAuthService,
         ILogger<AuthController> logger,
         ITokenService tokenService,
@@ -34,7 +32,6 @@ public class AuthController : ControllerBase
         IConfiguration configuration)
     {
         _context = context;
-        _googleAuthService = googleAuthService;
         _discordAuthService = discordAuthService;
         _logger = logger;
         _tokenService = tokenService;
@@ -57,15 +54,9 @@ public class AuthController : ControllerBase
                 email = discordPayload.Email;
                 name = discordPayload.Username;
             }
-            else if (!string.IsNullOrEmpty(request.GoogleIdToken))
-            {
-                var googlePayload = await _googleAuthService.ValidateGoogleTokenAsync(request.GoogleIdToken, ipAddress);
-                email = googlePayload.Email;
-                name = googlePayload.Name ?? googlePayload.Email;
-            }
             else
             {
-                return BadRequest(new { message = "Either Google ID token or Discord code with redirect URI is required" });
+                return BadRequest(new { message = "Discord code and redirect URI are required" });
             }
 
             var user = await CreateOrUpdateUserAsync(email, name);
@@ -767,7 +758,6 @@ public class AuthController : ControllerBase
 // Simple request/response models
 public class LoginRequest
 {
-    public string? GoogleIdToken { get; set; }
     public string? DiscordCode { get; set; }
     public string? RedirectUri { get; set; }
 }
