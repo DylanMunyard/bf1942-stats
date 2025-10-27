@@ -647,6 +647,7 @@ FORMAT TabSeparated";
             <= 90 => ("90d", 14),
             <= 180 => ("180d", 30),
             <= 365 => ("365d", 30),
+            >= 36500 => ("alltime", 30),  // 100+ years = all time
             _ => ($"{days}d", 30)  // Support arbitrary day values
         };
     }
