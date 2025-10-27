@@ -148,6 +148,39 @@ public class ServersController : ControllerBase
         }
     }
 
+    [HttpGet("{serverName}/insights/maps")]
+    public async Task<ActionResult<ServerMapsInsights>> GetServerMapsInsights(
+        string serverName,
+        [FromQuery] int? days)
+    {
+        if (string.IsNullOrWhiteSpace(serverName))
+            return BadRequest("Server name cannot be empty");
+
+        // Use modern URL decoding that preserves + signs
+        serverName = Uri.UnescapeDataString(serverName);
+
+        _logger.LogInformation("Looking up server maps insights for server name: '{ServerName}' with days: {Days}", serverName, days);
+
+        try
+        {
+            var mapsInsights = await _serverStatsService.GetServerMapsInsights(
+                serverName,
+                days ?? 7); // Default to 7 days if not specified
+
+            if (string.IsNullOrEmpty(mapsInsights.ServerGuid))
+            {
+                _logger.LogWarning("Server not found: '{ServerName}'", serverName);
+                return NotFound($"Server '{serverName}' not found");
+            }
+
+            return Ok(mapsInsights);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
     // Get all servers with pagination and filtering
     [HttpGet]
     public async Task<ActionResult<PagedResult<ServerBasicInfo>>> GetAllServers(

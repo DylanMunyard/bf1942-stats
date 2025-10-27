@@ -9,8 +9,14 @@ namespace junie_des_1942stats.ServerStats.Models
         public DateTime StartPeriod { get; set; }
         public DateTime EndPeriod { get; set; }
         public PlayersOnlineHistoryResponse? PlayersOnlineHistory { get; set; }
+    }
 
-        // Maps analysis
+    public class ServerMapsInsights
+    {
+        public string? ServerGuid { get; set; }
+        public string ServerName { get; set; } = "";
+        public DateTime StartPeriod { get; set; }
+        public DateTime EndPeriod { get; set; }
         public List<PopularMapDataPoint> Maps { get; set; } = [];
     }
 

@@ -577,51 +577,81 @@ FORMAT TabSeparated";
             EndPeriod = endPeriod
         };
 
-        // Execute all ClickHouse queries in parallel for maximum performance
-        var mapsTask = GetAllMapsFromClickHouse(server.Guid, startPeriod, endPeriod);
-        
         // Convert days to appropriate period string and rolling window
         var (period, rollingWindow) = ConvertDaysToPeriod(days);
-        var playersOnlineHistoryTask = _playersOnlineHistoryService.GetPlayersOnlineHistory(server.GameId, period, rollingWindow, server.Guid);
-
-        // Wait for all queries to complete
+        
+        // Fetch players online history
         try
         {
-            await Task.WhenAll(mapsTask, playersOnlineHistoryTask);
-
-            insights.Maps = await mapsTask;
-            insights.PlayersOnlineHistory = await playersOnlineHistoryTask;
+            insights.PlayersOnlineHistory = await _playersOnlineHistoryService.GetPlayersOnlineHistory(
+                server.GameId, period, rollingWindow, server.Guid);
         }
         catch (Exception ex)
         {
-            // Handle partial failures - assign individual results or empty defaults
-            _logger.LogError(ex, "Error during parallel ClickHouse queries execution");
-
-            // Maps data
-            try
-            {
-                insights.Maps = await mapsTask;
-            }
-            catch
-            {
-                insights.Maps = [];
-            }
-
-            // Players online history
-            try
-            {
-                insights.PlayersOnlineHistory = await playersOnlineHistoryTask;
-            }
-            catch
-            {
-                insights.PlayersOnlineHistory = null;
-            }
+            _logger.LogError(ex, "Error fetching players online history");
+            insights.PlayersOnlineHistory = null;
         }
 
         // Cache the result for 20 minutes
         await _cacheService.SetAsync(cacheKey, insights, TimeSpan.FromMinutes(20));
 
         return insights;
+    }
+
+    public async Task<ServerMapsInsights> GetServerMapsInsights(string serverName, int days = 7)
+    {
+        // Validate days parameter
+        if (days <= 0)
+            throw new ArgumentException("Days must be greater than 0", nameof(days));
+
+        // Calculate time periods
+        var endPeriod = DateTime.UtcNow;
+        var startPeriod = endPeriod.AddDays(-days);
+
+        // Check cache first
+        var cacheKey = _cacheKeyService.GetServerMapsInsightsKey(serverName, days);
+        var cachedResult = await _cacheService.GetAsync<ServerMapsInsights>(cacheKey);
+
+        if (cachedResult != null)
+        {
+            _logger.LogDebug("Cache hit for server maps insights: {ServerName}, days: {Days}", serverName, days);
+            return cachedResult;
+        }
+
+        _logger.LogDebug("Cache miss for server maps insights: {ServerName}, days: {Days}", serverName, days);
+
+        // Get the server by name
+        var server = await _dbContext.Servers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Name == serverName);
+
+        if (server == null)
+            return new ServerMapsInsights { ServerName = serverName, StartPeriod = startPeriod, EndPeriod = endPeriod };
+
+        // Create the maps insights object
+        var mapsInsights = new ServerMapsInsights
+        {
+            ServerGuid = server.Guid,
+            ServerName = server.Name,
+            StartPeriod = startPeriod,
+            EndPeriod = endPeriod
+        };
+
+        // Fetch maps data
+        try
+        {
+            mapsInsights.Maps = await GetAllMapsFromClickHouse(server.Guid, startPeriod, endPeriod);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching maps data");
+            mapsInsights.Maps = [];
+        }
+
+        // Cache the result for 20 minutes
+        await _cacheService.SetAsync(cacheKey, mapsInsights, TimeSpan.FromMinutes(20));
+
+        return mapsInsights;
     }
 
     private TimeGranularity CalculateGranularity(int days)

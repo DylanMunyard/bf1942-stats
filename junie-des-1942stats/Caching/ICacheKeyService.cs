@@ -11,6 +11,7 @@ public interface ICacheKeyService
     string GetServerLeaderboardsKey(string serverName, int days);
     string GetServerRankingsKey(string serverName, int? year, int page, int pageSize, string? playerName, int? minScore, int? minKills, int? minDeaths, double? minKdRatio, int? minPlayTimeMinutes, string? orderBy, string? orderDirection);
     string GetServerInsightsKey(string serverName, int daysToAnalyze);
+    string GetServerMapsInsightsKey(string serverName, int daysToAnalyze);
     string GetServersPageKey(int page, int pageSize, string sortBy, string sortOrder, object? filters);
 }
 
@@ -57,6 +58,11 @@ public class CacheKeyService : ICacheKeyService
     public string GetServerInsightsKey(string serverName, int daysToAnalyze)
     {
         return $"server_insights:{serverName}:{daysToAnalyze}";
+    }
+
+    public string GetServerMapsInsightsKey(string serverName, int daysToAnalyze)
+    {
+        return $"server_maps_insights:{serverName}:{daysToAnalyze}";
     }
 
     public string GetServersPageKey(int page, int pageSize, string sortBy, string sortOrder, object? filters)
