@@ -15,7 +15,7 @@ public class LiveServersController : ControllerBase
     private readonly IBfListApiService _bfListApiService;
     private readonly ILogger<LiveServersController> _logger;
     private readonly PlayerTrackerDbContext _dbContext;
-    private readonly IClickHouseReader _clickHouseReader;
+    private readonly PlayersOnlineHistoryService _playersOnlineHistoryService;
 
     private static readonly string[] ValidGames = ["bf1942", "fh2", "bfvietnam"];
 
@@ -23,12 +23,12 @@ public class LiveServersController : ControllerBase
         IBfListApiService bfListApiService,
         ILogger<LiveServersController> logger,
         PlayerTrackerDbContext dbContext,
-        IClickHouseReader clickHouseReader)
+        PlayersOnlineHistoryService playersOnlineHistoryService)
     {
         _bfListApiService = bfListApiService;
         _logger = logger;
         _dbContext = dbContext;
-        _clickHouseReader = clickHouseReader;
+        _playersOnlineHistoryService = playersOnlineHistoryService;
     }
 
     /// <summary>
@@ -350,7 +350,7 @@ public class LiveServersController : ControllerBase
 
         try
         {
-            var history = await GetPlayersOnlineHistoryFromClickHouse(game.ToLower(), period.ToLower(), rollingWindowDays);
+            var history = await _playersOnlineHistoryService.GetPlayersOnlineHistory(game.ToLower(), period.ToLower(), rollingWindowDays);
             return Ok(history);
         }
         catch (Exception ex)
@@ -360,190 +360,4 @@ public class LiveServersController : ControllerBase
         }
     }
 
-    private async Task<PlayersOnlineHistoryResponse> GetPlayersOnlineHistoryFromClickHouse(string game, string period, int rollingWindowDays)
-    {
-        var (days, timeInterval, useAllTime) = period switch
-        {
-            "1d" => (1, "INTERVAL 5 MINUTE", false),
-            "3d" => (3, "INTERVAL 30 MINUTE", false),
-            "7d" => (7, "INTERVAL 1 HOUR", false),
-            "1month" => (30, "INTERVAL 4 HOUR", false),
-            "3months" => (90, "INTERVAL 12 HOUR", false),
-            "thisyear" => (DateTime.Now.DayOfYear, "INTERVAL 1 DAY", false),
-            "alltime" => (0, "INTERVAL 1 DAY", true),
-            _ => (7, "INTERVAL 1 HOUR", false)
-        };
-
-        var timeCondition = useAllTime
-            ? ""
-            : $"AND timestamp >= now() - INTERVAL {days} DAY";
-
-        var query = $@"
-WITH server_bucket_counts AS (
-    SELECT 
-        toDateTime(toUnixTimestamp(timestamp) - (toUnixTimestamp(timestamp) % {GetIntervalSeconds(timeInterval)})) as time_bucket,
-        server_guid,
-        AVG(players_online) as avg_players_online
-    FROM server_online_counts
-    WHERE game = '{game.Replace("'", "''")}'
-        {timeCondition}
-        AND timestamp < now()
-    GROUP BY time_bucket, server_guid
-)
-SELECT 
-    time_bucket,
-    ROUND(SUM(avg_players_online)) as total_players
-FROM server_bucket_counts
-GROUP BY time_bucket
-ORDER BY time_bucket
-FORMAT TabSeparated";
-
-        var result = await _clickHouseReader.ExecuteQueryAsync(query);
-        var dataPoints = new List<PlayersOnlineDataPoint>();
-
-        foreach (var line in result?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? [])
-        {
-            var parts = line.Split('\t');
-            if (parts.Length >= 2 &&
-                DateTime.TryParse(parts[0], out var timestamp) &&
-                int.TryParse(parts[1], out var totalPlayers))
-            {
-                dataPoints.Add(new PlayersOnlineDataPoint
-                {
-                    Timestamp = timestamp,
-                    TotalPlayers = totalPlayers
-                });
-            }
-        }
-
-        var insights = CalculatePlayerTrendsInsights(dataPoints.ToArray(), period, rollingWindowDays);
-
-        return new PlayersOnlineHistoryResponse
-        {
-            DataPoints = dataPoints.ToArray(),
-            Insights = insights,
-            Period = period,
-            Game = game,
-            LastUpdated = DateTime.UtcNow.ToString("O")
-        };
-    }
-
-    private static int GetIntervalSeconds(string interval)
-    {
-        return interval switch
-        {
-            "INTERVAL 5 MINUTE" => 300,    // 5 minutes
-            "INTERVAL 30 MINUTE" => 1800,  // 30 minutes
-            "INTERVAL 1 HOUR" => 3600,     // 1 hour
-            "INTERVAL 4 HOUR" => 14400,    // 4 hours
-            "INTERVAL 12 HOUR" => 43200,   // 12 hours
-            "INTERVAL 1 DAY" => 86400,     // 1 day
-            _ => 3600                      // Default to 1 hour
-        };
-    }
-
-    private static PlayerTrendsInsights? CalculatePlayerTrendsInsights(PlayersOnlineDataPoint[] dataPoints, string period, int rollingWindowDays)
-    {
-        if (dataPoints.Length == 0) return null;
-
-        var totalPlayers = dataPoints.Sum(dp => dp.TotalPlayers);
-        var overallAverage = (double)totalPlayers / dataPoints.Length;
-
-        var peakDataPoint = dataPoints.OrderByDescending(dp => dp.TotalPlayers).First();
-        var lowestDataPoint = dataPoints.OrderBy(dp => dp.TotalPlayers).First();
-
-        // Calculate percentage change from start to end
-        var startValue = dataPoints.First().TotalPlayers;
-        var endValue = dataPoints.Last().TotalPlayers;
-        var percentageChange = startValue == 0 ? 0 : ((double)(endValue - startValue) / startValue) * 100;
-
-        // Determine trend direction
-        var trendDirection = percentageChange switch
-        {
-            > 5 => "increasing",
-            < -5 => "decreasing",
-            _ => "stable"
-        };
-
-        // Calculate rolling average for longer periods (1month+)
-        var rollingAverage = CalculateRollingAverage(dataPoints, period, rollingWindowDays);
-
-        var calculationMethod = GetCalculationMethodDescription(period);
-
-        return new PlayerTrendsInsights
-        {
-            OverallAverage = Math.Round(overallAverage, 2),
-            RollingAverage = rollingAverage,
-            TrendDirection = trendDirection,
-            PercentageChange = Math.Round(percentageChange, 2),
-            PeakPlayers = peakDataPoint.TotalPlayers,
-            PeakTimestamp = peakDataPoint.Timestamp,
-            LowestPlayers = lowestDataPoint.TotalPlayers,
-            LowestTimestamp = lowestDataPoint.Timestamp,
-            CalculationMethod = calculationMethod
-        };
-    }
-
-    private static RollingAverageDataPoint[] CalculateRollingAverage(PlayersOnlineDataPoint[] dataPoints, string period, int rollingWindowDays)
-    {
-        Console.WriteLine($"CalculateRollingAverage called with period='{period}', rollingWindowDays={rollingWindowDays}, dataPoints.Length={dataPoints.Length}");
-
-        // Only calculate rolling average for periods of 1month or longer
-        if (period is "1d" or "3d" or "7d")
-        {
-            Console.WriteLine($"Early return: period='{period}' is too short for rolling average calculation");
-            return [];
-        }
-
-        if (dataPoints.Length < 2)
-        {
-            Console.WriteLine($"Early return: insufficient data points ({dataPoints.Length})");
-            return [];
-        }
-
-        Console.WriteLine($"Proceeding with rolling average calculation for period='{period}'");
-
-        var rollingPoints = new List<RollingAverageDataPoint>();
-        var rollingWindowTicks = TimeSpan.FromDays(rollingWindowDays).Ticks;
-
-        for (int i = 0; i < dataPoints.Length; i++)
-        {
-            var currentTimestamp = dataPoints[i].Timestamp;
-            var windowStart = currentTimestamp.AddTicks(-rollingWindowTicks);
-
-            // Find all data points within the rolling window
-            var windowData = dataPoints
-                .Where(dp => dp.Timestamp >= windowStart && dp.Timestamp <= currentTimestamp)
-                .ToArray();
-
-            if (windowData.Length > 0)
-            {
-                var average = windowData.Average(dp => dp.TotalPlayers);
-
-                rollingPoints.Add(new RollingAverageDataPoint
-                {
-                    Timestamp = currentTimestamp,
-                    Average = Math.Round(average, 2)
-                });
-            }
-        }
-
-        Console.WriteLine($"Calculated {rollingPoints.Count} rolling average points");
-        return rollingPoints.ToArray();
-    }
-
-    private static string GetCalculationMethodDescription(string period)
-    {
-        return period switch
-        {
-            "1d" => "Data sampled every 5 minutes. Shows real-time player activity with minimal smoothing.",
-            "3d" => "Data averaged over 30-minute intervals. Minor smoothing applied to reduce noise.",
-            "7d" => "Data averaged over 1-hour intervals. Hourly averages provide clear trend visibility.",
-            "1month" => "Data averaged over 4-hour intervals. Each point represents the average player count during a 4-hour period, which may appear lower than peak activity you'd see in shorter timeframes.",
-            "3months" => "Data averaged over 12-hour intervals. Each point represents the average player count during a 12-hour period, significantly smoothing out daily peaks and valleys.",
-            "thisyear" => "Data averaged over 24-hour intervals. Each point represents the average daily player count, which smooths out all intraday activity patterns.",
-            "alltime" => "Data averaged over 24-hour intervals. Each point represents the average daily player count across the entire historical period.",
-            _ => "Data is time-bucketed and averaged to provide trend analysis while managing data volume."
-        };
-    }
 }

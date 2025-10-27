@@ -391,6 +391,7 @@ try
     // Register the ServerStatsService and supporting services
     builder.Services.AddScoped<ServerStatsService>();
     builder.Services.AddScoped<RoundsService>();
+    builder.Services.AddScoped<PlayersOnlineHistoryService>();
 
     // Register the stat collector background services
     builder.Services.AddHostedService<StatsCollectionBackgroundService>();
