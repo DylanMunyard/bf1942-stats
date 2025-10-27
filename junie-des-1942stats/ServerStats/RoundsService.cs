@@ -30,14 +30,24 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
                 r.Tickets1,
                 r.Tickets2,
                 r.Team1Label,
-                r.Team2Label,
-                TopPlayer = r.Sessions
-                    .Where(s => !s.Player.AiBot)
-                    .OrderByDescending(s => s.TotalScore)
+                r.Team2Label
+            })
+            .ToListAsync();
+
+        var roundIds = rounds.Select(r => r.RoundId).ToList();
+
+        var topPlayers = await _dbContext.PlayerSessions
+            .AsNoTracking()
+            .Where(ps => ps.RoundId != null && roundIds.Contains(ps.RoundId) && !ps.Player.AiBot)
+            .GroupBy(ps => ps.RoundId)
+            .Select(g => new
+            {
+                RoundId = g.Key!,
+                TopPlayer = g.OrderByDescending(s => s.TotalScore)
                     .Select(s => new { s.PlayerName, s.TotalScore })
                     .FirstOrDefault()
             })
-            .ToListAsync();
+            .ToDictionaryAsync(x => x.RoundId, x => x.TopPlayer);
 
         return rounds.Select(r => new RoundInfo
         {
@@ -50,8 +60,8 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
             WinningTeamLabel = DetermineWinningTeam(r.Tickets1, r.Tickets2, r.Team1Label, r.Team2Label),
             WinningTeamScore = GetWinningScore(r.Tickets1, r.Tickets2),
             LosingTeamScore = GetLosingScore(r.Tickets1, r.Tickets2),
-            TopPlayerName = r.TopPlayer?.PlayerName,
-            TopPlayerScore = r.TopPlayer?.TotalScore
+            TopPlayerName = topPlayers.TryGetValue(r.RoundId, out var topPlayer) ? topPlayer?.PlayerName : null,
+            TopPlayerScore = topPlayers.TryGetValue(r.RoundId, out var tp) ? tp?.TotalScore : null
         }).ToList();
     }
 
