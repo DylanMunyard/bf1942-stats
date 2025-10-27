@@ -16,20 +16,67 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
     {
         var rounds = await _dbContext.Rounds
             .AsNoTracking()
-            .Where(r => r.ServerGuid == serverGuid)
+            .Where(r => r.ServerGuid == serverGuid && (r.ParticipantCount ?? 0) > 0)
             .OrderByDescending(r => r.StartTime)
             .Take(limit)
-            .Select(r => new RoundInfo
+            .Select(r => new
             {
-                RoundId = r.RoundId,
-                MapName = r.MapName,
-                StartTime = r.StartTime,
-                EndTime = r.EndTime ?? DateTime.UtcNow,
-                IsActive = r.IsActive
+                r.RoundId,
+                r.MapName,
+                r.StartTime,
+                r.EndTime,
+                r.IsActive,
+                r.ParticipantCount,
+                r.Tickets1,
+                r.Tickets2,
+                r.Team1Label,
+                r.Team2Label,
+                TopPlayer = r.Sessions
+                    .Where(s => !s.Player.AiBot)
+                    .OrderByDescending(s => s.TotalScore)
+                    .Select(s => new { s.PlayerName, s.TotalScore })
+                    .FirstOrDefault()
             })
             .ToListAsync();
 
-        return rounds;
+        return rounds.Select(r => new RoundInfo
+        {
+            RoundId = r.RoundId,
+            MapName = r.MapName,
+            StartTime = r.StartTime,
+            EndTime = r.EndTime ?? DateTime.UtcNow,
+            IsActive = r.IsActive,
+            ParticipantCount = r.ParticipantCount ?? 0,
+            WinningTeamLabel = DetermineWinningTeam(r.Tickets1, r.Tickets2, r.Team1Label, r.Team2Label),
+            WinningTeamScore = GetWinningScore(r.Tickets1, r.Tickets2),
+            LosingTeamScore = GetLosingScore(r.Tickets1, r.Tickets2),
+            TopPlayerName = r.TopPlayer?.PlayerName,
+            TopPlayerScore = r.TopPlayer?.TotalScore
+        }).ToList();
+    }
+
+    private static string? DetermineWinningTeam(int? tickets1, int? tickets2, string? team1Label, string? team2Label)
+    {
+        if (!tickets1.HasValue || !tickets2.HasValue)
+            return null;
+
+        return tickets1.Value > tickets2.Value ? team1Label : team2Label;
+    }
+
+    private static int? GetWinningScore(int? tickets1, int? tickets2)
+    {
+        if (!tickets1.HasValue || !tickets2.HasValue)
+            return null;
+
+        return Math.Max(tickets1.Value, tickets2.Value);
+    }
+
+    private static int? GetLosingScore(int? tickets1, int? tickets2)
+    {
+        if (!tickets1.HasValue || !tickets2.HasValue)
+            return null;
+
+        return Math.Min(tickets1.Value, tickets2.Value);
     }
 
     public async Task<PlayerStats.Models.PagedResult<RoundWithPlayers>> GetRounds(
