@@ -97,6 +97,8 @@ spec:
         app: clickhouse
     spec:
       priorityClassName: 1942-services
+      nodeSelector:
+        workload: core
       initContainers:
         - name: restore-clickhouse
           image: mcr.microsoft.com/azure-cli:latest

@@ -28,6 +28,8 @@ spec:
         app: bf42-stats
     spec:
       priorityClassName: 1942-services
+      nodeSelector:
+        workload: core
       securityContext:
         fsGroup: 1000
         runAsUser: 1000
@@ -199,6 +201,8 @@ spec:
         app: redis
     spec:
       priorityClassName: 1942-services
+      nodeSelector:
+        workload: core
       containers:
         - name: redis
           image: redis:7-alpine
@@ -248,6 +252,8 @@ spec:
       labels:
         app: redis-commander
     spec:
+      nodeSelector:
+        workload: core
       containers:
         - name: redis-commander
           image: erikdubbelboer/phpredisadmin:latest
@@ -292,6 +298,8 @@ spec:
       labels:
         app: sqlite-browser
     spec:
+      nodeSelector:
+        workload: core
       securityContext:
         fsGroup: 1000
       containers:
