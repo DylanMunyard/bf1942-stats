@@ -38,6 +38,7 @@ public class AdminTournamentController : ControllerBase
             var tournaments = await _context.Tournaments
                 .Include(t => t.OrganizerPlayer)
                 .Include(t => t.TournamentRounds)
+                .Include(t => t.Server)
                 .Where(t => t.CreatedByUserEmail == userEmail)
                 .OrderByDescending(t => t.CreatedAt)
                 .Select(t => new TournamentListResponse
@@ -49,7 +50,9 @@ public class AdminTournamentController : ControllerBase
                     CreatedAt = t.CreatedAt,
                     AnticipatedRoundCount = t.AnticipatedRoundCount,
                     RoundCount = t.TournamentRounds.Count,
-                    HasHeroImage = t.HeroImage != null
+                    HasHeroImage = t.HeroImage != null,
+                    ServerGuid = t.ServerGuid,
+                    ServerName = t.Server != null ? t.Server.Name : null
                 })
                 .ToListAsync();
 
@@ -77,6 +80,7 @@ public class AdminTournamentController : ControllerBase
 
             var tournament = await _context.Tournaments
                 .Include(t => t.OrganizerPlayer)
+                .Include(t => t.Server)
                 .Include(t => t.TournamentRounds)
                     .ThenInclude(tr => tr.Round)
                         .ThenInclude(r => r.Sessions)
@@ -151,7 +155,9 @@ public class AdminTournamentController : ControllerBase
                 Rounds = rounds,
                 OverallWinner = overallWinner,
                 HeroImageBase64 = tournament.HeroImage != null ? Convert.ToBase64String(tournament.HeroImage) : null,
-                HeroImageContentType = tournament.HeroImageContentType
+                HeroImageContentType = tournament.HeroImageContentType,
+                ServerGuid = tournament.ServerGuid,
+                ServerName = tournament.Server?.Name
             };
 
             return Ok(response);
@@ -197,6 +203,13 @@ public class AdminTournamentController : ControllerBase
             if (organizer == null)
                 return BadRequest(new { message = $"Player '{request.Organizer}' not found" });
 
+            if (!string.IsNullOrWhiteSpace(request.ServerGuid))
+            {
+                var server = await _context.Servers.FirstOrDefaultAsync(s => s.Guid == request.ServerGuid);
+                if (server == null)
+                    return BadRequest(new { message = $"Server with GUID '{request.ServerGuid}' not found" });
+            }
+
             if (request.RoundIds != null && request.RoundIds.Count > 0)
             {
                 var rounds = await _context.Rounds
@@ -231,7 +244,8 @@ public class AdminTournamentController : ControllerBase
                 CreatedByUserEmail = userEmail,
                 AnticipatedRoundCount = request.AnticipatedRoundCount,
                 HeroImage = heroImageData,
-                HeroImageContentType = heroImageData != null ? request.HeroImageContentType : null
+                HeroImageContentType = heroImageData != null ? request.HeroImageContentType : null,
+                ServerGuid = !string.IsNullOrWhiteSpace(request.ServerGuid) ? request.ServerGuid : null
             };
 
             _context.Tournaments.Add(tournament);
@@ -311,6 +325,22 @@ public class AdminTournamentController : ControllerBase
 
             if (request.AnticipatedRoundCount.HasValue)
                 tournament.AnticipatedRoundCount = request.AnticipatedRoundCount;
+
+            if (request.ServerGuid != null)
+            {
+                if (!string.IsNullOrWhiteSpace(request.ServerGuid))
+                {
+                    var server = await _context.Servers.FirstOrDefaultAsync(s => s.Guid == request.ServerGuid);
+                    if (server == null)
+                        return BadRequest(new { message = $"Server with GUID '{request.ServerGuid}' not found" });
+                    
+                    tournament.ServerGuid = request.ServerGuid;
+                }
+                else
+                {
+                    tournament.ServerGuid = null;
+                }
+            }
 
             if (request.HeroImageBase64 != null)
             {
@@ -416,6 +446,49 @@ public class AdminTournamentController : ControllerBase
         {
             _logger.LogError(ex, "Error adding round to tournament {TournamentId}", id);
             return StatusCode(500, new { message = "Error adding round to tournament" });
+        }
+    }
+
+    /// <summary>
+    /// Delete a round from a tournament (authenticated users only)
+    /// </summary>
+    [HttpDelete("{id}/rounds/{roundId}")]
+    [Authorize]
+    public async Task<ActionResult<TournamentDetailResponse>> DeleteRoundFromTournament(int id, string roundId)
+    {
+        try
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return StatusCode(500, new { message = "User not found" });
+
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var tournament = await _context.Tournaments
+                .Include(t => t.TournamentRounds)
+                .Where(t => t.CreatedByUserEmail == userEmail)
+                .FirstOrDefaultAsync(t => t.Id == id);
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            var tournamentRound = await _context.TournamentRounds
+                .FirstOrDefaultAsync(tr => tr.TournamentId == id && tr.RoundId == roundId);
+
+            if (tournamentRound == null)
+                return NotFound(new { message = $"Round '{roundId}' not found in this tournament" });
+
+            _context.TournamentRounds.Remove(tournamentRound);
+            await _context.SaveChangesAsync();
+
+            return Ok(await GetTournamentDetailAsync(tournament.Id));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting round from tournament {TournamentId}", id);
+            return StatusCode(500, new { message = "Error deleting round from tournament" });
         }
     }
 
@@ -527,6 +600,7 @@ public class AdminTournamentController : ControllerBase
     {
         var tournament = await _context.Tournaments
             .Include(t => t.OrganizerPlayer)
+            .Include(t => t.Server)
             .Include(t => t.TournamentRounds)
                 .ThenInclude(tr => tr.Round)
                     .ThenInclude(r => r.Sessions)
@@ -596,7 +670,9 @@ public class AdminTournamentController : ControllerBase
             Rounds = rounds,
             OverallWinner = overallWinner,
             HeroImageBase64 = tournament.HeroImage != null ? Convert.ToBase64String(tournament.HeroImage) : null,
-            HeroImageContentType = tournament.HeroImageContentType
+            HeroImageContentType = tournament.HeroImageContentType,
+            ServerGuid = tournament.ServerGuid,
+            ServerName = tournament.Server?.Name
         };
     }
 }
@@ -611,6 +687,7 @@ public class CreateTournamentRequest
     public List<string>? RoundIds { get; set; }
     public string? HeroImageBase64 { get; set; }
     public string? HeroImageContentType { get; set; }
+    public string? ServerGuid { get; set; }
 }
 
 public class UpdateTournamentRequest
@@ -622,6 +699,7 @@ public class UpdateTournamentRequest
     public List<string>? RoundIds { get; set; }
     public string? HeroImageBase64 { get; set; }
     public string? HeroImageContentType { get; set; }
+    public string? ServerGuid { get; set; }
 }
 
 public class AddRoundRequest
@@ -640,6 +718,8 @@ public class TournamentListResponse
     public int? AnticipatedRoundCount { get; set; }
     public int RoundCount { get; set; }
     public bool HasHeroImage { get; set; }
+    public string? ServerGuid { get; set; }
+    public string? ServerName { get; set; }
 }
 
 public class TournamentDetailResponse
@@ -654,6 +734,8 @@ public class TournamentDetailResponse
     public TournamentWinnerResponse? OverallWinner { get; set; }
     public string? HeroImageBase64 { get; set; }
     public string? HeroImageContentType { get; set; }
+    public string? ServerGuid { get; set; }
+    public string? ServerName { get; set; }
 }
 
 public class TournamentRoundResponse

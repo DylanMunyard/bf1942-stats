@@ -285,6 +285,15 @@ public class PlayerTrackerDbContext : DbContext
             .HasPrincipalKey(p => p.Name)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // Configure relationship: Tournament -> GameServer (optional)
+        modelBuilder.Entity<Tournament>()
+            .HasOne(t => t.Server)
+            .WithMany()
+            .HasForeignKey(t => t.ServerGuid)
+            .HasPrincipalKey(gs => gs.Guid)
+            .OnDelete(DeleteBehavior.Restrict)
+            .IsRequired(false);
+
         // Configure TournamentRound entity
         modelBuilder.Entity<TournamentRound>()
             .HasKey(tr => tr.Id);
@@ -550,10 +559,12 @@ public class Tournament
     public int? AnticipatedRoundCount { get; set; }
     public byte[]? HeroImage { get; set; }
     public string? HeroImageContentType { get; set; }
+    public string? ServerGuid { get; set; }
 
     // Navigation properties
     public User CreatedByUser { get; set; } = null!;
     public Player OrganizerPlayer { get; set; } = null!;
+    public GameServer? Server { get; set; }
     public List<TournamentRound> TournamentRounds { get; set; } = [];
 }
 
