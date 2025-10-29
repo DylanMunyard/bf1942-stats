@@ -198,6 +198,7 @@ public class ServerFilters
 {
     public string? ServerName { get; set; }
     public string? GameId { get; set; }
+    public string? Game { get; set; }
     public string? Country { get; set; }
     public string? Region { get; set; }
     public bool? HasActivePlayers { get; set; }

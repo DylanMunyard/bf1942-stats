@@ -8,39 +8,48 @@ using Microsoft.Extensions.Logging;
 namespace junie_des_1942stats.Controllers;
 
 [ApiController]
-[Route("stats/[controller]")]
-public class TournamentController : ControllerBase
+[Route("stats/admin/tournaments")]
+public class AdminTournamentController : ControllerBase
 {
     private readonly PlayerTrackerDbContext _context;
-    private readonly ILogger<TournamentController> _logger;
+    private readonly ILogger<AdminTournamentController> _logger;
 
-    public TournamentController(
+    public AdminTournamentController(
         PlayerTrackerDbContext context,
-        ILogger<TournamentController> logger)
+        ILogger<AdminTournamentController> logger)
     {
         _context = context;
         _logger = logger;
     }
 
     /// <summary>
-    /// Get all tournaments
+    /// Get tournaments created by the current user
     /// </summary>
     [HttpGet]
+    [Authorize]
     public async Task<ActionResult<List<TournamentListResponse>>> GetTournaments()
     {
         try
         {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
             var tournaments = await _context.Tournaments
                 .Include(t => t.OrganizerPlayer)
                 .Include(t => t.TournamentRounds)
+                .Where(t => t.CreatedByUserEmail == userEmail)
                 .OrderByDescending(t => t.CreatedAt)
                 .Select(t => new TournamentListResponse
                 {
                     Id = t.Id,
                     Name = t.Name,
                     Organizer = t.Organizer,
+                    Game = t.Game,
                     CreatedAt = t.CreatedAt,
-                    RoundCount = t.TournamentRounds.Count
+                    AnticipatedRoundCount = t.AnticipatedRoundCount,
+                    RoundCount = t.TournamentRounds.Count,
+                    HasHeroImage = t.HeroImage != null
                 })
                 .ToListAsync();
 
@@ -57,15 +66,21 @@ public class TournamentController : ControllerBase
     /// Get tournament by ID with full details including rounds and winners
     /// </summary>
     [HttpGet("{id}")]
+    [Authorize]
     public async Task<ActionResult<TournamentDetailResponse>> GetTournament(int id)
     {
         try
         {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
             var tournament = await _context.Tournaments
                 .Include(t => t.OrganizerPlayer)
                 .Include(t => t.TournamentRounds)
                     .ThenInclude(tr => tr.Round)
                         .ThenInclude(r => r.Sessions)
+                .Where(t => t.CreatedByUserEmail == userEmail)
                 .FirstOrDefaultAsync(t => t.Id == id);
 
             if (tournament == null)
@@ -77,7 +92,6 @@ public class TournamentController : ControllerBase
             {
                 var round = tr.Round;
 
-                // Determine winning team
                 string? winningTeam = null;
                 if (round.Tickets1.HasValue && round.Tickets2.HasValue)
                 {
@@ -86,7 +100,6 @@ public class TournamentController : ControllerBase
                         : round.Team2Label;
                 }
 
-                // Get winning players (all players on the winning team)
                 var winningPlayers = new List<string>();
                 if (winningTeam != null)
                 {
@@ -116,7 +129,6 @@ public class TournamentController : ControllerBase
                 });
             }
 
-            // Determine overall winner (last round winners)
             TournamentWinnerResponse? overallWinner = null;
             var lastRound = rounds.OrderByDescending(r => r.StartTime).FirstOrDefault();
             if (lastRound != null && lastRound.WinningTeam != null)
@@ -133,9 +145,13 @@ public class TournamentController : ControllerBase
                 Id = tournament.Id,
                 Name = tournament.Name,
                 Organizer = tournament.Organizer,
+                Game = tournament.Game,
                 CreatedAt = tournament.CreatedAt,
+                AnticipatedRoundCount = tournament.AnticipatedRoundCount,
                 Rounds = rounds,
-                OverallWinner = overallWinner
+                OverallWinner = overallWinner,
+                HeroImageBase64 = tournament.HeroImage != null ? Convert.ToBase64String(tournament.HeroImage) : null,
+                HeroImageContentType = tournament.HeroImageContentType
             };
 
             return Ok(response);
@@ -160,65 +176,81 @@ public class TournamentController : ControllerBase
             if (user == null)
                 return StatusCode(500, new { message = "User not found" });
 
-            // Validate request
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
             if (string.IsNullOrWhiteSpace(request.Name))
                 return BadRequest(new { message = "Tournament name is required" });
 
             if (string.IsNullOrWhiteSpace(request.Organizer))
                 return BadRequest(new { message = "Organizer name is required" });
 
-            if (request.RoundIds == null || request.RoundIds.Count == 0)
-                return BadRequest(new { message = "At least one round is required" });
+            if (string.IsNullOrWhiteSpace(request.Game))
+                return BadRequest(new { message = "Game is required" });
 
-            // Verify organizer exists as a player
+            var allowedGames = new[] { "bf1942", "fh2", "bfvietnam" };
+            if (!allowedGames.Contains(request.Game.ToLower()))
+                return BadRequest(new { message = $"Invalid game. Allowed values: {string.Join(", ", allowedGames)}" });
+
             var organizer = await _context.Players.FirstOrDefaultAsync(p => p.Name == request.Organizer);
             if (organizer == null)
                 return BadRequest(new { message = $"Player '{request.Organizer}' not found" });
 
-            // Verify all rounds exist
-            var rounds = await _context.Rounds
-                .Where(r => request.RoundIds.Contains(r.RoundId))
-                .ToListAsync();
-
-            if (rounds.Count != request.RoundIds.Count)
-                return BadRequest(new { message = "One or more round IDs are invalid" });
-
-            // Check if any rounds are already in another tournament
-            var existingTournamentRounds = await _context.TournamentRounds
-                .Where(tr => request.RoundIds.Contains(tr.RoundId))
-                .ToListAsync();
-
-            if (existingTournamentRounds.Any())
+            if (request.RoundIds != null && request.RoundIds.Count > 0)
             {
-                var conflictingRoundIds = string.Join(", ", existingTournamentRounds.Select(tr => tr.RoundId));
-                return BadRequest(new { message = $"The following rounds are already in a tournament: {conflictingRoundIds}" });
+                var rounds = await _context.Rounds
+                    .Where(r => request.RoundIds.Contains(r.RoundId))
+                    .ToListAsync();
+
+                if (rounds.Count != request.RoundIds.Count)
+                    return BadRequest(new { message = "One or more round IDs are invalid" });
+
+                var existingTournamentRounds = await _context.TournamentRounds
+                    .Where(tr => request.RoundIds.Contains(tr.RoundId))
+                    .ToListAsync();
+
+                if (existingTournamentRounds.Any())
+                {
+                    var conflictingRoundIds = string.Join(", ", existingTournamentRounds.Select(tr => tr.RoundId));
+                    return BadRequest(new { message = $"The following rounds are already in a tournament: {conflictingRoundIds}" });
+                }
             }
 
-            // Create tournament
+            var (heroImageData, imageError) = ValidateAndProcessImage(request.HeroImageBase64, request.HeroImageContentType);
+            if (imageError != null)
+                return BadRequest(new { message = imageError });
+
             var tournament = new Tournament
             {
                 Name = request.Name,
                 Organizer = request.Organizer,
+                Game = request.Game.ToLower(),
                 CreatedAt = DateTime.UtcNow,
-                CreatedByUserId = user.Id
+                CreatedByUserId = user.Id,
+                CreatedByUserEmail = userEmail,
+                AnticipatedRoundCount = request.AnticipatedRoundCount,
+                HeroImage = heroImageData,
+                HeroImageContentType = heroImageData != null ? request.HeroImageContentType : null
             };
 
             _context.Tournaments.Add(tournament);
             await _context.SaveChangesAsync();
 
-            // Add tournament rounds
-            foreach (var roundId in request.RoundIds)
+            if (request.RoundIds != null && request.RoundIds.Count > 0)
             {
-                _context.TournamentRounds.Add(new TournamentRound
+                foreach (var roundId in request.RoundIds)
                 {
-                    TournamentId = tournament.Id,
-                    RoundId = roundId
-                });
+                    _context.TournamentRounds.Add(new TournamentRound
+                    {
+                        TournamentId = tournament.Id,
+                        RoundId = roundId
+                    });
+                }
+
+                await _context.SaveChangesAsync();
             }
 
-            await _context.SaveChangesAsync();
-
-            // Return created tournament with full details
             return CreatedAtAction(
                 nameof(GetTournament),
                 new { id = tournament.Id },
@@ -244,14 +276,18 @@ public class TournamentController : ControllerBase
             if (user == null)
                 return StatusCode(500, new { message = "User not found" });
 
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
             var tournament = await _context.Tournaments
                 .Include(t => t.TournamentRounds)
+                .Where(t => t.CreatedByUserEmail == userEmail)
                 .FirstOrDefaultAsync(t => t.Id == id);
 
             if (tournament == null)
                 return NotFound(new { message = "Tournament not found" });
 
-            // Validate request
             if (!string.IsNullOrWhiteSpace(request.Name))
                 tournament.Name = request.Name;
 
@@ -264,10 +300,30 @@ public class TournamentController : ControllerBase
                 tournament.Organizer = request.Organizer;
             }
 
-            // Update rounds if provided
+            if (!string.IsNullOrWhiteSpace(request.Game))
+            {
+                var allowedGames = new[] { "bf1942", "fh2", "bfvietnam" };
+                if (!allowedGames.Contains(request.Game.ToLower()))
+                    return BadRequest(new { message = $"Invalid game. Allowed values: {string.Join(", ", allowedGames)}" });
+
+                tournament.Game = request.Game.ToLower();
+            }
+
+            if (request.AnticipatedRoundCount.HasValue)
+                tournament.AnticipatedRoundCount = request.AnticipatedRoundCount;
+
+            if (request.HeroImageBase64 != null)
+            {
+                var (heroImageData, imageError) = ValidateAndProcessImage(request.HeroImageBase64, request.HeroImageContentType);
+                if (imageError != null)
+                    return BadRequest(new { message = imageError });
+
+                tournament.HeroImage = heroImageData;
+                tournament.HeroImageContentType = heroImageData != null ? request.HeroImageContentType : null;
+            }
+
             if (request.RoundIds != null && request.RoundIds.Count > 0)
             {
-                // Verify all rounds exist
                 var rounds = await _context.Rounds
                     .Where(r => request.RoundIds.Contains(r.RoundId))
                     .ToListAsync();
@@ -275,7 +331,6 @@ public class TournamentController : ControllerBase
                 if (rounds.Count != request.RoundIds.Count)
                     return BadRequest(new { message = "One or more round IDs are invalid" });
 
-                // Check if any rounds are already in another tournament
                 var existingTournamentRounds = await _context.TournamentRounds
                     .Where(tr => request.RoundIds.Contains(tr.RoundId) && tr.TournamentId != id)
                     .ToListAsync();
@@ -286,10 +341,8 @@ public class TournamentController : ControllerBase
                     return BadRequest(new { message = $"The following rounds are already in a tournament: {conflictingRoundIds}" });
                 }
 
-                // Remove old rounds
                 _context.TournamentRounds.RemoveRange(tournament.TournamentRounds);
 
-                // Add new rounds
                 foreach (var roundId in request.RoundIds)
                 {
                     _context.TournamentRounds.Add(new TournamentRound
@@ -302,13 +355,67 @@ public class TournamentController : ControllerBase
 
             await _context.SaveChangesAsync();
 
-            // Return updated tournament with full details
             return Ok(await GetTournamentDetailAsync(tournament.Id));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating tournament {TournamentId}", id);
             return StatusCode(500, new { message = "Error updating tournament" });
+        }
+    }
+
+    /// <summary>
+    /// Add a round to an existing tournament (authenticated users only)
+    /// </summary>
+    [HttpPost("{id}/rounds")]
+    [Authorize]
+    public async Task<ActionResult<TournamentDetailResponse>> AddRoundToTournament(int id, [FromBody] AddRoundRequest request)
+    {
+        try
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return StatusCode(500, new { message = "User not found" });
+
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var tournament = await _context.Tournaments
+                .Include(t => t.TournamentRounds)
+                .Where(t => t.CreatedByUserEmail == userEmail)
+                .FirstOrDefaultAsync(t => t.Id == id);
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            if (string.IsNullOrWhiteSpace(request.RoundId))
+                return BadRequest(new { message = "Round ID is required" });
+
+            var round = await _context.Rounds.FirstOrDefaultAsync(r => r.RoundId == request.RoundId);
+            if (round == null)
+                return BadRequest(new { message = $"Round '{request.RoundId}' not found" });
+
+            var existingTournamentRound = await _context.TournamentRounds
+                .FirstOrDefaultAsync(tr => tr.RoundId == request.RoundId);
+
+            if (existingTournamentRound != null)
+                return BadRequest(new { message = $"Round '{request.RoundId}' is already in a tournament" });
+
+            _context.TournamentRounds.Add(new TournamentRound
+            {
+                TournamentId = tournament.Id,
+                RoundId = request.RoundId
+            });
+
+            await _context.SaveChangesAsync();
+
+            return Ok(await GetTournamentDetailAsync(tournament.Id));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding round to tournament {TournamentId}", id);
+            return StatusCode(500, new { message = "Error adding round to tournament" });
         }
     }
 
@@ -325,7 +432,14 @@ public class TournamentController : ControllerBase
             if (user == null)
                 return StatusCode(500, new { message = "User not found" });
 
-            var tournament = await _context.Tournaments.FindAsync(id);
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var tournament = await _context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail)
+                .FirstOrDefaultAsync(t => t.Id == id);
+
             if (tournament == null)
                 return NotFound(new { message = "Tournament not found" });
 
@@ -341,6 +455,39 @@ public class TournamentController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Get tournament hero image
+    /// </summary>
+    [HttpGet("{id}/image")]
+    [Authorize]
+    public async Task<IActionResult> GetTournamentImage(int id)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var tournament = await _context.Tournaments
+                .Where(t => t.Id == id && t.CreatedByUserEmail == userEmail)
+                .Select(t => new { t.HeroImage, t.HeroImageContentType })
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            if (tournament.HeroImage == null)
+                return NotFound(new { message = "Tournament has no hero image" });
+
+            return File(tournament.HeroImage, tournament.HeroImageContentType ?? "image/jpeg");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting tournament image {TournamentId}", id);
+            return StatusCode(500, new { message = "Error retrieving tournament image" });
+        }
+    }
+
     // Helper methods
     private async Task<User?> GetCurrentUserAsync()
     {
@@ -349,6 +496,31 @@ public class TournamentController : ControllerBase
             return null;
 
         return await _context.Users.FirstOrDefaultAsync(u => u.Id == id);
+    }
+
+    private (byte[]? imageData, string? error) ValidateAndProcessImage(string? base64Image, string? contentType)
+    {
+        if (string.IsNullOrWhiteSpace(base64Image))
+            return (null, null);
+
+        try
+        {
+            var imageBytes = Convert.FromBase64String(base64Image);
+
+            const int maxSizeBytes = 4 * 1024 * 1024;
+            if (imageBytes.Length > maxSizeBytes)
+                return (null, $"Image size exceeds 4MB limit. Current size: {imageBytes.Length / 1024.0 / 1024.0:F2}MB");
+
+            var allowedTypes = new[] { "image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp" };
+            if (!string.IsNullOrWhiteSpace(contentType) && !allowedTypes.Contains(contentType.ToLower()))
+                return (null, $"Invalid image type. Allowed types: {string.Join(", ", allowedTypes)}");
+
+            return (imageBytes, null);
+        }
+        catch (FormatException)
+        {
+            return (null, "Invalid base64 image format");
+        }
     }
 
     private async Task<TournamentDetailResponse> GetTournamentDetailAsync(int tournamentId)
@@ -360,13 +532,11 @@ public class TournamentController : ControllerBase
                     .ThenInclude(r => r.Sessions)
             .FirstAsync(t => t.Id == tournamentId);
 
-        // Build tournament detail response with rounds and winners
         var rounds = new List<TournamentRoundResponse>();
         foreach (var tr in tournament.TournamentRounds.OrderBy(tr => tr.Round.StartTime))
         {
             var round = tr.Round;
 
-            // Determine winning team
             string? winningTeam = null;
             if (round.Tickets1.HasValue && round.Tickets2.HasValue)
             {
@@ -375,7 +545,6 @@ public class TournamentController : ControllerBase
                     : round.Team2Label;
             }
 
-            // Get winning players (all players on the winning team)
             var winningPlayers = new List<string>();
             if (winningTeam != null)
             {
@@ -405,7 +574,6 @@ public class TournamentController : ControllerBase
             });
         }
 
-        // Determine overall winner (last round winners)
         TournamentWinnerResponse? overallWinner = null;
         var lastRound = rounds.OrderByDescending(r => r.StartTime).FirstOrDefault();
         if (lastRound != null && lastRound.WinningTeam != null)
@@ -422,9 +590,13 @@ public class TournamentController : ControllerBase
             Id = tournament.Id,
             Name = tournament.Name,
             Organizer = tournament.Organizer,
+            Game = tournament.Game,
             CreatedAt = tournament.CreatedAt,
+            AnticipatedRoundCount = tournament.AnticipatedRoundCount,
             Rounds = rounds,
-            OverallWinner = overallWinner
+            OverallWinner = overallWinner,
+            HeroImageBase64 = tournament.HeroImage != null ? Convert.ToBase64String(tournament.HeroImage) : null,
+            HeroImageContentType = tournament.HeroImageContentType
         };
     }
 }
@@ -434,14 +606,27 @@ public class CreateTournamentRequest
 {
     public string Name { get; set; } = "";
     public string Organizer { get; set; } = "";
-    public List<string> RoundIds { get; set; } = [];
+    public string Game { get; set; } = "";
+    public int? AnticipatedRoundCount { get; set; }
+    public List<string>? RoundIds { get; set; }
+    public string? HeroImageBase64 { get; set; }
+    public string? HeroImageContentType { get; set; }
 }
 
 public class UpdateTournamentRequest
 {
     public string? Name { get; set; }
     public string? Organizer { get; set; }
+    public string? Game { get; set; }
+    public int? AnticipatedRoundCount { get; set; }
     public List<string>? RoundIds { get; set; }
+    public string? HeroImageBase64 { get; set; }
+    public string? HeroImageContentType { get; set; }
+}
+
+public class AddRoundRequest
+{
+    public string RoundId { get; set; } = "";
 }
 
 // Response DTOs
@@ -450,8 +635,11 @@ public class TournamentListResponse
     public int Id { get; set; }
     public string Name { get; set; } = "";
     public string Organizer { get; set; } = "";
+    public string Game { get; set; } = "";
     public DateTime CreatedAt { get; set; }
+    public int? AnticipatedRoundCount { get; set; }
     public int RoundCount { get; set; }
+    public bool HasHeroImage { get; set; }
 }
 
 public class TournamentDetailResponse
@@ -459,9 +647,13 @@ public class TournamentDetailResponse
     public int Id { get; set; }
     public string Name { get; set; } = "";
     public string Organizer { get; set; } = "";
+    public string Game { get; set; } = "";
     public DateTime CreatedAt { get; set; }
+    public int? AnticipatedRoundCount { get; set; }
     public List<TournamentRoundResponse> Rounds { get; set; } = [];
     public TournamentWinnerResponse? OverallWinner { get; set; }
+    public string? HeroImageBase64 { get; set; }
+    public string? HeroImageContentType { get; set; }
 }
 
 public class TournamentRoundResponse
@@ -485,3 +677,4 @@ public class TournamentWinnerResponse
     public string Team { get; set; } = "";
     public List<string> Players { get; set; } = [];
 }
+

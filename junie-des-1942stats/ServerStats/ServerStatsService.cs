@@ -853,6 +853,11 @@ FORMAT TabSeparated";
             baseQuery = baseQuery.Where(s => s.GameId == filters.GameId);
         }
 
+        if (!string.IsNullOrWhiteSpace(filters.Game))
+        {
+            baseQuery = baseQuery.Where(s => s.Game == filters.Game);
+        }
+
         if (!string.IsNullOrWhiteSpace(filters.Country))
         {
             baseQuery = baseQuery.Where(s => s.Country != null && s.Country.ToLower().Contains(filters.Country.ToLower()));

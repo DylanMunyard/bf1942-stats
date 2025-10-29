@@ -9,6 +9,7 @@
         "ASPNETCORE_ENVIRONMENT": "Development",
         "REDIS_CONNECTION_STRING": "localhost:6379",
         "LOKI_URL": "http://localhost:3100",
+        "SEQ_URL": "http://localhost:5341",
         "TEMPO_URL": "http://localhost:3200",
         "OTLP_ENDPOINT": "http://localhost:4318/v1/traces",
         "ENABLE_CLICKHOUSE_ROUND_SYNCING": "true",

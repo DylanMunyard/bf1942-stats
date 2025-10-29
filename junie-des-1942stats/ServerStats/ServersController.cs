@@ -190,6 +190,7 @@ public class ServersController : ControllerBase
         [FromQuery] string sortOrder = "asc",
         [FromQuery] string? serverName = null,
         [FromQuery] string? gameId = null,
+        [FromQuery] string? game = null,
         [FromQuery] string? country = null,
         [FromQuery] string? region = null,
         [FromQuery] bool? hasActivePlayers = null,
@@ -241,12 +242,21 @@ public class ServersController : ControllerBase
         if (lastActivityFrom.HasValue && lastActivityTo.HasValue && lastActivityFrom > lastActivityTo)
             return BadRequest("LastActivityFrom cannot be greater than LastActivityTo");
 
+        // Validate game parameter if provided
+        if (!string.IsNullOrWhiteSpace(game))
+        {
+            var allowedGames = new[] { "bf1942", "fh2", "bfvietnam" };
+            if (!allowedGames.Contains(game.ToLower()))
+                return BadRequest($"Invalid game. Allowed values: {string.Join(", ", allowedGames)}");
+        }
+
         try
         {
             var filters = new ServerFilters
             {
                 ServerName = serverName?.Trim(),
                 GameId = gameId?.Trim(),
+                Game = game?.Trim().ToLower(),
                 Country = country?.Trim(),
                 Region = region?.Trim(),
                 HasActivePlayers = hasActivePlayers,
@@ -271,6 +281,7 @@ public class ServersController : ControllerBase
     [HttpGet("search")]
     public async Task<ActionResult<PagedResult<ServerBasicInfo>>> SearchServers(
         [FromQuery] string query,
+        [FromQuery] string? game = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20)
     {
@@ -283,11 +294,20 @@ public class ServersController : ControllerBase
         if (pageSize < 1 || pageSize > 100)
             return BadRequest("Page size must be between 1 and 100");
 
+        // Validate game parameter if provided
+        if (!string.IsNullOrWhiteSpace(game))
+        {
+            var allowedGames = new[] { "bf1942", "fh2", "bfvietnam" };
+            if (!allowedGames.Contains(game.ToLower()))
+                return BadRequest($"Invalid game. Allowed values: {string.Join(", ", allowedGames)}");
+        }
+
         try
         {
             var filters = new ServerFilters
             {
-                ServerName = query.Trim()
+                ServerName = query.Trim(),
+                Game = game?.Trim().ToLower()
             };
 
             var result = await _serverStatsService.GetAllServersWithPaging(

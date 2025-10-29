@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using junie_des_1942stats.PlayerTracking;
 
@@ -10,9 +11,11 @@ using junie_des_1942stats.PlayerTracking;
 namespace junie_des_1942stats.Migrations
 {
     [DbContext(typeof(PlayerTrackerDbContext))]
-    partial class PlayerTrackerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251029100759_AddHeroImageToTournament")]
+    partial class AddHeroImageToTournament
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.5");
@@ -474,22 +477,11 @@ namespace junie_des_1942stats.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<int?>("AnticipatedRoundCount")
-                        .HasColumnType("INTEGER");
-
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CreatedByUserEmail")
-                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<int>("CreatedByUserId")
                         .HasColumnType("INTEGER");
-
-                    b.Property<string>("Game")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
 
                     b.Property<byte[]>("HeroImage")
                         .HasColumnType("BLOB");
@@ -509,11 +501,7 @@ namespace junie_des_1942stats.Migrations
 
                     b.HasIndex("CreatedAt");
 
-                    b.HasIndex("CreatedByUserEmail");
-
                     b.HasIndex("CreatedByUserId");
-
-                    b.HasIndex("Game");
 
                     b.HasIndex("Organizer");
 

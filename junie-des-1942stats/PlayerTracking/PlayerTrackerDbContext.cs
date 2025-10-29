@@ -264,6 +264,12 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<Tournament>()
             .HasIndex(t => t.Organizer);
 
+        modelBuilder.Entity<Tournament>()
+            .HasIndex(t => t.CreatedByUserEmail);
+
+        modelBuilder.Entity<Tournament>()
+            .HasIndex(t => t.Game);
+
         // Configure relationship: Tournament -> User (CreatedBy)
         modelBuilder.Entity<Tournament>()
             .HasOne(t => t.CreatedByUser)
@@ -537,8 +543,13 @@ public class Tournament
     public int Id { get; set; }
     public string Name { get; set; } = "";
     public string Organizer { get; set; } = ""; // References Player.Name
+    public string Game { get; set; } = ""; // bf1942, fh2, bfvietnam
     public DateTime CreatedAt { get; set; }
     public int CreatedByUserId { get; set; }
+    public string CreatedByUserEmail { get; set; } = "";
+    public int? AnticipatedRoundCount { get; set; }
+    public byte[]? HeroImage { get; set; }
+    public string? HeroImageContentType { get; set; }
 
     // Navigation properties
     public User CreatedByUser { get; set; } = null!;

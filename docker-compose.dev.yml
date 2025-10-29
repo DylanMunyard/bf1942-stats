@@ -52,6 +52,25 @@ services:
       timeout: 10s
       retries: 3
 
+  seq:
+    image: datalust/seq:latest
+    container_name: bf1942-seq
+    ports:
+      - "5341:80"
+      - "5342:5341"
+    networks:
+      - bf1942-dev
+    environment:
+      - ACCEPT_EULA=Y
+      - SEQ_FIRSTRUN_ADMINPASSWORD=admin
+    volumes:
+      - seq-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:80/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   grafana:
     image: grafana/grafana:10.1.0
     container_name: bf1942-grafana
@@ -82,4 +101,5 @@ volumes:
   redis-data:
   loki-data:
   tempo-data:
+  seq-data:
   grafana-data:

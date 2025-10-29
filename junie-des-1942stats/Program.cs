@@ -33,11 +33,12 @@ using System.IO.Compression;
 
 // Configure Serilog
 var lokiUrl = Environment.GetEnvironmentVariable("LOKI_URL") ?? "http://localhost:3100";
+var seqUrl = Environment.GetEnvironmentVariable("SEQ_URL");
 var otlpEndpoint = Environment.GetEnvironmentVariable("OTLP_ENDPOINT") ?? "http://localhost:4318/v1/traces";
 var serviceName = "junie-des-1942stats";
 var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development";
 
-Log.Logger = new LoggerConfiguration()
+var loggerConfig = new LoggerConfiguration()
     .MinimumLevel.Information()
     // Filter to suppress EF Core SQL logs only during bulk operations
     .Filter.ByExcluding(logEvent =>
@@ -74,8 +75,14 @@ Log.Logger = new LoggerConfiguration()
             new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "environment", Value = environment },
             new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "host", Value = Environment.MachineName }
         },
-        textFormatter: new Serilog.Formatting.Compact.RenderedCompactJsonFormatter())
-    .CreateLogger();
+        textFormatter: new Serilog.Formatting.Compact.RenderedCompactJsonFormatter());
+
+if (!string.IsNullOrEmpty(seqUrl))
+{
+    loggerConfig.WriteTo.Seq(seqUrl);
+}
+
+Log.Logger = loggerConfig.CreateLogger();
 
 try
 {
