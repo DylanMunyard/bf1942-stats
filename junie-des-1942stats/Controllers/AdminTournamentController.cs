@@ -1073,7 +1073,8 @@ public class AdminTournamentController : ControllerBase
             if (request.ServerName != null)
                 match.ServerName = request.ServerName;
 
-            if (request.RoundId != null)
+            // Handle RoundId updates - use a separate flag to indicate if RoundId should be updated
+            if (request.UpdateRoundId)
             {
                 if (!string.IsNullOrWhiteSpace(request.RoundId))
                 {
@@ -1221,6 +1222,7 @@ public class UpdateTournamentMatchRequest
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
     public string? RoundId { get; set; }
+    public bool UpdateRoundId { get; set; } = false;
 }
 
 // Response DTOs
