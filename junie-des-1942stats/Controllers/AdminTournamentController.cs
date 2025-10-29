@@ -83,14 +83,12 @@ public class AdminTournamentController : ControllerBase
                 .Include(t => t.Server)
                 .Include(t => t.TournamentRounds)
                     .ThenInclude(tr => tr.Round)
-                        .ThenInclude(r => r.Sessions)
                 .Where(t => t.CreatedByUserEmail == userEmail)
                 .FirstOrDefaultAsync(t => t.Id == id);
 
             if (tournament == null)
                 return NotFound(new { message = "Tournament not found" });
 
-            // Build tournament detail response with rounds and winners
             var rounds = new List<TournamentRoundResponse>();
             foreach (var tr in tournament.TournamentRounds.OrderBy(tr => tr.Round.StartTime))
             {
@@ -108,12 +106,12 @@ public class AdminTournamentController : ControllerBase
                 if (winningTeam != null)
                 {
                     int winningTeamNumber = winningTeam == round.Team1Label ? 1 : 2;
-                    winningPlayers = round.Sessions
-                        .Where(s => s.CurrentTeam == winningTeamNumber)
+                    winningPlayers = await _context.PlayerSessions
+                        .Where(s => s.RoundId == round.RoundId && s.CurrentTeam == winningTeamNumber)
                         .Select(s => s.PlayerName)
                         .Distinct()
                         .OrderBy(p => p)
-                        .ToList();
+                        .ToListAsync();
                 }
 
                 rounds.Add(new TournamentRoundResponse
@@ -603,7 +601,6 @@ public class AdminTournamentController : ControllerBase
             .Include(t => t.Server)
             .Include(t => t.TournamentRounds)
                 .ThenInclude(tr => tr.Round)
-                    .ThenInclude(r => r.Sessions)
             .FirstAsync(t => t.Id == tournamentId);
 
         var rounds = new List<TournamentRoundResponse>();
@@ -623,12 +620,12 @@ public class AdminTournamentController : ControllerBase
             if (winningTeam != null)
             {
                 int winningTeamNumber = winningTeam == round.Team1Label ? 1 : 2;
-                winningPlayers = round.Sessions
-                    .Where(s => s.CurrentTeam == winningTeamNumber)
+                winningPlayers = await _context.PlayerSessions
+                    .Where(s => s.RoundId == round.RoundId && s.CurrentTeam == winningTeamNumber)
                     .Select(s => s.PlayerName)
                     .Distinct()
                     .OrderBy(p => p)
-                    .ToList();
+                    .ToListAsync();
             }
 
             rounds.Add(new TournamentRoundResponse
