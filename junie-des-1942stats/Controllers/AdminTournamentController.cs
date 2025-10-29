@@ -89,78 +89,24 @@ public class AdminTournamentController : ControllerBase
             if (tournament == null)
                 return NotFound(new { message = "Tournament not found" });
 
-            var roundIds = tournament.TournamentRounds.Select(tr => tr.RoundId).ToList();
-            
-            Dictionary<string, List<(string PlayerName, int CurrentTeam)>> sessionsByRoundLookup = new();
-            
-            if (roundIds.Any())
-            {
-                var allSessionsByRound = await _context.PlayerSessions
-                    .Where(s => s.RoundId != null && roundIds.Contains(s.RoundId))
-                    .Select(s => new { s.RoundId, s.PlayerName, s.CurrentTeam })
-                    .ToListAsync();
 
-                sessionsByRoundLookup = allSessionsByRound
-                    .Where(s => s.RoundId != null)
-                    .GroupBy(s => s.RoundId!)
-                    .ToDictionary(
-                        g => g.Key, 
-                        g => g.Select(s => (s.PlayerName, s.CurrentTeam)).ToList()
-                    );
-            }
-
-            var rounds = new List<TournamentRoundResponse>();
-            foreach (var tr in tournament.TournamentRounds.OrderBy(tr => tr.Round.StartTime))
-            {
-                var round = tr.Round;
-
-                string? winningTeam = null;
-                if (round.Tickets1.HasValue && round.Tickets2.HasValue)
+            var rounds = tournament.TournamentRounds
+                .OrderBy(tr => tr.Round.StartTime)
+                .Select(tr => new TournamentRoundResponse
                 {
-                    winningTeam = round.Tickets1.Value > round.Tickets2.Value
-                        ? round.Team1Label
-                        : round.Team2Label;
-                }
+                    RoundId = tr.Round.RoundId,
+                    ServerGuid = tr.Round.ServerGuid,
+                    ServerName = tr.Round.ServerName,
+                    MapName = tr.Round.MapName,
+                    StartTime = tr.Round.StartTime,
+                    EndTime = tr.Round.EndTime,
+                    Tickets1 = tr.Round.Tickets1,
+                    Tickets2 = tr.Round.Tickets2,
+                    Team1Label = tr.Round.Team1Label,
+                    Team2Label = tr.Round.Team2Label
+                })
+                .ToList();
 
-                var winningPlayers = new List<string>();
-                if (winningTeam != null && sessionsByRoundLookup.TryGetValue(round.RoundId, out var sessions))
-                {
-                    int winningTeamNumber = winningTeam == round.Team1Label ? 1 : 2;
-                    winningPlayers = sessions
-                        .Where(s => s.CurrentTeam == winningTeamNumber)
-                        .Select(s => s.PlayerName)
-                        .Distinct()
-                        .OrderBy(p => p)
-                        .ToList();
-                }
-
-                rounds.Add(new TournamentRoundResponse
-                {
-                    RoundId = round.RoundId,
-                    ServerGuid = round.ServerGuid,
-                    ServerName = round.ServerName,
-                    MapName = round.MapName,
-                    StartTime = round.StartTime,
-                    EndTime = round.EndTime,
-                    WinningTeam = winningTeam,
-                    WinningPlayers = winningPlayers,
-                    Tickets1 = round.Tickets1,
-                    Tickets2 = round.Tickets2,
-                    Team1Label = round.Team1Label,
-                    Team2Label = round.Team2Label
-                });
-            }
-
-            TournamentWinnerResponse? overallWinner = null;
-            var lastRound = rounds.OrderByDescending(r => r.StartTime).FirstOrDefault();
-            if (lastRound != null && lastRound.WinningTeam != null)
-            {
-                overallWinner = new TournamentWinnerResponse
-                {
-                    Team = lastRound.WinningTeam,
-                    Players = lastRound.WinningPlayers
-                };
-            }
 
             var response = new TournamentDetailResponse
             {
@@ -171,7 +117,6 @@ public class AdminTournamentController : ControllerBase
                 CreatedAt = tournament.CreatedAt,
                 AnticipatedRoundCount = tournament.AnticipatedRoundCount,
                 Rounds = rounds,
-                OverallWinner = overallWinner,
                 HeroImageBase64 = tournament.HeroImage != null ? Convert.ToBase64String(tournament.HeroImage) : null,
                 HeroImageContentType = tournament.HeroImageContentType,
                 ServerGuid = tournament.ServerGuid,
@@ -623,78 +568,24 @@ public class AdminTournamentController : ControllerBase
                 .ThenInclude(tr => tr.Round)
             .FirstAsync(t => t.Id == tournamentId);
 
-        var roundIds = tournament.TournamentRounds.Select(tr => tr.RoundId).ToList();
-        
-        Dictionary<string, List<(string PlayerName, int CurrentTeam)>> sessionsByRoundLookup = new();
-        
-        if (roundIds.Any())
-        {
-            var allSessionsByRound = await _context.PlayerSessions
-                .Where(s => s.RoundId != null && roundIds.Contains(s.RoundId))
-                .Select(s => new { s.RoundId, s.PlayerName, s.CurrentTeam })
-                .ToListAsync();
 
-            sessionsByRoundLookup = allSessionsByRound
-                .Where(s => s.RoundId != null)
-                .GroupBy(s => s.RoundId!)
-                .ToDictionary(
-                    g => g.Key, 
-                    g => g.Select(s => (s.PlayerName, s.CurrentTeam)).ToList()
-                );
-        }
-
-        var rounds = new List<TournamentRoundResponse>();
-        foreach (var tr in tournament.TournamentRounds.OrderBy(tr => tr.Round.StartTime))
-        {
-            var round = tr.Round;
-
-            string? winningTeam = null;
-            if (round.Tickets1.HasValue && round.Tickets2.HasValue)
+        var rounds = tournament.TournamentRounds
+            .OrderBy(tr => tr.Round.StartTime)
+            .Select(tr => new TournamentRoundResponse
             {
-                winningTeam = round.Tickets1.Value > round.Tickets2.Value
-                    ? round.Team1Label
-                    : round.Team2Label;
-            }
+                RoundId = tr.Round.RoundId,
+                ServerGuid = tr.Round.ServerGuid,
+                ServerName = tr.Round.ServerName,
+                MapName = tr.Round.MapName,
+                StartTime = tr.Round.StartTime,
+                EndTime = tr.Round.EndTime,
+                Tickets1 = tr.Round.Tickets1,
+                Tickets2 = tr.Round.Tickets2,
+                Team1Label = tr.Round.Team1Label,
+                Team2Label = tr.Round.Team2Label
+            })
+            .ToList();
 
-            var winningPlayers = new List<string>();
-            if (winningTeam != null && sessionsByRoundLookup.TryGetValue(round.RoundId, out var sessions))
-            {
-                int winningTeamNumber = winningTeam == round.Team1Label ? 1 : 2;
-                winningPlayers = sessions
-                    .Where(s => s.CurrentTeam == winningTeamNumber)
-                    .Select(s => s.PlayerName)
-                    .Distinct()
-                    .OrderBy(p => p)
-                    .ToList();
-            }
-
-            rounds.Add(new TournamentRoundResponse
-            {
-                RoundId = round.RoundId,
-                ServerGuid = round.ServerGuid,
-                ServerName = round.ServerName,
-                MapName = round.MapName,
-                StartTime = round.StartTime,
-                EndTime = round.EndTime,
-                WinningTeam = winningTeam,
-                WinningPlayers = winningPlayers,
-                Tickets1 = round.Tickets1,
-                Tickets2 = round.Tickets2,
-                Team1Label = round.Team1Label,
-                Team2Label = round.Team2Label
-            });
-        }
-
-        TournamentWinnerResponse? overallWinner = null;
-        var lastRound = rounds.OrderByDescending(r => r.StartTime).FirstOrDefault();
-        if (lastRound != null && lastRound.WinningTeam != null)
-        {
-            overallWinner = new TournamentWinnerResponse
-            {
-                Team = lastRound.WinningTeam,
-                Players = lastRound.WinningPlayers
-            };
-        }
 
         return new TournamentDetailResponse
         {
@@ -705,7 +596,6 @@ public class AdminTournamentController : ControllerBase
             CreatedAt = tournament.CreatedAt,
             AnticipatedRoundCount = tournament.AnticipatedRoundCount,
             Rounds = rounds,
-            OverallWinner = overallWinner,
             HeroImageBase64 = tournament.HeroImage != null ? Convert.ToBase64String(tournament.HeroImage) : null,
             HeroImageContentType = tournament.HeroImageContentType,
             ServerGuid = tournament.ServerGuid,
@@ -768,7 +658,6 @@ public class TournamentDetailResponse
     public DateTime CreatedAt { get; set; }
     public int? AnticipatedRoundCount { get; set; }
     public List<TournamentRoundResponse> Rounds { get; set; } = [];
-    public TournamentWinnerResponse? OverallWinner { get; set; }
     public string? HeroImageBase64 { get; set; }
     public string? HeroImageContentType { get; set; }
     public string? ServerGuid { get; set; }
@@ -783,17 +672,10 @@ public class TournamentRoundResponse
     public string MapName { get; set; } = "";
     public DateTime StartTime { get; set; }
     public DateTime? EndTime { get; set; }
-    public string? WinningTeam { get; set; }
-    public List<string> WinningPlayers { get; set; } = [];
     public int? Tickets1 { get; set; }
     public int? Tickets2 { get; set; }
     public string? Team1Label { get; set; }
     public string? Team2Label { get; set; }
 }
 
-public class TournamentWinnerResponse
-{
-    public string Team { get; set; } = "";
-    public List<string> Players { get; set; } = [];
-}
 
