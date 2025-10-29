@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using junie_des_1942stats.PlayerTracking;
 
@@ -10,9 +11,11 @@ using junie_des_1942stats.PlayerTracking;
 namespace junie_des_1942stats.Migrations
 {
     [DbContext(typeof(PlayerTrackerDbContext))]
-    partial class PlayerTrackerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251029150901_AddTournamentTeamsAndMatches")]
+    partial class AddTournamentTeamsAndMatches
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.5");
@@ -578,6 +581,29 @@ namespace junie_des_1942stats.Migrations
                     b.ToTable("TournamentMatches");
                 });
 
+            modelBuilder.Entity("junie_des_1942stats.PlayerTracking.TournamentRound", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RoundId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TournamentId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoundId")
+                        .IsUnique();
+
+                    b.HasIndex("TournamentId");
+
+                    b.ToTable("TournamentRounds");
+                });
+
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.TournamentTeam", b =>
                 {
                     b.Property<int>("Id")
@@ -860,7 +886,7 @@ namespace junie_des_1942stats.Migrations
                         .IsRequired();
 
                     b.HasOne("junie_des_1942stats.PlayerTracking.Tournament", "Tournament")
-                        .WithMany("TournamentMatches")
+                        .WithMany()
                         .HasForeignKey("TournamentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -876,10 +902,29 @@ namespace junie_des_1942stats.Migrations
                     b.Navigation("Tournament");
                 });
 
+            modelBuilder.Entity("junie_des_1942stats.PlayerTracking.TournamentRound", b =>
+                {
+                    b.HasOne("junie_des_1942stats.PlayerTracking.Round", "Round")
+                        .WithMany()
+                        .HasForeignKey("RoundId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("junie_des_1942stats.PlayerTracking.Tournament", "Tournament")
+                        .WithMany("TournamentRounds")
+                        .HasForeignKey("TournamentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Round");
+
+                    b.Navigation("Tournament");
+                });
+
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.TournamentTeam", b =>
                 {
                     b.HasOne("junie_des_1942stats.PlayerTracking.Tournament", "Tournament")
-                        .WithMany("TournamentTeams")
+                        .WithMany()
                         .HasForeignKey("TournamentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -989,9 +1034,7 @@ namespace junie_des_1942stats.Migrations
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.Tournament", b =>
                 {
-                    b.Navigation("TournamentMatches");
-
-                    b.Navigation("TournamentTeams");
+                    b.Navigation("TournamentRounds");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.TournamentTeam", b =>
