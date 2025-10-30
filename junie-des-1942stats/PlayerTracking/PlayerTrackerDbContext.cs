@@ -21,6 +21,7 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<TournamentTeam> TournamentTeams { get; set; }
     public DbSet<TournamentTeamPlayer> TournamentTeamPlayers { get; set; }
     public DbSet<TournamentMatch> TournamentMatches { get; set; }
+    public DbSet<TournamentMatchMap> TournamentMatchMaps { get; set; }
 
     public PlayerTrackerDbContext(DbContextOptions<PlayerTrackerDbContext> options)
         : base(options)
@@ -369,9 +370,6 @@ public class PlayerTrackerDbContext : DbContext
             .HasIndex(tm => tm.Team2Id);
 
         modelBuilder.Entity<TournamentMatch>()
-            .HasIndex(tm => tm.RoundId);
-
-        modelBuilder.Entity<TournamentMatch>()
             .HasIndex(tm => tm.CreatedAt);
 
 
@@ -398,11 +396,32 @@ public class PlayerTrackerDbContext : DbContext
             .OnDelete(DeleteBehavior.SetNull)
             .IsRequired(false);
 
-        // Configure relationship: TournamentMatch -> Round (optional)
+        // Configure relationship: TournamentMatch -> TournamentMatchMaps
         modelBuilder.Entity<TournamentMatch>()
-            .HasOne(tm => tm.Round)
+            .HasMany(tm => tm.Maps)
+            .WithOne(tmm => tmm.Match)
+            .HasForeignKey(tmm => tmm.MatchId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Configure TournamentMatchMap entity
+        modelBuilder.Entity<TournamentMatchMap>()
+            .HasKey(tmm => tmm.Id);
+
+        modelBuilder.Entity<TournamentMatchMap>()
+            .HasIndex(tmm => tmm.MatchId);
+
+        modelBuilder.Entity<TournamentMatchMap>()
+            .HasIndex(tmm => tmm.RoundId);
+
+        // Index on MatchId + MapOrder (NOT unique to allow same map multiple times)
+        modelBuilder.Entity<TournamentMatchMap>()
+            .HasIndex(tmm => new { tmm.MatchId, tmm.MapOrder });
+
+        // Configure relationship: TournamentMatchMap -> Round (optional)
+        modelBuilder.Entity<TournamentMatchMap>()
+            .HasOne(tmm => tmm.Round)
             .WithMany()
-            .HasForeignKey(tm => tm.RoundId)
+            .HasForeignKey(tmm => tmm.RoundId)
             .HasPrincipalKey(r => r.RoundId)
             .OnDelete(DeleteBehavior.SetNull)
             .IsRequired(false);
@@ -676,6 +695,21 @@ public class TournamentTeamPlayer
     public Player Player { get; set; } = null!;
 }
 
+public class TournamentMatchMap
+{
+    public int Id { get; set; }
+    public int MatchId { get; set; }
+    public string MapName { get; set; } = "";
+    public int MapOrder { get; set; } // Sequence order for maps in the match (0-based). Note: MapName is NOT unique - same map can appear multiple times with different MapOrder values
+
+    // Link to completed round - set after the round completes
+    public string? RoundId { get; set; }
+
+    // Navigation properties
+    public TournamentMatch Match { get; set; } = null!;
+    public Round? Round { get; set; }
+}
+
 public class TournamentMatch
 {
     public int Id { get; set; }
@@ -683,14 +717,10 @@ public class TournamentMatch
     public DateTime ScheduledDate { get; set; }
     public int Team1Id { get; set; }
     public int Team2Id { get; set; }
-    public string MapName { get; set; } = "";
     
     // Optional server reference - may not exist until tournament starts
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; } // Fallback if ServerGuid is null
-    
-    // Link to completed round
-    public string? RoundId { get; set; }
     
     public DateTime CreatedAt { get; set; }
 
@@ -699,5 +729,5 @@ public class TournamentMatch
     public TournamentTeam Team1 { get; set; } = null!;
     public TournamentTeam Team2 { get; set; } = null!;
     public GameServer? Server { get; set; }
-    public Round? Round { get; set; }
+    public List<TournamentMatchMap> Maps { get; set; } = [];
 }
