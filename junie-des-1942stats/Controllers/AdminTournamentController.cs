@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using junie_des_1942stats.PlayerTracking;
 using Microsoft.Extensions.Logging;
+using NodaTime;
 
 namespace junie_des_1942stats.Controllers;
 
@@ -231,7 +232,7 @@ public class AdminTournamentController : ControllerBase
                 Name = request.Name,
                 Organizer = request.Organizer,
                 Game = request.Game.ToLower(),
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = SystemClock.Instance.GetCurrentInstant(),
                 CreatedByUserId = user.Id,
                 CreatedByUserEmail = userEmail,
                 AnticipatedRoundCount = request.AnticipatedRoundCount,
@@ -555,7 +556,7 @@ public class AdminTournamentController : ControllerBase
             {
                 TournamentId = tournamentId,
                 Name = request.Name,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = SystemClock.Instance.GetCurrentInstant()
             };
 
             _context.TournamentTeams.Add(team);
@@ -908,7 +909,7 @@ public class AdminTournamentController : ControllerBase
                 Team2Id = request.Team2Id,
                 ServerGuid = !string.IsNullOrWhiteSpace(request.ServerGuid) ? request.ServerGuid : null,
                 ServerName = request.ServerName,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = SystemClock.Instance.GetCurrentInstant()
             };
 
             _context.TournamentMatches.Add(match);
@@ -1337,7 +1338,7 @@ public class AddPlayerToTeamRequest
 // Match Management DTOs
 public class CreateTournamentMatchRequest
 {
-    public DateTime ScheduledDate { get; set; }
+    public Instant ScheduledDate { get; set; }
     public int Team1Id { get; set; }
     public int Team2Id { get; set; }
     public List<string> MapNames { get; set; } = [];
@@ -1347,7 +1348,7 @@ public class CreateTournamentMatchRequest
 
 public class UpdateTournamentMatchRequest
 {
-    public DateTime? ScheduledDate { get; set; }
+    public Instant? ScheduledDate { get; set; }
     public int? Team1Id { get; set; }
     public int? Team2Id { get; set; }
     public string? ServerGuid { get; set; }
@@ -1370,7 +1371,7 @@ public class TournamentListResponse
     public string Name { get; set; } = "";
     public string Organizer { get; set; } = "";
     public string Game { get; set; } = "";
-    public DateTime CreatedAt { get; set; }
+    public Instant CreatedAt { get; set; }
     public int? AnticipatedRoundCount { get; set; }
     public int MatchCount { get; set; }
     public int TeamCount { get; set; }
@@ -1385,7 +1386,7 @@ public class TournamentDetailResponse
     public string Name { get; set; } = "";
     public string Organizer { get; set; } = "";
     public string Game { get; set; } = "";
-    public DateTime CreatedAt { get; set; }
+    public Instant CreatedAt { get; set; }
     public int? AnticipatedRoundCount { get; set; }
     public List<TournamentTeamResponse> Teams { get; set; } = [];
     public List<TournamentMatchResponse> Matches { get; set; } = [];
@@ -1399,7 +1400,7 @@ public class TournamentTeamResponse
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
-    public DateTime CreatedAt { get; set; }
+    public Instant CreatedAt { get; set; }
     public List<TournamentTeamPlayerResponse> Players { get; set; } = [];
 }
 
@@ -1411,12 +1412,12 @@ public class TournamentTeamPlayerResponse
 public class TournamentMatchResponse
 {
     public int Id { get; set; }
-    public DateTime ScheduledDate { get; set; }
+    public Instant ScheduledDate { get; set; }
     public string Team1Name { get; set; } = "";
     public string Team2Name { get; set; } = "";
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
-    public DateTime CreatedAt { get; set; }
+    public Instant CreatedAt { get; set; }
     public List<TournamentMatchMapResponse> Maps { get; set; } = [];
 }
 

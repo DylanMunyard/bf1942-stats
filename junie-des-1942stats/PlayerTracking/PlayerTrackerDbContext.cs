@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using junie_des_1942stats.PlayerStats.Models;
+using NodaTime;
 
 namespace junie_des_1942stats.PlayerTracking;
 
@@ -297,6 +298,13 @@ public class PlayerTrackerDbContext : DbContext
             .OnDelete(DeleteBehavior.Restrict)
             .IsRequired(false);
 
+        // Configure NodaTime Instant conversions for Tournament
+        modelBuilder.Entity<Tournament>()
+            .Property(t => t.CreatedAt)
+            .HasConversion(
+                instant => instant.ToString(),
+                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+
         // Configure relationship: Tournament -> TournamentTeam
         modelBuilder.Entity<Tournament>()
             .HasMany(t => t.TournamentTeams)
@@ -321,6 +329,13 @@ public class PlayerTrackerDbContext : DbContext
 
         modelBuilder.Entity<TournamentTeam>()
             .HasIndex(tt => tt.CreatedAt);
+
+        // Configure NodaTime Instant conversion for TournamentTeam
+        modelBuilder.Entity<TournamentTeam>()
+            .Property(tt => tt.CreatedAt)
+            .HasConversion(
+                instant => instant.ToString(),
+                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
 
 
         // Configure TournamentTeamPlayer entity
@@ -371,6 +386,19 @@ public class PlayerTrackerDbContext : DbContext
 
         modelBuilder.Entity<TournamentMatch>()
             .HasIndex(tm => tm.CreatedAt);
+
+        // Configure NodaTime Instant conversions for TournamentMatch
+        modelBuilder.Entity<TournamentMatch>()
+            .Property(tm => tm.ScheduledDate)
+            .HasConversion(
+                instant => instant.ToString(),
+                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+
+        modelBuilder.Entity<TournamentMatch>()
+            .Property(tm => tm.CreatedAt)
+            .HasConversion(
+                instant => instant.ToString(),
+                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
 
 
         // Configure relationship: TournamentMatch -> Team1
@@ -655,7 +683,7 @@ public class Tournament
     public string Name { get; set; } = "";
     public string Organizer { get; set; } = ""; // References Player.Name
     public string Game { get; set; } = ""; // bf1942, fh2, bfvietnam
-    public DateTime CreatedAt { get; set; }
+    public Instant CreatedAt { get; set; }
     public int CreatedByUserId { get; set; }
     public string CreatedByUserEmail { get; set; } = "";
     public int? AnticipatedRoundCount { get; set; }
@@ -677,7 +705,7 @@ public class TournamentTeam
     public int Id { get; set; }
     public int TournamentId { get; set; }
     public string Name { get; set; } = ""; // Team name (usually clan tag)
-    public DateTime CreatedAt { get; set; }
+    public Instant CreatedAt { get; set; }
 
     // Navigation properties
     public Tournament Tournament { get; set; } = null!;
@@ -714,15 +742,15 @@ public class TournamentMatch
 {
     public int Id { get; set; }
     public int TournamentId { get; set; }
-    public DateTime ScheduledDate { get; set; }
+    public Instant ScheduledDate { get; set; }
     public int Team1Id { get; set; }
     public int Team2Id { get; set; }
-    
+
     // Optional server reference - may not exist until tournament starts
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; } // Fallback if ServerGuid is null
-    
-    public DateTime CreatedAt { get; set; }
+
+    public Instant CreatedAt { get; set; }
 
     // Navigation properties
     public Tournament Tournament { get; set; } = null!;

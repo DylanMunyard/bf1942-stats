@@ -21,6 +21,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using junie_des_1942stats.Services.Auth;
+using NodaTime;
+using NodaTime.Serialization.SystemTextJson;
 using System.Diagnostics;
 using OpenTelemetry.Trace;
 using OpenTelemetry.Resources;
@@ -194,6 +196,7 @@ try
     builder.Services.AddControllers().AddJsonOptions(o =>
     {
         o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+        o.JsonSerializerOptions.ConfigureForNodaTime(DateTimeZoneProviders.Tzdb);
     });
 
     // Configure response compression for bandwidth optimization
