@@ -27,7 +27,7 @@ public class DiscordAuthService : IDiscordAuthService
         _logger = logger;
         _cacheService = cacheService;
         _httpClient = httpClientFactory.CreateClient();
-        
+
         _clientId = configuration["DiscordOAuth:ClientId"] ?? throw new InvalidOperationException("DiscordOAuth:ClientId not configured");
         _clientSecret = configuration["DiscordOAuth:ClientSecret"] ?? throw new InvalidOperationException("DiscordOAuth:ClientSecret not configured");
     }
@@ -90,7 +90,7 @@ public class DiscordAuthService : IDiscordAuthService
         if (!response.IsSuccessStatusCode)
         {
             var errorContent = await response.Content.ReadAsStringAsync();
-            _logger.LogError("Discord token exchange failed: {StatusCode} - {Error} - RedirectUri: {RedirectUri}", 
+            _logger.LogError("Discord token exchange failed: {StatusCode} - {Error} - RedirectUri: {RedirectUri}",
                 response.StatusCode, errorContent, redirectUri);
             throw new UnauthorizedAccessException($"Failed to exchange Discord authorization code: {response.StatusCode} - {errorContent}");
         }

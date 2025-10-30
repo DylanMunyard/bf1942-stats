@@ -105,7 +105,7 @@ FORMAT TabSeparated";
             };
             return (customDays, interval, false);
         }
-        
+
         // Default fallback
         return (7, "INTERVAL 1 HOUR", false);
     }

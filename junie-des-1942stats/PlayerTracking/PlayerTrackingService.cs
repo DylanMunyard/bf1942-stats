@@ -48,7 +48,7 @@ public class PlayerTrackingService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error publishing server map change event for {ServerName}: {OldMap} -> {NewMap}. Continuing with stats collection.", 
+                _logger.LogError(ex, "Error publishing server map change event for {ServerName}: {OldMap} -> {NewMap}. Continuing with stats collection.",
                     server.Name, serverMapChangeOldMap, server.MapName);
             }
         }

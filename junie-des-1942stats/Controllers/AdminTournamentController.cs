@@ -311,7 +311,7 @@ public class AdminTournamentController : ControllerBase
                     var server = await _context.Servers.FirstOrDefaultAsync(s => s.Guid == request.ServerGuid);
                     if (server == null)
                         return BadRequest(new { message = $"Server with GUID '{request.ServerGuid}' not found" });
-                    
+
                     tournament.ServerGuid = request.ServerGuid;
                 }
                 else
@@ -1054,7 +1054,7 @@ public class AdminTournamentController : ControllerBase
             {
                 var newTeam1Id = request.Team1Id ?? match.Team1Id;
                 var newTeam2Id = request.Team2Id ?? match.Team2Id;
-                
+
                 if (newTeam1Id == newTeam2Id)
                     return BadRequest(new { message = "Team1Id and Team2Id cannot be the same" });
 
@@ -1181,9 +1181,9 @@ public class AdminTournamentController : ControllerBase
     [HttpPut("{tournamentId}/matches/{matchId}/maps/{mapId}")]
     [Authorize]
     public async Task<ActionResult<TournamentMatchMapResponse>> UpdateMatchMap(
-        int tournamentId, 
-        int matchId, 
-        int mapId, 
+        int tournamentId,
+        int matchId,
+        int mapId,
         [FromBody] UpdateTournamentMatchMapRequest request)
     {
         try

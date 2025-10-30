@@ -1112,7 +1112,7 @@ LIMIT {limit * 5}";
             return new Dictionary<string, double>();
 
         var candidateList = string.Join(", ", candidatePlayerNames.Select(Quote));
-        
+
         var query = $@"
 WITH target_sessions AS (
     SELECT 
@@ -1165,7 +1165,7 @@ FROM (SELECT DISTINCT player_name FROM candidate_sessions) cs
 WHERE player_name NOT IN (SELECT player_name FROM overlapping_sessions)";
 
         var overlaps = new Dictionary<string, double>();
-        
+
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();

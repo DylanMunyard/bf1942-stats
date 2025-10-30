@@ -162,7 +162,7 @@ public class ServerStatsService(
         var endPeriod = DateTime.UtcNow;
         var startPeriod = endPeriod.AddDays(-days);
 
-        _logger.LogInformation("Fetching leaderboards for {ServerName} ({ServerGuid}) from {StartPeriod} to {EndPeriod}", 
+        _logger.LogInformation("Fetching leaderboards for {ServerName} ({ServerGuid}) from {StartPeriod} to {EndPeriod}",
             server.Name, server.Guid, startPeriod, endPeriod);
 
         // Create the leaderboards object
@@ -579,7 +579,7 @@ FORMAT TabSeparated";
 
         // Convert days to appropriate period string and rolling window
         var (period, rollingWindow) = ConvertDaysToPeriod(days);
-        
+
         // Fetch players online history
         try
         {
