@@ -95,7 +95,9 @@ public class PublicTournamentController : ControllerBase
                     tmm.MatchId,
                     tmm.MapName,
                     tmm.MapOrder,
-                    tmm.RoundId
+                    tmm.RoundId,
+                    tmm.TeamId,
+                    TeamName = tmm.Team != null ? tmm.Team.Name : null
                 })
                 .ToListAsync();
 
@@ -149,49 +151,27 @@ public class PublicTournamentController : ControllerBase
                 .GroupBy(ps => ps.RoundId)
                 .ToDictionary(g => g.Key!, g => g.OrderByDescending(ps => ps.TotalScore).ToList());
 
-            // Determine winning teams for each round and collect winning team IDs
-            var winningTeamIds = new HashSet<int>();
-            var matchRoundWinners = new Dictionary<string, (int WinningTeamId, string WinningTeamName)>();
+            // Determine winning teams for each round based on tickets
+            var matchRoundWinners = new Dictionary<string, string>();
 
-            foreach (var match in matches)
+            foreach (var roundId in roundIds)
             {
-                if (!matchMapsLookup.TryGetValue(match.Id, out var maps))
-                    continue;
-
-                foreach (var map in maps)
+                if (roundsLookup.TryGetValue(roundId, out var round))
                 {
-                    if (!string.IsNullOrEmpty(map.RoundId) && roundsLookup.TryGetValue(map.RoundId, out var round))
-                    {
-                        // Determine winner based on tickets
-                        var tickets1 = round.Tickets1 ?? 0;
-                        var tickets2 = round.Tickets2 ?? 0;
+                    var tickets1 = round.Tickets1 ?? 0;
+                    var tickets2 = round.Tickets2 ?? 0;
 
-                        if (tickets1 > tickets2)
-                        {
-                            // Team1 won
-                            winningTeamIds.Add(match.Team1Id);
-                            matchRoundWinners[map.RoundId] = (match.Team1Id, match.Team1Name);
-                        }
-                        else if (tickets2 > tickets1)
-                        {
-                            // Team2 won
-                            winningTeamIds.Add(match.Team2Id);
-                            matchRoundWinners[map.RoundId] = (match.Team2Id, match.Team2Name);
-                        }
-                        // If tickets are equal, no winner
+                    if (tickets1 > tickets2 && round.Team1Label != null)
+                    {
+                        matchRoundWinners[roundId] = round.Team1Label;
                     }
+                    else if (tickets2 > tickets1 && round.Team2Label != null)
+                    {
+                        matchRoundWinners[roundId] = round.Team2Label;
+                    }
+                    // If tickets are equal, no winner
                 }
             }
-
-            // Batch load players for all winning teams
-            var winningTeamPlayers = await _context.TournamentTeamPlayers
-                .Where(ttp => winningTeamIds.Contains(ttp.TournamentTeamId))
-                .Select(ttp => new { ttp.TournamentTeamId, ttp.PlayerName })
-                .ToListAsync();
-
-            var winningTeamPlayersLookup = winningTeamPlayers
-                .GroupBy(wtp => wtp.TournamentTeamId)
-                .ToDictionary(g => g.Key, g => g.Select(x => x.PlayerName).ToList());
 
             // Build match responses
             var matchResponses = new List<PublicTournamentMatchResponse>();
@@ -209,18 +189,9 @@ public class PublicTournamentController : ControllerBase
                         if (!string.IsNullOrEmpty(map.RoundId) && roundsLookup.TryGetValue(map.RoundId, out var round))
                         {
                             string? winningTeamName = null;
-                            var winningPlayers = new List<PublicTournamentTeamPlayerResponse>();
-
-                            if (matchRoundWinners.TryGetValue(map.RoundId, out var winnerInfo))
+                            if (matchRoundWinners.TryGetValue(map.RoundId, out var winner))
                             {
-                                winningTeamName = winnerInfo.WinningTeamName;
-
-                                if (winningTeamPlayersLookup.TryGetValue(winnerInfo.WinningTeamId, out var playerNames))
-                                {
-                                    winningPlayers = playerNames
-                                        .Select(pn => new PublicTournamentTeamPlayerResponse { PlayerName = pn })
-                                        .ToList();
-                                }
+                                winningTeamName = winner;
                             }
 
                             // Get all players for this round
@@ -251,7 +222,6 @@ public class PublicTournamentController : ControllerBase
                                 Team1Label = round.Team1Label,
                                 Team2Label = round.Team2Label,
                                 WinningTeamName = winningTeamName,
-                                WinningTeamPlayers = winningPlayers,
                                 Players = roundPlayers
                             };
                         }
@@ -262,6 +232,8 @@ public class PublicTournamentController : ControllerBase
                             MapName = map.MapName,
                             MapOrder = map.MapOrder,
                             RoundId = map.RoundId,
+                            TeamId = map.TeamId,
+                            TeamName = map.TeamName,
                             Round = roundResponse
                         });
                     }
@@ -292,7 +264,9 @@ public class PublicTournamentController : ControllerBase
                 Matches = matchResponses,
                 HasHeroImage = tournament.HeroImage != null,
                 ServerGuid = tournament.ServerGuid,
-                ServerName = tournament.Server?.Name
+                ServerName = tournament.Server?.Name,
+                DiscordUrl = tournament.DiscordUrl,
+                ForumUrl = tournament.ForumUrl
             };
 
             return Ok(response);
@@ -347,6 +321,8 @@ public class PublicTournamentDetailResponse
     public bool HasHeroImage { get; set; }
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
+    public string? DiscordUrl { get; set; }
+    public string? ForumUrl { get; set; }
 }
 
 public class PublicTournamentTeamResponse
@@ -381,6 +357,8 @@ public class PublicTournamentMatchMapResponse
     public int MapOrder { get; set; }
     public string? RoundId { get; set; }
     public PublicTournamentRoundResponse? Round { get; set; }
+    public int? TeamId { get; set; }
+    public string? TeamName { get; set; }
 }
 
 public class PublicTournamentRoundResponse
@@ -396,7 +374,6 @@ public class PublicTournamentRoundResponse
     public string? Team1Label { get; set; }
     public string? Team2Label { get; set; }
     public string? WinningTeamName { get; set; }
-    public List<PublicTournamentTeamPlayerResponse> WinningTeamPlayers { get; set; } = [];
     public List<PublicRoundPlayerResponse> Players { get; set; } = [];
 }
 

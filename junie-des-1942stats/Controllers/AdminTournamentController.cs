@@ -71,7 +71,9 @@ public class AdminTournamentController : ControllerBase
                 TeamCount = teamCounts.GetValueOrDefault(t.Id, 0),
                 HasHeroImage = t.HeroImage != null,
                 ServerGuid = t.ServerGuid,
-                ServerName = t.Server?.Name
+                ServerName = t.Server?.Name,
+                DiscordUrl = t.DiscordUrl,
+                ForumUrl = t.ForumUrl
             }).ToList();
 
             return Ok(response);
@@ -139,6 +141,8 @@ public class AdminTournamentController : ControllerBase
                         MapName = m.MapName,
                         MapOrder = m.MapOrder,
                         RoundId = m.RoundId,
+                        TeamId = m.TeamId,
+                        TeamName = m.Team != null ? m.Team.Name : null,
                         Round = m.Round != null ? new TournamentRoundResponse
                         {
                             RoundId = m.Round.RoundId,
@@ -170,7 +174,9 @@ public class AdminTournamentController : ControllerBase
                 HeroImageBase64 = tournament.HeroImage != null ? Convert.ToBase64String(tournament.HeroImage) : null,
                 HeroImageContentType = tournament.HeroImageContentType,
                 ServerGuid = tournament.ServerGuid,
-                ServerName = tournament.Server?.Name
+                ServerName = tournament.Server?.Name,
+                DiscordUrl = tournament.DiscordUrl,
+                ForumUrl = tournament.ForumUrl
             };
 
             return Ok(response);
@@ -238,7 +244,9 @@ public class AdminTournamentController : ControllerBase
                 AnticipatedRoundCount = request.AnticipatedRoundCount,
                 HeroImage = heroImageData,
                 HeroImageContentType = heroImageData != null ? request.HeroImageContentType : null,
-                ServerGuid = !string.IsNullOrWhiteSpace(request.ServerGuid) ? request.ServerGuid : null
+                ServerGuid = !string.IsNullOrWhiteSpace(request.ServerGuid) ? request.ServerGuid : null,
+                DiscordUrl = request.DiscordUrl,
+                ForumUrl = request.ForumUrl
             };
 
             _context.Tournaments.Add(tournament);
@@ -329,6 +337,12 @@ public class AdminTournamentController : ControllerBase
                 tournament.HeroImage = heroImageData;
                 tournament.HeroImageContentType = heroImageData != null ? request.HeroImageContentType : null;
             }
+
+            if (request.DiscordUrl != null)
+                tournament.DiscordUrl = request.DiscordUrl;
+
+            if (request.ForumUrl != null)
+                tournament.ForumUrl = request.ForumUrl;
 
             await _context.SaveChangesAsync();
 
@@ -515,7 +529,9 @@ public class AdminTournamentController : ControllerBase
             HeroImageBase64 = tournament.HeroImage != null ? Convert.ToBase64String(tournament.HeroImage) : null,
             HeroImageContentType = tournament.HeroImageContentType,
             ServerGuid = tournament.ServerGuid,
-            ServerName = tournament.Server?.Name
+            ServerName = tournament.Server?.Name,
+            DiscordUrl = tournament.DiscordUrl,
+            ForumUrl = tournament.ForumUrl
         };
     }
 
@@ -946,6 +962,8 @@ public class AdminTournamentController : ControllerBase
                     MapName = m.MapName,
                     MapOrder = m.MapOrder,
                     RoundId = m.RoundId,
+                    TeamId = m.TeamId,
+                    TeamName = m.Team != null ? m.Team.Name : null,
                     Round = null
                 }).ToList()
             };
@@ -992,6 +1010,8 @@ public class AdminTournamentController : ControllerBase
                         MapName = m.MapName,
                         MapOrder = m.MapOrder,
                         RoundId = m.RoundId,
+                        TeamId = m.TeamId,
+                        TeamName = m.Team != null ? m.Team.Name : null,
                         Round = m.Round != null ? new TournamentRoundResponse
                         {
                             RoundId = m.Round.RoundId,
@@ -1145,6 +1165,8 @@ public class AdminTournamentController : ControllerBase
                         MapName = m.MapName,
                         MapOrder = m.MapOrder,
                         RoundId = m.RoundId,
+                        TeamId = m.TeamId,
+                        TeamName = m.Team != null ? m.Team.Name : null,
                         Round = m.Round != null ? new TournamentRoundResponse
                         {
                             RoundId = m.Round.RoundId,
@@ -1227,6 +1249,19 @@ public class AdminTournamentController : ControllerBase
                 }
             }
 
+            // Handle TeamId updates
+            if (request.TeamId.HasValue)
+            {
+                // Verify the team belongs to this tournament
+                var teamExists = await _context.TournamentTeams
+                    .AnyAsync(tt => tt.Id == request.TeamId.Value && tt.TournamentId == tournamentId);
+
+                if (!teamExists)
+                    return BadRequest(new { message = $"Team {request.TeamId} not found in this tournament" });
+
+                map.TeamId = request.TeamId;
+            }
+
             await _context.SaveChangesAsync();
 
             var response = await _context.TournamentMatchMaps
@@ -1237,6 +1272,8 @@ public class AdminTournamentController : ControllerBase
                     MapName = m.MapName,
                     MapOrder = m.MapOrder,
                     RoundId = m.RoundId,
+                    TeamId = m.TeamId,
+                    TeamName = m.Team != null ? m.Team.Name : null,
                     Round = m.Round != null ? new TournamentRoundResponse
                     {
                         RoundId = m.Round.RoundId,
@@ -1306,6 +1343,8 @@ public class CreateTournamentRequest
     public string? HeroImageBase64 { get; set; }
     public string? HeroImageContentType { get; set; }
     public string? ServerGuid { get; set; }
+    public string? DiscordUrl { get; set; }
+    public string? ForumUrl { get; set; }
 }
 
 public class UpdateTournamentRequest
@@ -1317,6 +1356,8 @@ public class UpdateTournamentRequest
     public string? HeroImageBase64 { get; set; }
     public string? HeroImageContentType { get; set; }
     public string? ServerGuid { get; set; }
+    public string? DiscordUrl { get; set; }
+    public string? ForumUrl { get; set; }
 }
 
 // Team Management DTOs
@@ -1362,6 +1403,7 @@ public class UpdateTournamentMatchMapRequest
     public string? MapName { get; set; }
     public string? RoundId { get; set; }
     public bool UpdateRoundId { get; set; } = false;
+    public int? TeamId { get; set; }
 }
 
 // Response DTOs
@@ -1378,6 +1420,8 @@ public class TournamentListResponse
     public bool HasHeroImage { get; set; }
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
+    public string? DiscordUrl { get; set; }
+    public string? ForumUrl { get; set; }
 }
 
 public class TournamentDetailResponse
@@ -1394,6 +1438,8 @@ public class TournamentDetailResponse
     public string? HeroImageContentType { get; set; }
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
+    public string? DiscordUrl { get; set; }
+    public string? ForumUrl { get; set; }
 }
 
 public class TournamentTeamResponse
@@ -1428,6 +1474,8 @@ public class TournamentMatchMapResponse
     public int MapOrder { get; set; }
     public string? RoundId { get; set; }
     public TournamentRoundResponse? Round { get; set; }
+    public int? TeamId { get; set; }
+    public string? TeamName { get; set; }
 }
 
 public class TournamentRoundResponse

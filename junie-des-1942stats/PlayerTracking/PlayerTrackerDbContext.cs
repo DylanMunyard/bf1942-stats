@@ -691,6 +691,10 @@ public class Tournament
     public string? HeroImageContentType { get; set; }
     public string? ServerGuid { get; set; }
 
+    // Community links
+    public string? DiscordUrl { get; set; }
+    public string? ForumUrl { get; set; }
+
     // Navigation properties
     public User CreatedByUser { get; set; } = null!;
     public Player OrganizerPlayer { get; set; } = null!;
@@ -733,9 +737,13 @@ public class TournamentMatchMap
     // Link to completed round - set after the round completes
     public string? RoundId { get; set; }
 
+    // Optional: Team that chose/assigned this map
+    public int? TeamId { get; set; }
+
     // Navigation properties
     public TournamentMatch Match { get; set; } = null!;
     public Round? Round { get; set; }
+    public TournamentTeam? Team { get; set; }
 }
 
 public class TournamentMatch

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using junie_des_1942stats.PlayerTracking;
 
@@ -10,9 +11,11 @@ using junie_des_1942stats.PlayerTracking;
 namespace junie_des_1942stats.Migrations
 {
     [DbContext(typeof(PlayerTrackerDbContext))]
-    partial class PlayerTrackerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251030135649_AddSocialLinksToTournaments")]
+    partial class AddSocialLinksToTournaments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.5");
@@ -597,16 +600,11 @@ namespace junie_des_1942stats.Migrations
                     b.Property<string>("RoundId")
                         .HasColumnType("TEXT");
 
-                    b.Property<int?>("TeamId")
-                        .HasColumnType("INTEGER");
-
                     b.HasKey("Id");
 
                     b.HasIndex("MatchId");
 
                     b.HasIndex("RoundId");
-
-                    b.HasIndex("TeamId");
 
                     b.HasIndex("MatchId", "MapOrder");
 
@@ -918,15 +916,9 @@ namespace junie_des_1942stats.Migrations
                         .HasForeignKey("RoundId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("junie_des_1942stats.PlayerTracking.TournamentTeam", "Team")
-                        .WithMany()
-                        .HasForeignKey("TeamId");
-
                     b.Navigation("Match");
 
                     b.Navigation("Round");
-
-                    b.Navigation("Team");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.TournamentTeam", b =>
