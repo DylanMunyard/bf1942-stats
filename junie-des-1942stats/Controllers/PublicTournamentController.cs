@@ -22,28 +22,45 @@ public class PublicTournamentController : ControllerBase
     }
 
     /// <summary>
-    /// Get tournament details by ID (public, no auth required)
+    /// Get tournament details by ID or name (public, no auth required)
     /// </summary>
-    [HttpGet("{id}")]
-    public async Task<ActionResult<PublicTournamentDetailResponse>> GetTournament(int id)
+    [HttpGet("{idOrName}")]
+    public async Task<ActionResult<PublicTournamentDetailResponse>> GetTournament(string idOrName)
     {
         try
         {
-            // Load tournament
-            var tournament = await _context.Tournaments
-                .Include(t => t.OrganizerPlayer)
-                .Include(t => t.Server)
-                .FirstOrDefaultAsync(t => t.Id == id);
+            Tournament? tournament;
+
+            // Try to parse as integer first (ID lookup)
+            if (int.TryParse(idOrName, out int id))
+            {
+                tournament = await _context.Tournaments
+                    .Include(t => t.OrganizerPlayer)
+                    .Include(t => t.Server)
+                    .FirstOrDefaultAsync(t => t.Id == id);
+            }
+            else
+            {
+                // If not a number, search by name
+                tournament = await _context.Tournaments
+                    .Include(t => t.OrganizerPlayer)
+                    .Include(t => t.Server)
+                    .FirstOrDefaultAsync(t => t.Name == idOrName);
+            }
 
             if (tournament == null)
                 return NotFound(new { message = "Tournament not found" });
 
+            // Rest of the existing logic stays the same...
+            var tournamentId = tournament.Id;
+
             // Load teams for this tournament
             var teams = await _context.TournamentTeams
-                .Where(tt => tt.TournamentId == id)
+                .Where(tt => tt.TournamentId == tournamentId)
                 .Select(tt => new { tt.Id, tt.Name, tt.CreatedAt })
                 .ToListAsync();
 
+            // [rest of the existing implementation continues unchanged...]
             var teamIds = teams.Select(t => t.Id).ToList();
 
             // Batch load all team players
@@ -69,7 +86,7 @@ public class PublicTournamentController : ControllerBase
 
             // Load matches for this tournament
             var matches = await _context.TournamentMatches
-                .Where(tm => tm.TournamentId == id)
+                .Where(tm => tm.TournamentId == tournamentId)
                 .Select(tm => new
                 {
                     tm.Id,
@@ -263,6 +280,8 @@ public class PublicTournamentController : ControllerBase
                 Teams = teamResponses,
                 Matches = matchResponses,
                 HasHeroImage = tournament.HeroImage != null,
+                HasCommunityLogo = tournament.CommunityLogo != null,
+                Rules = tournament.Rules,
                 ServerGuid = tournament.ServerGuid,
                 ServerName = tournament.Server?.Name,
                 DiscordUrl = tournament.DiscordUrl,
@@ -273,7 +292,7 @@ public class PublicTournamentController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting public tournament {TournamentId}", id);
+            _logger.LogError(ex, "Error getting public tournament {TournamentId}", idOrName);
             return StatusCode(500, new { message = "Error retrieving tournament" });
         }
     }
@@ -305,6 +324,34 @@ public class PublicTournamentController : ControllerBase
             return StatusCode(500, new { message = "Error retrieving tournament image" });
         }
     }
+
+    /// <summary>
+    /// Get tournament community logo (public, no auth required)
+    /// </summary>
+    [HttpGet("{id}/logo")]
+    public async Task<IActionResult> GetTournamentLogo(int id)
+    {
+        try
+        {
+            var tournament = await _context.Tournaments
+                .Where(t => t.Id == id)
+                .Select(t => new { t.CommunityLogo, t.CommunityLogoContentType })
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            if (tournament.CommunityLogo == null)
+                return NotFound(new { message = "Tournament has no community logo" });
+
+            return File(tournament.CommunityLogo, tournament.CommunityLogoContentType ?? "image/jpeg");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting tournament logo {TournamentId}", id);
+            return StatusCode(500, new { message = "Error retrieving tournament logo" });
+        }
+    }
 }
 
 // Response DTOs for public endpoints
@@ -319,6 +366,8 @@ public class PublicTournamentDetailResponse
     public List<PublicTournamentTeamResponse> Teams { get; set; } = [];
     public List<PublicTournamentMatchResponse> Matches { get; set; } = [];
     public bool HasHeroImage { get; set; }
+    public bool HasCommunityLogo { get; set; }
+    public string? Rules { get; set; }
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
     public string? DiscordUrl { get; set; }

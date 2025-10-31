@@ -5,6 +5,7 @@ using System.Security.Claims;
 using junie_des_1942stats.PlayerTracking;
 using Microsoft.Extensions.Logging;
 using NodaTime;
+using Markdig;
 
 namespace junie_des_1942stats.Controllers;
 
@@ -70,6 +71,8 @@ public class AdminTournamentController : ControllerBase
                 MatchCount = matchCounts.GetValueOrDefault(t.Id, 0),
                 TeamCount = teamCounts.GetValueOrDefault(t.Id, 0),
                 HasHeroImage = t.HeroImage != null,
+                HasCommunityLogo = t.CommunityLogo != null,
+                HasRules = !string.IsNullOrEmpty(t.Rules),
                 ServerGuid = t.ServerGuid,
                 ServerName = t.Server?.Name,
                 DiscordUrl = t.DiscordUrl,
@@ -173,6 +176,9 @@ public class AdminTournamentController : ControllerBase
                 Matches = matchResponses,
                 HeroImageBase64 = tournament.HeroImage != null ? Convert.ToBase64String(tournament.HeroImage) : null,
                 HeroImageContentType = tournament.HeroImageContentType,
+                CommunityLogoBase64 = tournament.CommunityLogo != null ? Convert.ToBase64String(tournament.CommunityLogo) : null,
+                CommunityLogoContentType = tournament.CommunityLogoContentType,
+                Rules = tournament.Rules,
                 ServerGuid = tournament.ServerGuid,
                 ServerName = tournament.Server?.Name,
                 DiscordUrl = tournament.DiscordUrl,
@@ -229,9 +235,28 @@ public class AdminTournamentController : ControllerBase
                     return BadRequest(new { message = $"Server with GUID '{request.ServerGuid}' not found" });
             }
 
-            var (heroImageData, imageError) = ValidateAndProcessImage(request.HeroImageBase64, request.HeroImageContentType);
-            if (imageError != null)
-                return BadRequest(new { message = imageError });
+            var (heroImageData, heroImageError) = ValidateAndProcessImage(request.HeroImageBase64, request.HeroImageContentType);
+            if (heroImageError != null)
+                return BadRequest(new { message = heroImageError });
+
+            var (communityLogoData, logoImageError) = ValidateAndProcessImage(request.CommunityLogoBase64, request.CommunityLogoContentType);
+            if (logoImageError != null)
+                return BadRequest(new { message = logoImageError });
+
+            // Sanitize markdown rules if provided
+            string? sanitizedRules = null;
+            if (!string.IsNullOrWhiteSpace(request.Rules))
+            {
+                // Use Markdig to sanitize the markdown
+                var pipeline = new MarkdownPipelineBuilder()
+                    .UseAdvancedExtensions()
+                    .DisableHtml()  // Prevents HTML injection
+                    .Build();
+
+                // Parse and render back to markdown to sanitize
+                var document = Markdown.Parse(request.Rules, pipeline);
+                sanitizedRules = Markdown.ToHtml(document, pipeline);
+            }
 
             var tournament = new Tournament
             {
@@ -244,6 +269,9 @@ public class AdminTournamentController : ControllerBase
                 AnticipatedRoundCount = request.AnticipatedRoundCount,
                 HeroImage = heroImageData,
                 HeroImageContentType = heroImageData != null ? request.HeroImageContentType : null,
+                CommunityLogo = communityLogoData,
+                CommunityLogoContentType = communityLogoData != null ? request.CommunityLogoContentType : null,
+                Rules = sanitizedRules,
                 ServerGuid = !string.IsNullOrWhiteSpace(request.ServerGuid) ? request.ServerGuid : null,
                 DiscordUrl = request.DiscordUrl,
                 ForumUrl = request.ForumUrl
@@ -330,12 +358,42 @@ public class AdminTournamentController : ControllerBase
 
             if (request.HeroImageBase64 != null)
             {
-                var (heroImageData, imageError) = ValidateAndProcessImage(request.HeroImageBase64, request.HeroImageContentType);
-                if (imageError != null)
-                    return BadRequest(new { message = imageError });
+                var (heroImageData, heroImageError) = ValidateAndProcessImage(request.HeroImageBase64, request.HeroImageContentType);
+                if (heroImageError != null)
+                    return BadRequest(new { message = heroImageError });
 
                 tournament.HeroImage = heroImageData;
                 tournament.HeroImageContentType = heroImageData != null ? request.HeroImageContentType : null;
+            }
+
+            if (request.CommunityLogoBase64 != null)
+            {
+                var (communityLogoData, logoImageError) = ValidateAndProcessImage(request.CommunityLogoBase64, request.CommunityLogoContentType);
+                if (logoImageError != null)
+                    return BadRequest(new { message = logoImageError });
+
+                tournament.CommunityLogo = communityLogoData;
+                tournament.CommunityLogoContentType = communityLogoData != null ? request.CommunityLogoContentType : null;
+            }
+
+            if (request.Rules != null)
+            {
+                // Sanitize markdown rules if provided
+                string? sanitizedRules = null;
+                if (!string.IsNullOrWhiteSpace(request.Rules))
+                {
+                    // Use Markdig to sanitize the markdown
+                    var pipeline = new MarkdownPipelineBuilder()
+                        .UseAdvancedExtensions()
+                        .DisableHtml()  // Prevents HTML injection
+                        .Build();
+
+                    // Parse and render back to markdown to sanitize
+                    var document = Markdown.Parse(request.Rules, pipeline);
+                    sanitizedRules = Markdown.ToHtml(document, pipeline);
+                }
+
+                tournament.Rules = sanitizedRules;
             }
 
             if (request.DiscordUrl != null)
@@ -421,6 +479,39 @@ public class AdminTournamentController : ControllerBase
         {
             _logger.LogError(ex, "Error getting tournament image {TournamentId}", id);
             return StatusCode(500, new { message = "Error retrieving tournament image" });
+        }
+    }
+
+    /// <summary>
+    /// Get tournament community logo
+    /// </summary>
+    [HttpGet("{id}/logo")]
+    [Authorize]
+    public async Task<IActionResult> GetTournamentLogo(int id)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var tournament = await _context.Tournaments
+                .Where(t => t.Id == id && t.CreatedByUserEmail == userEmail)
+                .Select(t => new { t.CommunityLogo, t.CommunityLogoContentType })
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            if (tournament.CommunityLogo == null)
+                return NotFound(new { message = "Tournament has no community logo" });
+
+            return File(tournament.CommunityLogo, tournament.CommunityLogoContentType ?? "image/jpeg");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting tournament logo {TournamentId}", id);
+            return StatusCode(500, new { message = "Error retrieving tournament logo" });
         }
     }
 
@@ -528,6 +619,9 @@ public class AdminTournamentController : ControllerBase
             Matches = matches,
             HeroImageBase64 = tournament.HeroImage != null ? Convert.ToBase64String(tournament.HeroImage) : null,
             HeroImageContentType = tournament.HeroImageContentType,
+            CommunityLogoBase64 = tournament.CommunityLogo != null ? Convert.ToBase64String(tournament.CommunityLogo) : null,
+            CommunityLogoContentType = tournament.CommunityLogoContentType,
+            Rules = tournament.Rules,
             ServerGuid = tournament.ServerGuid,
             ServerName = tournament.Server?.Name,
             DiscordUrl = tournament.DiscordUrl,
@@ -1342,6 +1436,9 @@ public class CreateTournamentRequest
     public int? AnticipatedRoundCount { get; set; }
     public string? HeroImageBase64 { get; set; }
     public string? HeroImageContentType { get; set; }
+    public string? CommunityLogoBase64 { get; set; }
+    public string? CommunityLogoContentType { get; set; }
+    public string? Rules { get; set; }
     public string? ServerGuid { get; set; }
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
@@ -1355,6 +1452,9 @@ public class UpdateTournamentRequest
     public int? AnticipatedRoundCount { get; set; }
     public string? HeroImageBase64 { get; set; }
     public string? HeroImageContentType { get; set; }
+    public string? CommunityLogoBase64 { get; set; }
+    public string? CommunityLogoContentType { get; set; }
+    public string? Rules { get; set; }
     public string? ServerGuid { get; set; }
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
@@ -1418,6 +1518,8 @@ public class TournamentListResponse
     public int MatchCount { get; set; }
     public int TeamCount { get; set; }
     public bool HasHeroImage { get; set; }
+    public bool HasCommunityLogo { get; set; }
+    public bool HasRules { get; set; }
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
     public string? DiscordUrl { get; set; }
@@ -1436,6 +1538,9 @@ public class TournamentDetailResponse
     public List<TournamentMatchResponse> Matches { get; set; } = [];
     public string? HeroImageBase64 { get; set; }
     public string? HeroImageContentType { get; set; }
+    public string? CommunityLogoBase64 { get; set; }
+    public string? CommunityLogoContentType { get; set; }
+    public string? Rules { get; set; }
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
     public string? DiscordUrl { get; set; }

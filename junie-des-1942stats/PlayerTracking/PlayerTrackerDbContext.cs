@@ -689,6 +689,9 @@ public class Tournament
     public int? AnticipatedRoundCount { get; set; }
     public byte[]? HeroImage { get; set; }
     public string? HeroImageContentType { get; set; }
+    public byte[]? CommunityLogo { get; set; }
+    public string? CommunityLogoContentType { get; set; }
+    public string? Rules { get; set; } // Markdown content for tournament rules
     public string? ServerGuid { get; set; }
 
     // Community links
