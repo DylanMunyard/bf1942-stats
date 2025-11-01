@@ -398,6 +398,9 @@ try
     builder.Services.AddScoped<RoundBackfillService>();
     builder.Services.AddScoped<PlayerStatsService>();
 
+    // Register markdown sanitization service for tournament rules
+    builder.Services.AddScoped<IMarkdownSanitizationService, MarkdownSanitizationService>();
+
     // Register the ServerStatsService and supporting services
     builder.Services.AddScoped<ServerStatsService>();
     builder.Services.AddScoped<RoundsService>();

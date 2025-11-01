@@ -17,6 +17,7 @@
     </ItemGroup>
 
     <ItemGroup>
+      <PackageReference Include="HtmlSanitizer" Version="9.0.886" />
       <PackageReference Include="Markdig" Version="0.43.0" />
       <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.8" />
       <PackageReference Include="NodaTime" Version="3.2.2" />

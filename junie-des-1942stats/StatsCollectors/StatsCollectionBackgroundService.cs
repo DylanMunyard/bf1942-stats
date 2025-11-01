@@ -15,7 +15,7 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
-    private readonly TimeSpan _collectionInterval = TimeSpan.FromSeconds(30);
+    private readonly TimeSpan _collectionInterval;
     private Timer? _timer;
     private int _isRunning = 0;
     private int _cycleCount = 0;
@@ -26,11 +26,15 @@ public class StatsCollectionBackgroundService : IHostedService, IDisposable
     {
         _scopeFactory = scopeFactory;
         _configuration = configuration;
+
+        // Read interval from config, default to 30 seconds
+        var intervalSeconds = _configuration.GetValue<int?>("STATS_COLLECTION_INTERVAL_SECONDS") ?? 30;
+        _collectionInterval = TimeSpan.FromSeconds(intervalSeconds);
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Stats collection service starting (30s intervals)...");
+        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Stats collection service starting ({_collectionInterval.TotalSeconds}s intervals)...");
 
         // Initialize timer to run immediately (dueTime: 0) and then every 30 seconds
         _timer = new Timer(
