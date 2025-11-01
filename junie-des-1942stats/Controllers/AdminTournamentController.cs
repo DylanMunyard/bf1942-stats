@@ -143,6 +143,7 @@ public class AdminTournamentController : ControllerBase
                     Team2Name = tm.Team2.Name,
                     ServerGuid = tm.ServerGuid,
                     ServerName = tm.ServerName,
+                    Week = tm.Week,
                     CreatedAt = tm.CreatedAt,
                     Maps = tm.Maps.OrderBy(m => m.MapOrder).Select(m => new TournamentMatchMapResponse
                     {
@@ -170,6 +171,17 @@ public class AdminTournamentController : ControllerBase
                 .OrderBy(tm => tm.ScheduledDate)
                 .ToListAsync();
 
+            // Group matches by week
+            var matchesByWeek = matchResponses
+                .GroupBy(m => m.Week)
+                .OrderBy(g => g.Key)
+                .Select(g => new MatchWeekGroup
+                {
+                    Week = g.Key,
+                    Matches = g.ToList()
+                })
+                .ToList();
+
             var response = new TournamentDetailResponse
             {
                 Id = tournament.Id,
@@ -179,7 +191,7 @@ public class AdminTournamentController : ControllerBase
                 CreatedAt = tournament.CreatedAt,
                 AnticipatedRoundCount = tournament.AnticipatedRoundCount,
                 Teams = teams,
-                Matches = matchResponses,
+                MatchesByWeek = matchesByWeek,
                 HeroImageBase64 = tournament.HeroImage != null ? Convert.ToBase64String(tournament.HeroImage) : null,
                 HeroImageContentType = tournament.HeroImageContentType,
                 CommunityLogoBase64 = tournament.CommunityLogo != null ? Convert.ToBase64String(tournament.CommunityLogo) : null,
@@ -188,7 +200,9 @@ public class AdminTournamentController : ControllerBase
                 ServerGuid = tournament.ServerGuid,
                 ServerName = tournament.Server?.Name,
                 DiscordUrl = tournament.DiscordUrl,
-                ForumUrl = tournament.ForumUrl
+                ForumUrl = tournament.ForumUrl,
+                PrimaryColour = tournament.PrimaryColour,
+                SecondaryColour = tournament.SecondaryColour
             };
 
             return Ok(response);
@@ -621,6 +635,7 @@ public class AdminTournamentController : ControllerBase
                 Team2Name = tm.Team2.Name,
                 ServerGuid = tm.ServerGuid,
                 ServerName = tm.ServerName,
+                Week = tm.Week,
                 CreatedAt = tm.CreatedAt,
                 Maps = tm.Maps.OrderBy(m => m.MapOrder).Select(m => new TournamentMatchMapResponse
                 {
@@ -646,6 +661,17 @@ public class AdminTournamentController : ControllerBase
             .OrderBy(tm => tm.ScheduledDate)
             .ToListAsync();
 
+        // Group matches by week
+        var matchesByWeek = matches
+            .GroupBy(m => m.Week)
+            .OrderBy(g => g.Key)
+            .Select(g => new MatchWeekGroup
+            {
+                Week = g.Key,
+                Matches = g.ToList()
+            })
+            .ToList();
+
         return new TournamentDetailResponse
         {
             Id = tournament.Id,
@@ -655,7 +681,7 @@ public class AdminTournamentController : ControllerBase
             CreatedAt = tournament.CreatedAt,
             AnticipatedRoundCount = tournament.AnticipatedRoundCount,
             Teams = teams,
-            Matches = matches,
+            MatchesByWeek = matchesByWeek,
             HeroImageBase64 = tournament.HeroImage != null ? Convert.ToBase64String(tournament.HeroImage) : null,
             HeroImageContentType = tournament.HeroImageContentType,
             CommunityLogoBase64 = tournament.CommunityLogo != null ? Convert.ToBase64String(tournament.CommunityLogo) : null,
@@ -1060,6 +1086,7 @@ public class AdminTournamentController : ControllerBase
                 Team2Id = request.Team2Id,
                 ServerGuid = !string.IsNullOrWhiteSpace(request.ServerGuid) ? request.ServerGuid : null,
                 ServerName = request.ServerName,
+                Week = request.Week,
                 CreatedAt = SystemClock.Instance.GetCurrentInstant()
             };
 
@@ -1090,6 +1117,7 @@ public class AdminTournamentController : ControllerBase
                 Team2Name = team2Name,
                 ServerGuid = match.ServerGuid,
                 ServerName = match.ServerName,
+                Week = match.Week,
                 CreatedAt = match.CreatedAt,
                 Maps = maps.Select(m => new TournamentMatchMapResponse
                 {
@@ -1138,6 +1166,7 @@ public class AdminTournamentController : ControllerBase
                     Team2Name = tm.Team2.Name,
                     ServerGuid = tm.ServerGuid,
                     ServerName = tm.ServerName,
+                    Week = tm.Week,
                     CreatedAt = tm.CreatedAt,
                     Maps = tm.Maps.OrderBy(m => m.MapOrder).Select(m => new TournamentMatchMapResponse
                     {
@@ -1247,6 +1276,9 @@ public class AdminTournamentController : ControllerBase
             if (request.ServerName != null)
                 match.ServerName = request.ServerName;
 
+            if (request.Week != null)
+                match.Week = request.Week;
+
             // Handle map updates
             if (request.MapNames != null)
             {
@@ -1293,6 +1325,7 @@ public class AdminTournamentController : ControllerBase
                     Team2Name = tm.Team2.Name,
                     ServerGuid = tm.ServerGuid,
                     ServerName = tm.ServerName,
+                    Week = tm.Week,
                     CreatedAt = tm.CreatedAt,
                     Maps = tm.Maps.OrderBy(m => m.MapOrder).Select(m => new TournamentMatchMapResponse
                     {
@@ -1530,6 +1563,7 @@ public class CreateTournamentMatchRequest
     public List<string> MapNames { get; set; } = [];
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
+    public string? Week { get; set; }
 }
 
 public class UpdateTournamentMatchRequest
@@ -1539,6 +1573,7 @@ public class UpdateTournamentMatchRequest
     public int? Team2Id { get; set; }
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
+    public string? Week { get; set; }
     public List<string>? MapNames { get; set; }
 }
 
@@ -1582,7 +1617,7 @@ public class TournamentDetailResponse
     public Instant CreatedAt { get; set; }
     public int? AnticipatedRoundCount { get; set; }
     public List<TournamentTeamResponse> Teams { get; set; } = [];
-    public List<TournamentMatchResponse> Matches { get; set; } = [];
+    public List<MatchWeekGroup> MatchesByWeek { get; set; } = [];
     public string? HeroImageBase64 { get; set; }
     public string? HeroImageContentType { get; set; }
     public string? CommunityLogoBase64 { get; set; }
@@ -1617,6 +1652,7 @@ public class TournamentMatchResponse
     public string Team2Name { get; set; } = "";
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
+    public string? Week { get; set; }
     public Instant CreatedAt { get; set; }
     public List<TournamentMatchMapResponse> Maps { get; set; } = [];
 }
@@ -1630,6 +1666,12 @@ public class TournamentMatchMapResponse
     public TournamentRoundResponse? Round { get; set; }
     public int? TeamId { get; set; }
     public string? TeamName { get; set; }
+}
+
+public class MatchWeekGroup
+{
+    public string? Week { get; set; }
+    public List<TournamentMatchResponse> Matches { get; set; } = [];
 }
 
 public class TournamentRoundResponse

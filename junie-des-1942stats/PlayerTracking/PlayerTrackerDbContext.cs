@@ -765,6 +765,9 @@ public class TournamentMatch
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; } // Fallback if ServerGuid is null
 
+    // Optional week/campaign identifier for ranking purposes
+    public string? Week { get; set; }
+
     public Instant CreatedAt { get; set; }
 
     // Navigation properties

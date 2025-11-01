@@ -97,6 +97,7 @@ public class PublicTournamentController : ControllerBase
                     Team2Name = tm.Team2.Name,
                     tm.ServerGuid,
                     tm.ServerName,
+                    tm.Week,
                     tm.CreatedAt
                 })
                 .ToListAsync();
@@ -264,10 +265,22 @@ public class PublicTournamentController : ControllerBase
                     Team2Name = match.Team2Name,
                     ServerGuid = match.ServerGuid,
                     ServerName = match.ServerName,
+                    Week = match.Week,
                     CreatedAt = match.CreatedAt,
                     Maps = matchMapsForThisMatch
                 });
             }
+
+            // Group matches by week
+            var matchesByWeek = matchResponses
+                .GroupBy(m => m.Week)
+                .OrderBy(g => g.Key)
+                .Select(g => new PublicMatchWeekGroup
+                {
+                    Week = g.Key,
+                    Matches = g.ToList()
+                })
+                .ToList();
 
             var response = new PublicTournamentDetailResponse
             {
@@ -278,7 +291,7 @@ public class PublicTournamentController : ControllerBase
                 CreatedAt = tournament.CreatedAt,
                 AnticipatedRoundCount = tournament.AnticipatedRoundCount,
                 Teams = teamResponses,
-                Matches = matchResponses,
+                MatchesByWeek = matchesByWeek,
                 HasHeroImage = tournament.HeroImage != null,
                 HasCommunityLogo = tournament.CommunityLogo != null,
                 Rules = tournament.Rules,
@@ -366,7 +379,7 @@ public class PublicTournamentDetailResponse
     public Instant CreatedAt { get; set; }
     public int? AnticipatedRoundCount { get; set; }
     public List<PublicTournamentTeamResponse> Teams { get; set; } = [];
-    public List<PublicTournamentMatchResponse> Matches { get; set; } = [];
+    public List<PublicMatchWeekGroup> MatchesByWeek { get; set; } = [];
     public bool HasHeroImage { get; set; }
     public bool HasCommunityLogo { get; set; }
     public string? Rules { get; set; }
@@ -399,6 +412,7 @@ public class PublicTournamentMatchResponse
     public string Team2Name { get; set; } = "";
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
+    public string? Week { get; set; }
     public Instant CreatedAt { get; set; }
     public List<PublicTournamentMatchMapResponse> Maps { get; set; } = [];
 }
@@ -412,6 +426,12 @@ public class PublicTournamentMatchMapResponse
     public PublicTournamentRoundResponse? Round { get; set; }
     public int? TeamId { get; set; }
     public string? TeamName { get; set; }
+}
+
+public class PublicMatchWeekGroup
+{
+    public string? Week { get; set; }
+    public List<PublicTournamentMatchResponse> Matches { get; set; } = [];
 }
 
 public class PublicTournamentRoundResponse
