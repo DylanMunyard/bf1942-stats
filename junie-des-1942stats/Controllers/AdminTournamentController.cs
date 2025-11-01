@@ -420,6 +420,7 @@ public class AdminTournamentController : ControllerBase
                     return BadRequest(new { message = "Invalid PrimaryColour. Use hex like #RRGGBB or #RRGGBBAA." });
 
                 tournament.PrimaryColour = string.IsNullOrWhiteSpace(request.PrimaryColour) ? null : request.PrimaryColour;
+                _logger.LogInformation("Updated PrimaryColour to: {Color}", tournament.PrimaryColour);
             }
 
             if (request.SecondaryColour != null)
@@ -428,6 +429,7 @@ public class AdminTournamentController : ControllerBase
                     return BadRequest(new { message = "Invalid SecondaryColour. Use hex like #RRGGBB or #RRGGBBAA." });
 
                 tournament.SecondaryColour = string.IsNullOrWhiteSpace(request.SecondaryColour) ? null : request.SecondaryColour;
+                _logger.LogInformation("Updated SecondaryColour to: {Color}", tournament.SecondaryColour);
             }
 
             await _context.SaveChangesAsync();
@@ -662,7 +664,9 @@ public class AdminTournamentController : ControllerBase
             ServerGuid = tournament.ServerGuid,
             ServerName = tournament.Server?.Name,
             DiscordUrl = tournament.DiscordUrl,
-            ForumUrl = tournament.ForumUrl
+            ForumUrl = tournament.ForumUrl,
+            PrimaryColour = tournament.PrimaryColour,
+            SecondaryColour = tournament.SecondaryColour
         };
     }
 
