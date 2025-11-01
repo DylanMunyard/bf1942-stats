@@ -694,6 +694,10 @@ public class Tournament
     public string? Rules { get; set; } // Markdown content for tournament rules
     public string? ServerGuid { get; set; }
 
+    // Colour customisation (hex codes like #RRGGBB or #RRGGBBAA)
+    public string? PrimaryColour { get; set; }
+    public string? SecondaryColour { get; set; }
+
     // Community links
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }

@@ -285,7 +285,9 @@ public class PublicTournamentController : ControllerBase
                 ServerGuid = tournament.ServerGuid,
                 ServerName = tournament.Server?.Name,
                 DiscordUrl = tournament.DiscordUrl,
-                ForumUrl = tournament.ForumUrl
+                ForumUrl = tournament.ForumUrl,
+                PrimaryColour = tournament.PrimaryColour,
+                SecondaryColour = tournament.SecondaryColour
             };
 
             return Ok(response);
@@ -372,6 +374,8 @@ public class PublicTournamentDetailResponse
     public string? ServerName { get; set; }
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
+    public string? PrimaryColour { get; set; }
+    public string? SecondaryColour { get; set; }
 }
 
 public class PublicTournamentTeamResponse

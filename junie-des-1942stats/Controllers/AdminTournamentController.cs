@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using junie_des_1942stats.PlayerTracking;
+using junie_des_1942stats.Services;
 using Microsoft.Extensions.Logging;
 using NodaTime;
 using Markdig;
@@ -15,13 +16,16 @@ public class AdminTournamentController : ControllerBase
 {
     private readonly PlayerTrackerDbContext _context;
     private readonly ILogger<AdminTournamentController> _logger;
+    private readonly IMarkdownSanitizationService _markdownSanitizer;
 
     public AdminTournamentController(
         PlayerTrackerDbContext context,
-        ILogger<AdminTournamentController> logger)
+        ILogger<AdminTournamentController> logger,
+        IMarkdownSanitizationService markdownSanitizer)
     {
         _context = context;
         _logger = logger;
+        _markdownSanitizer = markdownSanitizer;
     }
 
     /// <summary>
@@ -76,7 +80,9 @@ public class AdminTournamentController : ControllerBase
                 ServerGuid = t.ServerGuid,
                 ServerName = t.Server?.Name,
                 DiscordUrl = t.DiscordUrl,
-                ForumUrl = t.ForumUrl
+                ForumUrl = t.ForumUrl,
+                PrimaryColour = t.PrimaryColour,
+                SecondaryColour = t.SecondaryColour
             }).ToList();
 
             return Ok(response);
@@ -243,11 +249,22 @@ public class AdminTournamentController : ControllerBase
             if (logoImageError != null)
                 return BadRequest(new { message = logoImageError });
 
-            // Store rules as markdown (no conversion to HTML)
+            // Validate colours if provided
+            if (!string.IsNullOrWhiteSpace(request.PrimaryColour) && !IsValidHexColour(request.PrimaryColour))
+                return BadRequest(new { message = "Invalid PrimaryColour. Use hex like #RRGGBB or #RRGGBBAA." });
+            if (!string.IsNullOrWhiteSpace(request.SecondaryColour) && !IsValidHexColour(request.SecondaryColour))
+                return BadRequest(new { message = "Invalid SecondaryColour. Use hex like #RRGGBB or #RRGGBBAA." });
+
+            // Validate and store rules as markdown
             string? sanitizedRules = null;
             if (!string.IsNullOrWhiteSpace(request.Rules))
             {
-                // Simply store the markdown as-is
+                // Validate markdown for XSS risks
+                var validationResult = _markdownSanitizer.ValidateMarkdown(request.Rules);
+                if (!validationResult.IsValid)
+                    return BadRequest(new { message = validationResult.Error });
+
+                // Store the raw markdown (safe to store due to validation)
                 // The UI will handle rendering the markdown
                 sanitizedRules = request.Rules;
             }
@@ -268,7 +285,9 @@ public class AdminTournamentController : ControllerBase
                 Rules = sanitizedRules,
                 ServerGuid = !string.IsNullOrWhiteSpace(request.ServerGuid) ? request.ServerGuid : null,
                 DiscordUrl = request.DiscordUrl,
-                ForumUrl = request.ForumUrl
+                ForumUrl = request.ForumUrl,
+                PrimaryColour = string.IsNullOrWhiteSpace(request.PrimaryColour) ? null : request.PrimaryColour,
+                SecondaryColour = string.IsNullOrWhiteSpace(request.SecondaryColour) ? null : request.SecondaryColour
             };
 
             _context.Tournaments.Add(tournament);
@@ -372,11 +391,16 @@ public class AdminTournamentController : ControllerBase
 
             if (request.Rules != null)
             {
-                // Store rules as markdown (no conversion to HTML)
+                // Validate and store rules as markdown
                 string? sanitizedRules = null;
                 if (!string.IsNullOrWhiteSpace(request.Rules))
                 {
-                    // Simply store the markdown as-is
+                    // Validate markdown for XSS risks
+                    var validationResult = _markdownSanitizer.ValidateMarkdown(request.Rules);
+                    if (!validationResult.IsValid)
+                        return BadRequest(new { message = validationResult.Error });
+
+                    // Store the raw markdown (safe to store due to validation)
                     // The UI will handle rendering the markdown
                     sanitizedRules = request.Rules;
                 }
@@ -536,6 +560,15 @@ public class AdminTournamentController : ControllerBase
         {
             return (null, "Invalid base64 image format");
         }
+    }
+
+    private bool IsValidHexColour(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return false;
+        // Allows #RGB, #RRGGBB, #RGBA, #RRGGBBAA
+        if (!input.StartsWith('#')) return false;
+        var len = input.Length;
+        return len == 4 || len == 5 || len == 7 || len == 9;
     }
 
     private async Task<TournamentDetailResponse> GetTournamentDetailOptimizedAsync(int tournamentId)
@@ -1430,6 +1463,8 @@ public class CreateTournamentRequest
     public string? ServerGuid { get; set; }
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
+    public string? PrimaryColour { get; set; }
+    public string? SecondaryColour { get; set; }
 }
 
 public class UpdateTournamentRequest
@@ -1446,6 +1481,8 @@ public class UpdateTournamentRequest
     public string? ServerGuid { get; set; }
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
+    public string? PrimaryColour { get; set; }
+    public string? SecondaryColour { get; set; }
 }
 
 // Team Management DTOs
@@ -1512,6 +1549,8 @@ public class TournamentListResponse
     public string? ServerName { get; set; }
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
+    public string? PrimaryColour { get; set; }
+    public string? SecondaryColour { get; set; }
 }
 
 public class TournamentDetailResponse
@@ -1533,6 +1572,8 @@ public class TournamentDetailResponse
     public string? ServerName { get; set; }
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
+    public string? PrimaryColour { get; set; }
+    public string? SecondaryColour { get; set; }
 }
 
 public class TournamentTeamResponse
