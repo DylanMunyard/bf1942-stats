@@ -414,6 +414,22 @@ public class AdminTournamentController : ControllerBase
             if (request.ForumUrl != null)
                 tournament.ForumUrl = request.ForumUrl;
 
+            if (request.PrimaryColour != null)
+            {
+                if (!string.IsNullOrWhiteSpace(request.PrimaryColour) && !IsValidHexColour(request.PrimaryColour))
+                    return BadRequest(new { message = "Invalid PrimaryColour. Use hex like #RRGGBB or #RRGGBBAA." });
+
+                tournament.PrimaryColour = string.IsNullOrWhiteSpace(request.PrimaryColour) ? null : request.PrimaryColour;
+            }
+
+            if (request.SecondaryColour != null)
+            {
+                if (!string.IsNullOrWhiteSpace(request.SecondaryColour) && !IsValidHexColour(request.SecondaryColour))
+                    return BadRequest(new { message = "Invalid SecondaryColour. Use hex like #RRGGBB or #RRGGBBAA." });
+
+                tournament.SecondaryColour = string.IsNullOrWhiteSpace(request.SecondaryColour) ? null : request.SecondaryColour;
+            }
+
             await _context.SaveChangesAsync();
 
             return Ok(await GetTournamentDetailOptimizedAsync(tournament.Id));
