@@ -243,19 +243,13 @@ public class AdminTournamentController : ControllerBase
             if (logoImageError != null)
                 return BadRequest(new { message = logoImageError });
 
-            // Sanitize markdown rules if provided
+            // Store rules as markdown (no conversion to HTML)
             string? sanitizedRules = null;
             if (!string.IsNullOrWhiteSpace(request.Rules))
             {
-                // Use Markdig to sanitize the markdown
-                var pipeline = new MarkdownPipelineBuilder()
-                    .UseAdvancedExtensions()
-                    .DisableHtml()  // Prevents HTML injection
-                    .Build();
-
-                // Parse and render back to markdown to sanitize
-                var document = Markdown.Parse(request.Rules, pipeline);
-                sanitizedRules = Markdown.ToHtml(document, pipeline);
+                // Simply store the markdown as-is
+                // The UI will handle rendering the markdown
+                sanitizedRules = request.Rules;
             }
 
             var tournament = new Tournament
@@ -378,19 +372,13 @@ public class AdminTournamentController : ControllerBase
 
             if (request.Rules != null)
             {
-                // Sanitize markdown rules if provided
+                // Store rules as markdown (no conversion to HTML)
                 string? sanitizedRules = null;
                 if (!string.IsNullOrWhiteSpace(request.Rules))
                 {
-                    // Use Markdig to sanitize the markdown
-                    var pipeline = new MarkdownPipelineBuilder()
-                        .UseAdvancedExtensions()
-                        .DisableHtml()  // Prevents HTML injection
-                        .Build();
-
-                    // Parse and render back to markdown to sanitize
-                    var document = Markdown.Parse(request.Rules, pipeline);
-                    sanitizedRules = Markdown.ToHtml(document, pipeline);
+                    // Simply store the markdown as-is
+                    // The UI will handle rendering the markdown
+                    sanitizedRules = request.Rules;
                 }
 
                 tournament.Rules = sanitizedRules;
