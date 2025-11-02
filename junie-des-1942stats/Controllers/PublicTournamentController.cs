@@ -104,7 +104,7 @@ public class PublicTournamentController : ControllerBase
 
             var matchIds = matches.Select(m => m.Id).ToList();
 
-            // Batch load all match maps
+            // Batch load all match maps with their match results
             var matchMaps = await _context.TournamentMatchMaps
                 .Where(tmm => matchIds.Contains(tmm.MatchId))
                 .Select(tmm => new
@@ -115,81 +115,25 @@ public class PublicTournamentController : ControllerBase
                     tmm.MapOrder,
                     tmm.RoundId,
                     tmm.TeamId,
-                    TeamName = tmm.Team != null ? tmm.Team.Name : null
+                    TeamName = tmm.Team != null ? tmm.Team.Name : null,
+                    MatchResult = tmm.MatchResult != null ? new
+                    {
+                        tmm.MatchResult.Id,
+                        tmm.MatchResult.Team1Id,
+                        Team1Name = tmm.MatchResult.Team1 != null ? tmm.MatchResult.Team1.Name : null,
+                        tmm.MatchResult.Team2Id,
+                        Team2Name = tmm.MatchResult.Team2 != null ? tmm.MatchResult.Team2.Name : null,
+                        tmm.MatchResult.WinningTeamId,
+                        WinningTeamName = tmm.MatchResult.WinningTeam != null ? tmm.MatchResult.WinningTeam.Name : null,
+                        tmm.MatchResult.Team1Tickets,
+                        tmm.MatchResult.Team2Tickets
+                    } : null
                 })
                 .ToListAsync();
 
             var matchMapsLookup = matchMaps
                 .GroupBy(mm => mm.MatchId)
                 .ToDictionary(g => g.Key, g => g.OrderBy(x => x.MapOrder).ToList());
-
-            // Collect all round IDs
-            var roundIds = matchMaps
-                .Where(mm => !string.IsNullOrEmpty(mm.RoundId))
-                .Select(mm => mm.RoundId!)
-                .Distinct()
-                .ToList();
-
-            // Batch load all rounds
-            var rounds = await _context.Rounds
-                .Where(r => roundIds.Contains(r.RoundId))
-                .Select(r => new
-                {
-                    r.RoundId,
-                    r.ServerGuid,
-                    r.ServerName,
-                    r.MapName,
-                    r.StartTime,
-                    r.EndTime,
-                    r.Tickets1,
-                    r.Tickets2,
-                    r.Team1Label,
-                    r.Team2Label
-                })
-                .ToListAsync();
-
-            var roundsLookup = rounds.ToDictionary(r => r.RoundId);
-
-            // Batch load all player sessions (scores) for these rounds
-            var playerSessions = await _context.PlayerSessions
-                .Where(ps => ps.RoundId != null && roundIds.Contains(ps.RoundId))
-                .Select(ps => new
-                {
-                    ps.RoundId,
-                    ps.PlayerName,
-                    ps.TotalScore,
-                    ps.TotalKills,
-                    ps.TotalDeaths,
-                    ps.CurrentTeam,
-                    ps.CurrentTeamLabel
-                })
-                .ToListAsync();
-
-            var playerSessionsLookup = playerSessions
-                .GroupBy(ps => ps.RoundId)
-                .ToDictionary(g => g.Key!, g => g.OrderByDescending(ps => ps.TotalScore).ToList());
-
-            // Determine winning teams for each round based on tickets
-            var matchRoundWinners = new Dictionary<string, string>();
-
-            foreach (var roundId in roundIds)
-            {
-                if (roundsLookup.TryGetValue(roundId, out var round))
-                {
-                    var tickets1 = round.Tickets1 ?? 0;
-                    var tickets2 = round.Tickets2 ?? 0;
-
-                    if (tickets1 > tickets2 && round.Team1Label != null)
-                    {
-                        matchRoundWinners[roundId] = round.Team1Label;
-                    }
-                    else if (tickets2 > tickets1 && round.Team2Label != null)
-                    {
-                        matchRoundWinners[roundId] = round.Team2Label;
-                    }
-                    // If tickets are equal, no winner
-                }
-            }
 
             // Build match responses
             var matchResponses = new List<PublicTournamentMatchResponse>();
@@ -202,45 +146,21 @@ public class PublicTournamentController : ControllerBase
                 {
                     foreach (var map in mapsForMatch)
                     {
-                        PublicTournamentRoundResponse? roundResponse = null;
+                        PublicTournamentMatchResultResponse? matchResultResponse = null;
 
-                        if (!string.IsNullOrEmpty(map.RoundId) && roundsLookup.TryGetValue(map.RoundId, out var round))
+                        if (map.MatchResult != null)
                         {
-                            string? winningTeamName = null;
-                            if (matchRoundWinners.TryGetValue(map.RoundId, out var winner))
+                            matchResultResponse = new PublicTournamentMatchResultResponse
                             {
-                                winningTeamName = winner;
-                            }
-
-                            // Get all players for this round
-                            var roundPlayers = new List<PublicRoundPlayerResponse>();
-                            if (playerSessionsLookup.TryGetValue(map.RoundId, out var sessions))
-                            {
-                                roundPlayers = sessions.Select(s => new PublicRoundPlayerResponse
-                                {
-                                    PlayerName = s.PlayerName,
-                                    TotalScore = s.TotalScore,
-                                    TotalKills = s.TotalKills,
-                                    TotalDeaths = s.TotalDeaths,
-                                    Team = s.CurrentTeam,
-                                    TeamLabel = s.CurrentTeamLabel
-                                }).ToList();
-                            }
-
-                            roundResponse = new PublicTournamentRoundResponse
-                            {
-                                RoundId = round.RoundId,
-                                ServerGuid = round.ServerGuid,
-                                ServerName = round.ServerName,
-                                MapName = round.MapName,
-                                StartTime = round.StartTime,
-                                EndTime = round.EndTime,
-                                Tickets1 = round.Tickets1,
-                                Tickets2 = round.Tickets2,
-                                Team1Label = round.Team1Label,
-                                Team2Label = round.Team2Label,
-                                WinningTeamName = winningTeamName,
-                                Players = roundPlayers
+                                Id = map.MatchResult.Id,
+                                Team1Id = map.MatchResult.Team1Id,
+                                Team1Name = map.MatchResult.Team1Name,
+                                Team2Id = map.MatchResult.Team2Id,
+                                Team2Name = map.MatchResult.Team2Name,
+                                WinningTeamId = map.MatchResult.WinningTeamId,
+                                WinningTeamName = map.MatchResult.WinningTeamName,
+                                Team1Tickets = map.MatchResult.Team1Tickets,
+                                Team2Tickets = map.MatchResult.Team2Tickets
                             };
                         }
 
@@ -252,7 +172,7 @@ public class PublicTournamentController : ControllerBase
                             RoundId = map.RoundId,
                             TeamId = map.TeamId,
                             TeamName = map.TeamName,
-                            Round = roundResponse
+                            MatchResult = matchResultResponse
                         });
                     }
                 }
@@ -488,9 +408,22 @@ public class PublicTournamentMatchMapResponse
     public string MapName { get; set; } = "";
     public int MapOrder { get; set; }
     public string? RoundId { get; set; }
-    public PublicTournamentRoundResponse? Round { get; set; }
     public int? TeamId { get; set; }
     public string? TeamName { get; set; }
+    public PublicTournamentMatchResultResponse? MatchResult { get; set; }
+}
+
+public class PublicTournamentMatchResultResponse
+{
+    public int Id { get; set; }
+    public int? Team1Id { get; set; }
+    public string? Team1Name { get; set; }
+    public int? Team2Id { get; set; }
+    public string? Team2Name { get; set; }
+    public int? WinningTeamId { get; set; }
+    public string? WinningTeamName { get; set; }
+    public int Team1Tickets { get; set; }
+    public int Team2Tickets { get; set; }
 }
 
 public class PublicMatchWeekGroup

@@ -146,7 +146,9 @@ public class AdminTournamentController : ControllerBase
                 {
                     Id = tm.Id,
                     ScheduledDate = tm.ScheduledDate,
+                    Team1Id = tm.Team1Id,
                     Team1Name = tm.Team1.Name,
+                    Team2Id = tm.Team2Id,
                     Team2Name = tm.Team2.Name,
                     ServerGuid = tm.ServerGuid,
                     ServerName = tm.ServerName,
@@ -650,7 +652,9 @@ public class AdminTournamentController : ControllerBase
             {
                 Id = tm.Id,
                 ScheduledDate = tm.ScheduledDate,
+                Team1Id = tm.Team1Id,
                 Team1Name = tm.Team1.Name,
+                Team2Id = tm.Team2Id,
                 Team2Name = tm.Team2.Name,
                 ServerGuid = tm.ServerGuid,
                 ServerName = tm.ServerName,
@@ -1144,7 +1148,9 @@ public class AdminTournamentController : ControllerBase
             {
                 Id = match.Id,
                 ScheduledDate = match.ScheduledDate,
+                Team1Id = match.Team1Id,
                 Team1Name = team1Name,
+                Team2Id = match.Team2Id,
                 Team2Name = team2Name,
                 ServerGuid = match.ServerGuid,
                 ServerName = match.ServerName,
@@ -1193,7 +1199,9 @@ public class AdminTournamentController : ControllerBase
                 {
                     Id = tm.Id,
                     ScheduledDate = tm.ScheduledDate,
+                    Team1Id = tm.Team1Id,
                     Team1Name = tm.Team1.Name,
+                    Team2Id = tm.Team2Id,
                     Team2Name = tm.Team2.Name,
                     ServerGuid = tm.ServerGuid,
                     ServerName = tm.ServerName,
@@ -1364,7 +1372,9 @@ public class AdminTournamentController : ControllerBase
                 {
                     Id = tm.Id,
                     ScheduledDate = tm.ScheduledDate,
+                    Team1Id = tm.Team1Id,
                     Team1Name = tm.Team1.Name,
+                    Team2Id = tm.Team2Id,
                     Team2Name = tm.Team2.Name,
                     ServerGuid = tm.ServerGuid,
                     ServerName = tm.ServerName,
@@ -1514,7 +1524,42 @@ public class AdminTournamentController : ControllerBase
                 }
                 else
                 {
+                    // Unlinking a round - delete the associated match result
                     map.RoundId = null;
+
+                    var existingResult = await _context.TournamentMatchResults
+                        .Where(mr => mr.MapId == mapId)
+                        .FirstOrDefaultAsync();
+
+                    if (existingResult != null)
+                    {
+                        _logger.LogInformation(
+                            "Deleting match result {ResultId} for map {MapId} (unlinking round)",
+                            existingResult.Id, mapId);
+
+                        _context.TournamentMatchResults.Remove(existingResult);
+
+                        // Trigger ranking recalculation asynchronously since we removed a result
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                _logger.LogInformation(
+                                    "Starting async ranking recalculation after result deletion for tournament {TournamentId}",
+                                    tournamentId);
+                                await _rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
+                                _logger.LogInformation(
+                                    "Completed async ranking recalculation after result deletion for tournament {TournamentId}",
+                                    tournamentId);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex,
+                                    "Error during async ranking recalculation for tournament {TournamentId}",
+                                    tournamentId);
+                            }
+                        });
+                    }
                 }
             }
 
@@ -2003,7 +2048,9 @@ public class TournamentMatchResponse
 {
     public int Id { get; set; }
     public Instant ScheduledDate { get; set; }
+    public int Team1Id { get; set; }
     public string Team1Name { get; set; } = "";
+    public int Team2Id { get; set; }
     public string Team2Name { get; set; } = "";
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
