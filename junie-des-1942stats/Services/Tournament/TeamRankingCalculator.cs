@@ -45,9 +45,11 @@ public class TeamRankingCalculator : ITeamRankingCalculator
                 return [];
             }
 
-            // Group results by team and aggregate statistics
+            // Group results by team and aggregate statistics (filter out null team IDs)
             var teamIds = matchResults
                 .SelectMany(mr => new[] { mr.Team1Id, mr.Team2Id })
+                .Where(teamId => teamId.HasValue)
+                .Select(teamId => teamId!.Value)
                 .Distinct()
                 .ToList();
 

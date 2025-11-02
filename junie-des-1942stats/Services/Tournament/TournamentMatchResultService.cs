@@ -48,7 +48,7 @@ public class TournamentMatchResultService : ITournamentMatchResultService
 
             if (warning != null)
             {
-                // Team detection failed - return warning but don't fail
+                // Team detection failed - log warning but continue with null teams
                 _logger.LogWarning("Team mapping detection failed for round {RoundId}: {Warning}", roundId, warning);
             }
             else
@@ -59,14 +59,14 @@ public class TournamentMatchResultService : ITournamentMatchResultService
             }
 
             // Determine winning team (team with more tickets)
-            int winningTeamId = 0;
-            if (round.Tickets1.HasValue && round.Tickets2.HasValue)
+            int? winningTeamId = null;
+            if (team1Id > 0 && team2Id > 0 && round.Tickets1.HasValue && round.Tickets2.HasValue)
             {
-                if (round.Tickets1.Value > round.Tickets2.Value && team1Id > 0)
+                if (round.Tickets1.Value > round.Tickets2.Value)
                     winningTeamId = team1Id;
-                else if (round.Tickets2.Value > round.Tickets1.Value && team2Id > 0)
+                else if (round.Tickets2.Value > round.Tickets1.Value)
                     winningTeamId = team2Id;
-                // If equal, winningTeamId remains 0 (tie)
+                // If equal, winningTeamId remains null
             }
 
             // Check if result already exists for this map
@@ -79,8 +79,8 @@ public class TournamentMatchResultService : ITournamentMatchResultService
                 // Update existing
                 existingResult.RoundId = roundId;
                 existingResult.Week = match.Week;
-                existingResult.Team1Id = team1Id;
-                existingResult.Team2Id = team2Id;
+                existingResult.Team1Id = team1Id > 0 ? team1Id : null;
+                existingResult.Team2Id = team2Id > 0 ? team2Id : null;
                 existingResult.WinningTeamId = winningTeamId;
                 existingResult.Team1Tickets = round.Tickets1 ?? 0;
                 existingResult.Team2Tickets = round.Tickets2 ?? 0;
@@ -99,8 +99,8 @@ public class TournamentMatchResultService : ITournamentMatchResultService
                     MapId = mapId,
                     RoundId = roundId,
                     Week = match.Week,
-                    Team1Id = team1Id,
-                    Team2Id = team2Id,
+                    Team1Id = team1Id > 0 ? team1Id : null,
+                    Team2Id = team2Id > 0 ? team2Id : null,
                     WinningTeamId = winningTeamId,
                     Team1Tickets = round.Tickets1 ?? 0,
                     Team2Tickets = round.Tickets2 ?? 0,

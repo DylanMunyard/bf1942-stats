@@ -906,9 +906,9 @@ public class TournamentMatchResult
     public string? Week { get; set; } // Denormalized from TournamentMatch.Week
 
     // Tournament teams mapped to this round's Team1/Team2
-    public int Team1Id { get; set; }
-    public int Team2Id { get; set; }
-    public int WinningTeamId { get; set; }
+    public int? Team1Id { get; set; }
+    public int? Team2Id { get; set; }
+    public int? WinningTeamId { get; set; }
 
     // Ticket information from Round
     public int Team1Tickets { get; set; }
@@ -923,9 +923,9 @@ public class TournamentMatchResult
     public TournamentMatch Match { get; set; } = null!;
     public TournamentMatchMap Map { get; set; } = null!;
     public Round Round { get; set; } = null!;
-    public TournamentTeam Team1 { get; set; } = null!;
-    public TournamentTeam Team2 { get; set; } = null!;
-    public TournamentTeam WinningTeam { get; set; } = null!;
+    public TournamentTeam? Team1 { get; set; }
+    public TournamentTeam? Team2 { get; set; }
+    public TournamentTeam? WinningTeam { get; set; }
 }
 
 public class TournamentTeamRanking

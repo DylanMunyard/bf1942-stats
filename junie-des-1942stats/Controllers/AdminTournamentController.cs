@@ -117,8 +117,8 @@ public class AdminTournamentController : ControllerBase
             var tournament = await _context.Tournaments
                 .Include(t => t.OrganizerPlayer)
                 .Include(t => t.Server)
-                .Where(t => t.CreatedByUserEmail == userEmail)
-                .FirstOrDefaultAsync(t => t.Id == id);
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
+                .FirstOrDefaultAsync();
 
             if (tournament == null)
                 return NotFound(new { message = "Tournament not found" });
@@ -344,8 +344,8 @@ public class AdminTournamentController : ControllerBase
                 return Unauthorized(new { message = "User email not found in token" });
 
             var tournament = await _context.Tournaments
-                .Where(t => t.CreatedByUserEmail == userEmail)
-                .FirstOrDefaultAsync(t => t.Id == id);
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
+                .FirstOrDefaultAsync();
 
             if (tournament == null)
                 return NotFound(new { message = "Tournament not found" });
@@ -482,8 +482,8 @@ public class AdminTournamentController : ControllerBase
                 return Unauthorized(new { message = "User email not found in token" });
 
             var tournament = await _context.Tournaments
-                .Where(t => t.CreatedByUserEmail == userEmail)
-                .FirstOrDefaultAsync(t => t.Id == id);
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
+                .FirstOrDefaultAsync();
 
             if (tournament == null)
                 return NotFound(new { message = "Tournament not found" });
@@ -719,8 +719,8 @@ public class AdminTournamentController : ControllerBase
                 return Unauthorized(new { message = "User email not found in token" });
 
             var tournament = await _context.Tournaments
-                .Where(t => t.CreatedByUserEmail == userEmail)
-                .FirstOrDefaultAsync(t => t.Id == tournamentId);
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
+                .FirstOrDefaultAsync();
 
             if (tournament == null)
                 return NotFound(new { message = "Tournament not found" });
@@ -1045,8 +1045,8 @@ public class AdminTournamentController : ControllerBase
                 return Unauthorized(new { message = "User email not found in token" });
 
             var tournament = await _context.Tournaments
-                .Where(t => t.CreatedByUserEmail == userEmail)
-                .FirstOrDefaultAsync(t => t.Id == tournamentId);
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
+                .FirstOrDefaultAsync();
 
             if (tournament == null)
                 return NotFound(new { message = "Tournament not found" });
@@ -2010,11 +2010,11 @@ public class TournamentMatchResultAdminResponse
     public int MapId { get; set; }
     public string RoundId { get; set; } = "";
     public string? Week { get; set; }
-    public int Team1Id { get; set; }
+    public int? Team1Id { get; set; }
     public string? Team1Name { get; set; }
-    public int Team2Id { get; set; }
+    public int? Team2Id { get; set; }
     public string? Team2Name { get; set; }
-    public int WinningTeamId { get; set; }
+    public int? WinningTeamId { get; set; }
     public string? WinningTeamName { get; set; }
     public int Team1Tickets { get; set; }
     public int Team2Tickets { get; set; }
