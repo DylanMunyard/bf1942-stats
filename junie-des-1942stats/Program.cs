@@ -11,6 +11,7 @@ using junie_des_1942stats.ClickHouse.Interfaces;
 using junie_des_1942stats.ClickHouse.Base;
 using junie_des_1942stats.Caching;
 using junie_des_1942stats.Services;
+using junie_des_1942stats.Services.Tournament;
 using Serilog;
 using Serilog.Enrichers.Span;
 using Microsoft.Extensions.Logging;
@@ -400,6 +401,11 @@ try
 
     // Register markdown sanitization service for tournament rules
     builder.Services.AddScoped<IMarkdownSanitizationService, MarkdownSanitizationService>();
+
+    // Register tournament leaderboard services
+    builder.Services.AddScoped<ITeamMappingService, TeamMappingService>();
+    builder.Services.AddScoped<ITeamRankingCalculator, TeamRankingCalculator>();
+    builder.Services.AddScoped<ITournamentMatchResultService, TournamentMatchResultService>();
 
     // Register the ServerStatsService and supporting services
     builder.Services.AddScoped<ServerStatsService>();

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using junie_des_1942stats.PlayerTracking;
 using junie_des_1942stats.Services;
+using junie_des_1942stats.Services.Tournament;
 using Microsoft.Extensions.Logging;
 using NodaTime;
 using Markdig;
@@ -17,15 +18,21 @@ public class AdminTournamentController : ControllerBase
     private readonly PlayerTrackerDbContext _context;
     private readonly ILogger<AdminTournamentController> _logger;
     private readonly IMarkdownSanitizationService _markdownSanitizer;
+    private readonly ITournamentMatchResultService _matchResultService;
+    private readonly ITeamRankingCalculator _rankingCalculator;
 
     public AdminTournamentController(
         PlayerTrackerDbContext context,
         ILogger<AdminTournamentController> logger,
-        IMarkdownSanitizationService markdownSanitizer)
+        IMarkdownSanitizationService markdownSanitizer,
+        ITournamentMatchResultService matchResultService,
+        ITeamRankingCalculator rankingCalculator)
     {
         _context = context;
         _logger = logger;
         _markdownSanitizer = markdownSanitizer;
+        _matchResultService = matchResultService;
+        _rankingCalculator = rankingCalculator;
     }
 
     /// <summary>
@@ -1367,6 +1374,7 @@ public class AdminTournamentController : ControllerBase
 
     /// <summary>
     /// Update a tournament match map (e.g., link a round to a map)
+    /// When a RoundId is assigned, automatically creates/updates the match result with team mapping
     /// </summary>
     [HttpPut("{tournamentId}/matches/{matchId}/maps/{mapId}")]
     [Authorize]
@@ -1383,11 +1391,11 @@ public class AdminTournamentController : ControllerBase
                 return Unauthorized(new { message = "User email not found in token" });
 
             // Verify the match belongs to this tournament and user owns it
-            var matchExists = await _context.TournamentMatches
+            var match = await _context.TournamentMatches
                 .Where(tm => tm.Id == matchId && tm.TournamentId == tournamentId && tm.Tournament.CreatedByUserEmail == userEmail)
-                .AnyAsync();
+                .FirstOrDefaultAsync();
 
-            if (!matchExists)
+            if (match == null)
                 return NotFound(new { message = "Match not found" });
 
             var map = await _context.TournamentMatchMaps
@@ -1400,6 +1408,8 @@ public class AdminTournamentController : ControllerBase
             if (!string.IsNullOrWhiteSpace(request.MapName))
                 map.MapName = request.MapName;
 
+            string? teamMappingWarning = null;
+
             // Handle RoundId updates
             if (request.UpdateRoundId)
             {
@@ -1410,6 +1420,49 @@ public class AdminTournamentController : ControllerBase
                         return BadRequest(new { message = $"Round '{request.RoundId}' not found" });
 
                     map.RoundId = request.RoundId;
+
+                    // Create/update match result with team mapping
+                    _logger.LogInformation(
+                        "Processing match result for tournament {TournamentId}, match {MatchId}, map {MapId}, round {RoundId}",
+                        tournamentId, matchId, mapId, request.RoundId);
+
+                    var (resultId, warning) = await _matchResultService.CreateOrUpdateMatchResultAsync(
+                        tournamentId, matchId, mapId, request.RoundId);
+
+                    if (warning != null)
+                    {
+                        teamMappingWarning = warning;
+                        _logger.LogWarning(
+                            "Team mapping warning for tournament {TournamentId}, match {MatchId}: {Warning}",
+                            tournamentId, matchId, warning);
+                    }
+                    else
+                    {
+                        _logger.LogInformation(
+                            "Match result created/updated with ID {ResultId} for tournament {TournamentId}, match {MatchId}",
+                            resultId, tournamentId, matchId);
+
+                        // Trigger ranking recalculation asynchronously
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                _logger.LogInformation(
+                                    "Starting async ranking recalculation for tournament {TournamentId}",
+                                    tournamentId);
+                                await _rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
+                                _logger.LogInformation(
+                                    "Completed async ranking recalculation for tournament {TournamentId}",
+                                    tournamentId);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex,
+                                    "Error during async ranking recalculation for tournament {TournamentId}",
+                                    tournamentId);
+                            }
+                        });
+                    }
                 }
                 else
                 {
@@ -1458,7 +1511,9 @@ public class AdminTournamentController : ControllerBase
                 })
                 .FirstAsync();
 
-            return Ok(response);
+            // Include warning in response if team mapping had issues
+            var result = new { response, teamMappingWarning };
+            return Ok(result);
         }
         catch (Exception ex)
         {
@@ -1497,6 +1552,246 @@ public class AdminTournamentController : ControllerBase
         {
             _logger.LogError(ex, "Error deleting match {MatchId} for tournament {TournamentId}", matchId, tournamentId);
             return StatusCode(500, new { message = "Error deleting match" });
+        }
+    }
+
+    // ===== TOURNAMENT LEADERBOARD ENDPOINTS =====
+
+    /// <summary>
+    /// Get leaderboard rankings for a tournament (week-specific or cumulative)
+    /// </summary>
+    [HttpGet("{tournamentId}/leaderboard")]
+    [Authorize]
+    public async Task<ActionResult<List<TournamentTeamRankingResponse>>> GetLeaderboard(
+        int tournamentId,
+        string? week = null)
+    {
+        try
+        {
+            // Verify tournament belongs to user
+            var tournament = await _context.Tournaments
+                .Where(t => t.CreatedByUserEmail == User.FindFirstValue(ClaimTypes.Email) && t.Id == tournamentId)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            // Get rankings from database - Week == week OR (Week == null AND week == null) for cumulative
+            var rankings = await _context.TournamentTeamRankings
+                .Where(r => r.TournamentId == tournamentId && r.Week == week)
+                .OrderBy(r => r.Rank)
+                .Select(r => new TournamentTeamRankingResponse
+                {
+                    Rank = r.Rank,
+                    TeamId = r.TeamId,
+                    TeamName = r.Team.Name,
+                    RoundsWon = r.RoundsWon,
+                    RoundsTied = r.RoundsTied,
+                    RoundsLost = r.RoundsLost,
+                    TicketDifferential = r.TicketDifferential,
+                    Week = r.Week
+                })
+                .ToListAsync();
+
+            return Ok(rankings);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting leaderboard for tournament {TournamentId}, week {Week}", tournamentId, week);
+            return StatusCode(500, new { message = "Error retrieving leaderboard" });
+        }
+    }
+
+    /// <summary>
+    /// Override team mapping for a match result (admin manual correction)
+    /// </summary>
+    [HttpPut("{tournamentId}/match-results/{resultId}/override-teams")]
+    [Authorize]
+    public async Task<ActionResult<TournamentMatchResultAdminResponse>> OverrideTeamMapping(
+        int tournamentId,
+        int resultId,
+        [FromBody] OverrideTeamMappingRequest request)
+    {
+        try
+        {
+            // Verify tournament belongs to user
+            var tournament = await _context.Tournaments
+                .Where(t => t.CreatedByUserEmail == User.FindFirstValue(ClaimTypes.Email) && t.Id == tournamentId)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            // Get result and verify it belongs to the tournament
+            var result = await _context.TournamentMatchResults
+                .FirstOrDefaultAsync(r => r.Id == resultId && r.TournamentId == tournamentId);
+
+            if (result == null)
+                return NotFound(new { message = "Match result not found" });
+
+            // Validate team assignments
+            if (request.Team1Id <= 0 || request.Team2Id <= 0)
+                return BadRequest(new { message = "Both Team1Id and Team2Id must be provided and greater than 0" });
+
+            if (request.Team1Id == request.Team2Id)
+                return BadRequest(new { message = "Team1Id and Team2Id cannot be the same" });
+
+            _logger.LogInformation(
+                "Overriding team mapping for match result {ResultId} in tournament {TournamentId}",
+                resultId, tournamentId);
+
+            // Use service to override
+            await _matchResultService.OverrideTeamMappingAsync(resultId, request.Team1Id, request.Team2Id);
+
+            // Trigger ranking recalculation asynchronously
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    _logger.LogInformation(
+                        "Starting async ranking recalculation after team override for tournament {TournamentId}",
+                        tournamentId);
+                    await _rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
+                    _logger.LogInformation(
+                        "Completed async ranking recalculation after team override for tournament {TournamentId}",
+                        tournamentId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Error during async ranking recalculation for tournament {TournamentId}",
+                        tournamentId);
+                }
+            });
+
+            // Return updated result
+            var updatedResult = await _matchResultService.GetMatchResultAsync(resultId);
+            var response = new TournamentMatchResultAdminResponse
+            {
+                Id = updatedResult!.Id,
+                TournamentId = updatedResult.TournamentId,
+                MatchId = updatedResult.MatchId,
+                MapId = updatedResult.MapId,
+                RoundId = updatedResult.RoundId,
+                Week = updatedResult.Week,
+                Team1Id = updatedResult.Team1Id,
+                Team1Name = updatedResult.Team1?.Name,
+                Team2Id = updatedResult.Team2Id,
+                Team2Name = updatedResult.Team2?.Name,
+                WinningTeamId = updatedResult.WinningTeamId,
+                WinningTeamName = updatedResult.WinningTeam?.Name,
+                Team1Tickets = updatedResult.Team1Tickets,
+                Team2Tickets = updatedResult.Team2Tickets,
+                UpdatedAt = updatedResult.UpdatedAt
+            };
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error overriding team mapping for result {ResultId}", resultId);
+            return StatusCode(500, new { message = "Error overriding team mapping" });
+        }
+    }
+
+    /// <summary>
+    /// Delete a match result
+    /// </summary>
+    [HttpDelete("{tournamentId}/match-results/{resultId}")]
+    [Authorize]
+    public async Task<IActionResult> DeleteMatchResult(int tournamentId, int resultId)
+    {
+        try
+        {
+            // Verify tournament belongs to user
+            var tournament = await _context.Tournaments
+                .Where(t => t.CreatedByUserEmail == User.FindFirstValue(ClaimTypes.Email) && t.Id == tournamentId)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            // Get result and verify it belongs to the tournament
+            var result = await _context.TournamentMatchResults
+                .FirstOrDefaultAsync(r => r.Id == resultId && r.TournamentId == tournamentId);
+
+            if (result == null)
+                return NotFound(new { message = "Match result not found" });
+
+            _logger.LogInformation(
+                "Deleting match result {ResultId} from tournament {TournamentId}",
+                resultId, tournamentId);
+
+            await _matchResultService.DeleteMatchResultAsync(resultId);
+
+            // Trigger ranking recalculation asynchronously
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    _logger.LogInformation(
+                        "Starting async ranking recalculation after result deletion for tournament {TournamentId}",
+                        tournamentId);
+                    await _rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
+                    _logger.LogInformation(
+                        "Completed async ranking recalculation after result deletion for tournament {TournamentId}",
+                        tournamentId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Error during async ranking recalculation for tournament {TournamentId}",
+                        tournamentId);
+                }
+            });
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting match result {ResultId}", resultId);
+            return StatusCode(500, new { message = "Error deleting match result" });
+        }
+    }
+
+    /// <summary>
+    /// Manually trigger ranking recalculation for a tournament
+    /// </summary>
+    [HttpPost("{tournamentId}/leaderboard/recalculate")]
+    [Authorize]
+    public async Task<ActionResult<RecalculateRankingsResponse>> RecalculateRankings(int tournamentId)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            // Verify tournament belongs to user
+            var tournament = await _context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            _logger.LogInformation(
+                "Manual ranking recalculation triggered for tournament {TournamentId}",
+                tournamentId);
+
+            var totalUpdated = await _rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
+
+            return Ok(new RecalculateRankingsResponse
+            {
+                TournamentId = tournamentId,
+                TotalRankingsUpdated = totalUpdated,
+                UpdatedAt = SystemClock.Instance.GetCurrentInstant()
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error recalculating rankings for tournament {TournamentId}", tournamentId);
+            return StatusCode(500, new { message = "Error recalculating rankings" });
         }
     }
 }
@@ -1686,4 +1981,49 @@ public class TournamentRoundResponse
     public int? Tickets2 { get; set; }
     public string? Team1Label { get; set; }
     public string? Team2Label { get; set; }
+}
+
+// Leaderboard DTOs
+public class TournamentTeamRankingResponse
+{
+    public int Rank { get; set; }
+    public int TeamId { get; set; }
+    public string TeamName { get; set; } = "";
+    public int RoundsWon { get; set; }
+    public int RoundsTied { get; set; }
+    public int RoundsLost { get; set; }
+    public int TicketDifferential { get; set; }
+    public string? Week { get; set; }
+}
+
+public class OverrideTeamMappingRequest
+{
+    public int Team1Id { get; set; }
+    public int Team2Id { get; set; }
+}
+
+public class TournamentMatchResultAdminResponse
+{
+    public int Id { get; set; }
+    public int TournamentId { get; set; }
+    public int MatchId { get; set; }
+    public int MapId { get; set; }
+    public string RoundId { get; set; } = "";
+    public string? Week { get; set; }
+    public int Team1Id { get; set; }
+    public string? Team1Name { get; set; }
+    public int Team2Id { get; set; }
+    public string? Team2Name { get; set; }
+    public int WinningTeamId { get; set; }
+    public string? WinningTeamName { get; set; }
+    public int Team1Tickets { get; set; }
+    public int Team2Tickets { get; set; }
+    public Instant UpdatedAt { get; set; }
+}
+
+public class RecalculateRankingsResponse
+{
+    public int TournamentId { get; set; }
+    public int TotalRankingsUpdated { get; set; }
+    public Instant UpdatedAt { get; set; }
 }

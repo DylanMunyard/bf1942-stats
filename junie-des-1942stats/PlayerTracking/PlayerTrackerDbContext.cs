@@ -23,6 +23,8 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<TournamentTeamPlayer> TournamentTeamPlayers { get; set; }
     public DbSet<TournamentMatch> TournamentMatches { get; set; }
     public DbSet<TournamentMatchMap> TournamentMatchMaps { get; set; }
+    public DbSet<TournamentMatchResult> TournamentMatchResults { get; set; }
+    public DbSet<TournamentTeamRanking> TournamentTeamRankings { get; set; }
 
     public PlayerTrackerDbContext(DbContextOptions<PlayerTrackerDbContext> options)
         : base(options)
@@ -453,6 +455,121 @@ public class PlayerTrackerDbContext : DbContext
             .HasPrincipalKey(r => r.RoundId)
             .OnDelete(DeleteBehavior.SetNull)
             .IsRequired(false);
+
+        // Configure TournamentMatchResult entity
+        modelBuilder.Entity<TournamentMatchResult>()
+            .HasKey(tmr => tmr.Id);
+
+        modelBuilder.Entity<TournamentMatchResult>()
+            .HasIndex(tmr => tmr.TournamentId);
+
+        modelBuilder.Entity<TournamentMatchResult>()
+            .HasIndex(tmr => new { tmr.TournamentId, tmr.Week });
+
+        modelBuilder.Entity<TournamentMatchResult>()
+            .HasIndex(tmr => tmr.MatchId);
+
+        modelBuilder.Entity<TournamentMatchResult>()
+            .HasIndex(tmr => tmr.RoundId);
+
+        // Configure NodaTime Instant conversions for TournamentMatchResult
+        modelBuilder.Entity<TournamentMatchResult>()
+            .Property(tmr => tmr.CreatedAt)
+            .HasConversion(
+                instant => instant.ToString(),
+                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+
+        modelBuilder.Entity<TournamentMatchResult>()
+            .Property(tmr => tmr.UpdatedAt)
+            .HasConversion(
+                instant => instant.ToString(),
+                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+
+        // Configure relationship: TournamentMatchResult -> Tournament
+        modelBuilder.Entity<TournamentMatchResult>()
+            .HasOne(tmr => tmr.Tournament)
+            .WithMany()
+            .HasForeignKey(tmr => tmr.TournamentId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Configure relationship: TournamentMatchResult -> TournamentMatch
+        modelBuilder.Entity<TournamentMatchResult>()
+            .HasOne(tmr => tmr.Match)
+            .WithMany()
+            .HasForeignKey(tmr => tmr.MatchId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Configure relationship: TournamentMatchResult -> TournamentMatchMap
+        modelBuilder.Entity<TournamentMatchResult>()
+            .HasOne(tmr => tmr.Map)
+            .WithMany()
+            .HasForeignKey(tmr => tmr.MapId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Configure relationship: TournamentMatchResult -> Round
+        modelBuilder.Entity<TournamentMatchResult>()
+            .HasOne(tmr => tmr.Round)
+            .WithMany()
+            .HasForeignKey(tmr => tmr.RoundId)
+            .HasPrincipalKey(r => r.RoundId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Configure relationship: TournamentMatchResult -> Team1
+        modelBuilder.Entity<TournamentMatchResult>()
+            .HasOne(tmr => tmr.Team1)
+            .WithMany()
+            .HasForeignKey(tmr => tmr.Team1Id)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Configure relationship: TournamentMatchResult -> Team2
+        modelBuilder.Entity<TournamentMatchResult>()
+            .HasOne(tmr => tmr.Team2)
+            .WithMany()
+            .HasForeignKey(tmr => tmr.Team2Id)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Configure relationship: TournamentMatchResult -> WinningTeam
+        modelBuilder.Entity<TournamentMatchResult>()
+            .HasOne(tmr => tmr.WinningTeam)
+            .WithMany()
+            .HasForeignKey(tmr => tmr.WinningTeamId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Configure TournamentTeamRanking entity
+        modelBuilder.Entity<TournamentTeamRanking>()
+            .HasKey(ttr => ttr.Id);
+
+        modelBuilder.Entity<TournamentTeamRanking>()
+            .HasIndex(ttr => ttr.TournamentId);
+
+        modelBuilder.Entity<TournamentTeamRanking>()
+            .HasIndex(ttr => new { ttr.TournamentId, ttr.Week });
+
+        // Composite unique index on (TournamentId, TeamId, Week)
+        modelBuilder.Entity<TournamentTeamRanking>()
+            .HasIndex(ttr => new { ttr.TournamentId, ttr.TeamId, ttr.Week })
+            .IsUnique();
+
+        // Configure NodaTime Instant conversion for TournamentTeamRanking
+        modelBuilder.Entity<TournamentTeamRanking>()
+            .Property(ttr => ttr.UpdatedAt)
+            .HasConversion(
+                instant => instant.ToString(),
+                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+
+        // Configure relationship: TournamentTeamRanking -> Tournament
+        modelBuilder.Entity<TournamentTeamRanking>()
+            .HasOne(ttr => ttr.Tournament)
+            .WithMany()
+            .HasForeignKey(ttr => ttr.TournamentId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Configure relationship: TournamentTeamRanking -> TournamentTeam
+        modelBuilder.Entity<TournamentTeamRanking>()
+            .HasOne(ttr => ttr.Team)
+            .WithMany()
+            .HasForeignKey(ttr => ttr.TeamId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }
 
@@ -723,35 +840,6 @@ public class TournamentTeam
     public List<TournamentTeamPlayer> TeamPlayers { get; set; } = [];
 }
 
-public class TournamentTeamPlayer
-{
-    public int Id { get; set; }
-    public int TournamentTeamId { get; set; }
-    public string PlayerName { get; set; } = ""; // References Player.Name
-
-    // Navigation properties
-    public TournamentTeam TournamentTeam { get; set; } = null!;
-    public Player Player { get; set; } = null!;
-}
-
-public class TournamentMatchMap
-{
-    public int Id { get; set; }
-    public int MatchId { get; set; }
-    public string MapName { get; set; } = "";
-    public int MapOrder { get; set; } // Sequence order for maps in the match (0-based). Note: MapName is NOT unique - same map can appear multiple times with different MapOrder values
-
-    // Link to completed round - set after the round completes
-    public string? RoundId { get; set; }
-
-    // Optional: Team that chose/assigned this map
-    public int? TeamId { get; set; }
-
-    // Navigation properties
-    public TournamentMatch Match { get; set; } = null!;
-    public Round? Round { get; set; }
-    public TournamentTeam? Team { get; set; }
-}
 
 public class TournamentMatch
 {
@@ -776,4 +864,90 @@ public class TournamentMatch
     public TournamentTeam Team2 { get; set; } = null!;
     public GameServer? Server { get; set; }
     public List<TournamentMatchMap> Maps { get; set; } = [];
+}
+
+public class TournamentMatchMap
+{
+    public int Id { get; set; }
+    public int MatchId { get; set; }
+    public string MapName { get; set; } = "";
+    public int MapOrder { get; set; } // Sequence order for maps in the match (0-based). Note: MapName is NOT unique - same map can appear multiple times with different MapOrder values
+
+    // Link to completed round - set after the round completes
+    public string? RoundId { get; set; }
+
+    // Optional: Team that chose/assigned this map
+    public int? TeamId { get; set; }
+
+    // Navigation properties
+    public TournamentMatch Match { get; set; } = null!;
+    public Round? Round { get; set; }
+    public TournamentTeam? Team { get; set; }
+}
+
+public class TournamentTeamPlayer
+{
+    public int Id { get; set; }
+    public int TournamentTeamId { get; set; }
+    public string PlayerName { get; set; } = ""; // References Player.Name
+
+    // Navigation properties
+    public TournamentTeam TournamentTeam { get; set; } = null!;
+    public Player Player { get; set; } = null!;
+}
+
+public class TournamentMatchResult
+{
+    public int Id { get; set; }
+    public int TournamentId { get; set; }
+    public int MatchId { get; set; }
+    public int MapId { get; set; }
+    public string RoundId { get; set; } = "";
+    public string? Week { get; set; } // Denormalized from TournamentMatch.Week
+
+    // Tournament teams mapped to this round's Team1/Team2
+    public int Team1Id { get; set; }
+    public int Team2Id { get; set; }
+    public int WinningTeamId { get; set; }
+
+    // Ticket information from Round
+    public int Team1Tickets { get; set; }
+    public int Team2Tickets { get; set; }
+
+    // Timestamps
+    public Instant CreatedAt { get; set; }
+    public Instant UpdatedAt { get; set; }
+
+    // Navigation properties
+    public Tournament Tournament { get; set; } = null!;
+    public TournamentMatch Match { get; set; } = null!;
+    public TournamentMatchMap Map { get; set; } = null!;
+    public Round Round { get; set; } = null!;
+    public TournamentTeam Team1 { get; set; } = null!;
+    public TournamentTeam Team2 { get; set; } = null!;
+    public TournamentTeam WinningTeam { get; set; } = null!;
+}
+
+public class TournamentTeamRanking
+{
+    public int Id { get; set; }
+    public int TournamentId { get; set; }
+    public int TeamId { get; set; }
+    public string? Week { get; set; } // NULL = cumulative across all weeks
+
+    // Aggregated statistics
+    public int RoundsWon { get; set; }
+    public int RoundsTied { get; set; }
+    public int RoundsLost { get; set; }
+    public int TicketDifferential { get; set; }
+
+    // Calculated position in standings
+    public int Rank { get; set; }
+
+    // Timestamp
+    public Instant UpdatedAt { get; set; }
+
+    // Navigation properties
+    public Tournament Tournament { get; set; } = null!;
+    public TournamentTeam Team { get; set; } = null!;
 }

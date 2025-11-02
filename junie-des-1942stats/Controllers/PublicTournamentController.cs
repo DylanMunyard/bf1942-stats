@@ -367,6 +367,71 @@ public class PublicTournamentController : ControllerBase
             return StatusCode(500, new { message = "Error retrieving tournament logo" });
         }
     }
+
+    /// <summary>
+    /// Get leaderboard rankings for a tournament (public, no auth required)
+    /// Optional week parameter defaults to cumulative standings if not specified
+    /// </summary>
+    [HttpGet("{idOrName}/leaderboard")]
+    public async Task<ActionResult<PublicTournamentLeaderboardResponse>> GetLeaderboard(
+        string idOrName,
+        string? week = null)
+    {
+        try
+        {
+            Tournament? tournament;
+
+            // Try to parse as integer first (ID lookup)
+            if (int.TryParse(idOrName, out int id))
+            {
+                tournament = await _context.Tournaments
+                    .FirstOrDefaultAsync(t => t.Id == id);
+            }
+            else
+            {
+                // If not a number, search by name
+                tournament = await _context.Tournaments
+                    .FirstOrDefaultAsync(t => t.Name == idOrName);
+            }
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            // Get rankings for this tournament and week
+            // If week is null, returns cumulative standings (Week == null)
+            // If week is specified, returns week-specific standings
+            var rankings = await _context.TournamentTeamRankings
+                .Where(r => r.TournamentId == tournament.Id && r.Week == week)
+                .OrderBy(r => r.Rank)
+                .Select(r => new PublicTeamRankingResponse
+                {
+                    Rank = r.Rank,
+                    TeamId = r.TeamId,
+                    TeamName = r.Team.Name,
+                    RoundsWon = r.RoundsWon,
+                    RoundsTied = r.RoundsTied,
+                    RoundsLost = r.RoundsLost,
+                    TicketDifferential = r.TicketDifferential,
+                    TotalRounds = r.RoundsWon + r.RoundsTied + r.RoundsLost
+                })
+                .ToListAsync();
+
+            var response = new PublicTournamentLeaderboardResponse
+            {
+                TournamentId = tournament.Id,
+                TournamentName = tournament.Name,
+                Week = week,
+                Rankings = rankings
+            };
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting leaderboard for tournament {TournamentId}, week {Week}", idOrName, week);
+            return StatusCode(500, new { message = "Error retrieving leaderboard" });
+        }
+    }
 }
 
 // Response DTOs for public endpoints
@@ -458,4 +523,24 @@ public class PublicRoundPlayerResponse
     public int TotalDeaths { get; set; }
     public int Team { get; set; }
     public string TeamLabel { get; set; } = "";
+}
+
+public class PublicTournamentLeaderboardResponse
+{
+    public int TournamentId { get; set; }
+    public string TournamentName { get; set; } = "";
+    public string? Week { get; set; }
+    public List<PublicTeamRankingResponse> Rankings { get; set; } = [];
+}
+
+public class PublicTeamRankingResponse
+{
+    public int Rank { get; set; }
+    public int TeamId { get; set; }
+    public string TeamName { get; set; } = "";
+    public int RoundsWon { get; set; }
+    public int RoundsTied { get; set; }
+    public int RoundsLost { get; set; }
+    public int TicketDifferential { get; set; }
+    public int TotalRounds { get; set; }
 }
