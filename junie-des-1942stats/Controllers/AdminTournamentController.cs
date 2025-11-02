@@ -213,10 +213,8 @@ public class AdminTournamentController : ControllerBase
                 AnticipatedRoundCount = tournament.AnticipatedRoundCount,
                 Teams = teams,
                 MatchesByWeek = matchesByWeek,
-                HeroImageBase64 = tournament.HeroImage != null ? Convert.ToBase64String(tournament.HeroImage) : null,
-                HeroImageContentType = tournament.HeroImageContentType,
-                CommunityLogoBase64 = tournament.CommunityLogo != null ? Convert.ToBase64String(tournament.CommunityLogo) : null,
-                CommunityLogoContentType = tournament.CommunityLogoContentType,
+                HasHeroImage = tournament.HeroImage != null,
+                HasCommunityLogo = tournament.CommunityLogo != null,
                 Rules = tournament.Rules,
                 ServerGuid = tournament.ServerGuid,
                 ServerName = tournament.Server?.Name,
@@ -590,6 +588,38 @@ public class AdminTournamentController : ControllerBase
         return await _context.Users.FirstOrDefaultAsync(u => u.Id == id);
     }
 
+    /// <summary>
+    /// Cleanup orphaned match results - removes MatchResults whose maps no longer exist
+    /// This handles cases where cascade delete didn't work properly in previous versions
+    /// </summary>
+    private async Task<int> CleanupOrphanedMatchResultsAsync(int tournamentId)
+    {
+        // Find all MatchResults in this tournament that reference non-existent maps
+        var orphanedResults = await _context.TournamentMatchResults
+            .Where(mr => mr.TournamentId == tournamentId)
+            .Where(mr => !_context.TournamentMatchMaps.Any(m => m.Id == mr.MapId))
+            .ToListAsync();
+
+        if (orphanedResults.Count > 0)
+        {
+            _logger.LogWarning(
+                "Found {Count} orphaned match results in tournament {TournamentId}. Cleaning up...",
+                orphanedResults.Count, tournamentId);
+
+            foreach (var result in orphanedResults)
+            {
+                _logger.LogInformation(
+                    "Deleting orphaned match result {ResultId} (referenced non-existent map {MapId})",
+                    result.Id, result.MapId);
+                _context.TournamentMatchResults.Remove(result);
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
+        return orphanedResults.Count;
+    }
+
     private (byte[]? imageData, string? error) ValidateAndProcessImage(string? base64Image, string? contentType)
     {
         if (string.IsNullOrWhiteSpace(base64Image))
@@ -717,10 +747,8 @@ public class AdminTournamentController : ControllerBase
             AnticipatedRoundCount = tournament.AnticipatedRoundCount,
             Teams = teams,
             MatchesByWeek = matchesByWeek,
-            HeroImageBase64 = tournament.HeroImage != null ? Convert.ToBase64String(tournament.HeroImage) : null,
-            HeroImageContentType = tournament.HeroImageContentType,
-            CommunityLogoBase64 = tournament.CommunityLogo != null ? Convert.ToBase64String(tournament.CommunityLogo) : null,
-            CommunityLogoContentType = tournament.CommunityLogoContentType,
+            HasHeroImage = tournament.HeroImage != null,
+            HasCommunityLogo = tournament.CommunityLogo != null,
             Rules = tournament.Rules,
             ServerGuid = tournament.ServerGuid,
             ServerName = tournament.Server?.Name,
@@ -1340,28 +1368,71 @@ public class AdminTournamentController : ControllerBase
                 if (request.MapNames.Any(string.IsNullOrWhiteSpace))
                     return BadRequest(new { message = "All map names must be non-empty" });
 
-                // Load existing maps and create a lookup by map name to preserve RoundIds
+                // Load existing maps WITH their MatchResults to ensure cascade delete works
                 var existingMaps = await _context.TournamentMatchMaps
+                    .Include(m => m.MatchResult)
                     .Where(tmm => tmm.MatchId == matchId)
                     .ToListAsync();
 
-                // Build a dictionary of MapName -> RoundId from existing maps
-                var mapNameToRoundId = existingMaps
-                    .ToDictionary(m => m.MapName, m => m.RoundId);
+                // Build a dictionary of MapName -> (RoundId, MapId) from existing maps
+                var mapNameToData = existingMaps
+                    .ToDictionary(m => m.MapName, m => new { m.RoundId, m.Id });
 
-                // Remove all existing maps
-                _context.TournamentMatchMaps.RemoveRange(existingMaps);
+                // Identify which maps are being removed vs kept
+                var mapsToRemove = existingMaps
+                    .Where(m => !request.MapNames.Contains(m.MapName))
+                    .ToList();
 
-                // Add new maps, preserving RoundId if the map name exists in the old set
-                var newMaps = request.MapNames.Select((mapName, index) => new TournamentMatchMap
+                var mapsToKeep = existingMaps
+                    .Where(m => request.MapNames.Contains(m.MapName))
+                    .ToList();
+
+                // Explicitly delete MatchResults for removed maps (ensures proper cleanup)
+                foreach (var mapToRemove in mapsToRemove)
                 {
-                    MatchId = matchId,
-                    MapName = mapName,
-                    MapOrder = index,
-                    RoundId = mapNameToRoundId.GetValueOrDefault(mapName) // Preserve RoundId if map name existed before
-                }).ToList();
+                    if (mapToRemove.MatchResult != null)
+                    {
+                        _logger.LogInformation(
+                            "Deleting orphaned match result {ResultId} when removing map {MapId} from match {MatchId}",
+                            mapToRemove.MatchResult.Id, mapToRemove.Id, matchId);
+                        _context.TournamentMatchResults.Remove(mapToRemove.MatchResult);
+                    }
+                    _context.TournamentMatchMaps.Remove(mapToRemove);
+                }
 
-                _context.TournamentMatchMaps.AddRange(newMaps);
+                // Update existing maps that are being kept (preserve RoundId and MatchResult)
+                var newMapOrder = 0;
+                foreach (var mapName in request.MapNames)
+                {
+                    var existingMap = mapsToKeep.FirstOrDefault(m => m.MapName == mapName);
+                    if (existingMap != null)
+                    {
+                        // Update map order only if it changed
+                        if (existingMap.MapOrder != newMapOrder)
+                        {
+                            _logger.LogInformation(
+                                "Updating map order for map {MapId} from {OldOrder} to {NewOrder}",
+                                existingMap.Id, existingMap.MapOrder, newMapOrder);
+                            existingMap.MapOrder = newMapOrder;
+                        }
+                    }
+                    else
+                    {
+                        // This is a new map - add it without a RoundId (user can link round later)
+                        var newMap = new TournamentMatchMap
+                        {
+                            MatchId = matchId,
+                            MapName = mapName,
+                            MapOrder = newMapOrder,
+                            RoundId = null // New maps don't have rounds until explicitly linked
+                        };
+                        _logger.LogInformation(
+                            "Adding new map '{MapName}' at order {MapOrder} to match {MatchId}",
+                            mapName, newMapOrder, matchId);
+                        _context.TournamentMatchMaps.Add(newMap);
+                    }
+                    newMapOrder++;
+                }
             }
 
             await _context.SaveChangesAsync();
@@ -1899,6 +1970,59 @@ public class AdminTournamentController : ControllerBase
             return StatusCode(500, new { message = "Error recalculating rankings" });
         }
     }
+
+    /// <summary>
+    /// Cleanup orphaned match results for a tournament
+    /// This removes MatchResult records whose maps no longer exist
+    /// Useful for fixing data consistency issues from previous versions
+    /// </summary>
+    [HttpPost("{tournamentId}/maintenance/cleanup-orphaned-results")]
+    [Authorize]
+    public async Task<ActionResult<CleanupOrphanedResultsResponse>> CleanupOrphanedResults(int tournamentId)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            // Verify tournament belongs to user
+            var tournament = await _context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            _logger.LogInformation(
+                "Manual cleanup of orphaned match results triggered for tournament {TournamentId}",
+                tournamentId);
+
+            var orphanedCount = await CleanupOrphanedMatchResultsAsync(tournamentId);
+
+            if (orphanedCount > 0)
+            {
+                _logger.LogInformation(
+                    "Cleaned up {Count} orphaned match results from tournament {TournamentId}. Recalculating rankings...",
+                    orphanedCount, tournamentId);
+
+                // Recalculate rankings after cleanup
+                await _rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
+            }
+
+            return Ok(new CleanupOrphanedResultsResponse
+            {
+                TournamentId = tournamentId,
+                OrphanedResultsRemoved = orphanedCount,
+                UpdatedAt = SystemClock.Instance.GetCurrentInstant()
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error cleaning up orphaned results for tournament {TournamentId}", tournamentId);
+            return StatusCode(500, new { message = "Error cleaning up orphaned results" });
+        }
+    }
 }
 
 // Request DTOs
@@ -2018,10 +2142,8 @@ public class TournamentDetailResponse
     public int? AnticipatedRoundCount { get; set; }
     public List<TournamentTeamResponse> Teams { get; set; } = [];
     public List<MatchWeekGroup> MatchesByWeek { get; set; } = [];
-    public string? HeroImageBase64 { get; set; }
-    public string? HeroImageContentType { get; set; }
-    public string? CommunityLogoBase64 { get; set; }
-    public string? CommunityLogoContentType { get; set; }
+    public bool HasHeroImage { get; set; }
+    public bool HasCommunityLogo { get; set; }
     public string? Rules { get; set; }
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
@@ -2146,5 +2268,12 @@ public class RecalculateRankingsResponse
 {
     public int TournamentId { get; set; }
     public int TotalRankingsUpdated { get; set; }
+    public Instant UpdatedAt { get; set; }
+}
+
+public class CleanupOrphanedResultsResponse
+{
+    public int TournamentId { get; set; }
+    public int OrphanedResultsRemoved { get; set; }
     public Instant UpdatedAt { get; set; }
 }
