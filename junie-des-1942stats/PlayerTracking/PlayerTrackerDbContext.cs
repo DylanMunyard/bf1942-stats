@@ -502,8 +502,8 @@ public class PlayerTrackerDbContext : DbContext
         // Configure relationship: TournamentMatchResult -> TournamentMatchMap
         modelBuilder.Entity<TournamentMatchResult>()
             .HasOne(tmr => tmr.Map)
-            .WithMany()
-            .HasForeignKey(tmr => tmr.MapId)
+            .WithOne(tmm => tmm.MatchResult)
+            .HasForeignKey<TournamentMatchResult>(tmr => tmr.MapId)
             .OnDelete(DeleteBehavior.Cascade);
 
         // Configure relationship: TournamentMatchResult -> Round
@@ -883,6 +883,7 @@ public class TournamentMatchMap
     public TournamentMatch Match { get; set; } = null!;
     public Round? Round { get; set; }
     public TournamentTeam? Team { get; set; }
+    public TournamentMatchResult? MatchResult { get; set; }
 }
 
 public class TournamentTeamPlayer

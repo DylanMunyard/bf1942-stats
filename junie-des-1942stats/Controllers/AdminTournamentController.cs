@@ -172,6 +172,18 @@ public class AdminTournamentController : ControllerBase
                             Tickets2 = m.Round.Tickets2,
                             Team1Label = m.Round.Team1Label,
                             Team2Label = m.Round.Team2Label
+                        } : null,
+                        MatchResult = m.MatchResult != null ? new TournamentMatchResultResponse
+                        {
+                            Id = m.MatchResult.Id,
+                            Team1Id = m.MatchResult.Team1Id,
+                            Team1Name = m.MatchResult.Team1 != null ? m.MatchResult.Team1.Name : null,
+                            Team2Id = m.MatchResult.Team2Id,
+                            Team2Name = m.MatchResult.Team2 != null ? m.MatchResult.Team2.Name : null,
+                            WinningTeamId = m.MatchResult.WinningTeamId,
+                            WinningTeamName = m.MatchResult.WinningTeam != null ? m.MatchResult.WinningTeam.Name : null,
+                            Team1Tickets = m.MatchResult.Team1Tickets,
+                            Team2Tickets = m.MatchResult.Team2Tickets
                         } : null
                     }).ToList()
                 })
@@ -662,6 +674,18 @@ public class AdminTournamentController : ControllerBase
                         Tickets2 = m.Round.Tickets2,
                         Team1Label = m.Round.Team1Label,
                         Team2Label = m.Round.Team2Label
+                    } : null,
+                    MatchResult = m.MatchResult != null ? new TournamentMatchResultResponse
+                    {
+                        Id = m.MatchResult.Id,
+                        Team1Id = m.MatchResult.Team1Id,
+                        Team1Name = m.MatchResult.Team1 != null ? m.MatchResult.Team1.Name : null,
+                        Team2Id = m.MatchResult.Team2Id,
+                        Team2Name = m.MatchResult.Team2 != null ? m.MatchResult.Team2.Name : null,
+                        WinningTeamId = m.MatchResult.WinningTeamId,
+                        WinningTeamName = m.MatchResult.WinningTeam != null ? m.MatchResult.WinningTeam.Name : null,
+                        Team1Tickets = m.MatchResult.Team1Tickets,
+                        Team2Tickets = m.MatchResult.Team2Tickets
                     } : null
                 }).ToList()
             })
@@ -1195,6 +1219,18 @@ public class AdminTournamentController : ControllerBase
                             Tickets2 = m.Round.Tickets2,
                             Team1Label = m.Round.Team1Label,
                             Team2Label = m.Round.Team2Label
+                        } : null,
+                        MatchResult = m.MatchResult != null ? new TournamentMatchResultResponse
+                        {
+                            Id = m.MatchResult.Id,
+                            Team1Id = m.MatchResult.Team1Id,
+                            Team1Name = m.MatchResult.Team1 != null ? m.MatchResult.Team1.Name : null,
+                            Team2Id = m.MatchResult.Team2Id,
+                            Team2Name = m.MatchResult.Team2 != null ? m.MatchResult.Team2.Name : null,
+                            WinningTeamId = m.MatchResult.WinningTeamId,
+                            WinningTeamName = m.MatchResult.WinningTeam != null ? m.MatchResult.WinningTeam.Name : null,
+                            Team1Tickets = m.MatchResult.Team1Tickets,
+                            Team2Tickets = m.MatchResult.Team2Tickets
                         } : null
                     }).ToList()
                 })
@@ -1354,6 +1390,18 @@ public class AdminTournamentController : ControllerBase
                             Tickets2 = m.Round.Tickets2,
                             Team1Label = m.Round.Team1Label,
                             Team2Label = m.Round.Team2Label
+                        } : null,
+                        MatchResult = m.MatchResult != null ? new TournamentMatchResultResponse
+                        {
+                            Id = m.MatchResult.Id,
+                            Team1Id = m.MatchResult.Team1Id,
+                            Team1Name = m.MatchResult.Team1 != null ? m.MatchResult.Team1.Name : null,
+                            Team2Id = m.MatchResult.Team2Id,
+                            Team2Name = m.MatchResult.Team2 != null ? m.MatchResult.Team2.Name : null,
+                            WinningTeamId = m.MatchResult.WinningTeamId,
+                            WinningTeamName = m.MatchResult.WinningTeam != null ? m.MatchResult.WinningTeam.Name : null,
+                            Team1Tickets = m.MatchResult.Team1Tickets,
+                            Team2Tickets = m.MatchResult.Team2Tickets
                         } : null
                     }).ToList()
                 })
@@ -1507,6 +1555,18 @@ public class AdminTournamentController : ControllerBase
                         Tickets2 = m.Round.Tickets2,
                         Team1Label = m.Round.Team1Label,
                         Team2Label = m.Round.Team2Label
+                    } : null,
+                    MatchResult = m.MatchResult != null ? new TournamentMatchResultResponse
+                    {
+                        Id = m.MatchResult.Id,
+                        Team1Id = m.MatchResult.Team1Id,
+                        Team1Name = m.MatchResult.Team1 != null ? m.MatchResult.Team1.Name : null,
+                        Team2Id = m.MatchResult.Team2Id,
+                        Team2Name = m.MatchResult.Team2 != null ? m.MatchResult.Team2.Name : null,
+                        WinningTeamId = m.MatchResult.WinningTeamId,
+                        WinningTeamName = m.MatchResult.WinningTeam != null ? m.MatchResult.WinningTeam.Name : null,
+                        Team1Tickets = m.MatchResult.Team1Tickets,
+                        Team2Tickets = m.MatchResult.Team2Tickets
                     } : null
                 })
                 .FirstAsync();
@@ -1961,12 +2021,26 @@ public class TournamentMatchMapResponse
     public TournamentRoundResponse? Round { get; set; }
     public int? TeamId { get; set; }
     public string? TeamName { get; set; }
+    public TournamentMatchResultResponse? MatchResult { get; set; }
 }
 
 public class MatchWeekGroup
 {
     public string? Week { get; set; }
     public List<TournamentMatchResponse> Matches { get; set; } = [];
+}
+
+public class TournamentMatchResultResponse
+{
+    public int Id { get; set; }
+    public int? Team1Id { get; set; }
+    public string? Team1Name { get; set; }
+    public int? Team2Id { get; set; }
+    public string? Team2Name { get; set; }
+    public int? WinningTeamId { get; set; }
+    public string? WinningTeamName { get; set; }
+    public int Team1Tickets { get; set; }
+    public int Team2Tickets { get; set; }
 }
 
 public class TournamentRoundResponse
