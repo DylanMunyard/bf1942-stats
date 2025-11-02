@@ -162,12 +162,12 @@ public class TournamentMatchResultService : ITournamentMatchResultService
             result.Team2Id = team2Id;
 
             // Recalculate winner based on new team assignments and ticket counts
-            int winningTeamId = 0;
+            int? winningTeamId = null;
             if (result.Team1Tickets > result.Team2Tickets)
                 winningTeamId = team1Id;
             else if (result.Team2Tickets > result.Team1Tickets)
                 winningTeamId = team2Id;
-            // If equal, it's a tie (winningTeamId = 0)
+            // If equal, it's a tie (winningTeamId = null)
 
             result.WinningTeamId = winningTeamId;
             result.UpdatedAt = SystemClock.Instance.GetCurrentInstant();
