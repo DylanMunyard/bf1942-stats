@@ -1,0 +1,280 @@
+{
+  "requestSchemas": {
+    "CreateTournamentRequest": {
+      "name": "string",
+      "organizer": "string",
+      "game": "string",
+      "anticipatedRoundCount": "number?",
+      "heroImageBase64": "string?",
+      "heroImageContentType": "string?",
+      "communityLogoBase64": "string?",
+      "communityLogoContentType": "string?",
+      "rules": "string?",
+      "serverGuid": "string?",
+      "discordUrl": "string?",
+      "forumUrl": "string?",
+      "primaryColour": "string? (hex color #RRGGBB or #RRGGBBAA)",
+      "secondaryColour": "string? (hex color #RRGGBB or #RRGGBBAA)"
+    },
+    "UpdateTournamentRequest": {
+      "name": "string?",
+      "organizer": "string?",
+      "game": "string?",
+      "anticipatedRoundCount": "number?",
+      "heroImageBase64": "string?",
+      "heroImageContentType": "string?",
+      "communityLogoBase64": "string?",
+      "communityLogoContentType": "string?",
+      "rules": "string?",
+      "serverGuid": "string?",
+      "discordUrl": "string?",
+      "forumUrl": "string?",
+      "primaryColour": "string? (hex color #RRGGBB or #RRGGBBAA)",
+      "secondaryColour": "string? (hex color #RRGGBB or #RRGGBBAA)"
+    },
+    "UpdateTournamentMatchMapRequest": {
+      "mapId": "number",
+      "mapName": "string?",
+      "roundId": "string?",
+      "updateRoundId": "boolean (default: false)",
+      "teamId": "number?"
+    },
+    "OverrideTeamMappingRequest": {
+      "team1Id": "number",
+      "team2Id": "number"
+    }
+  },
+  "responseSchemas": {
+    "TournamentListResponse": {
+      "id": "number",
+      "name": "string",
+      "organizer": "string",
+      "game": "string",
+      "createdAt": "string (ISO date)",
+      "anticipatedRoundCount": "number?",
+      "matchCount": "number",
+      "teamCount": "number",
+      "hasHeroImage": "boolean",
+      "hasCommunityLogo": "boolean",
+      "hasRules": "boolean",
+      "serverGuid": "string?",
+      "serverName": "string?",
+      "discordUrl": "string?",
+      "forumUrl": "string?",
+      "primaryColour": "string? (hex color)",
+      "secondaryColour": "string? (hex color)"
+    },
+    "TournamentDetailResponse": {
+      "id": "number",
+      "name": "string",
+      "organizer": "string",
+      "game": "string",
+      "createdAt": "string (ISO date)",
+      "anticipatedRoundCount": "number?",
+      "teams": "array of TournamentTeamResponse",
+      "matchesByWeek": "array of MatchWeekGroup",
+      "heroImageBase64": "string?",
+      "heroImageContentType": "string?",
+      "communityLogoBase64": "string?",
+      "communityLogoContentType": "string?",
+      "rules": "string? (HTML sanitized markdown)",
+      "serverGuid": "string?",
+      "serverName": "string?",
+      "discordUrl": "string?",
+      "forumUrl": "string?",
+      "primaryColour": "string? (hex color)",
+      "secondaryColour": "string? (hex color)"
+    },
+    "PublicTournamentDetailResponse": {
+      "id": "number",
+      "name": "string",
+      "organizer": "string",
+      "game": "string",
+      "createdAt": "string (ISO date)",
+      "anticipatedRoundCount": "number?",
+      "teams": "array of PublicTournamentTeamResponse",
+      "matchesByWeek": "array of PublicMatchWeekGroup",
+      "hasHeroImage": "boolean",
+      "hasCommunityLogo": "boolean",
+      "rules": "string? (HTML sanitized markdown)",
+      "serverGuid": "string?",
+      "serverName": "string?",
+      "discordUrl": "string?",
+      "forumUrl": "string?",
+      "primaryColour": "string? (hex color)",
+      "secondaryColour": "string? (hex color)"
+    },
+    "MatchWeekGroup": {
+      "week": "string? (optional week/campaign identifier)",
+      "matches": "array of TournamentMatchResponse"
+    },
+    "PublicMatchWeekGroup": {
+      "week": "string? (optional week/campaign identifier)",
+      "matches": "array of PublicTournamentMatchResponse"
+    },
+    "TournamentMatchResponse": {
+      "id": "number",
+      "scheduledDate": "string (ISO date)",
+      "team1Name": "string",
+      "team2Name": "string",
+      "serverGuid": "string?",
+      "serverName": "string?",
+      "week": "string? (optional week/campaign identifier for ranking)",
+      "createdAt": "string (ISO date)",
+      "maps": "array of TournamentMatchMapResponse"
+    },
+    "PublicTournamentMatchResponse": {
+      "id": "number",
+      "scheduledDate": "string (ISO date)",
+      "team1Name": "string",
+      "team2Name": "string",
+      "serverGuid": "string?",
+      "serverName": "string?",
+      "week": "string? (optional week/campaign identifier for ranking)",
+      "createdAt": "string (ISO date)",
+      "maps": "array of PublicTournamentMatchMapResponse"
+    },
+    "TournamentMatchMapResponse": {
+      "id": "number",
+      "mapName": "string",
+      "mapOrder": "number (0-indexed order of map in match)",
+      "teamId": "number? (optional tournament team assigned to this map)",
+      "teamName": "string? (optional tournament team name)",
+      "matchResults": "array of TournamentMatchResultResponse (results for each time this map was played - can be empty)"
+    },
+    "PublicTournamentMatchMapResponse": {
+      "id": "number",
+      "mapName": "string",
+      "mapOrder": "number (0-indexed order of map in match)",
+      "teamId": "number? (optional tournament team assigned to this map)",
+      "teamName": "string? (optional tournament team name)",
+      "matchResults": "array of PublicTournamentMatchResultResponse (results for each time this map was played - can be empty)"
+    },
+    "PublicTournamentMatchResultResponse": {
+      "id": "number (result record ID)",
+      "team1Id": "number? (tournament team ID mapped to round team 1)",
+      "team1Name": "string? (tournament team name)",
+      "team2Id": "number? (tournament team ID mapped to round team 2)",
+      "team2Name": "string? (tournament team name)",
+      "winningTeamId": "number? (tournament team ID of winner based on tickets)",
+      "winningTeamName": "string? (tournament team name of winner)",
+      "team1Tickets": "number (final tickets from round team 1)",
+      "team2Tickets": "number (final tickets from round team 2)"
+    },
+    "TournamentRoundResponse": {
+      "roundId": "string",
+      "serverGuid": "string",
+      "serverName": "string",
+      "mapName": "string",
+      "startTime": "string (ISO date)",
+      "endTime": "string? (ISO date)",
+      "tickets1": "number? (tickets earned by team 1)",
+      "tickets2": "number? (tickets earned by team 2)",
+      "team1Label": "string? (round team 1 label, e.g. 'Axis')",
+      "team2Label": "string? (round team 2 label, e.g. 'Allied')"
+    },
+    "TournamentMatchResultResponse": {
+      "id": "number (result record ID)",
+      "team1Id": "number? (tournament team ID mapped to round team 1)",
+      "team1Name": "string? (tournament team name)",
+      "team2Id": "number? (tournament team ID mapped to round team 2)",
+      "team2Name": "string? (tournament team name)",
+      "winningTeamId": "number? (tournament team ID of winner)",
+      "winningTeamName": "string? (tournament team name of winner)",
+      "team1Tickets": "number (tickets from round team 1)",
+      "team2Tickets": "number (tickets from round team 2)"
+    },
+    "TournamentTeamResponse": {
+      "id": "number",
+      "name": "string",
+      "createdAt": "string (ISO date)",
+      "players": "array of TournamentTeamPlayerResponse"
+    },
+    "TournamentTeamPlayerResponse": {
+      "playerName": "string"
+    },
+    "TournamentTeamRankingResponse": {
+      "rank": "number",
+      "teamId": "number",
+      "teamName": "string",
+      "roundsWon": "number",
+      "roundsTied": "number",
+      "roundsLost": "number",
+      "ticketDifferential": "number",
+      "week": "string? (null for cumulative, specific week identifier for week-specific)"
+    },
+    "TournamentMatchResultAdminResponse": {
+      "id": "number",
+      "tournamentId": "number",
+      "matchId": "number",
+      "mapId": "number",
+      "roundId": "string",
+      "week": "string?",
+      "team1Id": "number?",
+      "team1Name": "string?",
+      "team2Id": "number?",
+      "team2Name": "string?",
+      "winningTeamId": "number?",
+      "winningTeamName": "string?",
+      "team1Tickets": "number",
+      "team2Tickets": "number",
+      "updatedAt": "string (ISO date)"
+    },
+    "RecalculateRankingsResponse": {
+      "tournamentId": "number",
+      "totalRankingsUpdated": "number",
+      "updatedAt": "string (ISO date)"
+    }
+  },
+  "endpoints": {
+    "Admin Tournament Management": {
+      "GET /stats/admin/tournaments": "Returns TournamentListResponse[]",
+      "GET /stats/admin/tournaments/{id}": "Returns TournamentDetailResponse (includes team mappings in matches)",
+      "POST /stats/admin/tournaments": "Accepts CreateTournamentRequest, returns TournamentDetailResponse",
+      "PUT /stats/admin/tournaments/{id}": "Accepts UpdateTournamentRequest, returns TournamentDetailResponse",
+      "DELETE /stats/admin/tournaments/{id}": "Deletes tournament, returns 204 No Content"
+    },
+    "Admin Team Management": {
+      "POST /stats/admin/tournaments/{tournamentId}/teams": "Accepts CreateTournamentTeamRequest, returns TournamentTeamResponse",
+      "GET /stats/admin/tournaments/{tournamentId}/teams/{teamId}": "Returns TournamentTeamResponse",
+      "PUT /stats/admin/tournaments/{tournamentId}/teams/{teamId}": "Accepts UpdateTournamentTeamRequest, returns TournamentTeamResponse",
+      "DELETE /stats/admin/tournaments/{tournamentId}/teams/{teamId}": "Deletes team, returns 204 No Content",
+      "POST /stats/admin/tournaments/{tournamentId}/teams/{teamId}/players": "Accepts AddPlayerToTeamRequest, returns TournamentTeamResponse",
+      "DELETE /stats/admin/tournaments/{tournamentId}/teams/{teamId}/players/{playerName}": "Removes player from team, returns TournamentTeamResponse"
+    },
+    "Admin Match Management": {
+      "POST /stats/admin/tournaments/{tournamentId}/matches": "Accepts CreateTournamentMatchRequest, returns TournamentMatchResponse",
+      "GET /stats/admin/tournaments/{tournamentId}/matches/{matchId}": "Returns TournamentMatchResponse (includes team mappings)",
+      "PUT /stats/admin/tournaments/{tournamentId}/matches/{matchId}": "Accepts UpdateTournamentMatchRequest, returns TournamentMatchResponse",
+      "DELETE /stats/admin/tournaments/{tournamentId}/matches/{matchId}": "Deletes match, returns 204 No Content",
+      "PUT /stats/admin/tournaments/{tournamentId}/matches/{matchId}/maps/{mapId}": "Accepts UpdateTournamentMatchMapRequest, links round and returns TournamentMatchMapResponse with MatchResults array"
+    },
+    "Admin Match Results & Overrides": {
+      "PUT /stats/admin/tournaments/{tournamentId}/match-results/{resultId}/override-teams": "Accepts OverrideTeamMappingRequest, returns TournamentMatchResultAdminResponse",
+      "DELETE /stats/admin/tournaments/{tournamentId}/match-results/{resultId}": "Deletes match result, returns 204 No Content"
+    },
+    "Admin Leaderboard": {
+      "GET /stats/admin/tournaments/{tournamentId}/leaderboard?week={week}": "Returns TournamentTeamRankingResponse[]",
+      "POST /stats/admin/tournaments/{tournamentId}/leaderboard/recalculate": "Manually triggers ranking recalculation, returns RecalculateRankingsResponse"
+    },
+    "Public Access": {
+      "GET /stats/tournaments/{idOrName}": "Returns PublicTournamentDetailResponse (includes match results with team mappings and scores, no player details)",
+      "GET /stats/tournaments/{idOrName}/leaderboard?week={week}": "Returns PublicTournamentLeaderboardResponse (cumulative or week-specific standings)",
+      "GET /stats/tournaments/{id}/image": "Returns hero image binary",
+      "GET /stats/tournaments/{id}/logo": "Returns community logo binary"
+    },
+    "File Access": {
+      "GET /stats/admin/tournaments/{id}/image": "Returns hero image binary (admin)",
+      "GET /stats/admin/tournaments/{id}/logo": "Returns community logo binary (admin)"
+    }
+  },
+  "keyFeatures": {
+    "multipleRoundResults": "Maps now support multiple match results - the same map can be played multiple times in a tournament with different team assignments and outcomes. Each result can optionally be linked to a specific round (via roundId).",
+    "resultLinking": "Each TournamentMatchResult can be linked to a Round (optional), or manually entered without a round. RoundId in the result can be used to fetch detailed round statistics.",
+    "publicAPI": "Public API returns match results arrays with team mappings and final scores (player stats not included in public API)",
+    "adminAPI": "Admin API has full access to all tournament details including team rosters, detailed match information, and multiple results per map",
+    "overrideCapability": "Admins can override auto-assigned team mappings using PUT .../match-results/{resultId}/override-teams",
+    "rankingCalculation": "Rankings are auto-calculated when match results are created/updated, or can be manually triggered. Accounts for multiple results per map.",
+    "colorCustomization": "Tournaments support primaryColour and secondaryColour as hex values (#RRGGBB or #RRGGBBAA)"
+  }
+}

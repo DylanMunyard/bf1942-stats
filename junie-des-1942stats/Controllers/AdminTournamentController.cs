@@ -1154,10 +1154,10 @@ public class AdminTournamentController : ControllerBase
                 return NotFound(new { message = "Tournament not found" });
 
             if (request.Team1Id <= 0 || request.Team2Id <= 0)
-                return BadRequest(new { message = "Both Team1Id and Team2Id are required" });
+                return BadRequest(new { message = "Both Team 1 and Team 2 are required" });
 
             if (request.Team1Id == request.Team2Id)
-                return BadRequest(new { message = "Team1Id and Team2Id cannot be the same" });
+                return BadRequest(new { message = "Team 1 and Team 2 cannot be the same" });
 
             if (request.MapNames == null || request.MapNames.Count == 0)
                 return BadRequest(new { message = "At least one map name is required" });
@@ -1349,7 +1349,7 @@ public class AdminTournamentController : ControllerBase
                 var newTeam2Id = request.Team2Id ?? match.Team2Id;
 
                 if (newTeam1Id == newTeam2Id)
-                    return BadRequest(new { message = "Team1Id and Team2Id cannot be the same" });
+                    return BadRequest(new { message = "Team 1 and Team 2 cannot be the same" });
 
                 var validTeams = await _context.TournamentTeams
                     .Where(tt => teamUpdates.Contains(tt.Id) && tt.TournamentId == tournamentId)
@@ -1774,10 +1774,10 @@ public class AdminTournamentController : ControllerBase
 
             // Validate request
             if (request.Team1Id <= 0 || request.Team2Id <= 0)
-                return BadRequest(new { message = "Both Team1Id and Team2Id must be provided and greater than 0" });
+                return BadRequest(new { message = "Both Team 1 and Team 2 must be provided" });
 
             if (request.Team1Id == request.Team2Id)
-                return BadRequest(new { message = "Team1Id and Team2Id cannot be the same" });
+                return BadRequest(new { message = "Team 1 and Team 2 cannot be the same" });
 
             // Create the manual result
             var resultId = await _matchResultService.CreateOrUpdateManualMatchResultAsync(
@@ -1793,6 +1793,9 @@ public class AdminTournamentController : ControllerBase
             _logger.LogInformation(
                 "Created manual match result {ResultId} for tournament {TournamentId}, match {MatchId}, map {MapId}",
                 resultId, tournamentId, matchId, mapId);
+
+            // Get the created result before starting background task to avoid DbContext threading issues
+            var result = await _matchResultService.GetMatchResultAsync(resultId);
 
             // Trigger ranking recalculation asynchronously
             _ = Task.Run(async () =>
@@ -1814,9 +1817,6 @@ public class AdminTournamentController : ControllerBase
                         tournamentId);
                 }
             });
-
-            // Return the created result
-            var result = await _matchResultService.GetMatchResultAsync(resultId);
             var response = new TournamentMatchResultAdminResponse
             {
                 Id = result!.Id,
@@ -1887,10 +1887,10 @@ public class AdminTournamentController : ControllerBase
 
             // Validate team assignments
             if (request.Team1Id <= 0 || request.Team2Id <= 0)
-                return BadRequest(new { message = "Both Team1Id and Team2Id must be provided and greater than 0" });
+                return BadRequest(new { message = "Both Team 1 and Team 2 must be provided" });
 
             if (request.Team1Id == request.Team2Id)
-                return BadRequest(new { message = "Team1Id and Team2Id cannot be the same" });
+                return BadRequest(new { message = "Team 1 and Team 2 cannot be the same" });
 
             // Validate that winning team is one of the two teams (if provided)
             if (request.WinningTeamId.HasValue && request.WinningTeamId > 0)
@@ -1918,6 +1918,9 @@ public class AdminTournamentController : ControllerBase
             _context.TournamentMatchResults.Update(result);
             await _context.SaveChangesAsync();
 
+            // Get updated result before starting background task to avoid DbContext threading issues
+            var updatedResult = await _matchResultService.GetMatchResultAsync(resultId);
+
             // Trigger ranking recalculation asynchronously
             _ = Task.Run(async () =>
             {
@@ -1938,9 +1941,6 @@ public class AdminTournamentController : ControllerBase
                         tournamentId);
                 }
             });
-
-            // Return updated result
-            var updatedResult = await _matchResultService.GetMatchResultAsync(resultId);
             var response = new TournamentMatchResultAdminResponse
             {
                 Id = updatedResult!.Id,
