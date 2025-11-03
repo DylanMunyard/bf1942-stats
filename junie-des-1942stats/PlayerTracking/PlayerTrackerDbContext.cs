@@ -440,21 +440,9 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<TournamentMatchMap>()
             .HasIndex(tmm => tmm.MatchId);
 
-        modelBuilder.Entity<TournamentMatchMap>()
-            .HasIndex(tmm => tmm.RoundId);
-
         // Index on MatchId + MapOrder (NOT unique to allow same map multiple times)
         modelBuilder.Entity<TournamentMatchMap>()
             .HasIndex(tmm => new { tmm.MatchId, tmm.MapOrder });
-
-        // Configure relationship: TournamentMatchMap -> Round (optional)
-        modelBuilder.Entity<TournamentMatchMap>()
-            .HasOne(tmm => tmm.Round)
-            .WithMany()
-            .HasForeignKey(tmm => tmm.RoundId)
-            .HasPrincipalKey(r => r.RoundId)
-            .OnDelete(DeleteBehavior.SetNull)
-            .IsRequired(false);
 
         // Configure TournamentMatchResult entity
         modelBuilder.Entity<TournamentMatchResult>()
@@ -502,17 +490,18 @@ public class PlayerTrackerDbContext : DbContext
         // Configure relationship: TournamentMatchResult -> TournamentMatchMap
         modelBuilder.Entity<TournamentMatchResult>()
             .HasOne(tmr => tmr.Map)
-            .WithOne(tmm => tmm.MatchResult)
-            .HasForeignKey<TournamentMatchResult>(tmr => tmr.MapId)
+            .WithMany(tmm => tmm.MatchResults)
+            .HasForeignKey(tmr => tmr.MapId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Configure relationship: TournamentMatchResult -> Round
+        // Configure relationship: TournamentMatchResult -> Round (optional)
         modelBuilder.Entity<TournamentMatchResult>()
             .HasOne(tmr => tmr.Round)
             .WithMany()
             .HasForeignKey(tmr => tmr.RoundId)
             .HasPrincipalKey(r => r.RoundId)
-            .OnDelete(DeleteBehavior.Cascade);
+            .OnDelete(DeleteBehavior.SetNull)
+            .IsRequired(false);
 
         // Configure relationship: TournamentMatchResult -> Team1
         modelBuilder.Entity<TournamentMatchResult>()
@@ -884,17 +873,13 @@ public class TournamentMatchMap
     public string MapName { get; set; } = "";
     public int MapOrder { get; set; } // Sequence order for maps in the match (0-based). Note: MapName is NOT unique - same map can appear multiple times with different MapOrder values
 
-    // Link to completed round - set after the round completes
-    public string? RoundId { get; set; }
-
     // Optional: Team that chose/assigned this map
     public int? TeamId { get; set; }
 
     // Navigation properties
     public TournamentMatch Match { get; set; } = null!;
-    public Round? Round { get; set; }
     public TournamentTeam? Team { get; set; }
-    public TournamentMatchResult? MatchResult { get; set; }
+    public ICollection<TournamentMatchResult> MatchResults { get; set; } = new List<TournamentMatchResult>();
 }
 
 public class TournamentTeamPlayer
@@ -914,15 +899,15 @@ public class TournamentMatchResult
     public int TournamentId { get; set; }
     public int MatchId { get; set; }
     public int MapId { get; set; }
-    public string RoundId { get; set; } = "";
+    public string? RoundId { get; set; } // Now nullable - round is optional for manual entries
     public string? Week { get; set; } // Denormalized from TournamentMatch.Week
 
-    // Tournament teams mapped to this round's Team1/Team2
+    // Tournament teams mapped to this result (can come from round or manual entry)
     public int? Team1Id { get; set; }
     public int? Team2Id { get; set; }
     public int? WinningTeamId { get; set; }
 
-    // Ticket information from Round
+    // Ticket information (from Round or manually entered)
     public int Team1Tickets { get; set; }
     public int Team2Tickets { get; set; }
 
@@ -934,7 +919,7 @@ public class TournamentMatchResult
     public Tournament Tournament { get; set; } = null!;
     public TournamentMatch Match { get; set; } = null!;
     public TournamentMatchMap Map { get; set; } = null!;
-    public Round Round { get; set; } = null!;
+    public Round? Round { get; set; } // Now nullable - can exist without a linked round
     public TournamentTeam? Team1 { get; set; }
     public TournamentTeam? Team2 { get; set; }
     public TournamentTeam? WinningTeam { get; set; }

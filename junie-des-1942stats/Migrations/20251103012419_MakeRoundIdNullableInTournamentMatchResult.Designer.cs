@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using junie_des_1942stats.PlayerTracking;
 
@@ -10,9 +11,11 @@ using junie_des_1942stats.PlayerTracking;
 namespace junie_des_1942stats.Migrations
 {
     [DbContext(typeof(PlayerTrackerDbContext))]
-    partial class PlayerTrackerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251103012419_MakeRoundIdNullableInTournamentMatchResult")]
+    partial class MakeRoundIdNullableInTournamentMatchResult
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.5");
@@ -612,12 +615,17 @@ namespace junie_des_1942stats.Migrations
                     b.Property<int>("MatchId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("RoundId")
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("TeamId")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
                     b.HasIndex("MatchId");
+
+                    b.HasIndex("RoundId");
 
                     b.HasIndex("TeamId");
 
@@ -672,7 +680,8 @@ namespace junie_des_1942stats.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("MapId");
+                    b.HasIndex("MapId")
+                        .IsUnique();
 
                     b.HasIndex("MatchId");
 
@@ -1065,11 +1074,18 @@ namespace junie_des_1942stats.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("junie_des_1942stats.PlayerTracking.Round", "Round")
+                        .WithMany()
+                        .HasForeignKey("RoundId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("junie_des_1942stats.PlayerTracking.TournamentTeam", "Team")
                         .WithMany()
                         .HasForeignKey("TeamId");
 
                     b.Navigation("Match");
+
+                    b.Navigation("Round");
 
                     b.Navigation("Team");
                 });
@@ -1077,8 +1093,8 @@ namespace junie_des_1942stats.Migrations
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.TournamentMatchResult", b =>
                 {
                     b.HasOne("junie_des_1942stats.PlayerTracking.TournamentMatchMap", "Map")
-                        .WithMany("MatchResults")
-                        .HasForeignKey("MapId")
+                        .WithOne("MatchResult")
+                        .HasForeignKey("junie_des_1942stats.PlayerTracking.TournamentMatchResult", "MapId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -1091,7 +1107,7 @@ namespace junie_des_1942stats.Migrations
                     b.HasOne("junie_des_1942stats.PlayerTracking.Round", "Round")
                         .WithMany()
                         .HasForeignKey("RoundId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("junie_des_1942stats.PlayerTracking.TournamentTeam", "Team1")
                         .WithMany()
@@ -1273,7 +1289,7 @@ namespace junie_des_1942stats.Migrations
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.TournamentMatchMap", b =>
                 {
-                    b.Navigation("MatchResults");
+                    b.Navigation("MatchResult");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.TournamentTeam", b =>

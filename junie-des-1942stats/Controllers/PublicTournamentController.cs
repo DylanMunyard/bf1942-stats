@@ -115,21 +115,20 @@ public class PublicTournamentController : ControllerBase
                     tmm.MatchId,
                     tmm.MapName,
                     tmm.MapOrder,
-                    tmm.RoundId,
                     tmm.TeamId,
                     TeamName = tmm.Team != null ? tmm.Team.Name : null,
-                    MatchResult = tmm.MatchResult != null ? new
+                    MatchResults = tmm.MatchResults.Select(mr => new
                     {
-                        tmm.MatchResult.Id,
-                        tmm.MatchResult.Team1Id,
-                        Team1Name = tmm.MatchResult.Team1 != null ? tmm.MatchResult.Team1.Name : null,
-                        tmm.MatchResult.Team2Id,
-                        Team2Name = tmm.MatchResult.Team2 != null ? tmm.MatchResult.Team2.Name : null,
-                        tmm.MatchResult.WinningTeamId,
-                        WinningTeamName = tmm.MatchResult.WinningTeam != null ? tmm.MatchResult.WinningTeam.Name : null,
-                        tmm.MatchResult.Team1Tickets,
-                        tmm.MatchResult.Team2Tickets
-                    } : null
+                        mr.Id,
+                        mr.Team1Id,
+                        Team1Name = mr.Team1 != null ? mr.Team1.Name : null,
+                        mr.Team2Id,
+                        Team2Name = mr.Team2 != null ? mr.Team2.Name : null,
+                        mr.WinningTeamId,
+                        WinningTeamName = mr.WinningTeam != null ? mr.WinningTeam.Name : null,
+                        mr.Team1Tickets,
+                        mr.Team2Tickets
+                    }).ToList()
                 })
                 .ToListAsync();
 
@@ -148,33 +147,28 @@ public class PublicTournamentController : ControllerBase
                 {
                     foreach (var map in mapsForMatch)
                     {
-                        PublicTournamentMatchResultResponse? matchResultResponse = null;
-
-                        if (map.MatchResult != null)
-                        {
-                            matchResultResponse = new PublicTournamentMatchResultResponse
+                        var matchResultResponses = map.MatchResults.Select(mr =>
+                            new PublicTournamentMatchResultResponse
                             {
-                                Id = map.MatchResult.Id,
-                                Team1Id = map.MatchResult.Team1Id,
-                                Team1Name = map.MatchResult.Team1Name,
-                                Team2Id = map.MatchResult.Team2Id,
-                                Team2Name = map.MatchResult.Team2Name,
-                                WinningTeamId = map.MatchResult.WinningTeamId,
-                                WinningTeamName = map.MatchResult.WinningTeamName,
-                                Team1Tickets = map.MatchResult.Team1Tickets,
-                                Team2Tickets = map.MatchResult.Team2Tickets
-                            };
-                        }
+                                Id = mr.Id,
+                                Team1Id = mr.Team1Id,
+                                Team1Name = mr.Team1Name,
+                                Team2Id = mr.Team2Id,
+                                Team2Name = mr.Team2Name,
+                                WinningTeamId = mr.WinningTeamId,
+                                WinningTeamName = mr.WinningTeamName,
+                                Team1Tickets = mr.Team1Tickets,
+                                Team2Tickets = mr.Team2Tickets
+                            }).ToList();
 
                         matchMapsForThisMatch.Add(new PublicTournamentMatchMapResponse
                         {
                             Id = map.Id,
                             MapName = map.MapName,
                             MapOrder = map.MapOrder,
-                            RoundId = map.RoundId,
                             TeamId = map.TeamId,
                             TeamName = map.TeamName,
-                            MatchResult = matchResultResponse
+                            MatchResults = matchResultResponses
                         });
                     }
                 }
@@ -422,10 +416,9 @@ public class PublicTournamentMatchMapResponse
     public int Id { get; set; }
     public string MapName { get; set; } = "";
     public int MapOrder { get; set; }
-    public string? RoundId { get; set; }
     public int? TeamId { get; set; }
     public string? TeamName { get; set; }
-    public PublicTournamentMatchResultResponse? MatchResult { get; set; }
+    public List<PublicTournamentMatchResultResponse> MatchResults { get; set; } = [];
 }
 
 public class PublicTournamentMatchResultResponse

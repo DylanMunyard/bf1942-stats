@@ -240,4 +240,101 @@ public class TournamentMatchResultService : ITournamentMatchResultService
             throw;
         }
     }
+
+    public async Task<int> CreateOrUpdateManualMatchResultAsync(
+        int tournamentId,
+        int matchId,
+        int mapId,
+        int team1Id,
+        int team2Id,
+        int team1Tickets,
+        int team2Tickets,
+        int? winningTeamId = null)
+    {
+        try
+        {
+            // Validate that teams exist in the tournament
+            var team1 = await _dbContext.TournamentTeams
+                .FirstOrDefaultAsync(t => t.Id == team1Id && t.TournamentId == tournamentId);
+            var team2 = await _dbContext.TournamentTeams
+                .FirstOrDefaultAsync(t => t.Id == team2Id && t.TournamentId == tournamentId);
+
+            if (team1 == null || team2 == null)
+                throw new InvalidOperationException("One or both teams not found in the tournament");
+
+            // Get the match to extract week information
+            var match = await _dbContext.TournamentMatches
+                .FirstOrDefaultAsync(m => m.Id == matchId && m.TournamentId == tournamentId);
+
+            if (match == null)
+                throw new InvalidOperationException($"Match {matchId} not found in tournament {tournamentId}");
+
+            // Validate winning team if provided
+            if (winningTeamId.HasValue && winningTeamId > 0)
+            {
+                if (winningTeamId != team1Id && winningTeamId != team2Id)
+                    throw new InvalidOperationException("Winning team must be one of the two teams in the match");
+            }
+
+            // Check if result already exists for this map
+            var existingResult = await _dbContext.TournamentMatchResults
+                .FirstOrDefaultAsync(r => r.MatchId == matchId && r.MapId == mapId);
+
+            TournamentMatchResult result;
+            if (existingResult != null)
+            {
+                // Update existing
+                existingResult.Week = match.Week;
+                existingResult.Team1Id = team1Id;
+                existingResult.Team2Id = team2Id;
+                existingResult.WinningTeamId = winningTeamId;
+                existingResult.Team1Tickets = team1Tickets;
+                existingResult.Team2Tickets = team2Tickets;
+                existingResult.UpdatedAt = SystemClock.Instance.GetCurrentInstant();
+
+                _dbContext.TournamentMatchResults.Update(existingResult);
+                result = existingResult;
+
+                _logger.LogInformation(
+                    "Updated manual match result {ResultId} for tournament {TournamentId}, match {MatchId}, map {MapId}",
+                    existingResult.Id, tournamentId, matchId, mapId);
+            }
+            else
+            {
+                // Create new (RoundId remains null for manual entries)
+                result = new TournamentMatchResult
+                {
+                    TournamentId = tournamentId,
+                    MatchId = matchId,
+                    MapId = mapId,
+                    RoundId = null, // Manual entry - no round linked
+                    Week = match.Week,
+                    Team1Id = team1Id,
+                    Team2Id = team2Id,
+                    WinningTeamId = winningTeamId,
+                    Team1Tickets = team1Tickets,
+                    Team2Tickets = team2Tickets,
+                    CreatedAt = SystemClock.Instance.GetCurrentInstant(),
+                    UpdatedAt = SystemClock.Instance.GetCurrentInstant()
+                };
+
+                _dbContext.TournamentMatchResults.Add(result);
+
+                _logger.LogInformation(
+                    "Created manual match result for tournament {TournamentId}, match {MatchId}, map {MapId}",
+                    tournamentId, matchId, mapId);
+            }
+
+            await _dbContext.SaveChangesAsync();
+
+            return result.Id;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error creating/updating manual match result for tournament {TournamentId}, match {MatchId}, map {MapId}",
+                tournamentId, matchId, mapId);
+            throw;
+        }
+    }
 }

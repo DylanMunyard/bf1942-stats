@@ -166,34 +166,20 @@ public class AdminTournamentController : ControllerBase
                         Id = m.Id,
                         MapName = m.MapName,
                         MapOrder = m.MapOrder,
-                        RoundId = m.RoundId,
                         TeamId = m.TeamId,
                         TeamName = m.Team != null ? m.Team.Name : null,
-                        Round = m.Round != null ? new TournamentRoundResponse
+                        MatchResults = m.MatchResults.Select(mr => new TournamentMatchResultResponse
                         {
-                            RoundId = m.Round.RoundId,
-                            ServerGuid = m.Round.ServerGuid,
-                            ServerName = m.Round.ServerName,
-                            MapName = m.Round.MapName,
-                            StartTime = m.Round.StartTime,
-                            EndTime = m.Round.EndTime,
-                            Tickets1 = m.Round.Tickets1,
-                            Tickets2 = m.Round.Tickets2,
-                            Team1Label = m.Round.Team1Label,
-                            Team2Label = m.Round.Team2Label
-                        } : null,
-                        MatchResult = m.MatchResult != null ? new TournamentMatchResultResponse
-                        {
-                            Id = m.MatchResult.Id,
-                            Team1Id = m.MatchResult.Team1Id,
-                            Team1Name = m.MatchResult.Team1 != null ? m.MatchResult.Team1.Name : null,
-                            Team2Id = m.MatchResult.Team2Id,
-                            Team2Name = m.MatchResult.Team2 != null ? m.MatchResult.Team2.Name : null,
-                            WinningTeamId = m.MatchResult.WinningTeamId,
-                            WinningTeamName = m.MatchResult.WinningTeam != null ? m.MatchResult.WinningTeam.Name : null,
-                            Team1Tickets = m.MatchResult.Team1Tickets,
-                            Team2Tickets = m.MatchResult.Team2Tickets
-                        } : null
+                            Id = mr.Id,
+                            Team1Id = mr.Team1Id,
+                            Team1Name = mr.Team1 != null ? mr.Team1.Name : null,
+                            Team2Id = mr.Team2Id,
+                            Team2Name = mr.Team2 != null ? mr.Team2.Name : null,
+                            WinningTeamId = mr.WinningTeamId,
+                            WinningTeamName = mr.WinningTeam != null ? mr.WinningTeam.Name : null,
+                            Team1Tickets = mr.Team1Tickets,
+                            Team2Tickets = mr.Team2Tickets
+                        }).ToList()
                     }).ToList()
                 })
                 .OrderBy(tm => tm.ScheduledDate)
@@ -760,32 +746,20 @@ public class AdminTournamentController : ControllerBase
                     Id = m.Id,
                     MapName = m.MapName,
                     MapOrder = m.MapOrder,
-                    RoundId = m.RoundId,
-                    Round = m.Round != null ? new TournamentRoundResponse
+                    TeamId = m.TeamId,
+                    TeamName = m.Team != null ? m.Team.Name : null,
+                    MatchResults = m.MatchResults.Select(mr => new TournamentMatchResultResponse
                     {
-                        RoundId = m.Round.RoundId,
-                        ServerGuid = m.Round.ServerGuid,
-                        ServerName = m.Round.ServerName,
-                        MapName = m.Round.MapName,
-                        StartTime = m.Round.StartTime,
-                        EndTime = m.Round.EndTime,
-                        Tickets1 = m.Round.Tickets1,
-                        Tickets2 = m.Round.Tickets2,
-                        Team1Label = m.Round.Team1Label,
-                        Team2Label = m.Round.Team2Label
-                    } : null,
-                    MatchResult = m.MatchResult != null ? new TournamentMatchResultResponse
-                    {
-                        Id = m.MatchResult.Id,
-                        Team1Id = m.MatchResult.Team1Id,
-                        Team1Name = m.MatchResult.Team1 != null ? m.MatchResult.Team1.Name : null,
-                        Team2Id = m.MatchResult.Team2Id,
-                        Team2Name = m.MatchResult.Team2 != null ? m.MatchResult.Team2.Name : null,
-                        WinningTeamId = m.MatchResult.WinningTeamId,
-                        WinningTeamName = m.MatchResult.WinningTeam != null ? m.MatchResult.WinningTeam.Name : null,
-                        Team1Tickets = m.MatchResult.Team1Tickets,
-                        Team2Tickets = m.MatchResult.Team2Tickets
-                    } : null
+                        Id = mr.Id,
+                        Team1Id = mr.Team1Id,
+                        Team1Name = mr.Team1 != null ? mr.Team1.Name : null,
+                        Team2Id = mr.Team2Id,
+                        Team2Name = mr.Team2 != null ? mr.Team2.Name : null,
+                        WinningTeamId = mr.WinningTeamId,
+                        WinningTeamName = mr.WinningTeam != null ? mr.WinningTeam.Name : null,
+                        Team1Tickets = mr.Team1Tickets,
+                        Team2Tickets = mr.Team2Tickets
+                    }).ToList()
                 }).ToList()
             })
             .OrderBy(tm => tm.ScheduledDate)
@@ -1233,8 +1207,7 @@ public class AdminTournamentController : ControllerBase
             {
                 MatchId = match.Id,
                 MapName = mapName,
-                MapOrder = index,
-                RoundId = null
+                MapOrder = index
             }).ToList();
 
             _context.TournamentMatchMaps.AddRange(maps);
@@ -1261,10 +1234,9 @@ public class AdminTournamentController : ControllerBase
                     Id = m.Id,
                     MapName = m.MapName,
                     MapOrder = m.MapOrder,
-                    RoundId = m.RoundId,
                     TeamId = m.TeamId,
                     TeamName = m.Team != null ? m.Team.Name : null,
-                    Round = null
+                    MatchResults = new List<TournamentMatchResultResponse>()
                 }).ToList()
             };
 
@@ -1312,34 +1284,20 @@ public class AdminTournamentController : ControllerBase
                         Id = m.Id,
                         MapName = m.MapName,
                         MapOrder = m.MapOrder,
-                        RoundId = m.RoundId,
                         TeamId = m.TeamId,
                         TeamName = m.Team != null ? m.Team.Name : null,
-                        Round = m.Round != null ? new TournamentRoundResponse
+                        MatchResults = m.MatchResults.Select(mr => new TournamentMatchResultResponse
                         {
-                            RoundId = m.Round.RoundId,
-                            ServerGuid = m.Round.ServerGuid,
-                            ServerName = m.Round.ServerName,
-                            MapName = m.Round.MapName,
-                            StartTime = m.Round.StartTime,
-                            EndTime = m.Round.EndTime,
-                            Tickets1 = m.Round.Tickets1,
-                            Tickets2 = m.Round.Tickets2,
-                            Team1Label = m.Round.Team1Label,
-                            Team2Label = m.Round.Team2Label
-                        } : null,
-                        MatchResult = m.MatchResult != null ? new TournamentMatchResultResponse
-                        {
-                            Id = m.MatchResult.Id,
-                            Team1Id = m.MatchResult.Team1Id,
-                            Team1Name = m.MatchResult.Team1 != null ? m.MatchResult.Team1.Name : null,
-                            Team2Id = m.MatchResult.Team2Id,
-                            Team2Name = m.MatchResult.Team2 != null ? m.MatchResult.Team2.Name : null,
-                            WinningTeamId = m.MatchResult.WinningTeamId,
-                            WinningTeamName = m.MatchResult.WinningTeam != null ? m.MatchResult.WinningTeam.Name : null,
-                            Team1Tickets = m.MatchResult.Team1Tickets,
-                            Team2Tickets = m.MatchResult.Team2Tickets
-                        } : null
+                            Id = mr.Id,
+                            Team1Id = mr.Team1Id,
+                            Team1Name = mr.Team1 != null ? mr.Team1.Name : null,
+                            Team2Id = mr.Team2Id,
+                            Team2Name = mr.Team2 != null ? mr.Team2.Name : null,
+                            WinningTeamId = mr.WinningTeamId,
+                            WinningTeamName = mr.WinningTeam != null ? mr.WinningTeam.Name : null,
+                            Team1Tickets = mr.Team1Tickets,
+                            Team2Tickets = mr.Team2Tickets
+                        }).ToList()
                     }).ToList()
                 })
                 .FirstOrDefaultAsync();
@@ -1442,13 +1400,13 @@ public class AdminTournamentController : ControllerBase
 
                 // Load existing maps WITH their MatchResults to ensure cascade delete works
                 var existingMaps = await _context.TournamentMatchMaps
-                    .Include(m => m.MatchResult)
+                    .Include(m => m.MatchResults)
                     .Where(tmm => tmm.MatchId == matchId)
                     .ToListAsync();
 
-                // Build a dictionary of MapName -> (RoundId, MapId) from existing maps
+                // Build a dictionary of MapName -> MapId from existing maps
                 var mapNameToData = existingMaps
-                    .ToDictionary(m => m.MapName, m => new { m.RoundId, m.Id });
+                    .ToDictionary(m => m.MapName, m => m.Id);
 
                 // Identify which maps are being removed vs kept
                 var mapsToRemove = existingMaps
@@ -1462,17 +1420,17 @@ public class AdminTournamentController : ControllerBase
                 // Explicitly delete MatchResults for removed maps (ensures proper cleanup)
                 foreach (var mapToRemove in mapsToRemove)
                 {
-                    if (mapToRemove.MatchResult != null)
+                    foreach (var matchResult in mapToRemove.MatchResults)
                     {
                         _logger.LogInformation(
                             "Deleting orphaned match result {ResultId} when removing map {MapId} from match {MatchId}",
-                            mapToRemove.MatchResult.Id, mapToRemove.Id, matchId);
-                        _context.TournamentMatchResults.Remove(mapToRemove.MatchResult);
+                            matchResult.Id, mapToRemove.Id, matchId);
+                        _context.TournamentMatchResults.Remove(matchResult);
                     }
                     _context.TournamentMatchMaps.Remove(mapToRemove);
                 }
 
-                // Update existing maps that are being kept (preserve RoundId and MatchResult)
+                // Update existing maps that are being kept (preserve MatchResults)
                 var newMapOrder = 0;
                 foreach (var mapName in request.MapNames)
                 {
@@ -1490,13 +1448,12 @@ public class AdminTournamentController : ControllerBase
                     }
                     else
                     {
-                        // This is a new map - add it without a RoundId (user can link round later)
+                        // This is a new map
                         var newMap = new TournamentMatchMap
                         {
                             MatchId = matchId,
                             MapName = mapName,
-                            MapOrder = newMapOrder,
-                            RoundId = null // New maps don't have rounds until explicitly linked
+                            MapOrder = newMapOrder
                         };
                         _logger.LogInformation(
                             "Adding new map '{MapName}' at order {MapOrder} to match {MatchId}",
@@ -1528,34 +1485,20 @@ public class AdminTournamentController : ControllerBase
                         Id = m.Id,
                         MapName = m.MapName,
                         MapOrder = m.MapOrder,
-                        RoundId = m.RoundId,
                         TeamId = m.TeamId,
                         TeamName = m.Team != null ? m.Team.Name : null,
-                        Round = m.Round != null ? new TournamentRoundResponse
+                        MatchResults = m.MatchResults.Select(mr => new TournamentMatchResultResponse
                         {
-                            RoundId = m.Round.RoundId,
-                            ServerGuid = m.Round.ServerGuid,
-                            ServerName = m.Round.ServerName,
-                            MapName = m.Round.MapName,
-                            StartTime = m.Round.StartTime,
-                            EndTime = m.Round.EndTime,
-                            Tickets1 = m.Round.Tickets1,
-                            Tickets2 = m.Round.Tickets2,
-                            Team1Label = m.Round.Team1Label,
-                            Team2Label = m.Round.Team2Label
-                        } : null,
-                        MatchResult = m.MatchResult != null ? new TournamentMatchResultResponse
-                        {
-                            Id = m.MatchResult.Id,
-                            Team1Id = m.MatchResult.Team1Id,
-                            Team1Name = m.MatchResult.Team1 != null ? m.MatchResult.Team1.Name : null,
-                            Team2Id = m.MatchResult.Team2Id,
-                            Team2Name = m.MatchResult.Team2 != null ? m.MatchResult.Team2.Name : null,
-                            WinningTeamId = m.MatchResult.WinningTeamId,
-                            WinningTeamName = m.MatchResult.WinningTeam != null ? m.MatchResult.WinningTeam.Name : null,
-                            Team1Tickets = m.MatchResult.Team1Tickets,
-                            Team2Tickets = m.MatchResult.Team2Tickets
-                        } : null
+                            Id = mr.Id,
+                            Team1Id = mr.Team1Id,
+                            Team1Name = mr.Team1 != null ? mr.Team1.Name : null,
+                            Team2Id = mr.Team2Id,
+                            Team2Name = mr.Team2 != null ? mr.Team2.Name : null,
+                            WinningTeamId = mr.WinningTeamId,
+                            WinningTeamName = mr.WinningTeam != null ? mr.WinningTeam.Name : null,
+                            Team1Tickets = mr.Team1Tickets,
+                            Team2Tickets = mr.Team2Tickets
+                        }).ToList()
                     }).ToList()
                 })
                 .FirstAsync();
@@ -1620,8 +1563,6 @@ public class AdminTournamentController : ControllerBase
                     if (!roundExists)
                         return BadRequest(new { message = $"Round '{request.RoundId}' not found" });
 
-                    map.RoundId = request.RoundId;
-
                     // Create/update match result with team mapping
                     _logger.LogInformation(
                         "Processing match result for tournament {TournamentId}, match {MatchId}, map {MapId}, round {RoundId}",
@@ -1668,8 +1609,6 @@ public class AdminTournamentController : ControllerBase
                 else
                 {
                     // Unlinking a round - delete the associated match result
-                    map.RoundId = null;
-
                     var existingResult = await _context.TournamentMatchResults
                         .Where(mr => mr.MapId == mapId)
                         .FirstOrDefaultAsync();
@@ -1728,34 +1667,20 @@ public class AdminTournamentController : ControllerBase
                     Id = m.Id,
                     MapName = m.MapName,
                     MapOrder = m.MapOrder,
-                    RoundId = m.RoundId,
                     TeamId = m.TeamId,
                     TeamName = m.Team != null ? m.Team.Name : null,
-                    Round = m.Round != null ? new TournamentRoundResponse
+                    MatchResults = m.MatchResults.Select(mr => new TournamentMatchResultResponse
                     {
-                        RoundId = m.Round.RoundId,
-                        ServerGuid = m.Round.ServerGuid,
-                        ServerName = m.Round.ServerName,
-                        MapName = m.Round.MapName,
-                        StartTime = m.Round.StartTime,
-                        EndTime = m.Round.EndTime,
-                        Tickets1 = m.Round.Tickets1,
-                        Tickets2 = m.Round.Tickets2,
-                        Team1Label = m.Round.Team1Label,
-                        Team2Label = m.Round.Team2Label
-                    } : null,
-                    MatchResult = m.MatchResult != null ? new TournamentMatchResultResponse
-                    {
-                        Id = m.MatchResult.Id,
-                        Team1Id = m.MatchResult.Team1Id,
-                        Team1Name = m.MatchResult.Team1 != null ? m.MatchResult.Team1.Name : null,
-                        Team2Id = m.MatchResult.Team2Id,
-                        Team2Name = m.MatchResult.Team2 != null ? m.MatchResult.Team2.Name : null,
-                        WinningTeamId = m.MatchResult.WinningTeamId,
-                        WinningTeamName = m.MatchResult.WinningTeam != null ? m.MatchResult.WinningTeam.Name : null,
-                        Team1Tickets = m.MatchResult.Team1Tickets,
-                        Team2Tickets = m.MatchResult.Team2Tickets
-                    } : null
+                        Id = mr.Id,
+                        Team1Id = mr.Team1Id,
+                        Team1Name = mr.Team1 != null ? mr.Team1.Name : null,
+                        Team2Id = mr.Team2Id,
+                        Team2Name = mr.Team2 != null ? mr.Team2.Name : null,
+                        WinningTeamId = mr.WinningTeamId,
+                        WinningTeamName = mr.WinningTeam != null ? mr.WinningTeam.Name : null,
+                        Team1Tickets = mr.Team1Tickets,
+                        Team2Tickets = mr.Team2Tickets
+                    }).ToList()
                 })
                 .FirstAsync();
 
@@ -1803,6 +1728,360 @@ public class AdminTournamentController : ControllerBase
         }
     }
 
+    // ===== MANUAL MATCH RESULT ENDPOINTS =====
+
+    /// <summary>
+    /// Create a manual match result for a tournament match map
+    /// Allows organizers to manually enter results without linking to a round
+    /// </summary>
+    [HttpPost("{tournamentId}/matches/{matchId}/maps/{mapId}/result")]
+    [Authorize]
+    public async Task<ActionResult<TournamentMatchResultAdminResponse>> CreateManualMatchResult(
+        int tournamentId,
+        int matchId,
+        int mapId,
+        [FromBody] CreateManualMatchResultRequest request)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            // Verify tournament belongs to user
+            var tournament = await _context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            // Verify match belongs to tournament
+            var match = await _context.TournamentMatches
+                .Where(tm => tm.Id == matchId && tm.TournamentId == tournamentId)
+                .FirstOrDefaultAsync();
+
+            if (match == null)
+                return NotFound(new { message = "Match not found" });
+
+            // Verify map belongs to match
+            var map = await _context.TournamentMatchMaps
+                .Where(m => m.Id == mapId && m.MatchId == matchId)
+                .FirstOrDefaultAsync();
+
+            if (map == null)
+                return NotFound(new { message = "Map not found" });
+
+            // Validate request
+            if (request.Team1Id <= 0 || request.Team2Id <= 0)
+                return BadRequest(new { message = "Both Team1Id and Team2Id must be provided and greater than 0" });
+
+            if (request.Team1Id == request.Team2Id)
+                return BadRequest(new { message = "Team1Id and Team2Id cannot be the same" });
+
+            // Create the manual result
+            var resultId = await _matchResultService.CreateOrUpdateManualMatchResultAsync(
+                tournamentId,
+                matchId,
+                mapId,
+                request.Team1Id,
+                request.Team2Id,
+                request.Team1Tickets,
+                request.Team2Tickets,
+                request.WinningTeamId);
+
+            _logger.LogInformation(
+                "Created manual match result {ResultId} for tournament {TournamentId}, match {MatchId}, map {MapId}",
+                resultId, tournamentId, matchId, mapId);
+
+            // Trigger ranking recalculation asynchronously
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    _logger.LogInformation(
+                        "Starting async ranking recalculation after manual result creation for tournament {TournamentId}",
+                        tournamentId);
+                    await _rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
+                    _logger.LogInformation(
+                        "Completed async ranking recalculation after manual result creation for tournament {TournamentId}",
+                        tournamentId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Error during async ranking recalculation for tournament {TournamentId}",
+                        tournamentId);
+                }
+            });
+
+            // Return the created result
+            var result = await _matchResultService.GetMatchResultAsync(resultId);
+            var response = new TournamentMatchResultAdminResponse
+            {
+                Id = result!.Id,
+                TournamentId = result.TournamentId,
+                MatchId = result.MatchId,
+                MapId = result.MapId,
+                RoundId = result.RoundId,
+                Week = result.Week,
+                Team1Id = result.Team1Id,
+                Team1Name = result.Team1?.Name,
+                Team2Id = result.Team2Id,
+                Team2Name = result.Team2?.Name,
+                WinningTeamId = result.WinningTeamId,
+                WinningTeamName = result.WinningTeam?.Name,
+                Team1Tickets = result.Team1Tickets,
+                Team2Tickets = result.Team2Tickets,
+                UpdatedAt = result.UpdatedAt
+            };
+
+            return CreatedAtAction(
+                nameof(GetMatch),
+                new { tournamentId = tournamentId, matchId = matchId },
+                response);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Invalid operation when creating manual match result");
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating manual match result for tournament {TournamentId}, match {MatchId}", tournamentId, matchId);
+            return StatusCode(500, new { message = "Error creating match result" });
+        }
+    }
+
+    /// <summary>
+    /// Update a manual match result (existing result without a linked round)
+    /// Allows organizers to update manually entered results
+    /// </summary>
+    [HttpPut("{tournamentId}/match-results/{resultId}/manual-update")]
+    [Authorize]
+    public async Task<ActionResult<TournamentMatchResultAdminResponse>> UpdateManualMatchResult(
+        int tournamentId,
+        int resultId,
+        [FromBody] UpdateManualMatchResultRequest request)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            // Verify tournament belongs to user
+            var tournament = await _context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            // Get result and verify it belongs to the tournament
+            var result = await _context.TournamentMatchResults
+                .FirstOrDefaultAsync(r => r.Id == resultId && r.TournamentId == tournamentId);
+
+            if (result == null)
+                return NotFound(new { message = "Match result not found" });
+
+            // Validate team assignments
+            if (request.Team1Id <= 0 || request.Team2Id <= 0)
+                return BadRequest(new { message = "Both Team1Id and Team2Id must be provided and greater than 0" });
+
+            if (request.Team1Id == request.Team2Id)
+                return BadRequest(new { message = "Team1Id and Team2Id cannot be the same" });
+
+            // Validate that winning team is one of the two teams (if provided)
+            if (request.WinningTeamId.HasValue && request.WinningTeamId > 0)
+            {
+                if (request.WinningTeamId != request.Team1Id && request.WinningTeamId != request.Team2Id)
+                    return BadRequest(new { message = "Winning team must be one of the two teams in the match" });
+            }
+
+            _logger.LogInformation(
+                "Updating manual match result {ResultId} in tournament {TournamentId}",
+                resultId, tournamentId);
+
+            // Override team mapping if teams differ from current
+            if (result.Team1Id != request.Team1Id || result.Team2Id != request.Team2Id)
+            {
+                await _matchResultService.OverrideTeamMappingAsync(resultId, request.Team1Id, request.Team2Id);
+            }
+
+            // Update scores and winning team
+            result.Team1Tickets = request.Team1Tickets;
+            result.Team2Tickets = request.Team2Tickets;
+            result.WinningTeamId = request.WinningTeamId;
+            result.UpdatedAt = SystemClock.Instance.GetCurrentInstant();
+
+            _context.TournamentMatchResults.Update(result);
+            await _context.SaveChangesAsync();
+
+            // Trigger ranking recalculation asynchronously
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    _logger.LogInformation(
+                        "Starting async ranking recalculation after manual result update for tournament {TournamentId}",
+                        tournamentId);
+                    await _rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
+                    _logger.LogInformation(
+                        "Completed async ranking recalculation after manual result update for tournament {TournamentId}",
+                        tournamentId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Error during async ranking recalculation for tournament {TournamentId}",
+                        tournamentId);
+                }
+            });
+
+            // Return updated result
+            var updatedResult = await _matchResultService.GetMatchResultAsync(resultId);
+            var response = new TournamentMatchResultAdminResponse
+            {
+                Id = updatedResult!.Id,
+                TournamentId = updatedResult.TournamentId,
+                MatchId = updatedResult.MatchId,
+                MapId = updatedResult.MapId,
+                RoundId = updatedResult.RoundId,
+                Week = updatedResult.Week,
+                Team1Id = updatedResult.Team1Id,
+                Team1Name = updatedResult.Team1?.Name,
+                Team2Id = updatedResult.Team2Id,
+                Team2Name = updatedResult.Team2?.Name,
+                WinningTeamId = updatedResult.WinningTeamId,
+                WinningTeamName = updatedResult.WinningTeam?.Name,
+                Team1Tickets = updatedResult.Team1Tickets,
+                Team2Tickets = updatedResult.Team2Tickets,
+                UpdatedAt = updatedResult.UpdatedAt
+            };
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating manual match result {ResultId}", resultId);
+            return StatusCode(500, new { message = "Error updating match result" });
+        }
+    }
+
+    /// <summary>
+    /// Update the linked round for a match result
+    /// </summary>
+    /// <summary>
+    /// Update the linked round for a match result
+    /// </summary>
+    /// <summary>
+    /// Update the linked round for a match result
+    /// </summary>
+    /// <summary>
+    /// Update the linked round for a match result
+    /// </summary>
+    [HttpPut("{tournamentId}/match-results/{resultId}/round")]
+    [Authorize]
+    public async Task<ActionResult<TournamentMatchResultAdminResponse>> UpdateMatchResultRound(
+        int tournamentId,
+        int resultId,
+        [FromBody] UpdateMatchResultRoundRequest request)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            // Verify tournament belongs to user
+            var tournament = await _context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            // Get result and verify it belongs to the tournament
+            var result = await _context.TournamentMatchResults
+                .FirstOrDefaultAsync(r => r.Id == resultId && r.TournamentId == tournamentId);
+
+            if (result == null)
+                return NotFound(new { message = "Match result not found" });
+
+            string? teamMappingWarning = null;
+
+            // Validate round if provided
+            if (!string.IsNullOrEmpty(request.RoundId))
+            {
+                var roundExists = await _context.Rounds
+                    .AnyAsync(r => r.RoundId == request.RoundId);
+
+                if (!roundExists)
+                    return BadRequest(new { message = "Round not found" });
+
+                _logger.LogInformation(
+                    "Updating round for match result {ResultId} in tournament {TournamentId} to {RoundId}",
+                    resultId, tournamentId, request.RoundId);
+
+                // Use the service to link the round - this will auto-detect teams and populate scores
+                var (newResultId, warning) = await _matchResultService.CreateOrUpdateMatchResultAsync(
+                    tournamentId,
+                    result.MatchId,
+                    result.MapId,
+                    request.RoundId);
+
+                if (warning != null)
+                {
+                    _logger.LogWarning("Team mapping warning when updating round: {Warning}", warning);
+                    teamMappingWarning = warning;
+                }
+            }
+            else
+            {
+                // Unlinking the round
+                _logger.LogInformation(
+                    "Unlinking round for match result {ResultId} in tournament {TournamentId}",
+                    resultId, tournamentId);
+
+                result.RoundId = null;
+                result.UpdatedAt = SystemClock.Instance.GetCurrentInstant();
+
+                _context.TournamentMatchResults.Update(result);
+                await _context.SaveChangesAsync();
+            }
+
+            // Return updated result
+            var updatedResult = await _matchResultService.GetMatchResultAsync(resultId);
+            var response = new TournamentMatchResultAdminResponse
+            {
+                Id = updatedResult!.Id,
+                TournamentId = updatedResult.TournamentId,
+                MatchId = updatedResult.MatchId,
+                MapId = updatedResult.MapId,
+                RoundId = updatedResult.RoundId,
+                Week = updatedResult.Week,
+                Team1Id = updatedResult.Team1Id,
+                Team1Name = updatedResult.Team1?.Name,
+                Team2Id = updatedResult.Team2Id,
+                Team2Name = updatedResult.Team2?.Name,
+                WinningTeamId = updatedResult.WinningTeamId,
+                WinningTeamName = updatedResult.WinningTeam?.Name,
+                Team1Tickets = updatedResult.Team1Tickets,
+                Team2Tickets = updatedResult.Team2Tickets,
+                TeamMappingWarning = teamMappingWarning,
+                UpdatedAt = updatedResult.UpdatedAt
+            };
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating round for match result {ResultId}", resultId);
+            return StatusCode(500, new { message = "Error updating match result round" });
+        }
+    }
+
     // ===== TOURNAMENT LEADERBOARD ENDPOINTS =====
 
     /// <summary>
@@ -1847,98 +2126,6 @@ public class AdminTournamentController : ControllerBase
         {
             _logger.LogError(ex, "Error getting leaderboard for tournament {TournamentId}, week {Week}", tournamentId, week);
             return StatusCode(500, new { message = "Error retrieving leaderboard" });
-        }
-    }
-
-    /// <summary>
-    /// Override team mapping for a match result (admin manual correction)
-    /// </summary>
-    [HttpPut("{tournamentId}/match-results/{resultId}/override-teams")]
-    [Authorize]
-    public async Task<ActionResult<TournamentMatchResultAdminResponse>> OverrideTeamMapping(
-        int tournamentId,
-        int resultId,
-        [FromBody] OverrideTeamMappingRequest request)
-    {
-        try
-        {
-            // Verify tournament belongs to user
-            var tournament = await _context.Tournaments
-                .Where(t => t.CreatedByUserEmail == User.FindFirstValue(ClaimTypes.Email) && t.Id == tournamentId)
-                .FirstOrDefaultAsync();
-
-            if (tournament == null)
-                return NotFound(new { message = "Tournament not found" });
-
-            // Get result and verify it belongs to the tournament
-            var result = await _context.TournamentMatchResults
-                .FirstOrDefaultAsync(r => r.Id == resultId && r.TournamentId == tournamentId);
-
-            if (result == null)
-                return NotFound(new { message = "Match result not found" });
-
-            // Validate team assignments
-            if (request.Team1Id <= 0 || request.Team2Id <= 0)
-                return BadRequest(new { message = "Both Team1Id and Team2Id must be provided and greater than 0" });
-
-            if (request.Team1Id == request.Team2Id)
-                return BadRequest(new { message = "Team1Id and Team2Id cannot be the same" });
-
-            _logger.LogInformation(
-                "Overriding team mapping for match result {ResultId} in tournament {TournamentId}",
-                resultId, tournamentId);
-
-            // Use service to override
-            await _matchResultService.OverrideTeamMappingAsync(resultId, request.Team1Id, request.Team2Id);
-
-            // Trigger ranking recalculation asynchronously
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    _logger.LogInformation(
-                        "Starting async ranking recalculation after team override for tournament {TournamentId}",
-                        tournamentId);
-                    await _rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
-                    _logger.LogInformation(
-                        "Completed async ranking recalculation after team override for tournament {TournamentId}",
-                        tournamentId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex,
-                        "Error during async ranking recalculation for tournament {TournamentId}",
-                        tournamentId);
-                }
-            });
-
-            // Return updated result
-            var updatedResult = await _matchResultService.GetMatchResultAsync(resultId);
-            var response = new TournamentMatchResultAdminResponse
-            {
-                Id = updatedResult!.Id,
-                TournamentId = updatedResult.TournamentId,
-                MatchId = updatedResult.MatchId,
-                MapId = updatedResult.MapId,
-                RoundId = updatedResult.RoundId,
-                Week = updatedResult.Week,
-                Team1Id = updatedResult.Team1Id,
-                Team1Name = updatedResult.Team1?.Name,
-                Team2Id = updatedResult.Team2Id,
-                Team2Name = updatedResult.Team2?.Name,
-                WinningTeamId = updatedResult.WinningTeamId,
-                WinningTeamName = updatedResult.WinningTeam?.Name,
-                Team1Tickets = updatedResult.Team1Tickets,
-                Team2Tickets = updatedResult.Team2Tickets,
-                UpdatedAt = updatedResult.UpdatedAt
-            };
-
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error overriding team mapping for result {ResultId}", resultId);
-            return StatusCode(500, new { message = "Error overriding team mapping" });
         }
     }
 
@@ -2272,11 +2459,9 @@ public class TournamentMatchMapResponse
     public int Id { get; set; }
     public string MapName { get; set; } = "";
     public int MapOrder { get; set; }
-    public string? RoundId { get; set; }
-    public TournamentRoundResponse? Round { get; set; }
     public int? TeamId { get; set; }
     public string? TeamName { get; set; }
-    public TournamentMatchResultResponse? MatchResult { get; set; }
+    public List<TournamentMatchResultResponse> MatchResults { get; set; } = [];
 }
 
 public class MatchWeekGroup
@@ -2325,10 +2510,28 @@ public class TournamentTeamRankingResponse
     public string? Week { get; set; }
 }
 
-public class OverrideTeamMappingRequest
+public class CreateManualMatchResultRequest
+{
+    public int MapId { get; set; }
+    public int Team1Id { get; set; }
+    public int Team2Id { get; set; }
+    public int Team1Tickets { get; set; }
+    public int Team2Tickets { get; set; }
+    public int? WinningTeamId { get; set; }
+}
+
+public class UpdateManualMatchResultRequest
 {
     public int Team1Id { get; set; }
     public int Team2Id { get; set; }
+    public int Team1Tickets { get; set; }
+    public int Team2Tickets { get; set; }
+    public int? WinningTeamId { get; set; }
+}
+
+public class UpdateMatchResultRoundRequest
+{
+    public string? RoundId { get; set; }
 }
 
 public class TournamentMatchResultAdminResponse
@@ -2337,7 +2540,7 @@ public class TournamentMatchResultAdminResponse
     public int TournamentId { get; set; }
     public int MatchId { get; set; }
     public int MapId { get; set; }
-    public string RoundId { get; set; } = "";
+    public string? RoundId { get; set; } // Now nullable - can be manually entered without a round
     public string? Week { get; set; }
     public int? Team1Id { get; set; }
     public string? Team1Name { get; set; }
@@ -2347,6 +2550,7 @@ public class TournamentMatchResultAdminResponse
     public string? WinningTeamName { get; set; }
     public int Team1Tickets { get; set; }
     public int Team2Tickets { get; set; }
+    public string? TeamMappingWarning { get; set; }
     public Instant UpdatedAt { get; set; }
 }
 

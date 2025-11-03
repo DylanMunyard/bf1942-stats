@@ -41,4 +41,18 @@ public interface ITournamentMatchResultService
         string? week = null,
         int page = 1,
         int pageSize = 50);
+
+    /// <summary>
+    /// Create or update a tournament match result with manually entered data (no round required).
+    /// Allows tournament organizers to manually enter match results.
+    /// </summary>
+    Task<int> CreateOrUpdateManualMatchResultAsync(
+        int tournamentId,
+        int matchId,
+        int mapId,
+        int team1Id,
+        int team2Id,
+        int team1Tickets,
+        int team2Tickets,
+        int? winningTeamId = null);
 }
