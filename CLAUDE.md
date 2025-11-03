@@ -1,0 +1,1 @@
+- When we document our decisions or iterate on a design, we store the outcomes / tasklist / progress in a markdown file in features/<feature-name> where feature name is a brief descriptive name of the feature separated by hyphens

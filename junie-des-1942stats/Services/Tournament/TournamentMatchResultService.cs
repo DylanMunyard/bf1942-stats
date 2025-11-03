@@ -131,6 +131,7 @@ public class TournamentMatchResultService : ITournamentMatchResultService
     public async Task<TournamentMatchResult?> GetMatchResultAsync(int resultId)
     {
         return await _dbContext.TournamentMatchResults
+            .AsNoTracking()
             .Include(mr => mr.Tournament)
             .Include(mr => mr.Match)
             .Include(mr => mr.Map)
@@ -241,27 +242,19 @@ public class TournamentMatchResultService : ITournamentMatchResultService
         }
     }
 
-    public async Task<int> CreateOrUpdateManualMatchResultAsync(
+    public async Task<(int ResultId, string? WarningMessage)> CreateOrUpdateManualMatchResultAsync(
         int tournamentId,
         int matchId,
         int mapId,
-        int team1Id,
-        int team2Id,
-        int team1Tickets,
-        int team2Tickets,
-        int? winningTeamId = null)
+        int? team1Id,
+        int? team2Id,
+        int? team1Tickets,
+        int? team2Tickets,
+        int? winningTeamId = null,
+        string? roundId = null)
     {
         try
         {
-            // Validate that teams exist in the tournament
-            var team1 = await _dbContext.TournamentTeams
-                .FirstOrDefaultAsync(t => t.Id == team1Id && t.TournamentId == tournamentId);
-            var team2 = await _dbContext.TournamentTeams
-                .FirstOrDefaultAsync(t => t.Id == team2Id && t.TournamentId == tournamentId);
-
-            if (team1 == null || team2 == null)
-                throw new InvalidOperationException("One or both teams not found in the tournament");
-
             // Get the match to extract week information
             var match = await _dbContext.TournamentMatches
                 .FirstOrDefaultAsync(m => m.Id == matchId && m.TournamentId == tournamentId);
@@ -269,15 +262,66 @@ public class TournamentMatchResultService : ITournamentMatchResultService
             if (match == null)
                 throw new InvalidOperationException($"Match {matchId} not found in tournament {tournamentId}");
 
-            // Validate winning team if provided
-            if (winningTeamId.HasValue && winningTeamId > 0)
+            // Get round data if provided
+            Round? round = null;
+            string? teamMappingWarning = null;
+
+            if (!string.IsNullOrWhiteSpace(roundId))
+            {
+                round = await _dbContext.Rounds.FirstOrDefaultAsync(r => r.RoundId == roundId);
+                if (round == null)
+                    throw new InvalidOperationException($"Round '{roundId}' not found");
+
+                // If round is provided and teams are not, try to auto-detect teams from the round
+                if (!team1Id.HasValue && !team2Id.HasValue)
+                {
+                    var (detectedTeam1Id, detectedTeam2Id, warning) = 
+                        await _teamMappingService.DetectTeamMappingAsync(roundId, tournamentId);
+                    
+                    teamMappingWarning = warning;
+
+                    // Use detected teams if we got valid IDs
+                    if (detectedTeam1Id > 0 && detectedTeam2Id > 0)
+                    {
+                        team1Id = detectedTeam1Id;
+                        team2Id = detectedTeam2Id;
+                    }
+                    // If detection failed or returned 0, teams remain null - admin will fill in manually
+                }
+            }
+
+            // Validate that teams exist in the tournament (only if teams are provided)
+            if (team1Id.HasValue && team1Id > 0 && team2Id.HasValue && team2Id > 0)
+            {
+                var team1 = await _dbContext.TournamentTeams
+                    .FirstOrDefaultAsync(t => t.Id == team1Id && t.TournamentId == tournamentId);
+                var team2 = await _dbContext.TournamentTeams
+                    .FirstOrDefaultAsync(t => t.Id == team2Id && t.TournamentId == tournamentId);
+
+                if (team1 == null || team2 == null)
+                    throw new InvalidOperationException("One or both teams not found in the tournament");
+            }
+
+            // Validate winning team if provided (only if teams are also provided)
+            if (team1Id.HasValue && team1Id > 0 && team2Id.HasValue && team2Id > 0 && winningTeamId.HasValue && winningTeamId > 0)
             {
                 if (winningTeamId != team1Id && winningTeamId != team2Id)
                     throw new InvalidOperationException("Winning team must be one of the two teams in the match");
             }
 
+            // Determine ticket values: use provided values if available, fall back to round values
+            var finalTeam1Tickets = team1Tickets.HasValue ? team1Tickets.Value : (round?.Tickets1 ?? 0);
+            var finalTeam2Tickets = team2Tickets.HasValue ? team2Tickets.Value : (round?.Tickets2 ?? 0);
+
+            _logger.LogInformation(
+                "Creating match result - Team1Tickets: requested={RequestedTeam1}, round={RoundTeam1}, final={FinalTeam1} | " +
+                "Team2Tickets: requested={RequestedTeam2}, round={RoundTeam2}, final={FinalTeam2} | RoundId={RoundId}",
+                team1Tickets, round?.Tickets1, finalTeam1Tickets,
+                team2Tickets, round?.Tickets2, finalTeam2Tickets,
+                roundId);
+
             // If it's a draw (equal tickets), clear the winning team
-            if (team1Tickets == team2Tickets)
+            if (finalTeam1Tickets == finalTeam2Tickets)
             {
                 winningTeamId = null;
             }
@@ -288,13 +332,13 @@ public class TournamentMatchResultService : ITournamentMatchResultService
                 TournamentId = tournamentId,
                 MatchId = matchId,
                 MapId = mapId,
-                RoundId = null, // Manual entry - no round linked
+                RoundId = roundId,
                 Week = match.Week,
                 Team1Id = team1Id,
                 Team2Id = team2Id,
                 WinningTeamId = winningTeamId,
-                Team1Tickets = team1Tickets,
-                Team2Tickets = team2Tickets,
+                Team1Tickets = finalTeam1Tickets,
+                Team2Tickets = finalTeam2Tickets,
                 CreatedAt = SystemClock.Instance.GetCurrentInstant(),
                 UpdatedAt = SystemClock.Instance.GetCurrentInstant()
             };
@@ -303,10 +347,11 @@ public class TournamentMatchResultService : ITournamentMatchResultService
             await _dbContext.SaveChangesAsync();
 
             _logger.LogInformation(
-                "Created manual match result {ResultId} for tournament {TournamentId}, match {MatchId}, map {MapId}",
-                result.Id, tournamentId, matchId, mapId);
+                "Created manual match result {ResultId} for tournament {TournamentId}, match {MatchId}, map {MapId}" +
+                (roundId != null ? ", linked to round {RoundId}" : ""),
+                result.Id, tournamentId, matchId, mapId, roundId);
 
-            return result.Id;
+            return (result.Id, teamMappingWarning);
         }
         catch (Exception ex)
         {

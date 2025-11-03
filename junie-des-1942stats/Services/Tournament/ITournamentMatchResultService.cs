@@ -51,13 +51,14 @@ public interface ITournamentMatchResultService
     /// Allows tournament organizers to manually enter match results. Each call creates a new result.
     /// To update an existing result, use the manual-update endpoint with the result ID.
     /// </summary>
-    Task<int> CreateOrUpdateManualMatchResultAsync(
+    Task<(int ResultId, string? WarningMessage)> CreateOrUpdateManualMatchResultAsync(
         int tournamentId,
         int matchId,
         int mapId,
-        int team1Id,
-        int team2Id,
-        int team1Tickets,
-        int team2Tickets,
-        int? winningTeamId = null);
+        int? team1Id,
+        int? team2Id,
+        int? team1Tickets,
+        int? team2Tickets,
+        int? winningTeamId = null,
+        string? roundId = null);
 }

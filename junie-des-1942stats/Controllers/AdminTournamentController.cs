@@ -704,6 +704,73 @@ public class AdminTournamentController : ControllerBase
         return len == 4 || len == 5 || len == 7 || len == 9;
     }
 
+    /// <summary>
+    /// Helper method to trigger async ranking recalculation for a tournament.
+    /// Encapsulates the common pattern used across multiple endpoints.
+    /// </summary>
+    private void TriggerAsyncRankingRecalculation(int tournamentId)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                _logger.LogInformation(
+                    "Starting async ranking recalculation for tournament {TournamentId}",
+                    tournamentId);
+                await _rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
+                _logger.LogInformation(
+                    "Completed async ranking recalculation for tournament {TournamentId}",
+                    tournamentId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Error during async ranking recalculation for tournament {TournamentId}",
+                    tournamentId);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Helper method to build a TournamentMatchResponse from a TournamentMatch entity.
+    /// </summary>
+    private TournamentMatchResponse BuildMatchResponse(TournamentMatch match)
+    {
+        return new TournamentMatchResponse
+        {
+            Id = match.Id,
+            ScheduledDate = match.ScheduledDate,
+            Team1Id = match.Team1Id,
+            Team1Name = match.Team1.Name,
+            Team2Id = match.Team2Id,
+            Team2Name = match.Team2.Name,
+            ServerGuid = match.ServerGuid,
+            ServerName = match.ServerName,
+            Week = match.Week,
+            CreatedAt = match.CreatedAt,
+            Maps = match.Maps.OrderBy(m => m.MapOrder).Select(m => new TournamentMatchMapResponse
+            {
+                Id = m.Id,
+                MapName = m.MapName,
+                MapOrder = m.MapOrder,
+                TeamId = m.TeamId,
+                TeamName = m.Team != null ? m.Team.Name : null,
+                MatchResults = m.MatchResults.Select(mr => new TournamentMatchResultResponse
+                {
+                    Id = mr.Id,
+                    Team1Id = mr.Team1Id,
+                    Team1Name = mr.Team1 != null ? mr.Team1.Name : null,
+                    Team2Id = mr.Team2Id,
+                    Team2Name = mr.Team2 != null ? mr.Team2.Name : null,
+                    WinningTeamId = mr.WinningTeamId,
+                    WinningTeamName = mr.WinningTeam != null ? mr.WinningTeam.Name : null,
+                    Team1Tickets = mr.Team1Tickets,
+                    Team2Tickets = mr.Team2Tickets
+                }).ToList()
+            }).ToList()
+        };
+    }
+
     private async Task<TournamentDetailResponse> GetTournamentDetailOptimizedAsync(int tournamentId)
     {
         var tournament = await _context.Tournaments
@@ -1513,12 +1580,8 @@ public class AdminTournamentController : ControllerBase
     }
 
     /// <summary>
-    /// Delete a match
-    /// </summary>
-
-    /// <summary>
-    /// Update a tournament match map (e.g., link a round to a map)
-    /// When a RoundId is assigned, automatically creates/updates the match result with team mapping
+    /// Update a tournament match map metadata (name and team assignment only).
+    /// Round linking/unlinking has been moved to match result level APIs.
     /// </summary>
     [HttpPut("{tournamentId}/matches/{matchId}/maps/{mapId}")]
     [Authorize]
@@ -1549,114 +1612,9 @@ public class AdminTournamentController : ControllerBase
             if (map == null)
                 return NotFound(new { message = "Map not found" });
 
+            // Update map metadata
             if (!string.IsNullOrWhiteSpace(request.MapName))
                 map.MapName = request.MapName;
-
-            string? teamMappingWarning = null;
-
-            // Handle RoundId updates
-            if (request.UpdateRoundId)
-            {
-                if (!string.IsNullOrWhiteSpace(request.RoundId))
-                {
-                    var roundExists = await _context.Rounds.AnyAsync(r => r.RoundId == request.RoundId);
-                    if (!roundExists)
-                        return BadRequest(new { message = $"Round '{request.RoundId}' not found" });
-
-                    // Create/update match result with team mapping
-                    _logger.LogInformation(
-                        "Processing match result for tournament {TournamentId}, match {MatchId}, map {MapId}, round {RoundId}",
-                        tournamentId, matchId, mapId, request.RoundId);
-
-                    var (resultId, warning) = await _matchResultService.CreateOrUpdateMatchResultAsync(
-                        tournamentId, matchId, mapId, request.RoundId);
-
-                    if (warning != null)
-                    {
-                        teamMappingWarning = warning;
-                        _logger.LogWarning(
-                            "Team mapping warning for tournament {TournamentId}, match {MatchId}: {Warning}",
-                            tournamentId, matchId, warning);
-                    }
-                    else
-                    {
-                        _logger.LogInformation(
-                            "Match result created/updated with ID {ResultId} for tournament {TournamentId}, match {MatchId}",
-                            resultId, tournamentId, matchId);
-
-                        // Trigger ranking recalculation asynchronously
-                        _ = Task.Run(async () =>
-                        {
-                            try
-                            {
-                                _logger.LogInformation(
-                                    "Starting async ranking recalculation for tournament {TournamentId}",
-                                    tournamentId);
-                                await _rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
-                                _logger.LogInformation(
-                                    "Completed async ranking recalculation for tournament {TournamentId}",
-                                    tournamentId);
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogError(ex,
-                                    "Error during async ranking recalculation for tournament {TournamentId}",
-                                    tournamentId);
-                            }
-                        });
-                    }
-                }
-                else
-                {
-                    // Unlinking a round - delete the associated match result
-                    var existingResult = await _context.TournamentMatchResults
-                        .Where(mr => mr.MapId == mapId)
-                        .FirstOrDefaultAsync();
-
-                    if (existingResult != null)
-                    {
-                        _logger.LogInformation(
-                            "Deleting match result {ResultId} for map {MapId} (unlinking round)",
-                            existingResult.Id, mapId);
-
-                        _context.TournamentMatchResults.Remove(existingResult);
-
-                        // Trigger ranking recalculation asynchronously since we removed a result
-                        _ = Task.Run(async () =>
-                        {
-                            try
-                            {
-                                _logger.LogInformation(
-                                    "Starting async ranking recalculation after result deletion for tournament {TournamentId}",
-                                    tournamentId);
-                                await _rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
-                                _logger.LogInformation(
-                                    "Completed async ranking recalculation after result deletion for tournament {TournamentId}",
-                                    tournamentId);
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogError(ex,
-                                    "Error during async ranking recalculation for tournament {TournamentId}",
-                                    tournamentId);
-                            }
-                        });
-                    }
-                }
-            }
-
-            // Handle TeamId updates
-            if (request.TeamId.HasValue)
-            {
-                // Verify the team belongs to this tournament
-                var teamExists = await _context.TournamentTeams
-                    .AnyAsync(tt => tt.Id == request.TeamId.Value && tt.TournamentId == tournamentId);
-
-                if (!teamExists)
-                    return BadRequest(new { message = $"Team {request.TeamId} not found in this tournament" });
-
-                map.TeamId = request.TeamId;
-            }
 
             await _context.SaveChangesAsync();
 
@@ -1684,9 +1642,7 @@ public class AdminTournamentController : ControllerBase
                 })
                 .FirstAsync();
 
-            // Include warning in response if team mapping had issues
-            var result = new { response, teamMappingWarning };
-            return Ok(result);
+            return Ok(response);
         }
         catch (Exception ex)
         {
@@ -1731,8 +1687,8 @@ public class AdminTournamentController : ControllerBase
     // ===== MANUAL MATCH RESULT ENDPOINTS =====
 
     /// <summary>
-    /// Create a manual match result for a tournament match map
-    /// Allows organizers to manually enter results without linking to a round
+    /// Create a manual match result for a tournament match map.
+    /// Optionally link to a round in the same call.
     /// </summary>
     [HttpPost("{tournamentId}/matches/{matchId}/maps/{mapId}/result")]
     [Authorize]
@@ -1772,51 +1728,64 @@ public class AdminTournamentController : ControllerBase
             if (map == null)
                 return NotFound(new { message = "Map not found" });
 
-            // Validate request
-            if (request.Team1Id <= 0 || request.Team2Id <= 0)
-                return BadRequest(new { message = "Both Team 1 and Team 2 must be provided" });
+            // Validate request - teams are optional but must be both present or both absent
+            var hasTeam1 = request.Team1Id.HasValue && request.Team1Id > 0;
+            var hasTeam2 = request.Team2Id.HasValue && request.Team2Id > 0;
 
-            if (request.Team1Id == request.Team2Id)
+            if (hasTeam1 != hasTeam2)
+                return BadRequest(new { message = "Both Team 1 and Team 2 must be provided together, or neither" });
+
+            if (hasTeam1 && hasTeam2 && request.Team1Id == request.Team2Id)
                 return BadRequest(new { message = "Team 1 and Team 2 cannot be the same" });
 
-            // Create the manual result
-            var resultId = await _matchResultService.CreateOrUpdateManualMatchResultAsync(
+            // Validate teams exist in tournament if provided
+            if (hasTeam1 && hasTeam2)
+            {
+                var teamIds = new[] { request.Team1Id!.Value, request.Team2Id!.Value };
+                var validTeams = await _context.TournamentTeams
+                    .Where(tt => teamIds.Contains(tt.Id) && tt.TournamentId == tournamentId)
+                    .Select(tt => tt.Id)
+                    .ToListAsync();
+
+                var invalidTeams = teamIds.Except(validTeams).ToList();
+                if (invalidTeams.Any())
+                    return BadRequest(new { message = $"Teams with IDs {string.Join(", ", invalidTeams)} not found in this tournament" });
+            }
+
+            // Create the manual result with optional teams
+            // Pass null if teams are not provided, otherwise pass the team ID
+            var team1Id = hasTeam1 ? request.Team1Id : (int?)null;
+            var team2Id = hasTeam2 ? request.Team2Id : (int?)null;
+
+            var (resultId, teamMappingWarning) = await _matchResultService.CreateOrUpdateManualMatchResultAsync(
                 tournamentId,
                 matchId,
                 mapId,
-                request.Team1Id,
-                request.Team2Id,
+                team1Id,
+                team2Id,
                 request.Team1Tickets,
                 request.Team2Tickets,
-                request.WinningTeamId);
+                request.WinningTeamId,
+                request.RoundId);
 
             _logger.LogInformation(
-                "Created manual match result {ResultId} for tournament {TournamentId}, match {MatchId}, map {MapId}",
-                resultId, tournamentId, matchId, mapId);
+                "Created manual match result {ResultId} for tournament {TournamentId}, match {MatchId}, map {MapId}" +
+                (request.RoundId != null ? ", linked to round {RoundId}" : ""),
+                resultId, tournamentId, matchId, mapId, request.RoundId);
 
-            // Get the created result before starting background task to avoid DbContext threading issues
+            if (teamMappingWarning != null)
+            {
+                _logger.LogWarning(
+                    "Team mapping warning for match result {ResultId}: {Warning}",
+                    resultId, teamMappingWarning);
+            }
+
+            // Get the created/updated result before starting background task to avoid DbContext threading issues
             var result = await _matchResultService.GetMatchResultAsync(resultId);
 
             // Trigger ranking recalculation asynchronously
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    _logger.LogInformation(
-                        "Starting async ranking recalculation after manual result creation for tournament {TournamentId}",
-                        tournamentId);
-                    await _rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
-                    _logger.LogInformation(
-                        "Completed async ranking recalculation after manual result creation for tournament {TournamentId}",
-                        tournamentId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex,
-                        "Error during async ranking recalculation for tournament {TournamentId}",
-                        tournamentId);
-                }
-            });
+            TriggerAsyncRankingRecalculation(tournamentId);
+
             var response = new TournamentMatchResultAdminResponse
             {
                 Id = result!.Id,
@@ -1833,6 +1802,7 @@ public class AdminTournamentController : ControllerBase
                 WinningTeamName = result.WinningTeam?.Name,
                 Team1Tickets = result.Team1Tickets,
                 Team2Tickets = result.Team2Tickets,
+                TeamMappingWarning = teamMappingWarning,
                 UpdatedAt = result.UpdatedAt
             };
 
@@ -1929,25 +1899,7 @@ public class AdminTournamentController : ControllerBase
             var updatedResult = await _matchResultService.GetMatchResultAsync(resultId);
 
             // Trigger ranking recalculation asynchronously
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    _logger.LogInformation(
-                        "Starting async ranking recalculation after manual result update for tournament {TournamentId}",
-                        tournamentId);
-                    await _rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
-                    _logger.LogInformation(
-                        "Completed async ranking recalculation after manual result update for tournament {TournamentId}",
-                        tournamentId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex,
-                        "Error during async ranking recalculation for tournament {TournamentId}",
-                        tournamentId);
-                }
-            });
+            TriggerAsyncRankingRecalculation(tournamentId);
             var response = new TournamentMatchResultAdminResponse
             {
                 Id = updatedResult!.Id,
@@ -1976,15 +1928,6 @@ public class AdminTournamentController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Update the linked round for a match result
-    /// </summary>
-    /// <summary>
-    /// Update the linked round for a match result
-    /// </summary>
-    /// <summary>
-    /// Update the linked round for a match result
-    /// </summary>
     /// <summary>
     /// Update the linked round for a match result
     /// </summary>
@@ -2534,9 +2477,6 @@ public class UpdateTournamentMatchMapRequest
 {
     public int MapId { get; set; }
     public string? MapName { get; set; }
-    public string? RoundId { get; set; }
-    public bool UpdateRoundId { get; set; } = false;
-    public int? TeamId { get; set; }
 }
 
 // Response DTOs
@@ -2667,11 +2607,28 @@ public class TournamentTeamRankingResponse
 public class CreateManualMatchResultRequest
 {
     public int MapId { get; set; }
-    public int Team1Id { get; set; }
-    public int Team2Id { get; set; }
-    public int Team1Tickets { get; set; }
-    public int Team2Tickets { get; set; }
+    /// <summary>
+    /// Optional: Team 1 ID. If not provided, can be set later via manual-update endpoint.
+    /// </summary>
+    public int? Team1Id { get; set; }
+    /// <summary>
+    /// Optional: Team 2 ID. If not provided, can be set later via manual-update endpoint.
+    /// </summary>
+    public int? Team2Id { get; set; }
+    /// <summary>
+    /// Optional: Team 1 score. If not provided, will be pulled from the linked round (if provided).
+    /// </summary>
+    public int? Team1Tickets { get; set; }
+    /// <summary>
+    /// Optional: Team 2 score. If not provided, will be pulled from the linked round (if provided).
+    /// </summary>
+    public int? Team2Tickets { get; set; }
     public int? WinningTeamId { get; set; }
+    /// <summary>
+    /// Optional: Link the result to a round upon creation.
+    /// If provided, teams and tickets will be auto-detected from the round data (if available).
+    /// </summary>
+    public string? RoundId { get; set; }
 }
 
 public class UpdateManualMatchResultRequest
