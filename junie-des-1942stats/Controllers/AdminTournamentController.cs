@@ -2229,6 +2229,10 @@ public class AdminTournamentController : ControllerBase
                 "Enhanced ranking recalculation triggered for tournament {TournamentId} with request: {Request}",
                 tournamentId, System.Text.Json.JsonSerializer.Serialize(request));
 
+            // Load team names mapping
+            var teamNamesMap = await _context.TournamentTeams
+                .ToDictionaryAsync(t => t.Id, t => t.Name);
+
             var weeksToRecalculate = new List<string?>();
             var (allWeeks, cumulativeUpdated) = await GetAllWeeksAndRecalculateCumulativeAsync(tournamentId);
 
@@ -2274,21 +2278,39 @@ public class AdminTournamentController : ControllerBase
             var updatedRankingsByWeek = new Dictionary<string, List<TournamentTeamRankingResponse>>();
             List<TournamentTeamRankingResponse> cumulativeRankings = [];
 
+            // Helper function to map rankings to response objects
+            TournamentTeamRankingResponse MapRankingToResponse(TournamentTeamRanking ranking)
+            {
+                var teamName = teamNamesMap.TryGetValue(ranking.TeamId, out var name) 
+                    ? name 
+                    : $"Team {ranking.TeamId}";
+                return new TournamentTeamRankingResponse
+                {
+                    Rank = ranking.Rank,
+                    TeamId = ranking.TeamId,
+                    TeamName = teamName,
+                    RoundsWon = ranking.RoundsWon,
+                    RoundsTied = ranking.RoundsTied,
+                    RoundsLost = ranking.RoundsLost,
+                    TicketDifferential = ranking.TicketDifferential,
+                    Week = ranking.Week
+                };
+            }
+
             // Get cumulative rankings
             var cumulativeRankingsList = await _rankingCalculator.CalculateRankingsAsync(tournamentId, null);
+            
+            // Save cumulative rankings to database
+            var oldCumulativeRankings = await _context.TournamentTeamRankings
+                .Where(r => r.TournamentId == tournamentId && r.Week == null)
+                .ToListAsync();
+            _context.TournamentTeamRankings.RemoveRange(oldCumulativeRankings);
+            await _context.TournamentTeamRankings.AddRangeAsync(cumulativeRankingsList);
+            await _context.SaveChangesAsync();
+            
             cumulativeRankings = cumulativeRankingsList
                 .OrderBy(r => r.Rank)
-                .Select(r => new TournamentTeamRankingResponse
-                {
-                    Rank = r.Rank,
-                    TeamId = r.TeamId,
-                    TeamName = r.Team?.Name ?? $"Team {r.TeamId}",
-                    RoundsWon = r.RoundsWon,
-                    RoundsTied = r.RoundsTied,
-                    RoundsLost = r.RoundsLost,
-                    TicketDifferential = r.TicketDifferential,
-                    Week = null
-                })
+                .Select(MapRankingToResponse)
                 .ToList();
 
             // Recalculate specific weeks
@@ -2300,25 +2322,23 @@ public class AdminTournamentController : ControllerBase
                 var rankings = await _rankingCalculator.CalculateRankingsAsync(tournamentId, week);
                 weeklyRankingsUpdated += rankings.Count;
 
+                // Save weekly rankings to database
+                var oldWeeklyRankings = await _context.TournamentTeamRankings
+                    .Where(r => r.TournamentId == tournamentId && r.Week == week)
+                    .ToListAsync();
+                _context.TournamentTeamRankings.RemoveRange(oldWeeklyRankings);
+                await _context.TournamentTeamRankings.AddRangeAsync(rankings);
+                await _context.SaveChangesAsync();
+
                 var response = rankings
                     .OrderBy(r => r.Rank)
-                    .Select(r => new TournamentTeamRankingResponse
-                    {
-                        Rank = r.Rank,
-                        TeamId = r.TeamId,
-                        TeamName = r.Team?.Name ?? $"Team {r.TeamId}",
-                        RoundsWon = r.RoundsWon,
-                        RoundsTied = r.RoundsTied,
-                        RoundsLost = r.RoundsLost,
-                        TicketDifferential = r.TicketDifferential,
-                        Week = r.Week
-                    })
+                    .Select(MapRankingToResponse)
                     .ToList();
 
                 updatedRankingsByWeek[week] = response;
 
                 _logger.LogInformation(
-                    "Updated {Count} rankings for tournament {TournamentId}, week {Week}",
+                    "Updated {Count} rankings for tournament {TournamentId}, week \"{Week}\"",
                     rankings.Count, tournamentId, week);
             }
 
