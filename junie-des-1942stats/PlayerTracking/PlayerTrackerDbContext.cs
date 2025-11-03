@@ -794,6 +794,17 @@ public class UserBuddy
     public Player Player { get; set; } = null!;
 }
 
+public class TournamentTheme
+{
+    public int Id { get; set; }
+    public string? BackgroundColour { get; set; } // Hex color (e.g., #RRGGBB or #RRGGBBAA)
+    public string? TextColour { get; set; } // Hex color
+    public string? AccentColour { get; set; } // Hex color
+
+    // Navigation properties
+    public Tournament Tournament { get; set; } = null!;
+}
+
 public class Tournament
 {
     public int Id { get; set; }
@@ -811,9 +822,8 @@ public class Tournament
     public string? Rules { get; set; } // Markdown content for tournament rules
     public string? ServerGuid { get; set; }
 
-    // Colour customisation (hex codes like #RRGGBB or #RRGGBBAA)
-    public string? PrimaryColour { get; set; }
-    public string? SecondaryColour { get; set; }
+    // Theme customisation
+    public int? ThemeId { get; set; }
 
     // Community links
     public string? DiscordUrl { get; set; }
@@ -823,6 +833,7 @@ public class Tournament
     public User CreatedByUser { get; set; } = null!;
     public Player OrganizerPlayer { get; set; } = null!;
     public GameServer? Server { get; set; }
+    public TournamentTheme? Theme { get; set; }
     public List<TournamentTeam> TournamentTeams { get; set; } = [];
     public List<TournamentMatch> TournamentMatches { get; set; } = [];
 }

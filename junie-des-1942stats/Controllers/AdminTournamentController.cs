@@ -51,6 +51,7 @@ public class AdminTournamentController : ControllerBase
             var tournaments = await _context.Tournaments
                 .Include(t => t.OrganizerPlayer)
                 .Include(t => t.Server)
+                .Include(t => t.Theme)
                 .Where(t => t.CreatedByUserEmail == userEmail)
                 .OrderByDescending(t => t.CreatedAt)
                 .ToListAsync();
@@ -88,8 +89,13 @@ public class AdminTournamentController : ControllerBase
                 ServerName = t.Server?.Name,
                 DiscordUrl = t.DiscordUrl,
                 ForumUrl = t.ForumUrl,
-                PrimaryColour = t.PrimaryColour,
-                SecondaryColour = t.SecondaryColour
+                Theme = t.Theme != null ? new TournamentThemeResponse
+                {
+                    Id = t.Theme.Id,
+                    BackgroundColour = t.Theme.BackgroundColour,
+                    TextColour = t.Theme.TextColour,
+                    AccentColour = t.Theme.AccentColour
+                } : null
             }).ToList();
 
             return Ok(response);
@@ -117,6 +123,7 @@ public class AdminTournamentController : ControllerBase
             var tournament = await _context.Tournaments
                 .Include(t => t.OrganizerPlayer)
                 .Include(t => t.Server)
+                .Include(t => t.Theme)
                 .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
                 .FirstOrDefaultAsync();
 
@@ -203,6 +210,14 @@ public class AdminTournamentController : ControllerBase
                 })
                 .ToList();
 
+            var themeResponse = tournament.Theme != null ? new TournamentThemeResponse
+            {
+                Id = tournament.Theme.Id,
+                BackgroundColour = tournament.Theme.BackgroundColour,
+                TextColour = tournament.Theme.TextColour,
+                AccentColour = tournament.Theme.AccentColour
+            } : null;
+
             var response = new TournamentDetailResponse
             {
                 Id = tournament.Id,
@@ -220,8 +235,7 @@ public class AdminTournamentController : ControllerBase
                 ServerName = tournament.Server?.Name,
                 DiscordUrl = tournament.DiscordUrl,
                 ForumUrl = tournament.ForumUrl,
-                PrimaryColour = tournament.PrimaryColour,
-                SecondaryColour = tournament.SecondaryColour
+                Theme = themeResponse
             };
 
             return Ok(response);
@@ -282,11 +296,13 @@ public class AdminTournamentController : ControllerBase
             if (logoImageError != null)
                 return BadRequest(new { message = logoImageError });
 
-            // Validate colours if provided
-            if (!string.IsNullOrWhiteSpace(request.PrimaryColour) && !IsValidHexColour(request.PrimaryColour))
-                return BadRequest(new { message = "Invalid PrimaryColour. Use hex like #RRGGBB or #RRGGBBAA." });
-            if (!string.IsNullOrWhiteSpace(request.SecondaryColour) && !IsValidHexColour(request.SecondaryColour))
-                return BadRequest(new { message = "Invalid SecondaryColour. Use hex like #RRGGBB or #RRGGBBAA." });
+            // Validate theme if provided
+            if (request.Theme != null)
+            {
+                var (isValid, themeError) = ValidateTheme(request.Theme);
+                if (!isValid)
+                    return BadRequest(new { message = themeError });
+            }
 
             // Validate and store rules as markdown
             string? sanitizedRules = null;
@@ -318,12 +334,24 @@ public class AdminTournamentController : ControllerBase
                 Rules = sanitizedRules,
                 ServerGuid = !string.IsNullOrWhiteSpace(request.ServerGuid) ? request.ServerGuid : null,
                 DiscordUrl = request.DiscordUrl,
-                ForumUrl = request.ForumUrl,
-                PrimaryColour = string.IsNullOrWhiteSpace(request.PrimaryColour) ? null : request.PrimaryColour,
-                SecondaryColour = string.IsNullOrWhiteSpace(request.SecondaryColour) ? null : request.SecondaryColour
+                ForumUrl = request.ForumUrl
             };
 
             _context.Tournaments.Add(tournament);
+
+            // Create theme if provided
+            if (request.Theme != null)
+            {
+                var theme = new TournamentTheme
+                {
+                    BackgroundColour = request.Theme.BackgroundColour,
+                    TextColour = request.Theme.TextColour,
+                    AccentColour = request.Theme.AccentColour,
+                    Tournament = tournament
+                };
+                _context.Add(theme);
+            }
+
             await _context.SaveChangesAsync();
 
             return CreatedAtAction(
@@ -356,6 +384,7 @@ public class AdminTournamentController : ControllerBase
                 return Unauthorized(new { message = "User email not found in token" });
 
             var tournament = await _context.Tournaments
+                .Include(t => t.Theme)
                 .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
                 .FirstOrDefaultAsync();
 
@@ -402,7 +431,12 @@ public class AdminTournamentController : ControllerBase
                 }
             }
 
-            if (request.HeroImageBase64 != null)
+            if (request.RemoveHeroImage)
+            {
+                tournament.HeroImage = null;
+                tournament.HeroImageContentType = null;
+            }
+            else if (request.HeroImageBase64 != null)
             {
                 var (heroImageData, heroImageError) = ValidateAndProcessImage(request.HeroImageBase64, request.HeroImageContentType);
                 if (heroImageError != null)
@@ -412,7 +446,12 @@ public class AdminTournamentController : ControllerBase
                 tournament.HeroImageContentType = heroImageData != null ? request.HeroImageContentType : null;
             }
 
-            if (request.CommunityLogoBase64 != null)
+            if (request.RemoveCommunityLogo)
+            {
+                tournament.CommunityLogo = null;
+                tournament.CommunityLogoContentType = null;
+            }
+            else if (request.CommunityLogoBase64 != null)
             {
                 var (communityLogoData, logoImageError) = ValidateAndProcessImage(request.CommunityLogoBase64, request.CommunityLogoContentType);
                 if (logoImageError != null)
@@ -447,22 +486,32 @@ public class AdminTournamentController : ControllerBase
             if (request.ForumUrl != null)
                 tournament.ForumUrl = request.ForumUrl;
 
-            if (request.PrimaryColour != null)
+            // Handle theme updates
+            if (request.Theme != null)
             {
-                if (!string.IsNullOrWhiteSpace(request.PrimaryColour) && !IsValidHexColour(request.PrimaryColour))
-                    return BadRequest(new { message = "Invalid PrimaryColour. Use hex like #RRGGBB or #RRGGBBAA." });
+                var (isValid, themeError) = ValidateTheme(request.Theme);
+                if (!isValid)
+                    return BadRequest(new { message = themeError });
 
-                tournament.PrimaryColour = string.IsNullOrWhiteSpace(request.PrimaryColour) ? null : request.PrimaryColour;
-                _logger.LogInformation("Updated PrimaryColour to: {Color}", tournament.PrimaryColour);
-            }
-
-            if (request.SecondaryColour != null)
-            {
-                if (!string.IsNullOrWhiteSpace(request.SecondaryColour) && !IsValidHexColour(request.SecondaryColour))
-                    return BadRequest(new { message = "Invalid SecondaryColour. Use hex like #RRGGBB or #RRGGBBAA." });
-
-                tournament.SecondaryColour = string.IsNullOrWhiteSpace(request.SecondaryColour) ? null : request.SecondaryColour;
-                _logger.LogInformation("Updated SecondaryColour to: {Color}", tournament.SecondaryColour);
+                if (tournament.Theme == null)
+                {
+                    // Create new theme
+                    tournament.Theme = new TournamentTheme
+                    {
+                        BackgroundColour = request.Theme.BackgroundColour,
+                        TextColour = request.Theme.TextColour,
+                        AccentColour = request.Theme.AccentColour,
+                        Tournament = tournament
+                    };
+                    _context.Add(tournament.Theme);
+                }
+                else
+                {
+                    // Update existing theme
+                    tournament.Theme.BackgroundColour = request.Theme.BackgroundColour;
+                    tournament.Theme.TextColour = request.Theme.TextColour;
+                    tournament.Theme.AccentColour = request.Theme.AccentColour;
+                }
             }
 
             await _context.SaveChangesAsync();
@@ -645,6 +694,21 @@ public class AdminTournamentController : ControllerBase
         }
     }
 
+    private (bool isValid, string? error) ValidateTheme(TournamentThemeRequest theme)
+    {
+        // All colors are optional, but if provided they must be valid hex colors
+        if (!string.IsNullOrWhiteSpace(theme.BackgroundColour) && !IsValidHexColour(theme.BackgroundColour))
+            return (false, "Invalid BackgroundColour. Use hex like #RRGGBB or #RRGGBBAA.");
+
+        if (!string.IsNullOrWhiteSpace(theme.TextColour) && !IsValidHexColour(theme.TextColour))
+            return (false, "Invalid TextColour. Use hex like #RRGGBB or #RRGGBBAA.");
+
+        if (!string.IsNullOrWhiteSpace(theme.AccentColour) && !IsValidHexColour(theme.AccentColour))
+            return (false, "Invalid AccentColour. Use hex like #RRGGBB or #RRGGBBAA.");
+
+        return (true, null);
+    }
+
     private bool IsValidHexColour(string input)
     {
         if (string.IsNullOrWhiteSpace(input)) return false;
@@ -659,6 +723,7 @@ public class AdminTournamentController : ControllerBase
         var tournament = await _context.Tournaments
             .Include(t => t.OrganizerPlayer)
             .Include(t => t.Server)
+            .Include(t => t.Theme)
             .FirstAsync(t => t.Id == tournamentId);
 
         var teams = await _context.TournamentTeams
@@ -737,6 +802,14 @@ public class AdminTournamentController : ControllerBase
             })
             .ToList();
 
+        var themeResponse = tournament.Theme != null ? new TournamentThemeResponse
+        {
+            Id = tournament.Theme.Id,
+            BackgroundColour = tournament.Theme.BackgroundColour,
+            TextColour = tournament.Theme.TextColour,
+            AccentColour = tournament.Theme.AccentColour
+        } : null;
+
         return new TournamentDetailResponse
         {
             Id = tournament.Id,
@@ -754,8 +827,7 @@ public class AdminTournamentController : ControllerBase
             ServerName = tournament.Server?.Name,
             DiscordUrl = tournament.DiscordUrl,
             ForumUrl = tournament.ForumUrl,
-            PrimaryColour = tournament.PrimaryColour,
-            SecondaryColour = tournament.SecondaryColour
+            Theme = themeResponse
         };
     }
 
@@ -2026,6 +2098,22 @@ public class AdminTournamentController : ControllerBase
 }
 
 // Request DTOs
+// Theme DTOs
+public class TournamentThemeRequest
+{
+    public string? BackgroundColour { get; set; } // Hex color
+    public string? TextColour { get; set; } // Hex color
+    public string? AccentColour { get; set; } // Hex color
+}
+
+public class TournamentThemeResponse
+{
+    public int Id { get; set; }
+    public string? BackgroundColour { get; set; } // Hex color
+    public string? TextColour { get; set; } // Hex color
+    public string? AccentColour { get; set; } // Hex color
+}
+
 public class CreateTournamentRequest
 {
     public string Name { get; set; } = "";
@@ -2040,8 +2128,7 @@ public class CreateTournamentRequest
     public string? ServerGuid { get; set; }
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
-    public string? PrimaryColour { get; set; }
-    public string? SecondaryColour { get; set; }
+    public TournamentThemeRequest? Theme { get; set; }
 }
 
 public class UpdateTournamentRequest
@@ -2052,14 +2139,15 @@ public class UpdateTournamentRequest
     public int? AnticipatedRoundCount { get; set; }
     public string? HeroImageBase64 { get; set; }
     public string? HeroImageContentType { get; set; }
+    public bool RemoveHeroImage { get; set; } = false;
     public string? CommunityLogoBase64 { get; set; }
     public string? CommunityLogoContentType { get; set; }
+    public bool RemoveCommunityLogo { get; set; } = false;
     public string? Rules { get; set; }
     public string? ServerGuid { get; set; }
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
-    public string? PrimaryColour { get; set; }
-    public string? SecondaryColour { get; set; }
+    public TournamentThemeRequest? Theme { get; set; }
 }
 
 // Team Management DTOs
@@ -2128,8 +2216,7 @@ public class TournamentListResponse
     public string? ServerName { get; set; }
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
-    public string? PrimaryColour { get; set; }
-    public string? SecondaryColour { get; set; }
+    public TournamentThemeResponse? Theme { get; set; }
 }
 
 public class TournamentDetailResponse
@@ -2149,8 +2236,7 @@ public class TournamentDetailResponse
     public string? ServerName { get; set; }
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
-    public string? PrimaryColour { get; set; }
-    public string? SecondaryColour { get; set; }
+    public TournamentThemeResponse? Theme { get; set; }
 }
 
 public class TournamentTeamResponse

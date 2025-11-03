@@ -61,6 +61,8 @@ var loggerConfig = new LoggerConfiguration()
     .MinimumLevel.Override("junie_des_1942stats.PlayerStats.PlayersController", Serilog.Events.LogEventLevel.Information)
     .MinimumLevel.Override("junie_des_1942stats.ServerStats.ServersController", Serilog.Events.LogEventLevel.Information)
     .MinimumLevel.Override("junie_des_1942stats.RealTimeAnalyticsController", Serilog.Events.LogEventLevel.Information)
+    // Suppress verbose HTTP client logs from the OTLP trace exporter
+    .MinimumLevel.Override("System.Net.Http.HttpClient.OtlpTraceExporter.ClientHandler", Serilog.Events.LogEventLevel.Warning)
     .Enrich.WithProperty("service.name", serviceName)
     .Enrich.WithProperty("service.version", "1.0.0")
     .Enrich.WithProperty("deployment.environment", environment)

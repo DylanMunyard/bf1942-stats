@@ -37,6 +37,7 @@ public class PublicTournamentController : ControllerBase
                 tournament = await _context.Tournaments
                     .Include(t => t.OrganizerPlayer)
                     .Include(t => t.Server)
+                    .Include(t => t.Theme)
                     .FirstOrDefaultAsync(t => t.Id == id);
             }
             else
@@ -45,6 +46,7 @@ public class PublicTournamentController : ControllerBase
                 tournament = await _context.Tournaments
                     .Include(t => t.OrganizerPlayer)
                     .Include(t => t.Server)
+                    .Include(t => t.Theme)
                     .FirstOrDefaultAsync(t => t.Name == idOrName);
             }
 
@@ -202,6 +204,13 @@ public class PublicTournamentController : ControllerBase
                 })
                 .ToList();
 
+            var themeResponse = tournament.Theme != null ? new PublicTournamentThemeResponse
+            {
+                BackgroundColour = tournament.Theme.BackgroundColour,
+                TextColour = tournament.Theme.TextColour,
+                AccentColour = tournament.Theme.AccentColour
+            } : null;
+
             var response = new PublicTournamentDetailResponse
             {
                 Id = tournament.Id,
@@ -219,8 +228,7 @@ public class PublicTournamentController : ControllerBase
                 ServerName = tournament.Server?.Name,
                 DiscordUrl = tournament.DiscordUrl,
                 ForumUrl = tournament.ForumUrl,
-                PrimaryColour = tournament.PrimaryColour,
-                SecondaryColour = tournament.SecondaryColour
+                Theme = themeResponse
             };
 
             return Ok(response);
@@ -355,6 +363,14 @@ public class PublicTournamentController : ControllerBase
 }
 
 // Response DTOs for public endpoints
+// Theme DTOs for public API
+public class PublicTournamentThemeResponse
+{
+    public string? BackgroundColour { get; set; }
+    public string? TextColour { get; set; }
+    public string? AccentColour { get; set; }
+}
+
 public class PublicTournamentDetailResponse
 {
     public int Id { get; set; }
@@ -372,8 +388,7 @@ public class PublicTournamentDetailResponse
     public string? ServerName { get; set; }
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
-    public string? PrimaryColour { get; set; }
-    public string? SecondaryColour { get; set; }
+    public PublicTournamentThemeResponse? Theme { get; set; }
 }
 
 public class PublicTournamentTeamResponse
