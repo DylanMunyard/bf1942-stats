@@ -2118,7 +2118,7 @@ public class AdminTournamentController : ControllerBase
                 {
                     Rank = r.Rank,
                     TeamId = r.TeamId,
-                    TeamName = r.Team.Name,
+                    TeamName = r.Team?.Name ?? $"Team {r.TeamId}",
                     RoundsWon = r.RoundsWon,
                     RoundsTied = r.RoundsTied,
                     RoundsLost = r.RoundsLost,
@@ -2282,7 +2282,7 @@ public class AdminTournamentController : ControllerBase
                 {
                     Rank = r.Rank,
                     TeamId = r.TeamId,
-                    TeamName = r.Team.Name,
+                    TeamName = r.Team?.Name ?? $"Team {r.TeamId}",
                     RoundsWon = r.RoundsWon,
                     RoundsTied = r.RoundsTied,
                     RoundsLost = r.RoundsLost,
@@ -2306,7 +2306,7 @@ public class AdminTournamentController : ControllerBase
                     {
                         Rank = r.Rank,
                         TeamId = r.TeamId,
-                        TeamName = r.Team.Name,
+                        TeamName = r.Team?.Name ?? $"Team {r.TeamId}",
                         RoundsWon = r.RoundsWon,
                         RoundsTied = r.RoundsTied,
                         RoundsLost = r.RoundsLost,
