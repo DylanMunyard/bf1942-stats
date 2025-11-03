@@ -61,7 +61,7 @@ public class LiveServersController : ControllerBase
             stepStopwatch.Restart();
             var response = new ServerListResponse
             {
-                Servers = servers,
+                Servers = servers ?? [],
                 LastUpdated = DateTime.UtcNow.ToString("O")
             };
             stepStopwatch.Stop();

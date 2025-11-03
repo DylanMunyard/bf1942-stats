@@ -2118,7 +2118,7 @@ public class AdminTournamentController : ControllerBase
                 {
                     Rank = r.Rank,
                     TeamId = r.TeamId,
-                    TeamName = r.Team?.Name ?? $"Team {r.TeamId}",
+                    TeamName = r.Team != null ? r.Team.Name : $"Team {r.TeamId}",
                     RoundsWon = r.RoundsWon,
                     RoundsTied = r.RoundsTied,
                     RoundsLost = r.RoundsLost,
