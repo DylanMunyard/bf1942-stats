@@ -2197,11 +2197,17 @@ public class AdminTournamentController : ControllerBase
     }
 
     /// <summary>
-    /// Manually trigger ranking recalculation for a tournament
+    /// Manually trigger ranking recalculation for a tournament with flexible week filtering
+    /// Allows admins to recalculate leaderboards for:
+    /// - All weeks (default - no request body)
+    /// - A single week (specify Week parameter)
+    /// - From a specific week onwards (specify FromWeek parameter)
     /// </summary>
     [HttpPost("{tournamentId}/leaderboard/recalculate")]
     [Authorize]
-    public async Task<ActionResult<RecalculateRankingsResponse>> RecalculateRankings(int tournamentId)
+    public async Task<ActionResult<RecalculateRankingsAdvancedResponse>> RecalculateRankings(
+        int tournamentId,
+        [FromBody] RecalculateRankingsAdvancedRequest? request = null)
     {
         try
         {
@@ -2217,24 +2223,145 @@ public class AdminTournamentController : ControllerBase
             if (tournament == null)
                 return NotFound(new { message = "Tournament not found" });
 
+            request ??= new RecalculateRankingsAdvancedRequest();
+
             _logger.LogInformation(
-                "Manual ranking recalculation triggered for tournament {TournamentId}",
-                tournamentId);
+                "Enhanced ranking recalculation triggered for tournament {TournamentId} with request: {Request}",
+                tournamentId, System.Text.Json.JsonSerializer.Serialize(request));
 
-            var totalUpdated = await _rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
+            var weeksToRecalculate = new List<string?>();
+            var (allWeeks, cumulativeUpdated) = await GetAllWeeksAndRecalculateCumulativeAsync(tournamentId);
 
-            return Ok(new RecalculateRankingsResponse
+            if (!string.IsNullOrWhiteSpace(request.Week))
+            {
+                // Single week recalculation
+                weeksToRecalculate.Add(request.Week);
+                _logger.LogInformation(
+                    "Recalculating rankings for specific week: {Week}",
+                    request.Week);
+            }
+            else if (!string.IsNullOrWhiteSpace(request.FromWeek))
+            {
+                // From week onwards recalculation
+                var weeksFromStartingPoint = allWeeks
+                    .SkipWhile(w => w != request.FromWeek)
+                    .ToList();
+
+                if (!weeksFromStartingPoint.Any())
+                {
+                    _logger.LogWarning(
+                        "Requested FromWeek '{FromWeek}' not found in tournament {TournamentId}. Available weeks: {AvailableWeeks}",
+                        request.FromWeek, tournamentId, string.Join(", ", allWeeks));
+                    return BadRequest(new { message = $"Week '{request.FromWeek}' not found in tournament" });
+                }
+
+                weeksToRecalculate.AddRange(weeksFromStartingPoint);
+                _logger.LogInformation(
+                    "Recalculating rankings from week '{FromWeek}' onwards. Weeks to recalculate: {Weeks}",
+                    request.FromWeek, string.Join(", ", weeksToRecalculate));
+            }
+            else
+            {
+                // All weeks recalculation (default)
+                weeksToRecalculate.AddRange(allWeeks);
+                _logger.LogInformation(
+                    "Recalculating rankings for all weeks: {Weeks}",
+                    string.Join(", ", allWeeks));
+            }
+
+            // Recalculate rankings for specified weeks
+            var weeklyRankingsUpdated = 0;
+            var updatedRankingsByWeek = new Dictionary<string, List<TournamentTeamRankingResponse>>();
+            List<TournamentTeamRankingResponse> cumulativeRankings = [];
+
+            // Get cumulative rankings
+            var cumulativeRankingsList = await _rankingCalculator.CalculateRankingsAsync(tournamentId, null);
+            cumulativeRankings = cumulativeRankingsList
+                .OrderBy(r => r.Rank)
+                .Select(r => new TournamentTeamRankingResponse
+                {
+                    Rank = r.Rank,
+                    TeamId = r.TeamId,
+                    TeamName = r.Team.Name,
+                    RoundsWon = r.RoundsWon,
+                    RoundsTied = r.RoundsTied,
+                    RoundsLost = r.RoundsLost,
+                    TicketDifferential = r.TicketDifferential,
+                    Week = null
+                })
+                .ToList();
+
+            // Recalculate specific weeks
+            foreach (var week in weeksToRecalculate)
+            {
+                if (string.IsNullOrWhiteSpace(week))
+                    continue;
+
+                var rankings = await _rankingCalculator.CalculateRankingsAsync(tournamentId, week);
+                weeklyRankingsUpdated += rankings.Count;
+
+                var response = rankings
+                    .OrderBy(r => r.Rank)
+                    .Select(r => new TournamentTeamRankingResponse
+                    {
+                        Rank = r.Rank,
+                        TeamId = r.TeamId,
+                        TeamName = r.Team.Name,
+                        RoundsWon = r.RoundsWon,
+                        RoundsTied = r.RoundsTied,
+                        RoundsLost = r.RoundsLost,
+                        TicketDifferential = r.TicketDifferential,
+                        Week = r.Week
+                    })
+                    .ToList();
+
+                updatedRankingsByWeek[week] = response;
+
+                _logger.LogInformation(
+                    "Updated {Count} rankings for tournament {TournamentId}, week {Week}",
+                    rankings.Count, tournamentId, week);
+            }
+
+            var result = new RecalculateRankingsAdvancedResponse
             {
                 TournamentId = tournamentId,
-                TotalRankingsUpdated = totalUpdated,
+                TotalRankingsUpdated = weeklyRankingsUpdated + cumulativeUpdated,
+                WeeksRecalculated = weeksToRecalculate.Where(w => !string.IsNullOrWhiteSpace(w)).ToList()!,
+                CumulativeRankings = cumulativeRankings,
+                RankingsByWeek = updatedRankingsByWeek,
                 UpdatedAt = SystemClock.Instance.GetCurrentInstant()
-            });
+            };
+
+            return Ok(result);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error recalculating rankings for tournament {TournamentId}", tournamentId);
             return StatusCode(500, new { message = "Error recalculating rankings" });
         }
+    }
+
+    /// <summary>
+    /// Helper method to get all distinct weeks and recalculate cumulative rankings
+    /// </summary>
+    private async Task<(List<string?>, int)> GetAllWeeksAndRecalculateCumulativeAsync(int tournamentId)
+    {
+        // Get all distinct weeks from match results
+        var weeks = await _context.TournamentMatchResults
+            .Where(mr => mr.TournamentId == tournamentId && mr.Week != null)
+            .Select(mr => mr.Week)
+            .Distinct()
+            .OrderBy(w => w)
+            .ToListAsync();
+
+        // Always recalculate cumulative rankings (week = null)
+        var cumulativeRankings = await _rankingCalculator.CalculateRankingsAsync(tournamentId, null);
+        
+        _logger.LogInformation(
+            "Recalculated cumulative rankings for tournament {TournamentId}: {Count} rankings",
+            tournamentId, cumulativeRankings.Count);
+
+        return (weeks, cumulativeRankings.Count);
     }
 
     /// <summary>
@@ -2572,5 +2699,57 @@ public class CleanupOrphanedResultsResponse
 {
     public int TournamentId { get; set; }
     public int OrphanedResultsRemoved { get; set; }
+    public Instant UpdatedAt { get; set; }
+}
+
+
+public class RecalculateRankingsAdvancedRequest
+{
+    /// <summary>
+    /// Optional: Specific week to recalculate.
+    /// If provided, only this week's rankings will be recalculated.
+    /// If not provided, defaults to recalculating all weeks.
+    /// </summary>
+    public string? Week { get; set; }
+
+    /// <summary>
+    /// Optional: Starting week for "from week onwards" recalculation.
+    /// If provided, all weeks from this week onwards will be recalculated.
+    /// Takes precedence over Week if both are provided.
+    /// If neither Week nor FromWeek are provided, all weeks are recalculated.
+    /// </summary>
+    public string? FromWeek { get; set; }
+}
+
+public class RecalculateRankingsAdvancedResponse
+{
+    /// <summary>
+    /// The tournament ID
+    /// </summary>
+    public int TournamentId { get; set; }
+
+    /// <summary>
+    /// Total number of ranking records updated (across all weeks and cumulative)
+    /// </summary>
+    public int TotalRankingsUpdated { get; set; }
+
+    /// <summary>
+    /// List of weeks that were recalculated
+    /// </summary>
+    public List<string> WeeksRecalculated { get; set; } = [];
+
+    /// <summary>
+    /// Cumulative rankings across all weeks
+    /// </summary>
+    public List<TournamentTeamRankingResponse> CumulativeRankings { get; set; } = [];
+
+    /// <summary>
+    /// Rankings grouped by week, showing the calculated standings for each specific week
+    /// </summary>
+    public Dictionary<string, List<TournamentTeamRankingResponse>> RankingsByWeek { get; set; } = [];
+
+    /// <summary>
+    /// Timestamp of when the recalculation was performed
+    /// </summary>
     public Instant UpdatedAt { get; set; }
 }
