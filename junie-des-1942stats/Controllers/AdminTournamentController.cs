@@ -1913,6 +1913,13 @@ public class AdminTournamentController : ControllerBase
             result.Team1Tickets = request.Team1Tickets;
             result.Team2Tickets = request.Team2Tickets;
             result.WinningTeamId = request.WinningTeamId;
+
+            // If it's a draw (equal tickets), clear the winning team
+            if (request.Team1Tickets == request.Team2Tickets)
+            {
+                result.WinningTeamId = null;
+            }
+
             result.UpdatedAt = SystemClock.Instance.GetCurrentInstant();
 
             _context.TournamentMatchResults.Update(result);

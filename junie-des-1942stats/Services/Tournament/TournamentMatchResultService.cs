@@ -276,63 +276,42 @@ public class TournamentMatchResultService : ITournamentMatchResultService
                     throw new InvalidOperationException("Winning team must be one of the two teams in the match");
             }
 
-            // Check if result already exists for this map
-            var existingResult = await _dbContext.TournamentMatchResults
-                .FirstOrDefaultAsync(r => r.MatchId == matchId && r.MapId == mapId);
-
-            TournamentMatchResult result;
-            if (existingResult != null)
+            // If it's a draw (equal tickets), clear the winning team
+            if (team1Tickets == team2Tickets)
             {
-                // Update existing
-                existingResult.Week = match.Week;
-                existingResult.Team1Id = team1Id;
-                existingResult.Team2Id = team2Id;
-                existingResult.WinningTeamId = winningTeamId;
-                existingResult.Team1Tickets = team1Tickets;
-                existingResult.Team2Tickets = team2Tickets;
-                existingResult.UpdatedAt = SystemClock.Instance.GetCurrentInstant();
-
-                _dbContext.TournamentMatchResults.Update(existingResult);
-                result = existingResult;
-
-                _logger.LogInformation(
-                    "Updated manual match result {ResultId} for tournament {TournamentId}, match {MatchId}, map {MapId}",
-                    existingResult.Id, tournamentId, matchId, mapId);
-            }
-            else
-            {
-                // Create new (RoundId remains null for manual entries)
-                result = new TournamentMatchResult
-                {
-                    TournamentId = tournamentId,
-                    MatchId = matchId,
-                    MapId = mapId,
-                    RoundId = null, // Manual entry - no round linked
-                    Week = match.Week,
-                    Team1Id = team1Id,
-                    Team2Id = team2Id,
-                    WinningTeamId = winningTeamId,
-                    Team1Tickets = team1Tickets,
-                    Team2Tickets = team2Tickets,
-                    CreatedAt = SystemClock.Instance.GetCurrentInstant(),
-                    UpdatedAt = SystemClock.Instance.GetCurrentInstant()
-                };
-
-                _dbContext.TournamentMatchResults.Add(result);
-
-                _logger.LogInformation(
-                    "Created manual match result for tournament {TournamentId}, match {MatchId}, map {MapId}",
-                    tournamentId, matchId, mapId);
+                winningTeamId = null;
             }
 
+            // Always create a new result (maps can have multiple results)
+            var result = new TournamentMatchResult
+            {
+                TournamentId = tournamentId,
+                MatchId = matchId,
+                MapId = mapId,
+                RoundId = null, // Manual entry - no round linked
+                Week = match.Week,
+                Team1Id = team1Id,
+                Team2Id = team2Id,
+                WinningTeamId = winningTeamId,
+                Team1Tickets = team1Tickets,
+                Team2Tickets = team2Tickets,
+                CreatedAt = SystemClock.Instance.GetCurrentInstant(),
+                UpdatedAt = SystemClock.Instance.GetCurrentInstant()
+            };
+
+            _dbContext.TournamentMatchResults.Add(result);
             await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Created manual match result {ResultId} for tournament {TournamentId}, match {MatchId}, map {MapId}",
+                result.Id, tournamentId, matchId, mapId);
 
             return result.Id;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
-                "Error creating/updating manual match result for tournament {TournamentId}, match {MatchId}, map {MapId}",
+                "Error creating manual match result for tournament {TournamentId}, match {MatchId}, map {MapId}",
                 tournamentId, matchId, mapId);
             throw;
         }
