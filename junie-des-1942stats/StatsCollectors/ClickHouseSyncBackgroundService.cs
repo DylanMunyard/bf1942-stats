@@ -174,6 +174,7 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
                         join ps in db.PlayerSessions on po.SessionId equals ps.SessionId
                         join s in db.Servers on ps.ServerGuid equals s.Guid
                         join p in db.Players on ps.PlayerName equals p.Name
+                        where !p.AiBot // Exclude bot players from ClickHouse sync
                         select new
                         {
                             po.Timestamp,
@@ -188,7 +189,7 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
                             TeamLabel = po.TeamLabel,
                             MapName = ps.MapName,
                             GameType = ps.GameType,
-                            IsBot = p.AiBot,
+                            IsBot = false, // Always false since we filter out bots above
                             Game = s.Game
                         };
 

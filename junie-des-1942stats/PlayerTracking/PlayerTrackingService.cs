@@ -87,6 +87,12 @@ public class PlayerTrackingService
 
         foreach (var playerInfo in server.Players)
         {
+            // Skip bot players entirely - don't store them in database at all
+            if (_botDetectionService.IsBotPlayer(playerInfo.Name, playerInfo.AiBot))
+            {
+                continue;
+            }
+
             if (!playerMap.TryGetValue(playerInfo.Name, out var player))
             {
                 player = new Player
@@ -94,7 +100,7 @@ public class PlayerTrackingService
                     Name = playerInfo.Name,
                     FirstSeen = timestamp,
                     LastSeen = timestamp,
-                    AiBot = _botDetectionService.IsBotPlayer(playerInfo.Name, playerInfo.AiBot),
+                    AiBot = false, // Since we skip bots above, this is always false
                 };
                 newPlayers.Add(player);
                 playerMap.Add(player.Name, player);
@@ -102,7 +108,6 @@ public class PlayerTrackingService
             else
             {
                 // Update existing player
-                player.AiBot = _botDetectionService.IsBotPlayer(playerInfo.Name, playerInfo.AiBot);
                 player.LastSeen = timestamp;
                 _dbContext.Players.Update(player);
             }
@@ -155,13 +160,10 @@ public class PlayerTrackingService
                 sessionsToCreate.Add(newSession);
                 pendingObservations.Add((playerInfo, newSession));
 
-                if (!playerInfo.AiBot)
-                {
-                    // Track player online event (true first time online)
-                    _logger.LogInformation("TRACKING: Detected player online for {PlayerName} on {ServerName}: ",
-                        server.Name, playerInfo.Name);
-                    eventsToPublish.Add(("player_online", playerInfo, newSession, null));
-                }
+                // Track player online event (bots are already filtered out above)
+                _logger.LogInformation("TRACKING: Detected player online for {PlayerName} on {ServerName}: ",
+                    server.Name, playerInfo.Name);
+                eventsToPublish.Add(("player_online", playerInfo, newSession, null));
             }
         }
 
@@ -223,21 +225,16 @@ public class PlayerTrackingService
                     await _dbContext.SaveChangesAsync();
                 }
 
-                // Update participant count for the round (distinct non-bot players)
+                // Update participant count for the round (all players since bots are no longer stored)
                 if (activeRound != null)
                 {
-                    var nonBotCount = await _dbContext.PlayerSessions
+                    var playerCount = await _dbContext.PlayerSessions
                         .Where(ps => ps.RoundId == activeRound.RoundId)
-                        .Join(_dbContext.Players,
-                              ps => ps.PlayerName,
-                              p => p.Name,
-                              (ps, p) => new { ps.PlayerName, p.AiBot })
-                        .Where(x => !x.AiBot)
-                        .Select(x => x.PlayerName)
+                        .Select(ps => ps.PlayerName)
                         .Distinct()
                         .CountAsync();
 
-                    activeRound.ParticipantCount = nonBotCount;
+                    activeRound.ParticipantCount = playerCount;
                     activeRound.Tickets1 = server.Tickets1;
                     activeRound.Tickets2 = server.Tickets2;
                     _dbContext.Rounds.Update(activeRound);

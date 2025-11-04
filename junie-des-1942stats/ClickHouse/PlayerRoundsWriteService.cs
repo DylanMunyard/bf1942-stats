@@ -174,10 +174,10 @@ SETTINGS index_granularity = 8192";
             using var scope = _scopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
 
-            // Get total count for progress reporting
+            // Get total count for progress reporting (exclude bot players)
             var totalQuery = lastSyncedTime.HasValue
-                ? dbContext.PlayerSessions.AsNoTracking().Where(ps => !ps.IsActive && ps.LastSeenTime > fromDate.AddHours(-1))
-                : dbContext.PlayerSessions.AsNoTracking().Where(ps => !ps.IsActive && ps.LastSeenTime >= fromDate);
+                ? dbContext.PlayerSessions.AsNoTracking().Where(ps => !ps.IsActive && ps.LastSeenTime > fromDate.AddHours(-1) && !ps.Player.AiBot)
+                : dbContext.PlayerSessions.AsNoTracking().Where(ps => !ps.IsActive && ps.LastSeenTime >= fromDate && !ps.Player.AiBot);
 
             var totalCount = await totalQuery.CountAsync();
             if (totalCount == 0)
@@ -201,10 +201,10 @@ SETTINGS index_granularity = 8192";
                 batchNumber++;
                 var batchStartTime = DateTime.UtcNow;
 
-                // Get completed sessions since last sync, ordered consistently
+                // Get completed sessions since last sync, ordered consistently (exclude bot players)
                 var baseQuery = lastSyncedTime.HasValue
-                    ? dbContext.PlayerSessions.AsNoTracking().Where(ps => !ps.IsActive && ps.LastSeenTime > fromDate.AddHours(-1))
-                    : dbContext.PlayerSessions.AsNoTracking().Where(ps => !ps.IsActive && ps.LastSeenTime >= fromDate);
+                    ? dbContext.PlayerSessions.AsNoTracking().Where(ps => !ps.IsActive && ps.LastSeenTime > fromDate.AddHours(-1) && !ps.Player.AiBot)
+                    : dbContext.PlayerSessions.AsNoTracking().Where(ps => !ps.IsActive && ps.LastSeenTime >= fromDate && !ps.Player.AiBot);
 
                 // Project minimal data needed for export
                 var completedBatch = await baseQuery
@@ -225,7 +225,7 @@ SETTINGS index_granularity = 8192";
                         ps.GameType,
                         ps.RoundId,
                         ps.AveragePing,
-                        AiBot = (bool?)ps.Player.AiBot,
+                        AiBot = false, // Always false since we filter out bots above
                         Game = ps.Server.Game,
                         TeamLabel = ps.Observations
                             .OrderByDescending(o => o.Timestamp)
