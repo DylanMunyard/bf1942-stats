@@ -254,7 +254,7 @@ SETTINGS index_granularity = 8192";
                     TeamLabel = r.TeamLabel ?? string.Empty,
                     GameId = r.GameType,
                     Game = r.Game ?? "unknown",
-                    IsBot = r.AiBot ?? false,
+                    IsBot = r.AiBot,
                     AveragePing = r.AveragePing,
                     CreatedAt = DateTime.UtcNow
                 }).ToList();
