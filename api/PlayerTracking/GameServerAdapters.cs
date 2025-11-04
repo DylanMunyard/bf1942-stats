@@ -1,4 +1,5 @@
 ﻿using api.Bflist;
+using api.Bflist.Models;
 
 namespace api.PlayerTracking
 {

@@ -22,6 +22,8 @@ We use a **feature-first organization** pattern rather than type-based organizat
 2. **Controllers go directly in the feature folder** - NOT in `/Controllers`
 3. **Services and service implementations go directly in the feature folder** - NOT in `/Services`
 4. **Models go in a `/Models` subfolder** within the feature
+   - **Each DTO class should be in its own file** (e.g., `UserDto.cs`, `LoginRequest.cs`)
+   - **Exception**: Small related value objects can be grouped if they form a cohesive domain concept
 5. **Avoid root-level type-based folders** like `/Services`, `/Controllers`, `/Models`
 6. **Shared/cross-cutting concerns** like `Telemetry`, `Caching`, `ClickHouse` can be in their own feature folders
 7. **Migrations and build artifacts** stay in their special folders (`/Migrations`, `/bin`, `/obj`, etc.)
@@ -48,11 +50,17 @@ junie-des-1942stats/
 │   │   ├── TournamentMatchResultService.cs
 │   │   └── ...
 │   └── Models/
-│       └── GamificationModels.cs
+│       ├── Achievement.cs
+│       ├── KillStreak.cs
+│       ├── BadgeDefinition.cs
+│       └── ...
 ├── PlayerStats/                    # Player statistics feature
 │   ├── PlayerStatsService.cs
 │   ├── PlayersController.cs
 │   └── Models/
+│       ├── PlayerBasicInfo.cs
+│       ├── PlayerFilters.cs
+│       ├── ServerInfo.cs
 │       └── ...
 ├── Auth/                           # Authentication feature
 │   ├── TokenService.cs
@@ -73,6 +81,7 @@ junie-des-1942stats/
 - **Cohesion**: Related code lives together
 - **Discoverability**: Easy to find all code related to a feature
 - **Scalability**: Features can grow independently with their own services, controllers, models
+- **DTO Organization**: Individual DTO files improve file discoverability and keep file sizes manageable
 
 ---
 

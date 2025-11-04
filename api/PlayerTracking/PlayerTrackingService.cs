@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using api.Bflist;
+using api.Bflist.Models;
 using api.Services;
 using api.ServerStats;
 using System.Text.Json;

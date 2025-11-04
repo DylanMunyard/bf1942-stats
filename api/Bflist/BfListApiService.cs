@@ -1,6 +1,7 @@
 using System.Text.Json;
 using api.Bflist;
-using api.StatsCollectors.Modals;
+using api.Bflist.Models;
+using api.StatsCollectors.Models;
 using api.Caching;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;

@@ -1,4 +1,5 @@
 using api.Bflist;
+using api.Bflist.Models;
 using Microsoft.AspNetCore.Mvc;
 using api.Services;
 using Microsoft.Extensions.Logging;
