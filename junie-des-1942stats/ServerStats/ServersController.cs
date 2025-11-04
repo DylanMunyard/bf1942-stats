@@ -10,10 +10,10 @@ namespace junie_des_1942stats.ServerStats;
 [Route("stats/[controller]")]
 public class ServersController : ControllerBase
 {
-    private readonly ServerStatsService _serverStatsService;
+    private readonly IServerStatsService _serverStatsService;
     private readonly ILogger<ServersController> _logger;
 
-    public ServersController(ServerStatsService serverStatsService, ILogger<ServersController> logger)
+    public ServersController(IServerStatsService serverStatsService, ILogger<ServersController> logger)
     {
         _serverStatsService = serverStatsService;
         _logger = logger;

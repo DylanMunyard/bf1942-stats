@@ -16,7 +16,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
     PlayerRoundsReadService playerRoundsReadService,
     ICacheService cacheService,
     ILogger<PlayerStatsService> logger,
-    IConfiguration configuration)
+    IConfiguration configuration) : IPlayerStatsService
 {
     private readonly PlayerTrackerDbContext _dbContext = dbContext;
     private readonly PlayerInsightsService _playerInsightsService = playerInsightsService;

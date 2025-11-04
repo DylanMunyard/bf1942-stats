@@ -17,7 +17,7 @@ namespace junie_des_1942stats.ClickHouse;
 /// Optimized to use post-processing for server GUID to name conversion
 /// to avoid multiple individual database queries during player comparison operations.
 /// </summary>
-public class PlayerComparisonService
+public class PlayerComparisonService : IPlayerComparisonService
 {
     private readonly ClickHouseConnection _connection;
     private readonly ILogger<PlayerComparisonService> _logger;

@@ -12,13 +12,13 @@ namespace junie_des_1942stats.PlayerStats;
 [Route("stats/[controller]")]
 public class PlayersController : ControllerBase
 {
-    private readonly PlayerStatsService _playerStatsService;
+    private readonly IPlayerStatsService _playerStatsService;
     private readonly ServerStatisticsService _serverStatisticsService;
-    private readonly PlayerComparisonService _playerComparisonService;
+    private readonly IPlayerComparisonService _playerComparisonService;
     private readonly PlayerRoundsReadService _playerRoundsService;
     private readonly ILogger<PlayersController> _logger;
 
-    public PlayersController(PlayerStatsService playerStatsService, ServerStatisticsService serverStatisticsService, PlayerComparisonService playerComparisonService, PlayerRoundsReadService playerRoundsService, ILogger<PlayersController> logger)
+    public PlayersController(IPlayerStatsService playerStatsService, ServerStatisticsService serverStatisticsService, IPlayerComparisonService playerComparisonService, PlayerRoundsReadService playerRoundsService, ILogger<PlayersController> logger)
     {
         _playerStatsService = playerStatsService;
         _serverStatisticsService = serverStatisticsService;
