@@ -23,6 +23,18 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "app", "app", "{E9373366-3A5
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "k3s", "k3s", "{67D0EE3E-1825-4084-8A52-33C1888346B8}"
+	ProjectSection(SolutionItems) = preProject
+		deploy\app\k3s\clickhouse-aks-monitor.yml = deploy\app\k3s\clickhouse-aks-monitor.yml
+		deploy\app\k3s\bf42-api-aks-monitor.yml = deploy\app\k3s\bf42-api-aks-monitor.yml
+		deploy\app\k3s\MONITORING.md = deploy\app\k3s\MONITORING.md
+		deploy\app\k3s\README.md = deploy\app\k3s\README.md
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "clickhouse", "clickhouse", "{62EA89F3-92D5-4441-96F3-007EE2F1712D}"
+	ProjectSection(SolutionItems) = preProject
+		deploy\app\clickhouse\deployment.yml = deploy\app\clickhouse\deployment.yml
+		deploy\app\clickhouse\batch-job-scale-down.yml = deploy\app\clickhouse\batch-job-scale-down.yml
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -42,5 +54,6 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{E9373366-3A5C-4916-A225-08477EE23649} = {D2AAAE5D-8D28-4907-AD74-0417D6DDC04D}
 		{67D0EE3E-1825-4084-8A52-33C1888346B8} = {E9373366-3A5C-4916-A225-08477EE23649}
+		{62EA89F3-92D5-4441-96F3-007EE2F1712D} = {E9373366-3A5C-4916-A225-08477EE23649}
 	EndGlobalSection
 EndGlobal

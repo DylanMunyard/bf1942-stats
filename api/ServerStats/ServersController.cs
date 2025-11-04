@@ -2,7 +2,7 @@ using api.ServerStats.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using System;
-using api.junie_des_1942stats;
+using api.Constants;
 using Microsoft.AspNetCore.Http;
 
 namespace api.ServerStats;

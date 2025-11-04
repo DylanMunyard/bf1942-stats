@@ -1,4 +1,4 @@
-namespace api.junie_des_1942stats;
+namespace api.Constants;
 
 /// <summary>
 /// Global constants for API pagination, validation, and filtering.

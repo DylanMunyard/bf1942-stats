@@ -3,7 +3,7 @@ using api.PlayerTracking;
 using Microsoft.AspNetCore.Mvc;
 using api.ClickHouse;
 using api.ClickHouse.Models;
-using api.junie_des_1942stats;
+using api.Constants;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Http;
 
