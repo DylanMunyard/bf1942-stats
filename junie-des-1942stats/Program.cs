@@ -400,6 +400,7 @@ try
     builder.Services.AddScoped<PlayerTrackingService>();
     builder.Services.AddScoped<RoundBackfillService>();
     builder.Services.AddScoped<PlayerStatsService>();
+    builder.Services.AddScoped<IPlayerStatsService>(sp => sp.GetRequiredService<PlayerStatsService>());
 
     // Register markdown sanitization service for tournament rules
     builder.Services.AddScoped<IMarkdownSanitizationService, MarkdownSanitizationService>();
@@ -411,6 +412,7 @@ try
 
     // Register the ServerStatsService and supporting services
     builder.Services.AddScoped<ServerStatsService>();
+    builder.Services.AddScoped<IServerStatsService>(sp => sp.GetRequiredService<ServerStatsService>());
     builder.Services.AddScoped<RoundsService>();
     builder.Services.AddScoped<PlayersOnlineHistoryService>();
 
@@ -757,6 +759,7 @@ try
         var playerInsightsService = sp.GetRequiredService<PlayerInsightsService>();
         return new PlayerComparisonService(connection, logger, dbContext, cacheService, cacheKeyService, playerInsightsService);
     });
+    builder.Services.AddScoped<IPlayerComparisonService>(sp => sp.GetRequiredService<PlayerComparisonService>());
 
     // Add HttpClient for GameTrendsService
     builder.Services.AddHttpClient<GameTrendsService>(client =>
