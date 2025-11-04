@@ -2062,10 +2062,17 @@ public class AdminTournamentController : ControllerBase
                     Rank = r.Rank,
                     TeamId = r.TeamId,
                     TeamName = r.Team != null ? r.Team.Name : $"Team {r.TeamId}",
+                    MatchesPlayed = r.MatchesPlayed,
+                    Victories = r.Victories,
+                    Ties = r.Ties,
+                    Losses = r.Losses,
                     RoundsWon = r.RoundsWon,
                     RoundsTied = r.RoundsTied,
                     RoundsLost = r.RoundsLost,
+                    TicketsFor = r.TicketsFor,
+                    TicketsAgainst = r.TicketsAgainst,
                     TicketDifferential = r.TicketDifferential,
+                    Points = r.Points,
                     Week = r.Week
                 })
                 .ToListAsync();
@@ -2232,10 +2239,17 @@ public class AdminTournamentController : ControllerBase
                     Rank = ranking.Rank,
                     TeamId = ranking.TeamId,
                     TeamName = teamName,
+                    MatchesPlayed = ranking.MatchesPlayed,
+                    Victories = ranking.Victories,
+                    Ties = ranking.Ties,
+                    Losses = ranking.Losses,
                     RoundsWon = ranking.RoundsWon,
                     RoundsTied = ranking.RoundsTied,
                     RoundsLost = ranking.RoundsLost,
+                    TicketsFor = ranking.TicketsFor,
+                    TicketsAgainst = ranking.TicketsAgainst,
                     TicketDifferential = ranking.TicketDifferential,
+                    Points = ranking.Points,
                     Week = ranking.Week
                 };
             }
@@ -2597,11 +2611,26 @@ public class TournamentTeamRankingResponse
     public int Rank { get; set; }
     public int TeamId { get; set; }
     public string TeamName { get; set; } = "";
+    public string? Week { get; set; }
+    
+    // Match-level statistics
+    public int MatchesPlayed { get; set; }
+    public int Victories { get; set; }
+    public int Ties { get; set; }
+    public int Losses { get; set; }
+    
+    // Round-level statistics
     public int RoundsWon { get; set; }
     public int RoundsTied { get; set; }
     public int RoundsLost { get; set; }
+    
+    // Ticket statistics
+    public int TicketsFor { get; set; }
+    public int TicketsAgainst { get; set; }
     public int TicketDifferential { get; set; }
-    public string? Week { get; set; }
+    
+    // Points (primary ranking metric)
+    public int Points { get; set; }
 }
 
 public class CreateManualMatchResultRequest

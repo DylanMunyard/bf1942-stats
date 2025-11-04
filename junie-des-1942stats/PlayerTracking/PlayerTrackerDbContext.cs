@@ -938,6 +938,19 @@ public class TournamentTeamRanking
     public int RoundsLost { get; set; }
     public int TicketDifferential { get; set; }
 
+    // Match-level statistics
+    public int MatchesPlayed { get; set; }
+    public int Victories { get; set; }
+    public int Ties { get; set; }
+    public int Losses { get; set; }
+
+    // Ticket statistics
+    public int TicketsFor { get; set; }
+    public int TicketsAgainst { get; set; }
+
+    // Points (primary ranking metric = RoundsWon)
+    public int Points { get; set; }
+
     // Calculated position in standings
     public int Rank { get; set; }
 

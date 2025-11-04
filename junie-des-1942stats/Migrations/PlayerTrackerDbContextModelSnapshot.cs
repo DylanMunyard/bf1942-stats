@@ -748,6 +748,15 @@ namespace junie_des_1942stats.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("Losses")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MatchesPlayed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Points")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("Rank")
                         .HasColumnType("INTEGER");
 
@@ -766,12 +775,24 @@ namespace junie_des_1942stats.Migrations
                     b.Property<int>("TicketDifferential")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("TicketsAgainst")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TicketsFor")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Ties")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("TournamentId")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("UpdatedAt")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("Victories")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Week")
                         .HasColumnType("TEXT");

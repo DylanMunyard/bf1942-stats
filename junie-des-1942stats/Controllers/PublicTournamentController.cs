@@ -330,10 +330,17 @@ public class PublicTournamentController : ControllerBase
                     Rank = r.Rank,
                     TeamId = r.TeamId,
                     TeamName = r.Team != null ? r.Team.Name : $"Team {r.TeamId}",
+                    MatchesPlayed = r.MatchesPlayed,
+                    Victories = r.Victories,
+                    Ties = r.Ties,
+                    Losses = r.Losses,
                     RoundsWon = r.RoundsWon,
                     RoundsTied = r.RoundsTied,
                     RoundsLost = r.RoundsLost,
+                    TicketsFor = r.TicketsFor,
+                    TicketsAgainst = r.TicketsAgainst,
                     TicketDifferential = r.TicketDifferential,
+                    Points = r.Points,
                     TotalRounds = r.RoundsWon + r.RoundsTied + r.RoundsLost
                 })
                 .ToListAsync();
@@ -479,9 +486,26 @@ public class PublicTeamRankingResponse
     public int Rank { get; set; }
     public int TeamId { get; set; }
     public string TeamName { get; set; } = "";
+    
+    // Match-level statistics
+    public int MatchesPlayed { get; set; }
+    public int Victories { get; set; }
+    public int Ties { get; set; }
+    public int Losses { get; set; }
+    
+    // Round-level statistics
     public int RoundsWon { get; set; }
     public int RoundsTied { get; set; }
     public int RoundsLost { get; set; }
+    
+    // Ticket statistics
+    public int TicketsFor { get; set; }
+    public int TicketsAgainst { get; set; }
     public int TicketDifferential { get; set; }
+    
+    // Points (primary ranking metric)
+    public int Points { get; set; }
+    
+    // Calculated field for compatibility
     public int TotalRounds { get; set; }
 }

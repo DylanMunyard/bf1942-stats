@@ -57,7 +57,7 @@ public class TeamRankingCalculator : ITeamRankingCalculator
                 "Unique teams identified | TournamentId={TournamentId} Week={Week} TeamCount={TeamCount}",
                 tournamentId, week ?? "cumulative", teamIds.Count);
 
-            var teamStats = new Dictionary<int, (int RoundsWon, int RoundsTied, int RoundsLost, int TicketDifferential)>();
+            var teamStats = new Dictionary<int, (int RoundsWon, int RoundsTied, int RoundsLost, int TicketDifferential, int MatchesPlayed, int Victories, int Ties, int Losses, int TicketsFor, int TicketsAgainst, int Points)>();
 
             foreach (var teamId in teamIds)
             {
@@ -65,19 +65,24 @@ public class TeamRankingCalculator : ITeamRankingCalculator
                 teamStats[teamId] = stats;
 
                 _logger.LogInformation(
-                    "Team statistics calculated | TournamentId={TournamentId} Week={Week} TeamId={TeamId} RoundsWon={Won} RoundsTied={Tied} RoundsLost={Lost} TicketDiff={Differential}",
-                    tournamentId, week ?? "cumulative", teamId, stats.RoundsWon, stats.RoundsTied, stats.RoundsLost, stats.TicketDifferential);
+                    "Team statistics calculated | TournamentId={TournamentId} Week={Week} TeamId={TeamId} Points={Points} RoundsWon={RoundsWon} RoundsTied={RoundsTied} RoundsLost={RoundsLost} Matches={Matches} Victories={Victories} Ties={Ties} Losses={Losses} TicketsFor={TicketsFor} TicketsAgainst={TicketsAgainst} TicketDiff={TicketDiff}",
+                    tournamentId, week ?? "cumulative", teamId, stats.Points, stats.RoundsWon, stats.RoundsTied, stats.RoundsLost, stats.MatchesPlayed, stats.Victories, stats.Ties, stats.Losses, stats.TicketsFor, stats.TicketsAgainst, stats.TicketDifferential);
             }
 
-            // Sort by ranking criteria (hierarchical)
+            // Sort by ranking criteria (hierarchical per spec)
+            // Primary: Points (= RoundsWon)
+            // Tier 1a: Rounds Tied (prefer tied over lost)
+            // Tier 1b: Rounds Lost (implicit - lower is better)
+            // Tier 2: Ticket Differential
             var rankedTeams = teamStats
-                .OrderByDescending(kvp => kvp.Value.RoundsWon)        // Primary: Rounds won
-                .ThenByDescending(kvp => kvp.Value.RoundsTied)        // Tier 1a: Rounds tied (prefer tied over lost)
-                .ThenByDescending(kvp => kvp.Value.TicketDifferential) // Tier 2: Ticket differential
+                .OrderByDescending(kvp => kvp.Value.Points)             // PRIMARY: Points (= RoundsWon)
+                .ThenByDescending(kvp => kvp.Value.RoundsTied)         // TIER 1a: Rounds tied (prefer tied)
+                .ThenByDescending(kvp => -kvp.Value.RoundsLost)        // TIER 1b: Rounds lost (ascending = prefer fewer losses)
+                .ThenByDescending(kvp => kvp.Value.TicketDifferential) // TIER 2: Ticket differential
                 .ToList();
 
             _logger.LogInformation(
-                "Teams sorted by ranking criteria | TournamentId={TournamentId} Week={Week} Criteria=(RoundsWon > RoundsTied > TicketDifferential)",
+                "Teams sorted by ranking criteria | TournamentId={TournamentId} Week={Week} Criteria=(Points > RoundsTied > -RoundsLost > TicketDifferential)",
                 tournamentId, week ?? "cumulative");
 
             // Create ranking records with assigned positions
@@ -97,6 +102,13 @@ public class TeamRankingCalculator : ITeamRankingCalculator
                     RoundsTied = stats.RoundsTied,
                     RoundsLost = stats.RoundsLost,
                     TicketDifferential = stats.TicketDifferential,
+                    MatchesPlayed = stats.MatchesPlayed,
+                    Victories = stats.Victories,
+                    Ties = stats.Ties,
+                    Losses = stats.Losses,
+                    TicketsFor = stats.TicketsFor,
+                    TicketsAgainst = stats.TicketsAgainst,
+                    Points = stats.Points,
                     Rank = rank,
                     UpdatedAt = SystemClock.Instance.GetCurrentInstant()
                 };
@@ -104,8 +116,8 @@ public class TeamRankingCalculator : ITeamRankingCalculator
                 rankings.Add(ranking);
 
                 _logger.LogInformation(
-                    "Team ranking assigned | TournamentId={TournamentId} Week={Week} TeamId={TeamId} Rank={Rank} W-T-L={Won}-{Tied}-{Lost} TicketDiff={Differential}",
-                    tournamentId, week ?? "cumulative", teamId, rank, stats.RoundsWon, stats.RoundsTied, stats.RoundsLost, stats.TicketDifferential);
+                    "Team ranking assigned | TournamentId={TournamentId} Week={Week} TeamId={TeamId} Rank={Rank} Points={Points} Matches={Matches} (V-T-L={Victories}-{Ties}-{Losses}) Rounds=(W-T-L={RoundsWon}-{RoundsTied}-{RoundsLost}) Tickets=({TicketsFor}-{TicketsAgainst}={TicketDiff})",
+                    tournamentId, week ?? "cumulative", teamId, rank, stats.Points, stats.MatchesPlayed, stats.Victories, stats.Ties, stats.Losses, stats.RoundsWon, stats.RoundsTied, stats.RoundsLost, stats.TicketsFor, stats.TicketsAgainst, stats.TicketDifferential);
             }
 
             _logger.LogInformation(
@@ -210,15 +222,23 @@ public class TeamRankingCalculator : ITeamRankingCalculator
     /// <summary>
     /// Calculate aggregate statistics for a specific team from match results.
     /// </summary>
-    private (int RoundsWon, int RoundsTied, int RoundsLost, int TicketDifferential) CalculateTeamStatistics(
+    private (int RoundsWon, int RoundsTied, int RoundsLost, int TicketDifferential, int MatchesPlayed, int Victories, int Ties, int Losses, int TicketsFor, int TicketsAgainst, int Points) CalculateTeamStatistics(
         List<TournamentMatchResult> matchResults,
         int teamId,
         int tournamentId)
     {
+        _logger.LogDebug("Starting statistics calculation for TeamId={TeamId}", teamId);
+        
         int roundsWon = 0;
         int roundsTied = 0;
         int roundsLost = 0;
         int ticketDifferential = 0;
+        int ticketsFor = 0;
+        int ticketsAgainst = 0;
+
+        // For match-level statistics, group rounds by match
+        var roundsByMatch = new Dictionary<int, List<TournamentMatchResult>>();
+        var roundDetails = new List<string>(); // For logging
 
         foreach (var result in matchResults)
         {
@@ -235,24 +255,122 @@ public class TeamRankingCalculator : ITeamRankingCalculator
             int diff = teamTickets - opponentTickets;
 
             ticketDifferential += diff;
+            ticketsFor += teamTickets;
+            ticketsAgainst += opponentTickets;
 
             // Determine result: win, tie, or loss
+            string roundOutcome;
             if (result.WinningTeamId == teamId)
             {
                 roundsWon++;
+                roundOutcome = "WIN";
             }
             else if (result.WinningTeamId == 0 || (isTeam1 && result.Team1Tickets == result.Team2Tickets) ||
                      (isTeam2 && result.Team2Tickets == result.Team1Tickets))
             {
                 // Tie condition: equal tickets
                 roundsTied++;
+                roundOutcome = "TIE";
             }
             else
             {
                 roundsLost++;
+                roundOutcome = "LOSS";
             }
+
+            roundDetails.Add($"MatchId={result.MatchId} MapId={result.MapId} {roundOutcome} Tickets={teamTickets}v{opponentTickets}");
+
+            // Group by match for match-level calculations
+            if (!roundsByMatch.ContainsKey(result.MatchId))
+            {
+                roundsByMatch[result.MatchId] = [];
+            }
+            roundsByMatch[result.MatchId].Add(result);
         }
 
-        return (roundsWon, roundsTied, roundsLost, ticketDifferential);
+        // Log all round details
+        if (roundDetails.Any())
+        {
+            _logger.LogDebug(
+                "Round-level results for TeamId={TeamId} | Total Rounds Processed={Count} | Details: {RoundDetails}",
+                teamId, roundDetails.Count, string.Join(" | ", roundDetails));
+        }
+        else
+        {
+            _logger.LogDebug("No rounds found for TeamId={TeamId}", teamId);
+        }
+
+        // Calculate match-level statistics
+        int matchesPlayed = 0;
+        int victories = 0;
+        int ties = 0;
+        int losses = 0;
+        var matchDetails = new List<string>(); // For logging
+
+        foreach (var matchId in roundsByMatch.Keys.OrderBy(m => m))
+        {
+            var roundsInMatch = roundsByMatch[matchId];
+            
+            // Sum tickets for team and opponent across all rounds in this match
+            int teamTotalTickets = 0;
+            int opponentTotalTickets = 0;
+            var roundsInMatchDetails = new List<string>();
+
+            foreach (var result in roundsInMatch)
+            {
+                bool isTeam1 = result.Team1Id == teamId;
+                int teamRoundTickets = isTeam1 ? result.Team1Tickets : result.Team2Tickets;
+                int opponentRoundTickets = isTeam1 ? result.Team2Tickets : result.Team1Tickets;
+                
+                teamTotalTickets += teamRoundTickets;
+                opponentTotalTickets += opponentRoundTickets;
+                
+                roundsInMatchDetails.Add($"Round{roundsInMatch.IndexOf(result) + 1}(Map={result.MapId}):{teamRoundTickets}v{opponentRoundTickets}");
+            }
+
+            matchesPlayed++;
+
+            // Determine match outcome based on total tickets
+            string matchOutcome;
+            if (teamTotalTickets > opponentTotalTickets)
+            {
+                victories++;
+                matchOutcome = "WIN";
+            }
+            else if (teamTotalTickets == opponentTotalTickets)
+            {
+                ties++;
+                matchOutcome = "TIE";
+            }
+            else
+            {
+                losses++;
+                matchOutcome = "LOSS";
+            }
+
+            matchDetails.Add($"MatchId={matchId} {matchOutcome} Rounds=[{string.Join(",", roundsInMatchDetails)}] Total={teamTotalTickets}v{opponentTotalTickets}");
+            
+            _logger.LogDebug(
+                "Match aggregation for TeamId={TeamId} MatchId={MatchId} | Outcome={Outcome} | Total Tickets={TeamTotal}v{OpponentTotal} | Rounds={RoundsInMatch}",
+                teamId, matchId, matchOutcome, teamTotalTickets, opponentTotalTickets, string.Join(" ", roundsInMatchDetails));
+        }
+
+        // Log match-level summary
+        if (matchDetails.Any())
+        {
+            _logger.LogDebug(
+                "Match-level results for TeamId={TeamId} | Total Matches={Count} | Details: {MatchDetails}",
+                teamId, matchDetails.Count, string.Join(" | ", matchDetails));
+        }
+
+        // Points = RoundsWon (per spec: 1 point per round won)
+        int points = roundsWon;
+
+        // Summary log
+        _logger.LogDebug(
+            "Statistics summary for TeamId={TeamId} | Points={Points} RoundsWon={RoundsWon} RoundsTied={RoundsTied} RoundsLost={RoundsLost} | MatchesPlayed={MatchesPlayed} Victories={Victories} Ties={Ties} Losses={Losses} | TicketsFor={TicketsFor} TicketsAgainst={TicketsAgainst} Differential={TicketDifferential}",
+            teamId, points, roundsWon, roundsTied, roundsLost, matchesPlayed, victories, ties, losses, ticketsFor, ticketsAgainst, ticketDifferential);
+
+        return (roundsWon, roundsTied, roundsLost, ticketDifferential, matchesPlayed, victories, ties, losses, ticketsFor, ticketsAgainst, points);
     }
 }
