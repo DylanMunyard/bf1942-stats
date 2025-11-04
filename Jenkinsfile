@@ -27,8 +27,8 @@ pipeline {
                       # Build and push ARM64 image for API with DinD optimizations
                       DOCKER_BUILDKIT=1 docker buildx build -f deploy/Dockerfile . \
                         --platform linux/arm64 \
-                        --build-arg PROJECT_PATH=junie-des-1942stats \
-                        --build-arg PROJECT_NAME=junie-des-1942stats \
+                        --build-arg PROJECT_PATH=api \
+                        --build-arg PROJECT_NAME=api \
                         --build-arg BUILDKIT_PROGRESS=plain \
                         --load \
                         -t dylanmunyard/bf42-stats:latest
@@ -97,8 +97,8 @@ pipeline {
                       # Build and push ARM64 image for Notifications with DinD optimizations
                       DOCKER_BUILDKIT=1 docker buildx build -f deploy/Dockerfile . \
                         --platform linux/arm64 \
-                        --build-arg PROJECT_PATH=junie-des-1942stats.Notifications \
-                        --build-arg PROJECT_NAME=junie-des-1942stats.Notifications \
+                        --build-arg PROJECT_PATH=notifications \
+                        --build-arg PROJECT_NAME=notifications \
                         --build-arg BUILDKIT_PROGRESS=plain \
                         --load \
                         -t dylanmunyard/bf42-notifications:latest
