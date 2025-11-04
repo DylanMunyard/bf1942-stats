@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using junie_des_1942stats.PlayerTracking;
 
@@ -10,9 +11,11 @@ using junie_des_1942stats.PlayerTracking;
 namespace junie_des_1942stats.Migrations
 {
     [DbContext(typeof(PlayerTrackerDbContext))]
-    partial class PlayerTrackerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251104062434_OptimizePlayerSearchIndexes")]
+    partial class OptimizePlayerSearchIndexes
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.5");
@@ -49,7 +52,7 @@ namespace junie_des_1942stats.Migrations
                     b.Property<int>("TotalKills")
                         .HasColumnType("INTEGER");
 
-                    b.ToTable("ServerBestScoreRaw", (string)null);
+                    b.ToTable("ServerBestScoreRaw");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.GameServer", b =>
@@ -126,7 +129,7 @@ namespace junie_des_1942stats.Migrations
 
                     b.HasKey("Guid");
 
-                    b.ToTable("Servers", (string)null);
+                    b.ToTable("Servers");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.Player", b =>
@@ -148,7 +151,7 @@ namespace junie_des_1942stats.Migrations
 
                     b.HasKey("Name");
 
-                    b.ToTable("Players", (string)null);
+                    b.ToTable("Players");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.PlayerObservation", b =>
@@ -190,7 +193,7 @@ namespace junie_des_1942stats.Migrations
 
                     b.HasIndex("SessionId", "Timestamp");
 
-                    b.ToTable("PlayerObservations", (string)null);
+                    b.ToTable("PlayerObservations");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.PlayerSession", b =>
@@ -266,7 +269,7 @@ namespace junie_des_1942stats.Migrations
 
                     b.HasIndex("ServerGuid", "StartTime", "MapName");
 
-                    b.ToTable("PlayerSessions", (string)null);
+                    b.ToTable("PlayerSessions");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.RefreshToken", b =>
@@ -307,7 +310,7 @@ namespace junie_des_1942stats.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("RefreshTokens", (string)null);
+                    b.ToTable("RefreshTokens");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.Round", b =>
@@ -375,7 +378,7 @@ namespace junie_des_1942stats.Migrations
 
                     b.HasIndex("ServerGuid", "StartTime");
 
-                    b.ToTable("Rounds", null, t =>
+                    b.ToTable("Rounds", t =>
                         {
                             t.HasCheckConstraint("CK_Round_EndTime", "EndTime IS NULL OR EndTime >= StartTime");
                         });
@@ -415,7 +418,7 @@ namespace junie_des_1942stats.Migrations
 
                     b.HasIndex("RoundId", "Timestamp");
 
-                    b.ToTable("RoundObservations", (string)null);
+                    b.ToTable("RoundObservations");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.ServerPlayerRanking", b =>
@@ -465,7 +468,7 @@ namespace junie_des_1942stats.Migrations
                     b.HasIndex("ServerGuid", "PlayerName", "Year", "Month")
                         .IsUnique();
 
-                    b.ToTable("ServerPlayerRankings", (string)null);
+                    b.ToTable("ServerPlayerRankings");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.Tournament", b =>
@@ -544,7 +547,7 @@ namespace junie_des_1942stats.Migrations
                     b.HasIndex("ThemeId")
                         .IsUnique();
 
-                    b.ToTable("Tournaments", (string)null);
+                    b.ToTable("Tournaments");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.TournamentMatch", b =>
@@ -593,7 +596,7 @@ namespace junie_des_1942stats.Migrations
 
                     b.HasIndex("TournamentId");
 
-                    b.ToTable("TournamentMatches", (string)null);
+                    b.ToTable("TournamentMatches");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.TournamentMatchMap", b =>
@@ -623,7 +626,7 @@ namespace junie_des_1942stats.Migrations
 
                     b.HasIndex("MatchId", "MapOrder");
 
-                    b.ToTable("TournamentMatchMaps", (string)null);
+                    b.ToTable("TournamentMatchMaps");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.TournamentMatchResult", b =>
@@ -688,7 +691,7 @@ namespace junie_des_1942stats.Migrations
 
                     b.HasIndex("TournamentId", "Week");
 
-                    b.ToTable("TournamentMatchResults", (string)null);
+                    b.ToTable("TournamentMatchResults");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.TournamentTeam", b =>
@@ -714,7 +717,7 @@ namespace junie_des_1942stats.Migrations
 
                     b.HasIndex("TournamentId");
 
-                    b.ToTable("TournamentTeams", (string)null);
+                    b.ToTable("TournamentTeams");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.TournamentTeamPlayer", b =>
@@ -739,7 +742,7 @@ namespace junie_des_1942stats.Migrations
                     b.HasIndex("TournamentTeamId", "PlayerName")
                         .IsUnique();
 
-                    b.ToTable("TournamentTeamPlayers", (string)null);
+                    b.ToTable("TournamentTeamPlayers");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.TournamentTeamRanking", b =>
@@ -808,7 +811,7 @@ namespace junie_des_1942stats.Migrations
                     b.HasIndex("TournamentId", "TeamId", "Week")
                         .IsUnique();
 
-                    b.ToTable("TournamentTeamRankings", (string)null);
+                    b.ToTable("TournamentTeamRankings");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.TournamentTheme", b =>
@@ -828,7 +831,7 @@ namespace junie_des_1942stats.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("TournamentTheme", (string)null);
+                    b.ToTable("TournamentTheme");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.User", b =>
@@ -855,7 +858,7 @@ namespace junie_des_1942stats.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.ToTable("Users", (string)null);
+                    b.ToTable("Users");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.UserBuddy", b =>
@@ -881,7 +884,7 @@ namespace junie_des_1942stats.Migrations
                     b.HasIndex("UserId", "BuddyPlayerName")
                         .IsUnique();
 
-                    b.ToTable("UserBuddies", (string)null);
+                    b.ToTable("UserBuddies");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.UserFavoriteServer", b =>
@@ -907,7 +910,7 @@ namespace junie_des_1942stats.Migrations
                     b.HasIndex("UserId", "ServerGuid")
                         .IsUnique();
 
-                    b.ToTable("UserFavoriteServers", (string)null);
+                    b.ToTable("UserFavoriteServers");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.UserPlayerName", b =>
@@ -933,7 +936,7 @@ namespace junie_des_1942stats.Migrations
                     b.HasIndex("UserId", "PlayerName")
                         .IsUnique();
 
-                    b.ToTable("UserPlayerNames", (string)null);
+                    b.ToTable("UserPlayerNames");
                 });
 
             modelBuilder.Entity("junie_des_1942stats.PlayerTracking.PlayerObservation", b =>

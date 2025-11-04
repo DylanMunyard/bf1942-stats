@@ -2,6 +2,7 @@ using junie_des_1942stats.ServerStats.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using System;
+using Microsoft.AspNetCore.Http;
 
 namespace junie_des_1942stats.ServerStats;
 
@@ -9,23 +10,34 @@ namespace junie_des_1942stats.ServerStats;
 [Route("stats/[controller]")]
 public class ServersController : ControllerBase
 {
-    private readonly ServerStatsService _serverStatsService;
+    private readonly IServerStatsService _serverStatsService;
     private readonly ILogger<ServersController> _logger;
 
-    public ServersController(ServerStatsService serverStatsService, ILogger<ServersController> logger)
+    public ServersController(IServerStatsService serverStatsService, ILogger<ServersController> logger)
     {
         _serverStatsService = serverStatsService;
         _logger = logger;
     }
 
-    // Get detailed server statistics with optional days parameter
+    /// <summary>
+    /// Retrieves detailed statistics for a specific server.
+    /// </summary>
+    /// <param name="serverName">The URL-encoded name of the server.</param>
+    /// <param name="days">Optional number of days to include in statistics (default: 7).</param>
+    /// <returns>Server statistics including player counts, map rotation, and performance metrics.</returns>
+    /// <response code="200">Returns the server statistics.</response>
+    /// <response code="400">If the server name is empty or invalid.</response>
+    /// <response code="404">If the server is not found in the database.</response>
     [HttpGet("{serverName}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ServerStatistics>> GetServerStats(
         string serverName,
         [FromQuery] int? days)
     {
         if (string.IsNullOrWhiteSpace(serverName))
-            return BadRequest("Server name cannot be empty");
+            return BadRequest(ApiConstants.ValidationMessages.ServerNameEmpty);
 
         // Use modern URL decoding that preserves + signs
         serverName = Uri.UnescapeDataString(serverName);
@@ -34,7 +46,7 @@ public class ServersController : ControllerBase
 
         var stats = await _serverStatsService.GetServerStatistics(
             serverName,
-            days ?? 7); // Default to 7 days if not specified
+            days ?? ApiConstants.TimePeriods.DefaultDays);
 
         if (string.IsNullOrEmpty(stats.ServerGuid))
         {
@@ -49,11 +61,11 @@ public class ServersController : ControllerBase
     [HttpGet("{serverName}/leaderboards")]
     public async Task<ActionResult<ServerLeaderboards>> GetServerLeaderboards(
         string serverName,
-        [FromQuery] int days = 7,
+        [FromQuery] int days = ApiConstants.TimePeriods.DefaultDays,
         [FromQuery] int? minPlayersForWeighting = null)
     {
         if (string.IsNullOrWhiteSpace(serverName))
-            return BadRequest("Server name cannot be empty");
+            return BadRequest(ApiConstants.ValidationMessages.ServerNameEmpty);
 
         // Use modern URL decoding that preserves + signs
         serverName = Uri.UnescapeDataString(serverName);
@@ -121,7 +133,7 @@ public class ServersController : ControllerBase
         [FromQuery] int? days)
     {
         if (string.IsNullOrWhiteSpace(serverName))
-            return BadRequest("Server name cannot be empty");
+            return BadRequest(ApiConstants.ValidationMessages.ServerNameEmpty);
 
         // Use modern URL decoding that preserves + signs
         serverName = Uri.UnescapeDataString(serverName);
@@ -132,7 +144,7 @@ public class ServersController : ControllerBase
         {
             var insights = await _serverStatsService.GetServerInsights(
                 serverName,
-                days ?? 7); // Default to 7 days if not specified
+                days ?? ApiConstants.TimePeriods.DefaultDays);
 
             if (string.IsNullOrEmpty(insights.ServerGuid))
             {
@@ -154,7 +166,7 @@ public class ServersController : ControllerBase
         [FromQuery] int? days)
     {
         if (string.IsNullOrWhiteSpace(serverName))
-            return BadRequest("Server name cannot be empty");
+            return BadRequest(ApiConstants.ValidationMessages.ServerNameEmpty);
 
         // Use modern URL decoding that preserves + signs
         serverName = Uri.UnescapeDataString(serverName);
@@ -165,7 +177,7 @@ public class ServersController : ControllerBase
         {
             var mapsInsights = await _serverStatsService.GetServerMapsInsights(
                 serverName,
-                days ?? 7); // Default to 7 days if not specified
+                days ?? ApiConstants.TimePeriods.DefaultDays);
 
             if (string.IsNullOrEmpty(mapsInsights.ServerGuid))
             {
@@ -184,10 +196,10 @@ public class ServersController : ControllerBase
     // Get all servers with pagination and filtering
     [HttpGet]
     public async Task<ActionResult<PagedResult<ServerBasicInfo>>> GetAllServers(
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 50,
-        [FromQuery] string sortBy = "ServerName",
-        [FromQuery] string sortOrder = "asc",
+        [FromQuery] int page = ApiConstants.Pagination.DefaultPage,
+        [FromQuery] int pageSize = ApiConstants.Pagination.DefaultPageSize,
+        [FromQuery] string sortBy = ApiConstants.ServerSortFields.ServerName,
+        [FromQuery] string sortOrder = ApiConstants.Sorting.AscendingOrder,
         [FromQuery] string? serverName = null,
         [FromQuery] string? gameId = null,
         [FromQuery] string? game = null,
@@ -203,51 +215,46 @@ public class ServersController : ControllerBase
     {
         // Validate parameters
         if (page < 1)
-            return BadRequest("Page number must be at least 1");
+            return BadRequest(ApiConstants.ValidationMessages.PageNumberTooLow);
 
-        if (pageSize < 1 || pageSize > 500)
-            return BadRequest("Page size must be between 1 and 500");
+        if (pageSize < 1 || pageSize > ApiConstants.Pagination.MaxPageSize)
+            return BadRequest(ApiConstants.ValidationMessages.PageSizeTooLarge(ApiConstants.Pagination.MaxPageSize));
 
-        // Valid sort fields
-        var validSortFields = new[]
-        {
-            "ServerName", "GameId", "Country", "Region", "TotalPlayersAllTime", "TotalActivePlayersLast24h", "LastActivity"
-        };
+        if (!ApiConstants.ServerSortFields.ValidFields.Contains(sortBy, StringComparer.OrdinalIgnoreCase))
+            return BadRequest(ApiConstants.ValidationMessages.InvalidSortField(
+                string.Join(", ", ApiConstants.ServerSortFields.ValidFields)));
 
-        if (!validSortFields.Contains(sortBy, StringComparer.OrdinalIgnoreCase))
-            return BadRequest($"Invalid sortBy field. Valid options: {string.Join(", ", validSortFields)}");
-
-        if (!new[] { "asc", "desc" }.Contains(sortOrder.ToLower()))
-            return BadRequest("Sort order must be 'asc' or 'desc'");
+        if (!ApiConstants.Sorting.ValidSortOrders.Contains(sortOrder.ToLower()))
+            return BadRequest(ApiConstants.ValidationMessages.InvalidSortOrder);
 
         // Validate filter parameters
         if (minTotalPlayers.HasValue && minTotalPlayers < 0)
-            return BadRequest("Minimum total players cannot be negative");
+            return BadRequest(ApiConstants.ValidationMessages.MinimumTotalPlayersNegative);
 
         if (maxTotalPlayers.HasValue && maxTotalPlayers < 0)
-            return BadRequest("Maximum total players cannot be negative");
+            return BadRequest(ApiConstants.ValidationMessages.MaximumTotalPlayersNegative);
 
         if (minTotalPlayers.HasValue && maxTotalPlayers.HasValue && minTotalPlayers > maxTotalPlayers)
-            return BadRequest("Minimum total players cannot be greater than maximum total players");
+            return BadRequest(ApiConstants.ValidationMessages.MinimumTotalPlayersGreaterThanMaximum);
 
         if (minActivePlayersLast24h.HasValue && minActivePlayersLast24h < 0)
-            return BadRequest("Minimum active players last 24h cannot be negative");
+            return BadRequest(ApiConstants.ValidationMessages.MinimumActivePlayersNegative);
 
         if (maxActivePlayersLast24h.HasValue && maxActivePlayersLast24h < 0)
-            return BadRequest("Maximum active players last 24h cannot be negative");
+            return BadRequest(ApiConstants.ValidationMessages.MaximumActivePlayersNegative);
 
         if (minActivePlayersLast24h.HasValue && maxActivePlayersLast24h.HasValue && minActivePlayersLast24h > maxActivePlayersLast24h)
-            return BadRequest("Minimum active players last 24h cannot be greater than maximum active players last 24h");
+            return BadRequest(ApiConstants.ValidationMessages.MinimumActivePlayersGreaterThanMaximum);
 
         if (lastActivityFrom.HasValue && lastActivityTo.HasValue && lastActivityFrom > lastActivityTo)
-            return BadRequest("LastActivityFrom cannot be greater than LastActivityTo");
+            return BadRequest(ApiConstants.ValidationMessages.LastActivityFromGreaterThanTo("LastActivity"));
 
         // Validate game parameter if provided
         if (!string.IsNullOrWhiteSpace(game))
         {
-            var allowedGames = new[] { "bf1942", "fh2", "bfvietnam" };
-            if (!allowedGames.Contains(game.ToLower()))
-                return BadRequest($"Invalid game. Allowed values: {string.Join(", ", allowedGames)}");
+            if (!ApiConstants.Games.AllowedGames.Contains(game.ToLower()))
+                return BadRequest(ApiConstants.ValidationMessages.InvalidGame(
+                    string.Join(", ", ApiConstants.Games.AllowedGames)));
         }
 
         try
@@ -282,24 +289,24 @@ public class ServersController : ControllerBase
     public async Task<ActionResult<PagedResult<ServerBasicInfo>>> SearchServers(
         [FromQuery] string query,
         [FromQuery] string? game = null,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int page = ApiConstants.Pagination.DefaultPage,
+        [FromQuery] int pageSize = ApiConstants.Pagination.SearchDefaultPageSize)
     {
         if (string.IsNullOrWhiteSpace(query))
-            return BadRequest("Search query cannot be empty");
+            return BadRequest(ApiConstants.ValidationMessages.SearchQueryEmpty);
 
         if (page < 1)
-            return BadRequest("Page number must be at least 1");
+            return BadRequest(ApiConstants.ValidationMessages.PageNumberTooLow);
 
-        if (pageSize < 1 || pageSize > 100)
-            return BadRequest("Page size must be between 1 and 100");
+        if (pageSize < 1 || pageSize > ApiConstants.Pagination.SearchMaxPageSize)
+            return BadRequest(ApiConstants.ValidationMessages.PageSizeTooLarge(ApiConstants.Pagination.SearchMaxPageSize));
 
         // Validate game parameter if provided
         if (!string.IsNullOrWhiteSpace(game))
         {
-            var allowedGames = new[] { "bf1942", "fh2", "bfvietnam" };
-            if (!allowedGames.Contains(game.ToLower()))
-                return BadRequest($"Invalid game. Allowed values: {string.Join(", ", allowedGames)}");
+            if (!ApiConstants.Games.AllowedGames.Contains(game.ToLower()))
+                return BadRequest(ApiConstants.ValidationMessages.InvalidGame(
+                    string.Join(", ", ApiConstants.Games.AllowedGames)));
         }
 
         try

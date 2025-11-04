@@ -4,8 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using junie_des_1942stats.ClickHouse;
 using junie_des_1942stats.ClickHouse.Models;
 using Microsoft.Extensions.Logging;
-using junie_des_1942stats.Telemetry;
-using System.Diagnostics;
+using Microsoft.AspNetCore.Http;
 
 namespace junie_des_1942stats.PlayerStats;
 
@@ -13,13 +12,13 @@ namespace junie_des_1942stats.PlayerStats;
 [Route("stats/[controller]")]
 public class PlayersController : ControllerBase
 {
-    private readonly PlayerStatsService _playerStatsService;
+    private readonly IPlayerStatsService _playerStatsService;
     private readonly ServerStatisticsService _serverStatisticsService;
-    private readonly PlayerComparisonService _playerComparisonService;
+    private readonly IPlayerComparisonService _playerComparisonService;
     private readonly PlayerRoundsReadService _playerRoundsService;
     private readonly ILogger<PlayersController> _logger;
 
-    public PlayersController(PlayerStatsService playerStatsService, ServerStatisticsService serverStatisticsService, PlayerComparisonService playerComparisonService, PlayerRoundsReadService playerRoundsService, ILogger<PlayersController> logger)
+    public PlayersController(IPlayerStatsService playerStatsService, ServerStatisticsService serverStatisticsService, IPlayerComparisonService playerComparisonService, PlayerRoundsReadService playerRoundsService, ILogger<PlayersController> logger)
     {
         _playerStatsService = playerStatsService;
         _serverStatisticsService = serverStatisticsService;
@@ -28,13 +27,34 @@ public class PlayersController : ControllerBase
         _logger = logger;
     }
 
-    // Get all players with basic info - enhanced with paging and sorting
+    /// <summary>
+    /// Retrieves a paginated list of all players with optional filtering and sorting.
+    /// </summary>
+    /// <param name="page">Page number (1-based, default: 1).</param>
+    /// <param name="pageSize">Number of items per page (1-500, default: 50).</param>
+    /// <param name="sortBy">Field to sort by. Valid options: PlayerName, TotalPlayTimeMinutes, LastSeen, IsActive.</param>
+    /// <param name="sortOrder">Sort order: asc or desc (default: desc).</param>
+    /// <param name="playerName">Optional player name to filter by.</param>
+    /// <param name="minPlayTime">Optional minimum play time in minutes.</param>
+    /// <param name="maxPlayTime">Optional maximum play time in minutes.</param>
+    /// <param name="lastSeenFrom">Optional start date for last seen filter.</param>
+    /// <param name="lastSeenTo">Optional end date for last seen filter.</param>
+    /// <param name="isActive">Optional active status filter.</param>
+    /// <param name="serverName">Optional server name filter.</param>
+    /// <param name="gameId">Optional game ID filter.</param>
+    /// <param name="game">Optional game type filter (bf1942, fh2, bfvietnam).</param>
+    /// <param name="mapName">Optional map name filter.</param>
+    /// <returns>Paginated list of players matching the specified criteria.</returns>
+    /// <response code="200">Returns the list of players.</response>
+    /// <response code="400">If pagination or filter parameters are invalid.</response>
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PagedResult<PlayerBasicInfo>>> GetAllPlayers(
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 50,
-        [FromQuery] string sortBy = "IsActive",
-        [FromQuery] string sortOrder = "desc",
+        [FromQuery] int page = ApiConstants.Pagination.DefaultPage,
+        [FromQuery] int pageSize = ApiConstants.Pagination.DefaultPageSize,
+        [FromQuery] string sortBy = ApiConstants.PlayerSortFields.IsActive,
+        [FromQuery] string sortOrder = ApiConstants.Sorting.DescendingOrder,
         [FromQuery] string? playerName = null,
         [FromQuery] int? minPlayTime = null,
         [FromQuery] int? maxPlayTime = null,
@@ -48,35 +68,30 @@ public class PlayersController : ControllerBase
     {
         // Validate parameters
         if (page < 1)
-            return BadRequest("Page number must be at least 1");
+            return BadRequest(ApiConstants.ValidationMessages.PageNumberTooLow);
 
-        if (pageSize < 1 || pageSize > 500)
-            return BadRequest("Page size must be between 1 and 500");
+        if (pageSize < 1 || pageSize > ApiConstants.Pagination.MaxPageSize)
+            return BadRequest(ApiConstants.ValidationMessages.PageSizeTooLarge(ApiConstants.Pagination.MaxPageSize));
 
-        // Valid sort fields
-        var validSortFields = new[]
-        {
-            "PlayerName", "TotalPlayTimeMinutes", "LastSeen", "IsActive"
-        };
+        if (!ApiConstants.PlayerSortFields.ValidFields.Contains(sortBy, StringComparer.OrdinalIgnoreCase))
+            return BadRequest(ApiConstants.ValidationMessages.InvalidSortField(
+                string.Join(", ", ApiConstants.PlayerSortFields.ValidFields)));
 
-        if (!validSortFields.Contains(sortBy, StringComparer.OrdinalIgnoreCase))
-            return BadRequest($"Invalid sortBy field. Valid options: {string.Join(", ", validSortFields)}");
-
-        if (!new[] { "asc", "desc" }.Contains(sortOrder.ToLower()))
-            return BadRequest("Sort order must be 'asc' or 'desc'");
+        if (!ApiConstants.Sorting.ValidSortOrders.Contains(sortOrder.ToLower()))
+            return BadRequest(ApiConstants.ValidationMessages.InvalidSortOrder);
 
         // Validate filter parameters
         if (minPlayTime.HasValue && minPlayTime < 0)
-            return BadRequest("Minimum play time cannot be negative");
+            return BadRequest(ApiConstants.ValidationMessages.MinimumPlayTimeNegative);
 
         if (maxPlayTime.HasValue && maxPlayTime < 0)
-            return BadRequest("Maximum play time cannot be negative");
+            return BadRequest(ApiConstants.ValidationMessages.MaximumPlayTimeNegative);
 
         if (minPlayTime.HasValue && maxPlayTime.HasValue && minPlayTime > maxPlayTime)
-            return BadRequest("Minimum play time cannot be greater than maximum play time");
+            return BadRequest(ApiConstants.ValidationMessages.MinimumPlayTimeGreaterThanMaximum);
 
         if (lastSeenFrom.HasValue && lastSeenTo.HasValue && lastSeenFrom > lastSeenTo)
-            return BadRequest("LastSeenFrom cannot be greater than LastSeenTo");
+            return BadRequest(ApiConstants.ValidationMessages.LastActivityFromGreaterThanTo("LastSeen"));
 
         try
         {
@@ -108,7 +123,10 @@ public class PlayersController : ControllerBase
     public async Task<ActionResult<PlayerTimeStatistics>> GetPlayerStats(string playerName)
     {
         if (string.IsNullOrWhiteSpace(playerName))
-            return BadRequest("Player name cannot be empty");
+            return BadRequest(ApiConstants.ValidationMessages.PlayerNameEmpty);
+
+        // Use modern URL decoding that preserves + signs
+        playerName = Uri.UnescapeDataString(playerName);
 
         var stats = await _playerStatsService.GetPlayerStatistics(playerName);
 
@@ -133,6 +151,9 @@ public class PlayersController : ControllerBase
     [HttpGet("{playerName}/sessions/{sessionId}")]
     public async Task<ActionResult<SessionDetail>> GetPlayerStats(string playerName, int sessionId)
     {
+        // Use modern URL decoding that preserves + signs
+        playerName = Uri.UnescapeDataString(playerName);
+
         var stats = await _playerStatsService.GetSession(playerName, sessionId);
 
         if (stats is null)
@@ -151,10 +172,13 @@ public class PlayersController : ControllerBase
         [FromQuery] string range = "ThisYear")
     {
         if (string.IsNullOrWhiteSpace(playerName))
-            return BadRequest("Player name cannot be empty");
+            return BadRequest(ApiConstants.ValidationMessages.PlayerNameEmpty);
 
         if (string.IsNullOrWhiteSpace(serverGuid))
-            return BadRequest("Server GUID cannot be empty");
+            return BadRequest(ApiConstants.ValidationMessages.ServerGuidEmpty);
+
+        // Use modern URL decoding that preserves + signs
+        playerName = Uri.UnescapeDataString(playerName);
 
         if (!Enum.TryParse<TimePeriod>(range, true, out var period))
             return BadRequest($"Invalid range. Valid options: {string.Join(", ", Enum.GetNames<TimePeriod>())}");
@@ -177,17 +201,17 @@ public class PlayersController : ControllerBase
     [HttpGet("search")]
     public async Task<ActionResult<PagedResult<PlayerBasicInfo>>> SearchPlayers(
         [FromQuery] string query,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int page = ApiConstants.Pagination.DefaultPage,
+        [FromQuery] int pageSize = ApiConstants.Pagination.SearchDefaultPageSize)
     {
         if (string.IsNullOrWhiteSpace(query))
-            return BadRequest("Search query cannot be empty");
+            return BadRequest(ApiConstants.ValidationMessages.SearchQueryEmpty);
 
         if (page < 1)
-            return BadRequest("Page number must be at least 1");
+            return BadRequest(ApiConstants.ValidationMessages.PageNumberTooLow);
 
-        if (pageSize < 1 || pageSize > 100)
-            return BadRequest("Page size must be between 1 and 100");
+        if (pageSize < 1 || pageSize > ApiConstants.Pagination.SearchMaxPageSize)
+            return BadRequest(ApiConstants.ValidationMessages.PageSizeTooLarge(ApiConstants.Pagination.SearchMaxPageSize));
 
         try
         {
@@ -211,7 +235,11 @@ public class PlayersController : ControllerBase
     public async Task<IActionResult> ComparePlayers([FromQuery] string player1, [FromQuery] string player2, [FromQuery] string? serverGuid = null)
     {
         if (string.IsNullOrWhiteSpace(player1) || string.IsNullOrWhiteSpace(player2))
-            return BadRequest("Both player1 and player2 must be provided.");
+            return BadRequest(ApiConstants.ValidationMessages.BothPlayersRequired);
+
+        // Use modern URL decoding that preserves + signs
+        player1 = Uri.UnescapeDataString(player1);
+        player2 = Uri.UnescapeDataString(player2);
 
         try
         {
@@ -228,13 +256,16 @@ public class PlayersController : ControllerBase
     }
 
     [HttpGet("{playerName}/similar")]
-    public async Task<IActionResult> GetSimilarPlayers(string playerName, [FromQuery] int limit = 10, [FromQuery] string mode = "default")
+    public async Task<IActionResult> GetSimilarPlayers(string playerName, [FromQuery] int limit = ApiConstants.SimilaritySearch.DefaultLimit, [FromQuery] string mode = "default")
     {
         if (string.IsNullOrWhiteSpace(playerName))
-            return BadRequest("Player name cannot be empty");
+            return BadRequest(ApiConstants.ValidationMessages.PlayerNameEmpty);
 
-        if (limit < 1 || limit > 50)
-            return BadRequest("Limit must be between 1 and 50");
+        // Use modern URL decoding that preserves + signs
+        playerName = Uri.UnescapeDataString(playerName);
+
+        if (limit < ApiConstants.SimilaritySearch.MinLimit || limit > ApiConstants.SimilaritySearch.MaxLimit)
+            return BadRequest(ApiConstants.ValidationMessages.LimitOutOfRange);
 
         // Parse similarity mode
         if (!Enum.TryParse<SimilarityMode>(mode, true, out var similarityMode))
@@ -260,7 +291,11 @@ public class PlayersController : ControllerBase
     public async Task<IActionResult> ComparePlayersActivityHours([FromQuery] string player1, [FromQuery] string player2)
     {
         if (string.IsNullOrWhiteSpace(player1) || string.IsNullOrWhiteSpace(player2))
-            return BadRequest("Both player1 and player2 must be provided.");
+            return BadRequest(ApiConstants.ValidationMessages.BothPlayersRequired);
+
+        // Use modern URL decoding that preserves + signs
+        player1 = Uri.UnescapeDataString(player1);
+        player2 = Uri.UnescapeDataString(player2);
 
         try
         {

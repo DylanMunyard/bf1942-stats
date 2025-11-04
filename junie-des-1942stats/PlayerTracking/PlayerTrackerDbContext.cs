@@ -66,6 +66,12 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<PlayerSession>()
             .HasIndex(ps => new { ps.RoundId, ps.PlayerName });
 
+        // Optimized index for player search EXISTS subquery
+        // Used by GetAllPlayersWithPaging when filtering active players
+        modelBuilder.Entity<PlayerSession>()
+            .HasIndex(ps => new { ps.PlayerName, ps.IsActive })
+            .HasDatabaseName("IX_PlayerSessions_PlayerName_IsActive");
+
         // Configure PlayerObservation entity
         modelBuilder.Entity<PlayerObservation>()
             .HasKey(po => po.ObservationId);

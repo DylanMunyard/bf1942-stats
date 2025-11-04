@@ -28,7 +28,7 @@ public class ServerStatsService(
     IClickHouseReader clickHouseReader,
     RoundsService roundsService,
     GameTrendsService gameTrendsService,
-    PlayersOnlineHistoryService playersOnlineHistoryService)
+    PlayersOnlineHistoryService playersOnlineHistoryService) : IServerStatsService
 {
     private readonly PlayerTrackerDbContext _dbContext = dbContext;
     private readonly ILogger<ServerStatsService> _logger = logger;
