@@ -105,8 +105,28 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             }
         }
 
+        // Apply sorting at database level
+        var isDescending = sortOrder.ToLower() == "desc";
+
+        var query = sortBy.ToLower() switch
+        {
+            "playername" => isDescending
+                ? baseQuery.OrderByDescending(p => p.Name)
+                : baseQuery.OrderBy(p => p.Name),
+            "totalplaytimeminutes" => isDescending
+                ? baseQuery.OrderByDescending(p => p.TotalPlayTimeMinutes)
+                : baseQuery.OrderBy(p => p.TotalPlayTimeMinutes),
+            "lastseen" => isDescending
+                ? baseQuery.OrderByDescending(p => p.LastSeen)
+                : baseQuery.OrderBy(p => p.LastSeen),
+            "isactive" => isDescending
+                ? baseQuery.OrderByDescending(p => p.Sessions.Any(s => s.IsActive)).ThenByDescending(p => p.LastSeen)
+                : baseQuery.OrderBy(p => p.Sessions.Any(s => s.IsActive)).ThenByDescending(p => p.LastSeen),
+            _ => baseQuery.OrderByDescending(p => p.Sessions.Any(s => s.IsActive)).ThenByDescending(p => p.LastSeen)
+        };
+
         // Now project to PlayerBasicInfo
-        var query = baseQuery.Select(p => new PlayerBasicInfo
+        var projectedQuery = query.Select(p => new PlayerBasicInfo
         {
             PlayerName = p.Name,
             TotalPlayTimeMinutes = p.TotalPlayTimeMinutes,
@@ -127,31 +147,11 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                 : null
         });
 
-        // Apply sorting
-        var isDescending = sortOrder.ToLower() == "desc";
-
-        query = sortBy.ToLower() switch
-        {
-            "playername" => isDescending
-                ? query.OrderByDescending(p => p.PlayerName)
-                : query.OrderBy(p => p.PlayerName),
-            "totalplaytimeminutes" => isDescending
-                ? query.OrderByDescending(p => p.TotalPlayTimeMinutes)
-                : query.OrderBy(p => p.TotalPlayTimeMinutes),
-            "lastseen" => isDescending
-                ? query.OrderByDescending(p => p.LastSeen)
-                : query.OrderBy(p => p.LastSeen),
-            "isactive" => isDescending
-                ? query.OrderByDescending(p => p.IsActive).ThenByDescending(p => p.LastSeen)
-                : query.OrderBy(p => p.IsActive).ThenByDescending(p => p.LastSeen),
-            _ => query.OrderByDescending(p => p.IsActive).ThenByDescending(p => p.LastSeen)
-        };
-
         // Get total count for pagination (after filters are applied)
-        var totalCount = await query.CountAsync();
+        var totalCount = await projectedQuery.CountAsync();
 
         // Apply pagination
-        var players = await query
+        var players = await projectedQuery
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
