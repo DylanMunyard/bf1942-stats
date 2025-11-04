@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using junie_des_1942stats.ClickHouse;
 using junie_des_1942stats.ClickHouse.Models;
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Http;
 
 namespace junie_des_1942stats.PlayerStats;
 

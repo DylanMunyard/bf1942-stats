@@ -2,6 +2,7 @@ using junie_des_1942stats.ServerStats.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using System;
+using Microsoft.AspNetCore.Http;
 
 namespace junie_des_1942stats.ServerStats;
 
