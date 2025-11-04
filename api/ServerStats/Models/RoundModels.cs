@@ -1,6 +1,6 @@
-using PlayerStatsModels = junie_des_1942stats.PlayerStats.Models;
+using PlayerStatsModels = api.PlayerStats.Models;
 
-namespace junie_des_1942stats.ServerStats.Models;
+namespace api.ServerStats.Models;
 
 public class RoundListItem
 {

@@ -2,14 +2,14 @@ using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
-using junie_des_1942stats.PlayerTracking;
-using junie_des_1942stats.Bflist;
-using junie_des_1942stats.ClickHouse;
-using junie_des_1942stats.Services;
-using junie_des_1942stats.Telemetry;
+using api.PlayerTracking;
+using api.Bflist;
+using api.ClickHouse;
+using api.Services;
+using api.Telemetry;
 using Serilog.Context;
 
-namespace junie_des_1942stats.StatsCollectors;
+namespace api.StatsCollectors;
 
 public class StatsCollectionBackgroundService : IHostedService, IDisposable
 {

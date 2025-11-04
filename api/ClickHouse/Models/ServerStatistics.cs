@@ -1,6 +1,6 @@
 using System.Runtime.Serialization;
 
-namespace junie_des_1942stats.ClickHouse.Models;
+namespace api.ClickHouse.Models;
 
 [DataContract(Name = "ClickHouseServerStatistics")]
 public class ServerStatistics

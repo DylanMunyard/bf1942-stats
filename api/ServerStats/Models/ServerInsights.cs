@@ -1,7 +1,7 @@
-using junie_des_1942stats.Bflist;
-using junie_des_1942stats.Services;
+using api.Bflist;
+using api.Services;
 
-namespace junie_des_1942stats.ServerStats.Models
+namespace api.ServerStats.Models
 {
     public class ServerInsights
     {

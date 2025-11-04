@@ -1,11 +1,11 @@
-using junie_des_1942stats.ClickHouse.Base;
-using junie_des_1942stats.ClickHouse.Interfaces;
-using junie_des_1942stats.PlayerTracking;
+using api.ClickHouse.Base;
+using api.ClickHouse.Interfaces;
+using api.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
 using System.Text;
 using Microsoft.Extensions.Logging;
 
-namespace junie_des_1942stats.ClickHouse;
+namespace api.ClickHouse;
 
 public class GameTrendsService : BaseClickHouseService
 {

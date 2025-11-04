@@ -1,4 +1,4 @@
-namespace junie_des_1942stats.Gamification.Models;
+namespace api.Gamification.Models;
 
 public class Achievement
 {

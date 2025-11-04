@@ -1,11 +1,11 @@
-using junie_des_1942stats.ClickHouse.Base;
-using junie_des_1942stats.ClickHouse.Interfaces;
-using junie_des_1942stats.PlayerStats.Models;
+using api.ClickHouse.Base;
+using api.ClickHouse.Interfaces;
+using api.PlayerStats.Models;
 using Microsoft.Extensions.Logging;
-using junie_des_1942stats.Telemetry;
+using api.Telemetry;
 using System.Diagnostics;
 
-namespace junie_des_1942stats.ClickHouse;
+namespace api.ClickHouse;
 
 public class PlayerInsightsService : BaseClickHouseService, IClickHouseReader
 {

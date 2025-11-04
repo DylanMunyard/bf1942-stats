@@ -1,4 +1,4 @@
-namespace junie_des_1942stats.Gamification.Services;
+namespace api.Gamification.Services;
 
 /// <summary>
 /// Service for automatically detecting tournament team assignments from round player data.

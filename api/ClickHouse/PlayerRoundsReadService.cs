@@ -1,17 +1,17 @@
 using System.Net.Http;
-using junie_des_1942stats.ClickHouse.Models;
-using junie_des_1942stats.ClickHouse.Interfaces;
-using junie_des_1942stats.ClickHouse.Base;
-using junie_des_1942stats.ServerStats.Models;
-using junie_des_1942stats.PlayerStats.Models;
-using junie_des_1942stats.PlayerTracking;
+using api.ClickHouse.Models;
+using api.ClickHouse.Interfaces;
+using api.ClickHouse.Base;
+using api.ServerStats.Models;
+using api.PlayerStats.Models;
+using api.PlayerTracking;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
-using junie_des_1942stats.Telemetry;
+using api.Telemetry;
 using System.Diagnostics;
 
-namespace junie_des_1942stats.ClickHouse;
+namespace api.ClickHouse;
 
 public class PlayerRoundsReadService : BaseClickHouseService, IClickHouseReader
 {

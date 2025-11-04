@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
-using junie_des_1942stats.Notifications.Telemetry;
+using notifications.Telemetry;
 using System.Diagnostics;
 
-namespace junie_des_1942stats.Notifications.Services;
+namespace notifications.Services;
 
 public interface IBuddyApiService
 {

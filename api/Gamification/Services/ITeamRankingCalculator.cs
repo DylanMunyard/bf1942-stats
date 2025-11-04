@@ -1,6 +1,6 @@
-using junie_des_1942stats.PlayerTracking;
+using api.PlayerTracking;
 
-namespace junie_des_1942stats.Gamification.Services;
+namespace api.Gamification.Services;
 
 /// <summary>
 /// Service for calculating team rankings based on tournament match results.

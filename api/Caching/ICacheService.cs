@@ -1,10 +1,10 @@
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
-using junie_des_1942stats.Telemetry;
+using api.Telemetry;
 using System.Diagnostics;
 
-namespace junie_des_1942stats.Caching;
+namespace api.Caching;
 
 public interface ICacheService
 {

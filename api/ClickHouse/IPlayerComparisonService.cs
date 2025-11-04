@@ -1,4 +1,4 @@
-namespace junie_des_1942stats.ClickHouse;
+namespace api.ClickHouse;
 
 /// <summary>
 /// Interface for player comparison service.

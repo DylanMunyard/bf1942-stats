@@ -1,7 +1,7 @@
 using Markdig;
 using Microsoft.Extensions.Logging;
 
-namespace junie_des_1942stats.Utils;
+namespace api.Utils;
 
 /// <summary>
 /// Service for safely processing markdown content to prevent XSS attacks.

@@ -1,6 +1,6 @@
-using junie_des_1942stats.Gamification.Models;
+using api.Gamification.Models;
 
-namespace junie_des_1942stats.Gamification.Services;
+namespace api.Gamification.Services;
 
 public class BadgeDefinitionsService
 {

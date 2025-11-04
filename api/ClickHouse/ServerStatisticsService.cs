@@ -4,11 +4,11 @@ using System.Threading.Tasks;
 using ClickHouse.Client.ADO;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using junie_des_1942stats.ClickHouse.Models;
-using junie_des_1942stats.Telemetry;
+using api.ClickHouse.Models;
+using api.Telemetry;
 using System.Diagnostics;
 
-namespace junie_des_1942stats.ClickHouse;
+namespace api.ClickHouse;
 
 public class ServerStatisticsService : IDisposable
 {

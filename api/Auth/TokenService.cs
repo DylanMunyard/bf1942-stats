@@ -4,9 +4,9 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
-using junie_des_1942stats.PlayerTracking;
+using api.PlayerTracking;
 
-namespace junie_des_1942stats.Auth;
+namespace api.Auth;
 
 public interface ITokenService
 {

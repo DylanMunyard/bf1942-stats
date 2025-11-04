@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using junie_des_1942stats.PlayerTracking;
+using api.PlayerTracking;
 using Microsoft.Extensions.Logging;
 using NodaTime;
 
-namespace junie_des_1942stats.Controllers;
+namespace api.Controllers;
 
 [ApiController]
 [Route("stats/tournaments")]

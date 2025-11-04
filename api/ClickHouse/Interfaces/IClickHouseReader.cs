@@ -1,6 +1,6 @@
 using System.Net.Http;
 
-namespace junie_des_1942stats.ClickHouse.Interfaces;
+namespace api.ClickHouse.Interfaces;
 
 public interface IClickHouseReader
 {

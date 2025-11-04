@@ -1,7 +1,7 @@
-using junie_des_1942stats.ServerStats.Models;
-using junie_des_1942stats.Gamification.Models;
+using api.ServerStats.Models;
+using api.Gamification.Models;
 
-namespace junie_des_1942stats.ServerStats;
+namespace api.ServerStats;
 
 /// <summary>
 /// Interface for server statistics service.

@@ -4,11 +4,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using junie_des_1942stats.PlayerTracking;
+using api.PlayerTracking;
 
 #nullable disable
 
-namespace junie_des_1942stats.Migrations
+namespace api.Migrations
 {
     [DbContext(typeof(PlayerTrackerDbContext))]
     [Migration("20251104003230_AddTournamentRankingColumnsForMatchesAndTickets")]

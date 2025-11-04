@@ -1,12 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
-using junie_des_1942stats.Notifications.Services;
-using junie_des_1942stats.Notifications.Telemetry;
+using notifications.Services;
+using notifications.Telemetry;
 using System.Security.Claims;
 using System.Diagnostics;
 
-namespace junie_des_1942stats.Notifications.Hubs;
+namespace notifications.Hubs;
 
 [Authorize]
 public class NotificationHub : Hub

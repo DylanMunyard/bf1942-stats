@@ -1,13 +1,13 @@
 using System.Diagnostics;
 using System.Linq;
 using System.Text.Json;
-using junie_des_1942stats.Gamification.Models;
-using junie_des_1942stats.PlayerTracking;
-using junie_des_1942stats.Telemetry;
+using api.Gamification.Models;
+using api.PlayerTracking;
+using api.Telemetry;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace junie_des_1942stats.Gamification.Services;
+namespace api.Gamification.Services;
 
 public record TeamVictoryMetadata(
     int WinningTeam,

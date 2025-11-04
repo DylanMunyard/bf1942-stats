@@ -3,12 +3,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 using System.Text.Json;
-using junie_des_1942stats.Notifications.Services;
-using junie_des_1942stats.Notifications.Models;
-using junie_des_1942stats.Notifications.Telemetry;
+using notifications.Services;
+using notifications.Models;
+using notifications.Telemetry;
 using System.Diagnostics;
 
-namespace junie_des_1942stats.Notifications.Consumers
+namespace notifications.Consumers
 {
     public class PlayerEventConsumer : BackgroundService
     {

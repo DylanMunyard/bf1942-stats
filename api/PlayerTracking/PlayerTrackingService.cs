@@ -2,12 +2,12 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
-using junie_des_1942stats.Bflist;
-using junie_des_1942stats.Services;
-using junie_des_1942stats.ServerStats;
+using api.Bflist;
+using api.Services;
+using api.ServerStats;
 using System.Text.Json;
 
-namespace junie_des_1942stats.PlayerTracking;
+namespace api.PlayerTracking;
 
 public class PlayerTrackingService
 {

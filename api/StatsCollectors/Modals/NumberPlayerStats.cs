@@ -1,4 +1,4 @@
-﻿namespace junie_des_1942stats.StatsCollectors.Modals;
+﻿namespace api.StatsCollectors.Modals;
 
 public class NumberPlayerStats
 {

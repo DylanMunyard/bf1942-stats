@@ -1,12 +1,12 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
-using junie_des_1942stats.Notifications.Models;
-using junie_des_1942stats.Notifications.Hubs;
-using junie_des_1942stats.Notifications.Services;
-using junie_des_1942stats.Notifications.Telemetry;
+using notifications.Models;
+using notifications.Hubs;
+using notifications.Services;
+using notifications.Telemetry;
 using System.Diagnostics;
 
-namespace junie_des_1942stats.Notifications.Handlers;
+namespace notifications.Handlers;
 
 public class PlayerOnlineNotificationHandler
 {

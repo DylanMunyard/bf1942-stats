@@ -1,9 +1,9 @@
-using junie_des_1942stats.PlayerStats.Models;
-using junie_des_1942stats.ServerStats.Models;
+using api.PlayerStats.Models;
+using api.ServerStats.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
-namespace junie_des_1942stats.ServerStats;
+namespace api.ServerStats;
 
 [ApiController]
 [Route("stats/[controller]")]

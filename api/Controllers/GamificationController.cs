@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
-using junie_des_1942stats.Gamification.Models;
-using junie_des_1942stats.Gamification.Services;
-using junie_des_1942stats.PlayerStats.Models;
+using api.Gamification.Models;
+using api.Gamification.Services;
+using api.PlayerStats.Models;
 using Microsoft.Extensions.Logging;
 
-namespace junie_des_1942stats.Controllers;
+namespace api.Controllers;
 
 [ApiController]
 [Route("stats/[controller]")]

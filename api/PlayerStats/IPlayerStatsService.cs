@@ -1,6 +1,6 @@
-using junie_des_1942stats.PlayerStats.Models;
+using api.PlayerStats.Models;
 
-namespace junie_des_1942stats.PlayerStats;
+namespace api.PlayerStats;
 
 /// <summary>
 /// Interface for player statistics service.

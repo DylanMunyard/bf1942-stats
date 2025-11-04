@@ -1,13 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
-using junie_des_1942stats.Gamification.Services;
-using junie_des_1942stats.Caching;
-using junie_des_1942stats.ClickHouse;
-using junie_des_1942stats.ClickHouse.Interfaces;
-using junie_des_1942stats.PlayerTracking;
+using api.Gamification.Services;
+using api.Caching;
+using api.ClickHouse;
+using api.ClickHouse.Interfaces;
+using api.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace junie_des_1942stats.Controllers;
+namespace api.Controllers;
 
 [ApiController]
 [Route("stats/[controller]")]

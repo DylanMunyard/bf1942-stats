@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using ClickHouse.Client;
 using ClickHouse.Client.ADO;
-using junie_des_1942stats.ClickHouse.Models;
+using api.ClickHouse.Models;
 using Microsoft.Extensions.Configuration;
 using System.Data.Common;
 using Microsoft.Extensions.Logging;
 
-namespace junie_des_1942stats.ClickHouse;
+namespace api.ClickHouse;
 
 public class RealTimeAnalyticsService : IDisposable
 {

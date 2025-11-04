@@ -1,9 +1,9 @@
-using junie_des_1942stats.Gamification.Models;
-using junie_des_1942stats.ClickHouse.Models;
+using api.Gamification.Models;
+using api.ClickHouse.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace junie_des_1942stats.Gamification.Services;
+namespace api.Gamification.Services;
 
 public class PerformanceBadgeCalculator
 {

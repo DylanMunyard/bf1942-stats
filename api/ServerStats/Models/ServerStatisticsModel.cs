@@ -1,8 +1,8 @@
 using System.Text.Json;
 using System.Runtime.Serialization;
-using junie_des_1942stats.Gamification.Models;
+using api.Gamification.Models;
 
-namespace junie_des_1942stats.ServerStats.Models;
+namespace api.ServerStats.Models;
 
 [DataContract(Name = "ServerStatsServerStatistics")]
 public class ServerStatistics

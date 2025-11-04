@@ -1,15 +1,15 @@
 using System.Text.Json;
-using junie_des_1942stats.Bflist;
-using junie_des_1942stats.StatsCollectors.Modals;
-using junie_des_1942stats.Caching;
+using api.Bflist;
+using api.StatsCollectors.Modals;
+using api.Caching;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
-using junie_des_1942stats.Telemetry;
+using api.Telemetry;
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
-using junie_des_1942stats.PlayerTracking;
+using api.PlayerTracking;
 
-namespace junie_des_1942stats.Bflist;
+namespace api.Bflist;
 
 public interface IBfListApiService
 {

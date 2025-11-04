@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
-using junie_des_1942stats.ClickHouse;
-using junie_des_1942stats.ClickHouse.Models;
+using api.ClickHouse;
+using api.ClickHouse.Models;
 
-namespace junie_des_1942stats;
+namespace api;
 
 [ApiController]
 [Route("stats/[controller]")]

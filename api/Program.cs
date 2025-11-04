@@ -1,17 +1,17 @@
-using junie_des_1942stats.PlayerStats;
+using api.PlayerStats;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using junie_des_1942stats.PlayerTracking;
-using junie_des_1942stats.ServerStats;
-using junie_des_1942stats.StatsCollectors;
-using junie_des_1942stats.ClickHouse;
-using junie_des_1942stats.ClickHouse.Interfaces;
-using junie_des_1942stats.ClickHouse.Base;
-using junie_des_1942stats.Caching;
-using junie_des_1942stats.Services;
-using junie_des_1942stats.Gamification.Services;
+using api.PlayerTracking;
+using api.ServerStats;
+using api.StatsCollectors;
+using api.ClickHouse;
+using api.ClickHouse.Interfaces;
+using api.ClickHouse.Base;
+using api.Caching;
+using api.Services;
+using api.Gamification.Services;
 using Serilog;
 using Serilog.Enrichers.Span;
 using Microsoft.Extensions.Logging;
@@ -21,20 +21,20 @@ using Microsoft.IdentityModel.Tokens;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using junie_des_1942stats.Auth;
-using junie_des_1942stats.Utils;
+using api.Auth;
+using api.Utils;
 using NodaTime;
 using NodaTime.Serialization.SystemTextJson;
 using System.Diagnostics;
 using OpenTelemetry.Trace;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Metrics;
-using junie_des_1942stats.Telemetry;
+using api.Telemetry;
 using OpenTelemetry.Exporter;
 using Serilog.Sinks.Grafana.Loki;
 using Microsoft.AspNetCore.ResponseCompression;
 using System.IO.Compression;
-using junie_des_1942stats.Data.Migrations;
+using api.Data.Migrations;
 
 // Configure Serilog
 var lokiUrl = Environment.GetEnvironmentVariable("LOKI_URL") ?? "http://localhost:3100";
@@ -60,9 +60,9 @@ var loggerConfig = new LoggerConfiguration()
         return false; // Include this log
     })
     // Keep controller logs at Information level
-    .MinimumLevel.Override("junie_des_1942stats.PlayerStats.PlayersController", Serilog.Events.LogEventLevel.Information)
-    .MinimumLevel.Override("junie_des_1942stats.ServerStats.ServersController", Serilog.Events.LogEventLevel.Information)
-    .MinimumLevel.Override("junie_des_1942stats.RealTimeAnalyticsController", Serilog.Events.LogEventLevel.Information)
+    .MinimumLevel.Override("api.PlayerStats.PlayersController", Serilog.Events.LogEventLevel.Information)
+    .MinimumLevel.Override("api.ServerStats.ServersController", Serilog.Events.LogEventLevel.Information)
+    .MinimumLevel.Override("api.RealTimeAnalyticsController", Serilog.Events.LogEventLevel.Information)
     // Suppress verbose HTTP client logs from the OTLP trace exporter
     .MinimumLevel.Override("System.Net.Http.HttpClient.OtlpTraceExporter.ClientHandler", Serilog.Events.LogEventLevel.Warning)
     .Enrich.WithProperty("service.name", serviceName)
@@ -225,7 +225,7 @@ try
     });
 
     // Register Auth services
-    builder.Services.AddScoped<junie_des_1942stats.Auth.IDiscordAuthService, junie_des_1942stats.Auth.DiscordAuthService>();
+    builder.Services.AddScoped<api.Auth.IDiscordAuthService, api.Auth.DiscordAuthService>();
 
     // CORS
     var allowedOrigin = builder.Configuration["Cors:AllowedOrigins"];
@@ -712,14 +712,14 @@ try
         options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(15);
     });
 
-    builder.Services.AddScoped<junie_des_1942stats.Bflist.IBfListApiService, junie_des_1942stats.Bflist.BfListApiService>();
+    builder.Services.AddScoped<api.Bflist.IBfListApiService, api.Bflist.BfListApiService>();
 
     // Register Gamification Services
-    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.BadgeDefinitionsService>();
-    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.AchievementLabelingService>();
+    builder.Services.AddScoped<api.Gamification.Services.BadgeDefinitionsService>();
+    builder.Services.AddScoped<api.Gamification.Services.AchievementLabelingService>();
 
     // Register HttpClient for ClickHouse Gamification Service
-    builder.Services.AddHttpClient<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>(client =>
+    builder.Services.AddHttpClient<api.Gamification.Services.ClickHouseGamificationService>(client =>
     {
         client.Timeout = TimeSpan.FromSeconds(10); // Longer timeout for bulk operations
         client.DefaultRequestHeaders.Add("X-ClickHouse-User", "default");
@@ -730,18 +730,18 @@ try
     });
 
     // Register ClickHouse Gamification Service as Singleton to match other ClickHouse services
-    builder.Services.AddSingleton<junie_des_1942stats.Gamification.Services.ClickHouseGamificationService>();
+    builder.Services.AddSingleton<api.Gamification.Services.ClickHouseGamificationService>();
 
-    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.HistoricalProcessor>();
-    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.KillStreakDetector>();
-    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.MilestoneCalculator>();
-    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.PerformanceBadgeCalculator>();
-    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.PlacementProcessor>();
-    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.TeamVictoryProcessor>();
-    builder.Services.AddScoped<junie_des_1942stats.Gamification.Services.GamificationService>();
+    builder.Services.AddScoped<api.Gamification.Services.HistoricalProcessor>();
+    builder.Services.AddScoped<api.Gamification.Services.KillStreakDetector>();
+    builder.Services.AddScoped<api.Gamification.Services.MilestoneCalculator>();
+    builder.Services.AddScoped<api.Gamification.Services.PerformanceBadgeCalculator>();
+    builder.Services.AddScoped<api.Gamification.Services.PlacementProcessor>();
+    builder.Services.AddScoped<api.Gamification.Services.TeamVictoryProcessor>();
+    builder.Services.AddScoped<api.Gamification.Services.GamificationService>();
 
     // Register Gamification Background Service
-    builder.Services.AddHostedService<junie_des_1942stats.Gamification.Services.GamificationBackgroundService>();
+    builder.Services.AddHostedService<api.Gamification.Services.GamificationBackgroundService>();
 
     // Register PlayerComparisonService (read-only)
     builder.Services.AddScoped<PlayerComparisonService>(sp =>

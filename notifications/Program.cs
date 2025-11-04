@@ -1,9 +1,9 @@
-using junie_des_1942stats.Notifications.Consumers;
-using junie_des_1942stats.Notifications.Handlers;
-using junie_des_1942stats.Notifications.Hubs;
-using junie_des_1942stats.Notifications.Models;
-using junie_des_1942stats.Notifications.Services;
-using junie_des_1942stats.Notifications.Telemetry;
+using notifications.Consumers;
+using notifications.Handlers;
+using notifications.Hubs;
+using notifications.Models;
+using notifications.Services;
+using notifications.Telemetry;
 using StackExchange.Redis;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;

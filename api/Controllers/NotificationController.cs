@@ -1,9 +1,9 @@
-using junie_des_1942stats.PlayerTracking;
+using api.PlayerTracking;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace junie_des_1942stats.Controllers;
+namespace api.Controllers;
 
 [ApiController]
 [Route("stats/[controller]")]

@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
-using junie_des_1942stats.ClickHouse;
-using junie_des_1942stats.Caching;
+using api.ClickHouse;
+using api.Caching;
 using Microsoft.Extensions.Logging;
 using System.Linq;
 
-namespace junie_des_1942stats.Controllers;
+namespace api.Controllers;
 
 [ApiController]
 [Route("stats/[controller]")]

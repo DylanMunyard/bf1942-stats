@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using junie_des_1942stats.PlayerStats.Models;
+using api.PlayerStats.Models;
 using NodaTime;
 
-namespace junie_des_1942stats.PlayerTracking;
+namespace api.PlayerTracking;
 
 public class PlayerTrackerDbContext : DbContext
 {

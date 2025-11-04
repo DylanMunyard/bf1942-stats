@@ -4,13 +4,13 @@ using System.Linq;
 using System.Threading.Tasks;
 using ClickHouse.Client.ADO;
 using ClickHouse.Client.ADO.Readers;
-using junie_des_1942stats.PlayerStats.Models;
-using junie_des_1942stats.PlayerTracking;
-using junie_des_1942stats.Caching;
+using api.PlayerStats.Models;
+using api.PlayerTracking;
+using api.Caching;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace junie_des_1942stats.ClickHouse;
+namespace api.ClickHouse;
 
 /// <summary>
 /// Service for comparing players and finding similar players.

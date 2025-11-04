@@ -1,9 +1,9 @@
-using junie_des_1942stats.PlayerTracking;
+using api.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-namespace junie_des_1942stats.StatsCollectors;
+namespace api.StatsCollectors;
 
 public class RankingCalculationService(IServiceProvider services) : BackgroundService
 {

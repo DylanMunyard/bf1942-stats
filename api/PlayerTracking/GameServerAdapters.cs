@@ -1,6 +1,6 @@
-﻿using junie_des_1942stats.Bflist;
+﻿using api.Bflist;
 
-namespace junie_des_1942stats.PlayerTracking
+namespace api.PlayerTracking
 {
     public interface IGameServer
     {

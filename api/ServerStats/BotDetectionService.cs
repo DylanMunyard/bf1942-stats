@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
 
-namespace junie_des_1942stats.ServerStats;
+namespace api.ServerStats;
 
 public class BotDetectionConfig
 {

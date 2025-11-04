@@ -1,4 +1,4 @@
-namespace junie_des_1942stats.PlayerStats.Models;
+namespace api.PlayerStats.Models;
 
 public class PlayerBasicInfo
 {

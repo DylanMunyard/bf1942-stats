@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace junie_des_1942stats.Notifications.Services;
+namespace notifications.Services;
 
 public interface IEventAggregator
 {

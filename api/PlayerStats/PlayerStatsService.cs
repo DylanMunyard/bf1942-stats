@@ -1,15 +1,15 @@
-using junie_des_1942stats.PlayerStats.Models;
-using junie_des_1942stats.PlayerTracking;
-using junie_des_1942stats.ClickHouse;
-using junie_des_1942stats.Caching;
+using api.PlayerStats.Models;
+using api.PlayerTracking;
+using api.ClickHouse;
+using api.Caching;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
-using junie_des_1942stats.Telemetry;
+using api.Telemetry;
 using System.Diagnostics;
 using System.Threading;
 
-namespace junie_des_1942stats.PlayerStats;
+namespace api.PlayerStats;
 
 public class PlayerStatsService(PlayerTrackerDbContext dbContext,
     PlayerInsightsService playerInsightsService,

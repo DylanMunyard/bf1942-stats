@@ -1,7 +1,7 @@
-using junie_des_1942stats.Gamification.Models;
+using api.Gamification.Models;
 using Microsoft.Extensions.Logging;
 
-namespace junie_des_1942stats.Gamification.Services;
+namespace api.Gamification.Services;
 
 public class AchievementLabelingService
 {

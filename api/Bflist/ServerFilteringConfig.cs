@@ -1,4 +1,4 @@
-namespace junie_des_1942stats.Bflist;
+namespace api.Bflist;
 
 public class ServerFilteringConfig
 {

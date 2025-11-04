@@ -1,4 +1,4 @@
-﻿namespace junie_des_1942stats.Bflist;
+﻿namespace api.Bflist;
 
 public class Fh2ServerInfo
 {
@@ -50,11 +50,4 @@ public class Fh2ServerInfo
     public bool NoVehicles { get; set; }
     public List<TeamInfo> Teams { get; set; } = [];
     public List<PlayerInfo> Players { get; set; } = [];
-}
-
-public class Fh2ServersResponse
-{
-    public Fh2ServerInfo[] Servers { get; set; } = [];
-    public string Cursor { get; set; } = "";
-    public bool HasMore { get; set; }
 }

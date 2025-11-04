@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
-using junie_des_1942stats.Notifications.Telemetry;
+using notifications.Telemetry;
 using System.Diagnostics;
 
-namespace junie_des_1942stats.Notifications.Services;
+namespace notifications.Services;
 
 public class BuddyNotificationService : IBuddyNotificationService
 {

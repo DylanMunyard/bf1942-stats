@@ -1,4 +1,4 @@
-namespace junie_des_1942stats.Services;
+namespace api.Services;
 
 public interface IPlayerEventPublisher
 {

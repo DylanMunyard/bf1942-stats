@@ -5,11 +5,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using junie_des_1942stats.PlayerTracking;
-using junie_des_1942stats.ClickHouse;
-using junie_des_1942stats.Telemetry;
+using api.PlayerTracking;
+using api.ClickHouse;
+using api.Telemetry;
 
-namespace junie_des_1942stats.StatsCollectors;
+namespace api.StatsCollectors;
 
 public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
 {

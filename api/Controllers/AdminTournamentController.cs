@@ -2,15 +2,15 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
-using junie_des_1942stats.PlayerTracking;
-using junie_des_1942stats.Services;
-using junie_des_1942stats.Gamification.Services;
-using junie_des_1942stats.Utils;
+using api.PlayerTracking;
+using api.Services;
+using api.Gamification.Services;
+using api.Utils;
 using Microsoft.Extensions.Logging;
 using NodaTime;
 using Markdig;
 
-namespace junie_des_1942stats.Controllers;
+namespace api.Controllers;
 
 [ApiController]
 [Route("stats/admin/tournaments")]

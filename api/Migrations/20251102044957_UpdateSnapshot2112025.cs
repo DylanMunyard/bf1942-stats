@@ -2,7 +2,7 @@
 
 #nullable disable
 
-namespace junie_des_1942stats.Migrations
+namespace api.Migrations
 {
     /// <inheritdoc />
     public partial class UpdateSnapshot2112025 : Migration

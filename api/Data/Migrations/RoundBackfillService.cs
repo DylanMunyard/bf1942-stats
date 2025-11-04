@@ -1,10 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
-using junie_des_1942stats.PlayerTracking;
+using api.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace junie_des_1942stats.Data.Migrations;
+namespace api.Data.Migrations;
 
 public class RoundBackfillService
 {

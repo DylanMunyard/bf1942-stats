@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
-namespace junie_des_1942stats.Caching;
+namespace api.Caching;
 
 public interface ICacheKeyService
 {

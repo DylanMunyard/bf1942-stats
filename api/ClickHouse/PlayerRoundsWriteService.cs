@@ -3,15 +3,15 @@ using System.Text;
 using System.Globalization;
 using CsvHelper;
 using CsvHelper.Configuration;
-using junie_des_1942stats.ClickHouse.Models;
-using junie_des_1942stats.ClickHouse.Interfaces;
-using junie_des_1942stats.ClickHouse.Base;
-using junie_des_1942stats.PlayerTracking;
+using api.ClickHouse.Models;
+using api.ClickHouse.Interfaces;
+using api.ClickHouse.Base;
+using api.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace junie_des_1942stats.ClickHouse;
+namespace api.ClickHouse;
 
 public class PlayerRoundsWriteService : BaseClickHouseService, IClickHouseWriter
 {

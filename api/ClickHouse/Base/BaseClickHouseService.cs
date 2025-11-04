@@ -1,10 +1,10 @@
 using System.Net.Http;
 using System.Text;
-using junie_des_1942stats.ClickHouse.Interfaces;
-using junie_des_1942stats.Telemetry;
+using api.ClickHouse.Interfaces;
+using api.Telemetry;
 using System.Diagnostics;
 
-namespace junie_des_1942stats.ClickHouse.Base;
+namespace api.ClickHouse.Base;
 
 public abstract class BaseClickHouseService
 {

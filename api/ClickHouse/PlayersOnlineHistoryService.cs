@@ -1,8 +1,8 @@
-using junie_des_1942stats.Bflist;
-using junie_des_1942stats.ClickHouse.Interfaces;
+using api.Bflist;
+using api.ClickHouse.Interfaces;
 using Microsoft.Extensions.Logging;
 
-namespace junie_des_1942stats.ClickHouse;
+namespace api.ClickHouse;
 
 public class PlayersOnlineHistoryService
 {

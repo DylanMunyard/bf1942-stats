@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace junie_des_1942stats.Notifications.Telemetry;
+namespace notifications.Telemetry;
 
 public static class ActivitySources
 {

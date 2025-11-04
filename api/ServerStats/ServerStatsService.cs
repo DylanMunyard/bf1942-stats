@@ -1,16 +1,16 @@
 using System.Data.SqlTypes;
-using junie_des_1942stats.PlayerTracking;
-using junie_des_1942stats.ServerStats.Models;
-using junie_des_1942stats.Caching;
-using junie_des_1942stats.ClickHouse;
-using junie_des_1942stats.ClickHouse.Base;
-using junie_des_1942stats.ClickHouse.Interfaces;
-using junie_des_1942stats.Gamification.Models;
-using junie_des_1942stats.Services;
+using api.PlayerTracking;
+using api.ServerStats.Models;
+using api.Caching;
+using api.ClickHouse;
+using api.ClickHouse.Base;
+using api.ClickHouse.Interfaces;
+using api.Gamification.Models;
+using api.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace junie_des_1942stats.ServerStats;
+namespace api.ServerStats;
 
 // Helper class for raw SQL query results
 public class PingTimestampData
@@ -1016,7 +1016,7 @@ FORMAT TabSeparated";
                     Percentile = 0,
                     GeneratedAt = DateTime.UtcNow
                 },
-                HourlyTimeline = new List<junie_des_1942stats.ServerStats.Models.HourlyBusyData>(),
+                HourlyTimeline = new List<api.ServerStats.Models.HourlyBusyData>(),
                 GeneratedAt = DateTime.UtcNow
             };
         }
@@ -1032,7 +1032,7 @@ FORMAT TabSeparated";
                 TypicalPlayers = serverResult.BusyIndicator.TypicalPlayers,
                 Percentile = serverResult.BusyIndicator.Percentile,
                 HistoricalRange = serverResult.BusyIndicator.HistoricalRange != null ?
-                    new junie_des_1942stats.ServerStats.Models.HistoricalRange
+                    new api.ServerStats.Models.HistoricalRange
                     {
                         Min = serverResult.BusyIndicator.HistoricalRange.Min,
                         Q25 = serverResult.BusyIndicator.HistoricalRange.Q25,
@@ -1044,13 +1044,13 @@ FORMAT TabSeparated";
                     } : null,
                 GeneratedAt = serverResult.BusyIndicator.GeneratedAt
             },
-            HourlyTimeline = serverResult.HourlyTimeline?.Select(ht => new junie_des_1942stats.ServerStats.Models.HourlyBusyData
+            HourlyTimeline = serverResult.HourlyTimeline?.Select(ht => new api.ServerStats.Models.HourlyBusyData
             {
                 Hour = ht.Hour,
                 TypicalPlayers = ht.TypicalPlayers,
                 BusyLevel = ht.BusyLevel,
                 IsCurrentHour = ht.IsCurrentHour
-            }).ToList() ?? new List<junie_des_1942stats.ServerStats.Models.HourlyBusyData>(),
+            }).ToList() ?? new List<api.ServerStats.Models.HourlyBusyData>(),
             GeneratedAt = busyIndicatorResult.GeneratedAt
         };
 

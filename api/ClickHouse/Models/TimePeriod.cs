@@ -1,4 +1,4 @@
-namespace junie_des_1942stats.ClickHouse.Models;
+namespace api.ClickHouse.Models;
 
 public enum TimePeriod
 {

@@ -1,13 +1,13 @@
-using junie_des_1942stats.Bflist;
+using api.Bflist;
 using Microsoft.AspNetCore.Mvc;
-using junie_des_1942stats.Services;
+using api.Services;
 using Microsoft.Extensions.Logging;
-using junie_des_1942stats.PlayerTracking;
+using api.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
-using junie_des_1942stats.ClickHouse;
-using junie_des_1942stats.ClickHouse.Interfaces;
+using api.ClickHouse;
+using api.ClickHouse.Interfaces;
 
-namespace junie_des_1942stats.Controllers;
+namespace api.Controllers;
 
 [ApiController]
 [Route("stats/[controller]")]

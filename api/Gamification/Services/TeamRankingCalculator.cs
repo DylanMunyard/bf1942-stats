@@ -1,9 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using junie_des_1942stats.PlayerTracking;
+using api.PlayerTracking;
 using NodaTime;
 
-namespace junie_des_1942stats.Gamification.Services;
+namespace api.Gamification.Services;
 
 public class TeamRankingCalculator : ITeamRankingCalculator
 {

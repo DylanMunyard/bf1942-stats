@@ -1,13 +1,13 @@
-﻿using junie_des_1942stats.PlayerStats.Models;
-using junie_des_1942stats.PlayerTracking;
+﻿using api.PlayerStats.Models;
+using api.PlayerTracking;
 using Microsoft.AspNetCore.Mvc;
-using junie_des_1942stats.ClickHouse;
-using junie_des_1942stats.ClickHouse.Models;
-using junie_des_1942stats.junie_des_1942stats;
+using api.ClickHouse;
+using api.ClickHouse.Models;
+using api.junie_des_1942stats;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Http;
 
-namespace junie_des_1942stats.PlayerStats;
+namespace api.PlayerStats;
 
 [ApiController]
 [Route("stats/[controller]")]

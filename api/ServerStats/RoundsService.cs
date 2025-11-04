@@ -1,10 +1,10 @@
-using junie_des_1942stats.PlayerTracking;
-using junie_des_1942stats.ServerStats.Models;
-using junie_des_1942stats.ClickHouse;
+using api.PlayerTracking;
+using api.ServerStats.Models;
+using api.ClickHouse;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace junie_des_1942stats.ServerStats;
+namespace api.ServerStats;
 
 public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsService> logger, PlayerRoundsReadService? clickHouseReader = null)
 {

@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
-using junie_des_1942stats.PlayerTracking;
+using api.PlayerTracking;
 
-namespace junie_des_1942stats.Data.Migrations;
+namespace api.Data.Migrations;
 
 [ApiController]
 [Route("stats/admin/[controller]")]

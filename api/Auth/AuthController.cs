@@ -3,13 +3,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
-using junie_des_1942stats.ClickHouse;
-using junie_des_1942stats.Auth;
+using api.ClickHouse;
+using api.Auth;
 using Microsoft.Extensions.Configuration;
-using junie_des_1942stats.PlayerTracking;
+using api.PlayerTracking;
 using Microsoft.Extensions.Logging;
 
-namespace junie_des_1942stats.Auth;
+namespace api.Auth;
 
 [ApiController]
 [Route("stats/[controller]")]

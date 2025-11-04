@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
-using junie_des_1942stats.Caching;
+using api.Caching;
 using System.Text.Json;
 
-namespace junie_des_1942stats.Auth;
+namespace api.Auth;
 
 public interface IDiscordAuthService
 {

@@ -1,4 +1,4 @@
-namespace junie_des_1942stats.Notifications.Models;
+namespace notifications.Models;
 
 public abstract record PlayerEventNotification
 {

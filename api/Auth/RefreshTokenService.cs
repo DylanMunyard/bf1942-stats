@@ -4,9 +4,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using junie_des_1942stats.PlayerTracking;
+using api.PlayerTracking;
 
-namespace junie_des_1942stats.Auth;
+namespace api.Auth;
 
 public interface IRefreshTokenService
 {
