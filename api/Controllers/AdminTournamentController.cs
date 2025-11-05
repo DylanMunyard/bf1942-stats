@@ -730,46 +730,6 @@ public class AdminTournamentController : ControllerBase
         });
     }
 
-    /// <summary>
-    /// Helper method to build a TournamentMatchResponse from a TournamentMatch entity.
-    /// </summary>
-    private TournamentMatchResponse BuildMatchResponse(TournamentMatch match)
-    {
-        return new TournamentMatchResponse
-        {
-            Id = match.Id,
-            ScheduledDate = match.ScheduledDate,
-            Team1Id = match.Team1Id,
-            Team1Name = match.Team1.Name,
-            Team2Id = match.Team2Id,
-            Team2Name = match.Team2.Name,
-            ServerGuid = match.ServerGuid,
-            ServerName = match.ServerName,
-            Week = match.Week,
-            CreatedAt = match.CreatedAt,
-            Maps = match.Maps.OrderBy(m => m.MapOrder).Select(m => new TournamentMatchMapResponse
-            {
-                Id = m.Id,
-                MapName = m.MapName,
-                MapOrder = m.MapOrder,
-                TeamId = m.TeamId,
-                TeamName = m.Team != null ? m.Team.Name : null,
-                MatchResults = m.MatchResults.Select(mr => new TournamentMatchResultResponse
-                {
-                    Id = mr.Id,
-                    Team1Id = mr.Team1Id,
-                    Team1Name = mr.Team1 != null ? mr.Team1.Name : null,
-                    Team2Id = mr.Team2Id,
-                    Team2Name = mr.Team2 != null ? mr.Team2.Name : null,
-                    WinningTeamId = mr.WinningTeamId,
-                    WinningTeamName = mr.WinningTeam != null ? mr.WinningTeam.Name : null,
-                    Team1Tickets = mr.Team1Tickets,
-                    Team2Tickets = mr.Team2Tickets
-                }).ToList()
-            }).ToList()
-        };
-    }
-
     private async Task<TournamentDetailResponse> GetTournamentDetailOptimizedAsync(int tournamentId)
     {
         var tournament = await _context.Tournaments

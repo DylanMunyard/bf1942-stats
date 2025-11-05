@@ -1,5 +1,4 @@
 using api.Gamification.Models;
-using api.ClickHouse.Models;
 using api.ClickHouse.Interfaces;
 using Microsoft.Extensions.Logging;
 
@@ -460,61 +459,6 @@ ORDER BY player_name, threshold";
         return achievements;
     }
 
-    /// <summary>
-    /// Get player stats with existing achievements - optimized to avoid N+1 queries
-    /// </summary>
-    private async Task<List<PlayerStatsWithAchievements>> GetPlayerStatsWithExistingAchievementsAsync(DateTime startDate, DateTime endDate)
-    {
-        // Get player stats in single query
-        var playerStats = await GetPlayerStatsInPeriodAsync(startDate, endDate);
-
-        // Get all existing milestone achievements in single query
-        var existingAchievements = await GetExistingMilestoneAchievementsAsync();
-
-        // Combine the data
-        var result = new List<PlayerStatsWithAchievements>();
-        foreach (var stats in playerStats)
-        {
-            var playerAchievements = existingAchievements.ContainsKey(stats.PlayerName)
-                ? existingAchievements[stats.PlayerName]
-                : new HashSet<string>();
-
-            result.Add(new PlayerStatsWithAchievements
-            {
-                Stats = stats,
-                ExistingAchievementIds = playerAchievements
-            });
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Get aggregated player statistics for a time period using a single ClickHouse query
-    /// </summary>
-    private async Task<List<PlayerGameStats>> GetPlayerStatsInPeriodAsync(DateTime startDate, DateTime endDate)
-    {
-        var query = $@"
-            SELECT 
-                player_name,
-                SUM(final_kills) as total_kills,
-                SUM(final_deaths) as total_deaths,
-                SUM(final_score) as total_score,
-                SUM(play_time_minutes) as total_playtime,
-                COUNT(*) as total_rounds
-            FROM player_rounds
-            WHERE round_end_time >= '{startDate:yyyy-MM-dd HH:mm:ss}'
-            AND round_end_time <= '{endDate:yyyy-MM-dd HH:mm:ss}'
-            AND is_bot = 0
-            GROUP BY player_name
-            HAVING total_rounds >= 5  -- Only process players with meaningful activity
-            ORDER BY total_kills DESC";
-
-        var result = await QueryPlayerRoundsAsync(query);
-        return ParsePlayerStats(result);
-    }
-
-
     private Achievement CreateMilestoneAchievement(string playerName, string achievementId,
         string name, int value, DateTime achievedAt, string category)
     {
@@ -677,34 +621,6 @@ ORDER BY player_name, threshold";
         }
 
         return stats;
-    }
-
-    private List<PlayerRound> ParsePlayerRounds(string result)
-    {
-        var rounds = new List<PlayerRound>();
-        var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-        foreach (var line in lines)
-        {
-            var parts = line.Split('\t');
-            if (parts.Length >= 8)
-            {
-                rounds.Add(new PlayerRound
-                {
-                    PlayerName = parts[0],
-                    RoundId = parts[1],
-                    ServerGuid = parts[2],
-                    MapName = parts[3],
-                    RoundEndTime = DateTime.Parse(parts[4]),
-                    FinalKills = (uint)int.Parse(parts[5]),
-                    FinalDeaths = (uint)int.Parse(parts[6]),
-                    FinalScore = int.Parse(parts[7]),
-                    PlayTimeMinutes = parts.Length > 8 ? double.Parse(parts[8]) : 0
-                });
-            }
-        }
-
-        return rounds;
     }
 
     private List<StreakData> ParseStreakData(string result)
