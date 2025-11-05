@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using api.PlayerTracking;
 using api.ClickHouse;
+using api.ClickHouse.Models;
 using api.Telemetry;
 
 namespace api.StatsCollectors;

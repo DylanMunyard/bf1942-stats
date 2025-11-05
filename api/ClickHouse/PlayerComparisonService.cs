@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ClickHouse.Client.ADO;
 using ClickHouse.Client.ADO.Readers;
 using api.PlayerStats.Models;
+using api.ClickHouse.Models;
 using api.PlayerTracking;
 using api.Caching;
 using Microsoft.EntityFrameworkCore;
@@ -162,12 +163,12 @@ public class PlayerComparisonService : IPlayerComparisonService
     private async Task<List<KillRateComparison>> GetKillRates(string player1, string player2, string? serverGuid = null)
     {
         // Calculate kill rate (kills per minute) using player_rounds data
-        var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
+        var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {ClickHouseHelpers.QuoteString(serverGuid)}" : "";
         var query = $@"
 SELECT player_name, 
     SUM(final_kills) / nullIf(SUM(play_time_minutes), 0) AS kill_rate
 FROM player_rounds
-WHERE player_name IN ({Quote(player1)}, {Quote(player2)}){serverFilter}
+WHERE player_name IN ({ClickHouseHelpers.QuoteString(player1)}, {ClickHouseHelpers.QuoteString(player2)}){serverFilter}
 GROUP BY player_name";
 
         var result = new List<KillRateComparison>();
@@ -196,7 +197,7 @@ GROUP BY player_name";
             ("AllTime", "1=1")
         };
         var results = new List<BucketTotalsComparison>();
-        var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
+        var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {ClickHouseHelpers.QuoteString(serverGuid)}" : "";
 
         foreach (var (label, condition) in buckets)
         {
@@ -207,7 +208,7 @@ SELECT player_name,
     SUM(final_deaths) AS total_deaths,
     SUM(play_time_minutes) AS total_play_time_minutes
 FROM player_rounds
-WHERE player_name IN ({Quote(player1)}, {Quote(player2)}) AND {condition}{serverFilter}
+WHERE player_name IN ({ClickHouseHelpers.QuoteString(player1)}, {ClickHouseHelpers.QuoteString(player2)}) AND {condition}{serverFilter}
 GROUP BY player_name";
 
             await using var cmd = _connection.CreateCommand();
@@ -234,13 +235,13 @@ GROUP BY player_name";
 
     private async Task<List<PingComparison>> GetAveragePing(string player1, string player2, string? serverGuid = null)
     {
-        var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
+        var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {ClickHouseHelpers.QuoteString(serverGuid)}" : "";
 
         // Optimized ping query - get recent pings more efficiently
         var query = $@"
 SELECT player_name, avg(ping) as avg_ping
 FROM player_metrics 
-WHERE player_name IN ({Quote(player1)}, {Quote(player2)}) 
+WHERE player_name IN ({ClickHouseHelpers.QuoteString(player1)}, {ClickHouseHelpers.QuoteString(player2)}) 
   AND ping > 0 
   AND ping < 1000  -- Filter out unrealistic ping values
   AND timestamp >= now() - INTERVAL 7 DAY  -- Only recent data for more relevant ping
@@ -264,7 +265,7 @@ GROUP BY player_name";
 
     private async Task<List<MapPerformanceComparison>> GetMapPerformance(string player1, string player2, string? serverGuid = null)
     {
-        var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {Quote(serverGuid)}" : "";
+        var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND server_guid = {ClickHouseHelpers.QuoteString(serverGuid)}" : "";
         var query = $@"
 SELECT map_name, player_name, 
     SUM(final_score) AS total_score,
@@ -272,7 +273,7 @@ SELECT map_name, player_name,
     SUM(final_deaths) AS total_deaths,
     SUM(play_time_minutes) AS total_play_time_minutes
 FROM player_rounds
-WHERE player_name IN ({Quote(player1)}, {Quote(player2)}){serverFilter}
+WHERE player_name IN ({ClickHouseHelpers.QuoteString(player1)}, {ClickHouseHelpers.QuoteString(player2)}){serverFilter}
 GROUP BY map_name, player_name";
 
         var mapStats = new Dictionary<string, MapPerformanceComparison>();
@@ -300,7 +301,7 @@ GROUP BY map_name, player_name";
     private async Task<(List<HeadToHeadSession> sessions, HashSet<string> serverGuids)> GetHeadToHeadData(string player1, string player2, string? serverGuid = null)
     {
         // Find overlapping rounds using the player_rounds table
-        var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND p1.server_guid = {Quote(serverGuid)}" : "";
+        var serverFilter = !string.IsNullOrEmpty(serverGuid) ? $" AND p1.server_guid = {ClickHouseHelpers.QuoteString(serverGuid)}" : "";
         var query = $@"
 SELECT p1.round_start_time, p1.round_end_time, p1.server_guid, p1.map_name,
        p1.final_score, p1.final_kills, p1.final_deaths,
@@ -311,7 +312,7 @@ JOIN player_rounds p2 ON p1.server_guid = p2.server_guid
     AND p1.map_name = p2.map_name
     AND p1.round_start_time <= p2.round_end_time 
     AND p2.round_start_time <= p1.round_end_time
-WHERE p1.player_name = {Quote(player1)} AND p2.player_name = {Quote(player2)}{serverFilter}
+WHERE p1.player_name = {ClickHouseHelpers.QuoteString(player1)} AND p2.player_name = {ClickHouseHelpers.QuoteString(player2)}{serverFilter}
 ORDER BY p1.round_start_time DESC
 LIMIT 50";
 
@@ -371,11 +372,11 @@ LIMIT 50";
         var query = $@"
 SELECT DISTINCT server_guid
 FROM player_rounds
-WHERE player_name = {Quote(player1)} AND round_start_time >= now() - INTERVAL 6 MONTH
+WHERE player_name = {ClickHouseHelpers.QuoteString(player1)} AND round_start_time >= now() - INTERVAL 6 MONTH
 INTERSECT
 SELECT DISTINCT server_guid
 FROM player_rounds
-WHERE player_name = {Quote(player2)} AND round_start_time >= now() - INTERVAL 6 MONTH";
+WHERE player_name = {ClickHouseHelpers.QuoteString(player2)} AND round_start_time >= now() - INTERVAL 6 MONTH";
 
         var serverGuids = new HashSet<string>();
         await using var cmd = _connection.CreateCommand();
@@ -435,7 +436,7 @@ WHERE player_name = {Quote(player2)} AND round_start_time >= now() - INTERVAL 6 
         var serverFilter = "";
         if (serverGuids != null && serverGuids.Any())
         {
-            var serverList = string.Join(", ", serverGuids.Select(Quote));
+            var serverList = string.Join(", ", serverGuids.Select(ClickHouseHelpers.QuoteString));
             serverFilter = $" AND server_guid IN ({serverList})";
         }
 
@@ -445,7 +446,7 @@ SELECT
     toHour(round_start_time) as hour_of_day,
     SUM(play_time_minutes) as total_minutes
 FROM player_rounds
-WHERE player_name = {Quote(playerName)} 
+WHERE player_name = {ClickHouseHelpers.QuoteString(playerName)} 
   AND round_start_time >= now() - INTERVAL 6 MONTH{serverFilter}
 GROUP BY hour_of_day
 ORDER BY hour_of_day";
@@ -557,12 +558,12 @@ WITH total_stats AS (
         SUM(final_deaths) AS total_deaths,
         SUM(play_time_minutes) AS total_play_time_minutes
     FROM player_rounds
-    WHERE player_name = {Quote(playerName)} AND round_start_time >= now() - INTERVAL 6 MONTH
+    WHERE player_name = {ClickHouseHelpers.QuoteString(playerName)} AND round_start_time >= now() - INTERVAL 6 MONTH
 ),
 server_playtime AS (
     SELECT server_guid, SUM(play_time_minutes) AS total_minutes
     FROM player_rounds
-    WHERE player_name = {Quote(playerName)} AND round_start_time >= now() - INTERVAL 6 MONTH
+    WHERE player_name = {ClickHouseHelpers.QuoteString(playerName)} AND round_start_time >= now() - INTERVAL 6 MONTH
     GROUP BY server_guid
     ORDER BY total_minutes DESC
     LIMIT 1
@@ -570,7 +571,7 @@ server_playtime AS (
 game_ids AS (
     SELECT DISTINCT game_id
     FROM player_rounds
-    WHERE player_name = {Quote(playerName)} AND round_start_time >= now() - INTERVAL 6 MONTH
+    WHERE player_name = {ClickHouseHelpers.QuoteString(playerName)} AND round_start_time >= now() - INTERVAL 6 MONTH
 )
 SELECT 
     t.total_kills,
@@ -624,7 +625,7 @@ GROUP BY t.total_kills, t.total_deaths, t.total_play_time_minutes, s.server_guid
             var serverFilter = "";
             if (activeServers.Any())
             {
-                var serverList = string.Join(", ", activeServers.Select(Quote));
+                var serverList = string.Join(", ", activeServers.Select(ClickHouseHelpers.QuoteString));
                 serverFilter = $" AND server_guid IN ({serverList})";
             }
 
@@ -650,7 +651,7 @@ GROUP BY t.total_kills, t.total_deaths, t.total_play_time_minutes, s.server_guid
         var query = $@"
 SELECT DISTINCT server_guid
 FROM player_rounds
-WHERE player_name = {Quote(playerName)} 
+WHERE player_name = {ClickHouseHelpers.QuoteString(playerName)} 
   AND round_start_time >= now() - INTERVAL 6 MONTH
   AND play_time_minutes > 5";
 
@@ -672,7 +673,7 @@ WHERE player_name = {Quote(playerName)}
         var serverFilter = "";
         if (serverGuids != null && serverGuids.Any())
         {
-            var serverList = string.Join(", ", serverGuids.Select(Quote));
+            var serverList = string.Join(", ", serverGuids.Select(ClickHouseHelpers.QuoteString));
             serverFilter = $" AND server_guid IN ({serverList})";
         }
 
@@ -682,7 +683,7 @@ WITH hourly_playtime AS (
         toHour(round_start_time) as hour_of_day,
         SUM(play_time_minutes) as total_minutes
     FROM player_rounds
-    WHERE player_name = {Quote(playerName)}
+    WHERE player_name = {ClickHouseHelpers.QuoteString(playerName)}
       AND round_start_time >= now() - INTERVAL 6 MONTH{serverFilter}
     GROUP BY hour_of_day
 ),
@@ -714,7 +715,7 @@ ORDER BY hour_of_day";
         var serverFilter = "";
         if (serverGuids != null && serverGuids.Any())
         {
-            var serverList = string.Join(", ", serverGuids.Select(Quote));
+            var serverList = string.Join(", ", serverGuids.Select(ClickHouseHelpers.QuoteString));
             serverFilter = $" AND server_guid IN ({serverList})";
         }
 
@@ -723,7 +724,7 @@ SELECT
     server_guid,
     avg(ping) as avg_ping
 FROM player_metrics
-WHERE player_name = {Quote(playerName)}
+WHERE player_name = {ClickHouseHelpers.QuoteString(playerName)}
   AND ping > 0
   AND ping < 1000{serverFilter}
   AND timestamp >= now() - INTERVAL 30 DAY  -- Recent ping data for accuracy
@@ -754,7 +755,7 @@ HAVING count(*) >= 10  -- Require at least 10 measurements for reliability";
         var serverFilter = "";
         if (serverGuids != null && serverGuids.Any())
         {
-            var serverList = string.Join(", ", serverGuids.Select(Quote));
+            var serverList = string.Join(", ", serverGuids.Select(ClickHouseHelpers.QuoteString));
             serverFilter = $" AND server_guid IN ({serverList})";
         }
 
@@ -766,7 +767,7 @@ WITH player_map_stats AS (
         AVG(final_score / nullIf(play_time_minutes, 0)) as player_score_rate,
         SUM(play_time_minutes) as total_play_time
     FROM player_rounds
-    WHERE player_name = {Quote(playerName)}
+    WHERE player_name = {ClickHouseHelpers.QuoteString(playerName)}
       AND round_start_time >= now() - INTERVAL 6 MONTH
       AND play_time_minutes > 5{serverFilter}
     GROUP BY map_name
@@ -828,7 +829,7 @@ JOIN map_averages a ON p.map_name = a.map_name";
         string playTimeFilter = "total_play_time_minutes >= 30"; // At least 30 minutes of data for any mode
 
         // Create server filter - only include players who have played on the same servers as target player
-        var serverList = string.Join(", ", targetActiveServers.Select(Quote));
+        var serverList = string.Join(", ", targetActiveServers.Select(ClickHouseHelpers.QuoteString));
         var serverFilter = $" AND server_guid IN ({serverList})";
 
         // OPTIMIZATION: Build query based on mode to skip expensive calculations when not needed
@@ -845,14 +846,14 @@ WITH player_stats AS (
         SUM(play_time_minutes) AS total_play_time_minutes,
         CASE WHEN SUM(final_deaths) > 0 THEN SUM(final_kills) / SUM(final_deaths) ELSE toFloat64(SUM(final_kills)) END AS kdr
     FROM player_rounds
-    WHERE player_name != {Quote(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH{serverFilter}
+    WHERE player_name != {ClickHouseHelpers.QuoteString(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH{serverFilter}
     GROUP BY player_name
     HAVING {playTimeFilter}
 ),
 server_playtime AS (
     SELECT player_name, server_guid, SUM(play_time_minutes) AS total_minutes
     FROM player_rounds
-    WHERE player_name != {Quote(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH{serverFilter}
+    WHERE player_name != {ClickHouseHelpers.QuoteString(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH{serverFilter}
     GROUP BY player_name, server_guid
 ),
 favorite_servers AS (
@@ -863,7 +864,7 @@ favorite_servers AS (
 player_game_ids AS (
     SELECT player_name, arrayStringConcat(groupArray(DISTINCT game_id), ',') as game_ids
     FROM player_rounds
-    WHERE player_name != {Quote(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH{serverFilter}
+    WHERE player_name != {ClickHouseHelpers.QuoteString(targetPlayer)} AND round_start_time >= now() - INTERVAL 6 MONTH{serverFilter}
     GROUP BY player_name
 ),
 -- Get all active servers for all candidates in one query
@@ -1111,7 +1112,7 @@ LIMIT {limit * 5}";
         if (!candidatePlayerNames.Any())
             return new Dictionary<string, double>();
 
-        var candidateList = string.Join(", ", candidatePlayerNames.Select(Quote));
+        var candidateList = string.Join(", ", candidatePlayerNames.Select(ClickHouseHelpers.QuoteString));
 
         var query = $@"
 WITH target_sessions AS (
@@ -1120,7 +1121,7 @@ WITH target_sessions AS (
         round_end_time,
         server_guid
     FROM player_rounds
-    WHERE player_name = {Quote(targetPlayer)} 
+    WHERE player_name = {ClickHouseHelpers.QuoteString(targetPlayer)} 
       AND round_start_time >= now() - INTERVAL 3 MONTH
 ),
 candidate_sessions AS (
@@ -1460,7 +1461,7 @@ SELECT
     value,
     achieved_at
 FROM player_achievements_deduplicated
-WHERE player_name = {Quote(playerName)} 
+WHERE player_name = {ClickHouseHelpers.QuoteString(playerName)} 
   AND achievement_type IN ('milestone', 'badge')
   AND achievement_id NOT LIKE 'kill_streak_%'
 ORDER BY achieved_at DESC";
@@ -1484,8 +1485,6 @@ ORDER BY achieved_at DESC";
 
         return achievements;
     }
-
-    private static string Quote(string s) => $"'{s.Replace("'", "''")}'";
 
     /// <summary>
     /// Converts HeadToHeadSession data by replacing server GUIDs with server names
@@ -1534,155 +1533,4 @@ ORDER BY achieved_at DESC";
             playerStats.ServerPings = updatedServerPings;
         }
     }
-}
-
-// Result Models
-public class PlayerComparisonResult
-{
-    public string Player1 { get; set; } = string.Empty;
-    public string Player2 { get; set; } = string.Empty;
-    public ServerDetails? ServerDetails { get; set; }
-    public List<KillRateComparison> KillRates { get; set; } = new();
-    public List<BucketTotalsComparison> BucketTotals { get; set; } = new();
-    public List<PingComparison> AveragePing { get; set; } = new();
-    public List<MapPerformanceComparison> MapPerformance { get; set; } = new();
-    public List<HeadToHeadSession> HeadToHead { get; set; } = new();
-    public List<ServerDetails> CommonServers { get; set; } = new();
-    public List<KillMilestone> Player1KillMilestones { get; set; } = new();
-    public List<KillMilestone> Player2KillMilestones { get; set; } = new();
-    public List<MilestoneAchievement> Player1MilestoneAchievements { get; set; } = new();
-    public List<MilestoneAchievement> Player2MilestoneAchievements { get; set; } = new();
-}
-
-public class KillRateComparison
-{
-    public string PlayerName { get; set; } = string.Empty;
-    public double KillRate { get; set; }
-}
-
-public class BucketTotalsComparison
-{
-    public string Bucket { get; set; } = string.Empty;
-    public PlayerTotals Player1Totals { get; set; } = new();
-    public PlayerTotals Player2Totals { get; set; } = new();
-}
-
-public class PlayerTotals
-{
-    public int Score { get; set; }
-    public uint Kills { get; set; }
-    public uint Deaths { get; set; }
-    public double PlayTimeMinutes { get; set; }
-}
-
-public class PingComparison
-{
-    public string PlayerName { get; set; } = string.Empty;
-    public double AveragePing { get; set; }
-}
-
-public class MapPerformanceComparison
-{
-    public string MapName { get; set; } = string.Empty;
-    public PlayerTotals Player1Totals { get; set; } = new();
-    public PlayerTotals Player2Totals { get; set; } = new();
-}
-
-public class HeadToHeadSession
-{
-    public DateTime Timestamp { get; set; }
-    public string ServerName { get; set; } = string.Empty;
-    public string MapName { get; set; } = string.Empty;
-    public int Player1Score { get; set; }
-    public int Player1Kills { get; set; }
-    public int Player1Deaths { get; set; }
-    public int Player2Score { get; set; }
-    public int Player2Kills { get; set; }
-    public int Player2Deaths { get; set; }
-    public DateTime Player2Timestamp { get; set; }
-    public string? RoundId { get; set; } // For UI linking to round details
-}
-
-public class ServerDetails
-{
-    public string Guid { get; set; } = string.Empty;
-    public string Name { get; set; } = string.Empty;
-    public string Ip { get; set; } = string.Empty;
-    public int Port { get; set; }
-    public string GameId { get; set; } = string.Empty;
-    public string? Country { get; set; }
-    public string? Region { get; set; }
-    public string? City { get; set; }
-    public string? Timezone { get; set; }
-    public string? Org { get; set; }
-}
-
-public class MilestoneAchievement
-{
-    public string AchievementId { get; set; } = string.Empty;
-    public string AchievementName { get; set; } = string.Empty;
-    public string Tier { get; set; } = string.Empty;
-    public uint Value { get; set; }
-    public DateTime AchievedAt { get; set; }
-}
-
-// Similar Players Feature Models
-public class SimilarPlayersResult
-{
-    public string TargetPlayer { get; set; } = "";
-    public PlayerSimilarityStats? TargetPlayerStats { get; set; }
-    public List<SimilarPlayer> SimilarPlayers { get; set; } = new();
-}
-
-public class PlayerSimilarityStats
-{
-    public string PlayerName { get; set; } = "";
-    public uint TotalKills { get; set; }
-    public uint TotalDeaths { get; set; }
-    public double TotalPlayTimeMinutes { get; set; }
-    public double KillDeathRatio { get; set; }
-    public double KillsPerMinute => TotalPlayTimeMinutes > 0 ? TotalKills / TotalPlayTimeMinutes : 0;
-    public string FavoriteServerName { get; set; } = "";
-    public double FavoriteServerPlayTimeMinutes { get; set; }
-    public List<string> GameIds { get; set; } = new();
-    public double TemporalOverlapMinutes { get; set; }
-    public List<int> TypicalOnlineHours { get; set; } = new();
-    public Dictionary<string, double> ServerPings { get; set; } = new(); // server_name -> average_ping
-    public Dictionary<string, double> MapDominanceScores { get; set; } = new(); // map_name -> dominance_score
-    public double TemporalNonOverlapScore { get; set; } // For alias detection: higher = less overlap
-}
-
-public class SimilarPlayer
-{
-    public string PlayerName { get; set; } = "";
-    public uint TotalKills { get; set; }
-    public uint TotalDeaths { get; set; }
-    public double TotalPlayTimeMinutes { get; set; }
-    public double KillDeathRatio { get; set; }
-    public double KillsPerMinute { get; set; }
-    public string FavoriteServerName { get; set; } = "";
-    public double FavoriteServerPlayTimeMinutes { get; set; }
-    public List<string> GameIds { get; set; } = new();
-    public List<int> TypicalOnlineHours { get; set; } = new();
-    public Dictionary<string, double> ServerPings { get; set; } = new(); // server_name -> average_ping
-    public Dictionary<string, double> MapDominanceScores { get; set; } = new(); // map_name -> dominance_score
-    public double TemporalNonOverlapScore { get; set; } // For alias detection: higher = less overlap
-    public double TemporalOverlapMinutes { get; set; } // Actual overlap minutes with target player
-    public double SimilarityScore { get; set; }
-    public List<string> SimilarityReasons { get; set; } = new();
-}
-
-public class PlayerActivityHoursComparison
-{
-    public string Player1 { get; set; } = "";
-    public string Player2 { get; set; } = "";
-    public List<HourlyActivity> Player1ActivityHours { get; set; } = new();
-    public List<HourlyActivity> Player2ActivityHours { get; set; } = new();
-}
-
-// Similarity algorithm modes
-public enum SimilarityMode
-{
-    Default,        // General similarity based on play patterns and skills
-    AliasDetection  // Focused on detecting same player using different aliases
 }

@@ -2,7 +2,7 @@ using api.Gamification.Models;
 
 namespace api.Gamification.Services;
 
-public class BadgeDefinitionsService
+public class BadgeDefinitionsService : IBadgeDefinitionsService
 {
     private readonly Dictionary<string, BadgeDefinition> _badgeDefinitions;
 

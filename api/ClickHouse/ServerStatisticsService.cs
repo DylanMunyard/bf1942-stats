@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using ClickHouse.Client.ADO;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using api.ClickHouse.Models;
 using api.Telemetry;
@@ -10,13 +9,13 @@ using System.Diagnostics;
 
 namespace api.ClickHouse;
 
-public class ServerStatisticsService : IDisposable
+public class ServerStatisticsService : IServerStatisticsService
 {
     private readonly ClickHouseConnection _connection;
     private readonly ILogger<ServerStatisticsService> _logger;
     private bool _disposed;
 
-    public ServerStatisticsService(IConfiguration configuration, ILogger<ServerStatisticsService> logger)
+    public ServerStatisticsService(ILogger<ServerStatisticsService> logger)
     {
         _logger = logger;
         var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
@@ -61,7 +60,7 @@ public class ServerStatisticsService : IDisposable
                 await _connection.OpenAsync();
             }
 
-            var serverFilter = string.IsNullOrEmpty(serverGuid) ? "" : $" AND server_guid = {Quote(serverGuid)}";
+            var serverFilter = string.IsNullOrEmpty(serverGuid) ? "" : $" AND server_guid = {ClickHouseHelpers.QuoteString(serverGuid)}";
             var timePeriodCondition = GetTimePeriodCondition(period);
 
             // Optimized query using player_rounds table - much simpler and faster
@@ -74,7 +73,7 @@ SELECT
     COUNT(*) AS sessions_played,
     SUM(play_time_minutes) AS total_play_time_minutes
 FROM player_rounds
-WHERE player_name = {Quote(playerName)}{serverFilter}
+WHERE player_name = {ClickHouseHelpers.QuoteString(playerName)}{serverFilter}
 {timePeriodCondition.Replace("timestamp", "round_start_time")}
 GROUP BY map_name
 ORDER BY total_kills DESC";
@@ -106,9 +105,6 @@ ORDER BY total_kills DESC";
             throw;
         }
     }
-
-    // Helper method to properly quote strings for ClickHouse
-    private static string Quote(string s) => $"'{s.Replace("'", "''")}'";
 
     public void Dispose()
     {

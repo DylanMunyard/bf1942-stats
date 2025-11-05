@@ -1,3 +1,5 @@
+using api.ClickHouse.Models;
+
 namespace api.ClickHouse;
 
 /// <summary>

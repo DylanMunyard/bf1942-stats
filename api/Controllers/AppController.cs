@@ -13,16 +13,16 @@ namespace api.Controllers;
 [Route("stats/[controller]")]
 public class AppController : ControllerBase
 {
-    private readonly BadgeDefinitionsService _badgeDefinitionsService;
-    private readonly GameTrendsService _gameTrendsService;
+    private readonly IBadgeDefinitionsService _badgeDefinitionsService;
+    private readonly IGameTrendsService _gameTrendsService;
     private readonly ICacheService _cacheService;
     private readonly ILogger<AppController> _logger;
     private readonly IClickHouseReader _clickHouseReader;
     private readonly PlayerTrackerDbContext _dbContext;
 
     public AppController(
-        BadgeDefinitionsService badgeDefinitionsService,
-        GameTrendsService gameTrendsService,
+        IBadgeDefinitionsService badgeDefinitionsService,
+        IGameTrendsService gameTrendsService,
         ICacheService cacheService,
         ILogger<AppController> logger,
         IClickHouseReader clickHouseReader,

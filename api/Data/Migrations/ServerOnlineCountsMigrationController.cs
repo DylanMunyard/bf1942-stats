@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using api.ClickHouse;
+using api.ClickHouse.Models;
 using api.PlayerTracking;
 
 namespace api.Data.Migrations;

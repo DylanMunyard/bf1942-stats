@@ -14,12 +14,12 @@ namespace api.PlayerStats;
 public class PlayersController : ControllerBase
 {
     private readonly IPlayerStatsService _playerStatsService;
-    private readonly ServerStatisticsService _serverStatisticsService;
+    private readonly IServerStatisticsService _serverStatisticsService;
     private readonly IPlayerComparisonService _playerComparisonService;
     private readonly PlayerRoundsReadService _playerRoundsService;
     private readonly ILogger<PlayersController> _logger;
 
-    public PlayersController(IPlayerStatsService playerStatsService, ServerStatisticsService serverStatisticsService, IPlayerComparisonService playerComparisonService, PlayerRoundsReadService playerRoundsService, ILogger<PlayersController> logger)
+    public PlayersController(IPlayerStatsService playerStatsService, IServerStatisticsService serverStatisticsService, IPlayerComparisonService playerComparisonService, PlayerRoundsReadService playerRoundsService, ILogger<PlayersController> logger)
     {
         _playerStatsService = playerStatsService;
         _serverStatisticsService = serverStatisticsService;

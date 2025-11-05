@@ -632,6 +632,7 @@ try
         var logger = sp.GetRequiredService<ILogger<PlayerInsightsService>>();
         return new PlayerInsightsService(httpClient, clickHouseReadUrl, logger);
     });
+    builder.Services.AddSingleton<IPlayerInsightsService>(sp => sp.GetRequiredService<PlayerInsightsService>());
 
     // Register RealTimeAnalyticsService (read-only)
     builder.Services.AddSingleton<RealTimeAnalyticsService>();
@@ -646,7 +647,7 @@ try
 
     // Register ServerStatisticsService (read-only)
     builder.Services.AddSingleton<ServerStatisticsService>();
-
+    builder.Services.AddSingleton<IServerStatisticsService>(sp => sp.GetRequiredService<ServerStatisticsService>());
 
     // Configure Redis caching with short timeouts
     var redisConnectionString = Environment.GetEnvironmentVariable("REDIS_CONNECTION_STRING") ?? "42redis.home.net:6380";
@@ -787,6 +788,7 @@ try
         var dbContext = sp.GetRequiredService<PlayerTrackerDbContext>();
         return new GameTrendsService(httpClient, clickHouseReadUrl, logger, dbContext);
     });
+    builder.Services.AddScoped<IGameTrendsService>(sp => sp.GetRequiredService<GameTrendsService>());
 
     var host = builder.Build();
 

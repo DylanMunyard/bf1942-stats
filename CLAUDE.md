@@ -85,6 +85,7 @@ junie-des-1942stats/
 
 ---
 
-## Documentation Pattern
+## Conventions
 
 - When we document our decisions or iterate on a design, we store the outcomes / tasklist / progress in a markdown file in `features/<feature-name>` where feature name is a brief descriptive name of the feature separated by hyphens
+- Use the latest C# language features, e.g. use collection expressions Tiers = ["bronze"] instead of Tiers = new[] { "bronze" }, and other features like range expressions and pattern matching.

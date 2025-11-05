@@ -1,5 +1,6 @@
 using api.ClickHouse.Base;
 using api.ClickHouse.Interfaces;
+using api.ClickHouse.Models;
 using api.PlayerStats.Models;
 using Microsoft.Extensions.Logging;
 using api.Telemetry;
@@ -7,7 +8,7 @@ using System.Diagnostics;
 
 namespace api.ClickHouse;
 
-public class PlayerInsightsService : BaseClickHouseService, IClickHouseReader
+public class PlayerInsightsService : BaseClickHouseService, IClickHouseReader, IPlayerInsightsService
 {
     private readonly ILogger<PlayerInsightsService> _logger;
 
@@ -183,13 +184,4 @@ FORMAT TabSeparated";
             DaysToAchieve = m.DaysToAchieve
         }).ToList();
     }
-}
-
-public class PlayerKillMilestone
-{
-    public string PlayerName { get; set; } = "";
-    public int Milestone { get; set; }
-    public DateTime AchievedDate { get; set; }
-    public int TotalKillsAtMilestone { get; set; }
-    public int DaysToAchieve { get; set; }
 }
