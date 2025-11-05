@@ -33,7 +33,7 @@ public class RoundsController(
         [FromQuery] bool? isActive = null,
         [FromQuery] string? gameId = null,
         [FromQuery] List<string>? playerNames = null,
-        [FromQuery] bool includePlayers = true,
+        [FromQuery] bool includeTopPlayers = false,
         [FromQuery] bool onlySpecifiedPlayers = false)
     {
         // Validate parameters
@@ -104,7 +104,7 @@ public class RoundsController(
                     : null
             };
 
-            var result = await roundsService.GetRounds(page, pageSize, sortBy, sortOrder, filters, includePlayers, onlySpecifiedPlayers);
+            var result = await roundsService.GetRounds(page, pageSize, sortBy, sortOrder, filters, includeTopPlayers, onlySpecifiedPlayers);
 
             if (result.TotalItems == 0)
                 return NotFound("No rounds found with the specified filters");

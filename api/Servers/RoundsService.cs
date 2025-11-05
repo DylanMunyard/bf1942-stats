@@ -94,7 +94,7 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
         string sortBy,
         string sortOrder,
         RoundFilters filters,
-        bool includePlayers = true,
+        bool includeTopPlayers = false,
         bool onlySpecifiedPlayers = false)
     {
         var query = dbContext.Rounds.AsNoTracking();
@@ -251,11 +251,13 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
             IsActive = round.IsActive,
             Team1Label = round.Team1Label,
             Team2Label = round.Team2Label,
+            Team1Points = round.Tickets1,
+            Team2Points = round.Tickets2,
             Players = new List<SessionListItem>()
         }).ToList();
 
-        // If players are requested, load them all in a single query
-        if (includePlayers && rounds.Any())
+        // If top players are requested, load top 3 by score in a single query
+        if (includeTopPlayers && rounds.Any())
         {
             var roundIds = rounds.Select(r => r.RoundId).Where(id => !string.IsNullOrEmpty(id)).ToList();
 
@@ -272,9 +274,10 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
                     playerQuery = playerQuery.Where(ps => names.Contains(ps.PlayerName));
                 }
 
+                // Get all players first, then select top 3 by score per round
                 var allPlayers = await playerQuery
                     .OrderBy(ps => ps.RoundId)
-                    .ThenBy(ps => ps.PlayerName)
+                    .ThenByDescending(ps => ps.TotalScore)
                     .Select(ps => new SessionListItem
                     {
                         SessionId = ps.SessionId,
@@ -290,14 +293,16 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
                     })
                     .ToListAsync();
 
-                // Group players by RoundId and assign to rounds
-                var playersByRound = allPlayers.GroupBy(p => p.RoundId!).ToDictionary(g => g.Key, g => g.ToList());
+                // Group by round and take top 3 by score
+                var topPlayersByRound = allPlayers
+                    .GroupBy(p => p.RoundId!)
+                    .ToDictionary(g => g.Key, g => g.Take(3).ToList());
 
                 foreach (var round in result)
                 {
-                    if (playersByRound.TryGetValue(round.RoundId, out var players))
+                    if (topPlayersByRound.TryGetValue(round.RoundId, out var topPlayers))
                     {
-                        round.Players = players;
+                        round.TopPlayers = topPlayers;
                     }
                 }
             }

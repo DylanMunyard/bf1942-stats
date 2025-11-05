@@ -17,6 +17,8 @@ public class RoundListItem
     public bool IsActive { get; set; }
     public string? Team1Label { get; set; }
     public string? Team2Label { get; set; }
+    public int? Team1Points { get; set; }
+    public int? Team2Points { get; set; }
     public int? RoundTimeRemain { get; set; }
 }
 
@@ -43,5 +45,6 @@ public class RoundFilters
 public class RoundWithPlayers : RoundListItem
 {
     public List<SessionListItem> Players { get; set; } = new List<SessionListItem>();
+    public List<SessionListItem>? TopPlayers { get; set; } // Top 3 players by score
 }
 
