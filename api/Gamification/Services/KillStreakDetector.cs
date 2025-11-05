@@ -9,9 +9,6 @@ public class KillStreakDetector(
     BadgeDefinitionsService badgeService,
     ILogger<KillStreakDetector> logger)
 {
-    private readonly ClickHouseGamificationService _readService = readService;
-    private readonly BadgeDefinitionsService _badgeService = badgeService;
-    private readonly ILogger<KillStreakDetector> _logger = logger;
 
     public async Task<List<Achievement>> CalculateKillStreaksForRoundAsync(PlayerRound round)
     {
@@ -24,7 +21,7 @@ public class KillStreakDetector(
         try
         {
             // Get all kill streak achievements for this player
-            var streakAchievements = await _readService.GetPlayerAchievementsByTypeAsync(
+            var streakAchievements = await readService.GetPlayerAchievementsByTypeAsync(
                 playerName, AchievementTypes.KillStreak);
 
             if (!streakAchievements.Any())
@@ -60,7 +57,7 @@ public class KillStreakDetector(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting kill streak stats for player {PlayerName}", playerName);
+            logger.LogError(ex, "Error getting kill streak stats for player {PlayerName}", playerName);
             return new KillStreakStats();
         }
     }
@@ -78,7 +75,7 @@ public class KillStreakDetector(
 
         if (allAchievements.Any())
         {
-            _logger.LogInformation("Processed {RoundCount} rounds, found {AchievementCount} kill streak achievements",
+            logger.LogInformation("Processed {RoundCount} rounds, found {AchievementCount} kill streak achievements",
                 rounds.Count, allAchievements.Count);
         }
 
@@ -100,7 +97,7 @@ public class KillStreakDetector(
 
             if (playerMetrics.Count < 2)
             {
-                _logger.LogDebug("Insufficient player_metrics data for {PlayerName} round {RoundId} - found {Count} metrics",
+                logger.LogDebug("Insufficient player_metrics data for {PlayerName} round {RoundId} - found {Count} metrics",
                     round.PlayerName, round.RoundId, playerMetrics.Count);
                 return achievements; // Need at least 2 metrics to detect streaks
             }
@@ -111,7 +108,7 @@ public class KillStreakDetector(
             if (!streakInstances.Any()) return achievements; // No streaks of 5+ kills
 
             // Get existing achievements to avoid duplicates
-            var existingAchievements = await _readService.GetPlayerAchievementsByTypeAsync(round.PlayerName, AchievementTypes.KillStreak);
+            var existingAchievements = await readService.GetPlayerAchievementsByTypeAsync(round.PlayerName, AchievementTypes.KillStreak);
             var existingRoundAchievements = existingAchievements.Where(a => a.RoundId == round.RoundId).ToList();
 
             foreach (var streakInstance in streakInstances)
@@ -125,7 +122,7 @@ public class KillStreakDetector(
 
                 if (!hasAchievementForThisInstance)
                 {
-                    var badgeDefinition = _badgeService.GetBadgeDefinition(achievementId);
+                    var badgeDefinition = badgeService.GetBadgeDefinition(achievementId);
                     if (badgeDefinition != null)
                     {
                         achievements.Add(new Achievement
@@ -146,7 +143,7 @@ public class KillStreakDetector(
                             Version = streakInstance.AchievedAt  // Use achieved_at as deterministic version for idempotency
                         });
 
-                        _logger.LogInformation("ClickHouse kill streak achievement: {PlayerName} achieved {AchievementName} with {Threshold} kills at {AchievementTime}",
+                        logger.LogInformation("ClickHouse kill streak achievement: {PlayerName} achieved {AchievementName} with {Threshold} kills at {AchievementTime}",
                             round.PlayerName, badgeDefinition.Name, streakInstance.Threshold, streakInstance.AchievedAt);
                     }
                 }
@@ -154,7 +151,7 @@ public class KillStreakDetector(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error calculating kill streaks from player_metrics for round {RoundId}, player {PlayerName}",
+            logger.LogError(ex, "Error calculating kill streaks from player_metrics for round {RoundId}, player {PlayerName}",
                 round.RoundId, round.PlayerName);
         }
 
@@ -179,7 +176,7 @@ public class KillStreakDetector(
 
             // Use the existing ClickHouseGamificationService to get the player metrics
             // This ensures we use ADO.NET with proper parameterized queries
-            var playerMetricPoints = await _readService.GetPlayerMetricsForRoundAsync(
+            var playerMetricPoints = await readService.GetPlayerMetricsForRoundAsync(
                 round.PlayerName,
                 round.ServerGuid,
                 round.MapName,
@@ -194,14 +191,14 @@ public class KillStreakDetector(
                 PlayerName = round.PlayerName
             }).ToList();
 
-            _logger.LogDebug("Retrieved {Count} player metrics for {PlayerName} round {RoundId}",
+            logger.LogDebug("Retrieved {Count} player metrics for {PlayerName} round {RoundId}",
                 results.Count, round.PlayerName, round.RoundId);
 
             return results;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching player metrics for round {RoundId}, player {PlayerName}",
+            logger.LogError(ex, "Error fetching player metrics for round {RoundId}, player {PlayerName}",
                 round.RoundId, round.PlayerName);
             return new List<PlayerMetric>();
         }

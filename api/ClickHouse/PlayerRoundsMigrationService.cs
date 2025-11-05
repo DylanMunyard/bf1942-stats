@@ -5,7 +5,6 @@ namespace api.ClickHouse;
 
 public class PlayerRoundsMigrationService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerRoundsMigrationService> logger) : BaseClickHouseService(httpClient, clickHouseUrl)
 {
-    private readonly ILogger<PlayerRoundsMigrationService> _logger = logger;
 
     public async Task<MigrationResult> MigrateToAddGameColumnAsync(
         int batchSize = 1_000_000,
@@ -16,7 +15,7 @@ public class PlayerRoundsMigrationService(HttpClient httpClient, string clickHou
 
         try
         {
-            _logger.LogInformation("Starting player_rounds migration to add game column using server_online_counts JOIN");
+            logger.LogInformation("Starting player_rounds migration to add game column using server_online_counts JOIN");
 
             // Create new table structure with game column
             await CreatePlayerRoundsV2TableAsync();
@@ -31,7 +30,7 @@ public class PlayerRoundsMigrationService(HttpClient httpClient, string clickHou
 
             if (months.Count == 0)
             {
-                _logger.LogInformation("No data found in player_rounds; nothing to migrate.");
+                logger.LogInformation("No data found in player_rounds; nothing to migrate.");
                 return new MigrationResult
                 {
                     Success = true,
@@ -41,12 +40,12 @@ public class PlayerRoundsMigrationService(HttpClient httpClient, string clickHou
                 };
             }
 
-            _logger.LogInformation("Identified {MonthCount} month partitions to migrate: {Months}", months.Count, string.Join(",", months));
+            logger.LogInformation("Identified {MonthCount} month partitions to migrate: {Months}", months.Count, string.Join(",", months));
 
             foreach (var ym in months)
             {
                 var monthStart = DateTime.UtcNow;
-                _logger.LogInformation("Migrating month partition {Ym} ...", ym);
+                logger.LogInformation("Migrating month partition {Ym} ...", ym);
 
                 // Insert month partition from player_rounds into v2 with game column via JOIN
                 var migrateQuery = $@"
@@ -86,7 +85,7 @@ WHERE toYYYYMM(pr.round_start_time) = {ym}";
                 totalMigrated += (int)dstCount;
 
                 var monthDuration = DateTime.UtcNow - monthStart;
-                _logger.LogInformation(
+                logger.LogInformation(
                     "Month {Ym}: Source rows={SrcCount}, Migrated rows={DstCount} in {DurationMs}ms",
                     ym, srcCount, dstCount, monthDuration.TotalMilliseconds);
 
@@ -100,7 +99,7 @@ WHERE toYYYYMM(pr.round_start_time) = {ym}";
             var verificationResult = await VerifyMigrationAsync();
 
             var duration = DateTime.UtcNow - startTime;
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Migration completed: {TotalMigrated} rows inserted in {Duration}. Verification: {Verified}",
                 totalMigrated, duration, verificationResult ? "PASSED" : "FAILED");
 
@@ -115,7 +114,7 @@ WHERE toYYYYMM(pr.round_start_time) = {ym}";
         catch (Exception ex)
         {
             var duration = DateTime.UtcNow - startTime;
-            _logger.LogError(ex, "Migration failed after {Migrated} records in {Duration}", totalMigrated, duration);
+            logger.LogError(ex, "Migration failed after {Migrated} records in {Duration}", totalMigrated, duration);
 
             return new MigrationResult
             {
@@ -159,7 +158,7 @@ ORDER BY (player_name, server_guid, round_start_time, round_id)
 SETTINGS index_granularity = 8192";
 
         await ExecuteCommandAsync(createTableQuery);
-        _logger.LogInformation("Created player_rounds_v2 table with game column");
+        logger.LogInformation("Created player_rounds_v2 table with game column");
     }
 
     private async Task<bool> VerifyMigrationAsync()
@@ -177,14 +176,14 @@ SETTINGS index_granularity = 8192";
             var gamePopulatedQuery = "SELECT COUNT(*) FROM player_rounds_v2 WHERE game != 'unknown' AND game != ''";
             var gamePopulated = long.Parse((await ExecuteQueryInternalAsync(gamePopulatedQuery)).Trim());
 
-            _logger.LogInformation("Verification: Old count={OldCount}, New count={NewCount}, Game populated={GamePopulated}",
+            logger.LogInformation("Verification: Old count={OldCount}, New count={NewCount}, Game populated={GamePopulated}",
                 oldCount, newCount, gamePopulated);
 
             return oldCount == newCount && gamePopulated > 0;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Verification failed");
+            logger.LogError(ex, "Verification failed");
             return false;
         }
     }
@@ -193,17 +192,17 @@ SETTINGS index_granularity = 8192";
     {
         try
         {
-            _logger.LogInformation("Switching tables: player_rounds -> player_rounds_backup, player_rounds_v2 -> player_rounds");
+            logger.LogInformation("Switching tables: player_rounds -> player_rounds_backup, player_rounds_v2 -> player_rounds");
 
             await ExecuteCommandAsync("RENAME TABLE player_rounds TO player_rounds_backup");
             await ExecuteCommandAsync("RENAME TABLE player_rounds_v2 TO player_rounds");
 
-            _logger.LogInformation("Table switch completed successfully");
+            logger.LogInformation("Table switch completed successfully");
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to switch tables");
+            logger.LogError(ex, "Failed to switch tables");
             return false;
         }
     }
@@ -212,17 +211,17 @@ SETTINGS index_granularity = 8192";
     {
         try
         {
-            _logger.LogInformation("Rolling back table switch");
+            logger.LogInformation("Rolling back table switch");
 
             await ExecuteCommandAsync("RENAME TABLE player_rounds TO player_rounds_failed");
             await ExecuteCommandAsync("RENAME TABLE player_rounds_backup TO player_rounds");
 
-            _logger.LogInformation("Rollback completed successfully");
+            logger.LogInformation("Rollback completed successfully");
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to rollback table switch");
+            logger.LogError(ex, "Failed to rollback table switch");
             return false;
         }
     }
@@ -231,16 +230,16 @@ SETTINGS index_granularity = 8192";
     {
         try
         {
-            _logger.LogInformation("Dropping old backup table player_rounds_backup");
+            logger.LogInformation("Dropping old backup table player_rounds_backup");
 
             await ExecuteCommandAsync("DROP TABLE IF EXISTS player_rounds_backup");
 
-            _logger.LogInformation("Cleanup completed successfully");
+            logger.LogInformation("Cleanup completed successfully");
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to cleanup old table");
+            logger.LogError(ex, "Failed to cleanup old table");
             return false;
         }
     }

@@ -20,9 +20,6 @@ public interface IRefreshTokenService
 
 public class RefreshTokenService(PlayerTrackerDbContext db, IConfiguration config, ILogger<RefreshTokenService> logger) : IRefreshTokenService
 {
-    private readonly PlayerTrackerDbContext _db = db;
-    private readonly IConfiguration _config = config;
-    private readonly ILogger<RefreshTokenService> _logger = logger;
     private readonly string _cookieName = config["RefreshToken:CookieName"] ?? "rt";
     private readonly string? _cookieDomain = config["RefreshToken:CookieDomain"];
     private readonly string _cookiePath = config["RefreshToken:CookiePath"] ?? "/stats";
@@ -44,15 +41,15 @@ public class RefreshTokenService(PlayerTrackerDbContext db, IConfiguration confi
             IpAddress = ip,
             UserAgent = userAgent
         };
-        _db.RefreshTokens.Add(entity);
-        await _db.SaveChangesAsync(ct);
+        db.RefreshTokens.Add(entity);
+        await db.SaveChangesAsync(ct);
         return (raw, entity);
     }
 
     public async Task<(RefreshToken token, User user)> ValidateAsync(string rawToken, CancellationToken ct = default)
     {
         var hash = ComputeHash(rawToken);
-        var token = await _db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
+        var token = await db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
         if (token == null)
             throw new UnauthorizedAccessException("invalid");
         if (token.RevokedAt != null)
@@ -64,7 +61,7 @@ public class RefreshTokenService(PlayerTrackerDbContext db, IConfiguration confi
         if (token.ExpiresAt <= DateTime.UtcNow)
             throw new UnauthorizedAccessException("expired");
 
-        var user = await _db.Users.FirstAsync(u => u.Id == token.UserId, ct);
+        var user = await db.Users.FirstAsync(u => u.Id == token.UserId, ct);
         return (token, user);
     }
 
@@ -77,7 +74,7 @@ public class RefreshTokenService(PlayerTrackerDbContext db, IConfiguration confi
         // reload actual userId not needed; link family
         current.RevokedAt = DateTime.UtcNow;
         current.ReplacedByTokenHash = newEntity.TokenHash;
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
 
         return (newRaw, newEntity);
     }
@@ -88,7 +85,7 @@ public class RefreshTokenService(PlayerTrackerDbContext db, IConfiguration confi
         var toRevoke = new List<RefreshToken> { token };
         while (true)
         {
-            var next = await _db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == token.ReplacedByTokenHash!, ct);
+            var next = await db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == token.ReplacedByTokenHash!, ct);
             if (next == null) break;
             toRevoke.Add(next);
             token = next;
@@ -98,7 +95,7 @@ public class RefreshTokenService(PlayerTrackerDbContext db, IConfiguration confi
         {
             if (t.RevokedAt == null) t.RevokedAt = DateTime.UtcNow;
         }
-        await _db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
     }
 
     public void SetCookie(HttpResponse response, string rawToken, DateTime expiresAt)

@@ -20,44 +20,35 @@ public class ServerStatsService(
     GameTrendsService gameTrendsService,
     PlayersOnlineHistoryService playersOnlineHistoryService) : IServerStatsService
 {
-    private readonly PlayerTrackerDbContext _dbContext = dbContext;
-    private readonly ILogger<ServerStatsService> _logger = logger;
-    private readonly ICacheService _cacheService = cacheService;
-    private readonly ICacheKeyService _cacheKeyService = cacheKeyService;
-    private readonly PlayerRoundsReadService _playerRoundsService = playerRoundsService;
-    private readonly IClickHouseReader _clickHouseReader = clickHouseReader;
-    private readonly RoundsService _roundsService = roundsService;
-    private readonly GameTrendsService _gameTrendsService = gameTrendsService;
-    private readonly PlayersOnlineHistoryService _playersOnlineHistoryService = playersOnlineHistoryService;
 
     public async Task<ServerStatistics> GetServerStatistics(
         string serverName,
         int daysToAnalyze = 7)
     {
         // Check cache first - simplified cache key since we removed all leaderboard queries
-        var cacheKey = _cacheKeyService.GetServerStatisticsKey(serverName, daysToAnalyze);
-        var cachedResult = await _cacheService.GetAsync<ServerStatistics>(cacheKey);
+        var cacheKey = cacheKeyService.GetServerStatisticsKey(serverName, daysToAnalyze);
+        var cachedResult = await cacheService.GetAsync<ServerStatistics>(cacheKey);
 
         if (cachedResult != null)
         {
-            _logger.LogDebug("Cache hit for server statistics: {ServerName}, {Days} days", serverName, daysToAnalyze);
+            logger.LogDebug("Cache hit for server statistics: {ServerName}, {Days} days", serverName, daysToAnalyze);
             return cachedResult;
         }
 
-        _logger.LogDebug("Cache miss for server statistics: {ServerName}, {Days} days", serverName, daysToAnalyze);
+        logger.LogDebug("Cache miss for server statistics: {ServerName}, {Days} days", serverName, daysToAnalyze);
 
         // Calculate the time period
         var endPeriod = DateTime.UtcNow;
         var startPeriod = endPeriod.AddDays(-daysToAnalyze);
 
         // Get the server by name - CurrentMap is now stored directly on the server
-        var server = await _dbContext.Servers
+        var server = await dbContext.Servers
             .Where(s => s.Name == serverName)
             .FirstOrDefaultAsync();
 
         if (server == null)
         {
-            _logger.LogWarning("Server not found: '{ServerName}'", serverName);
+            logger.LogWarning("Server not found: '{ServerName}'", serverName);
             return new ServerStatistics { ServerName = serverName, StartPeriod = startPeriod, EndPeriod = endPeriod };
         }
 
@@ -80,7 +71,7 @@ public class ServerStatsService(
         };
 
         // Execute only recent rounds and busy indicator queries (no leaderboards)
-        var recentRoundsTask = _roundsService.GetRecentRoundsAsync(server.Guid, 8);
+        var recentRoundsTask = roundsService.GetRecentRoundsAsync(server.Guid, 8);
 
         // Get busy indicator data for this server
         try
@@ -90,15 +81,15 @@ public class ServerStatsService(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get busy indicator for server {ServerName} ({ServerGuid})", serverName, server.Guid);
+            logger.LogError(ex, "Failed to get busy indicator for server {ServerName} ({ServerGuid})", serverName, server.Guid);
             // Continue without busy indicator data rather than failing the entire request
         }
 
         statistics.RecentRounds = await recentRoundsTask;
 
         // Cache the result for 10 minutes
-        await _cacheService.SetAsync(cacheKey, statistics, TimeSpan.FromMinutes(10));
-        _logger.LogDebug("Cached server statistics: {ServerName}, {Days} days", serverName, daysToAnalyze);
+        await cacheService.SetAsync(cacheKey, statistics, TimeSpan.FromMinutes(10));
+        logger.LogDebug("Cached server statistics: {ServerName}, {Days} days", serverName, daysToAnalyze);
 
         return statistics;
     }
@@ -122,25 +113,25 @@ public class ServerStatsService(
         }
 
         // Check cache first
-        var cacheKey = $"{_cacheKeyService.GetServerLeaderboardsKey(serverName, days)}_weight_{minPlayersForWeighting}";
-        var cachedResult = await _cacheService.GetAsync<ServerLeaderboards>(cacheKey);
+        var cacheKey = $"{cacheKeyService.GetServerLeaderboardsKey(serverName, days)}_weight_{minPlayersForWeighting}";
+        var cachedResult = await cacheService.GetAsync<ServerLeaderboards>(cacheKey);
 
         if (cachedResult != null)
         {
-            _logger.LogDebug("Cache hit for server leaderboards: {ServerName}, {Days} days", serverName, days);
+            logger.LogDebug("Cache hit for server leaderboards: {ServerName}, {Days} days", serverName, days);
             return cachedResult;
         }
 
-        _logger.LogDebug("Cache miss for server leaderboards: {ServerName}, {Days} days", serverName, days);
+        logger.LogDebug("Cache miss for server leaderboards: {ServerName}, {Days} days", serverName, days);
 
         // Get the server by name
-        var server = await _dbContext.Servers
+        var server = await dbContext.Servers
             .Where(s => s.Name == serverName)
             .FirstOrDefaultAsync();
 
         if (server == null)
         {
-            _logger.LogWarning("Server not found: '{ServerName}'", serverName);
+            logger.LogWarning("Server not found: '{ServerName}'", serverName);
             return new ServerLeaderboards
             {
                 ServerName = serverName,
@@ -152,7 +143,7 @@ public class ServerStatsService(
         var endPeriod = DateTime.UtcNow;
         var startPeriod = endPeriod.AddDays(-days);
 
-        _logger.LogInformation("Fetching leaderboards for {ServerName} ({ServerGuid}) from {StartPeriod} to {EndPeriod}",
+        logger.LogInformation("Fetching leaderboards for {ServerName} ({ServerGuid}) from {StartPeriod} to {EndPeriod}",
             server.Name, server.Guid, startPeriod, endPeriod);
 
         // Create the leaderboards object
@@ -168,10 +159,10 @@ public class ServerStatsService(
         // Execute leaderboard queries in parallel for the specified time period
         try
         {
-            var mostActivePlayersTask = _playerRoundsService.GetMostActivePlayersAsync(server.Guid, startPeriod, endPeriod, 10);
-            var topScoresTask = _playerRoundsService.GetTopScoresAsync(server.Guid, startPeriod, endPeriod, 10);
-            var topKDRatiosTask = _playerRoundsService.GetTopKDRatiosAsync(server.Guid, startPeriod, endPeriod, 10);
-            var topKillRatesTask = _playerRoundsService.GetTopKillRatesAsync(server.Guid, startPeriod, endPeriod, 10);
+            var mostActivePlayersTask = playerRoundsService.GetMostActivePlayersAsync(server.Guid, startPeriod, endPeriod, 10);
+            var topScoresTask = playerRoundsService.GetTopScoresAsync(server.Guid, startPeriod, endPeriod, 10);
+            var topKDRatiosTask = playerRoundsService.GetTopKDRatiosAsync(server.Guid, startPeriod, endPeriod, 10);
+            var topKillRatesTask = playerRoundsService.GetTopKillRatesAsync(server.Guid, startPeriod, endPeriod, 10);
             var topPlacementsTask = GetPlacementLeaderboardAsync(server.Guid, startPeriod, endPeriod, 10);
 
             // Wait for all queries to complete
@@ -186,7 +177,7 @@ public class ServerStatsService(
             leaderboards.TopKillRates = await topKillRatesTask;
             leaderboards.TopPlacements = await topPlacementsTask;
 
-            _logger.LogInformation("Leaderboards fetched: MostActive={MostActiveCount}, TopScores={TopScoresCount}, TopKD={TopKDCount}, TopKillRate={TopKillRateCount}, TopPlacements={TopPlacementsCount}",
+            logger.LogInformation("Leaderboards fetched: MostActive={MostActiveCount}, TopScores={TopScoresCount}, TopKD={TopKDCount}, TopKillRate={TopKillRateCount}, TopPlacements={TopPlacementsCount}",
                 leaderboards.MostActivePlayersByTime.Count,
                 leaderboards.TopScores.Count,
                 leaderboards.TopKDRatios.Count,
@@ -195,7 +186,7 @@ public class ServerStatsService(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching leaderboards for server {ServerName} ({ServerGuid})", server.Name, server.Guid);
+            logger.LogError(ex, "Error fetching leaderboards for server {ServerName} ({ServerGuid})", server.Name, server.Guid);
             // Return partial results - whatever was initialized will be empty lists
         }
 
@@ -210,17 +201,17 @@ public class ServerStatsService(
                 var weightedPlacementsTask = GetWeightedPlacementLeaderboardAsync(server.Guid, startPeriod, endPeriod, 10, minPlayers);
                 leaderboards.WeightedTopPlacements = await weightedPlacementsTask;
 
-                _logger.LogInformation("Weighted placements fetched: Count={Count}", leaderboards.WeightedTopPlacements?.Count ?? 0);
+                logger.LogInformation("Weighted placements fetched: Count={Count}", leaderboards.WeightedTopPlacements?.Count ?? 0);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error fetching weighted placements for server {ServerName} ({ServerGuid})", server.Name, server.Guid);
+                logger.LogError(ex, "Error fetching weighted placements for server {ServerName} ({ServerGuid})", server.Name, server.Guid);
             }
         }
 
         // Cache the result for 10 minutes
-        await _cacheService.SetAsync(cacheKey, leaderboards, TimeSpan.FromMinutes(10));
-        _logger.LogDebug("Cached server leaderboards: {ServerName}, {Days} days", serverName, days);
+        await cacheService.SetAsync(cacheKey, leaderboards, TimeSpan.FromMinutes(10));
+        logger.LogDebug("Cached server leaderboards: {ServerName}, {Days} days", serverName, days);
 
         return leaderboards;
     }
@@ -257,10 +248,10 @@ ORDER BY first_places DESC, second_places DESC, third_places DESC
 LIMIT {limit}
 FORMAT TabSeparated";
 
-            _logger.LogDebug("Executing placement leaderboard query for server {ServerGuid} from {Start} to {End}",
+            logger.LogDebug("Executing placement leaderboard query for server {ServerGuid} from {Start} to {End}",
                 serverGuid, startPeriod, endPeriod);
 
-            var result = await _clickHouseReader.ExecuteQueryAsync(query);
+            var result = await clickHouseReader.ExecuteQueryAsync(query);
             var entries = new List<PlacementLeaderboardEntry>();
 
             var lines = result?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
@@ -283,14 +274,14 @@ FORMAT TabSeparated";
                 }
             }
 
-            _logger.LogDebug("Found {Count} placement leaderboard entries for server {ServerGuid}",
+            logger.LogDebug("Found {Count} placement leaderboard entries for server {ServerGuid}",
                 entries.Count, serverGuid);
 
             return entries;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching placement leaderboard for server {ServerGuid}", serverGuid);
+            logger.LogError(ex, "Error fetching placement leaderboard for server {ServerGuid}", serverGuid);
             return new List<PlacementLeaderboardEntry>();
         }
     }
@@ -327,10 +318,10 @@ ORDER BY first_places DESC, second_places DESC, third_places DESC
 LIMIT {limit}
 FORMAT TabSeparated";
 
-            _logger.LogDebug("Executing weighted placement leaderboard query for server {ServerGuid} from {Start} to {End} with minPlayerCount {MinPlayerCount}",
+            logger.LogDebug("Executing weighted placement leaderboard query for server {ServerGuid} from {Start} to {End} with minPlayerCount {MinPlayerCount}",
                 serverGuid, startPeriod, endPeriod, minPlayerCount);
 
-            var result = await _clickHouseReader.ExecuteQueryAsync(query);
+            var result = await clickHouseReader.ExecuteQueryAsync(query);
             var entries = new List<PlacementLeaderboardEntry>();
 
             var lines = result?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
@@ -353,14 +344,14 @@ FORMAT TabSeparated";
                 }
             }
 
-            _logger.LogDebug("Found {Count} placement leaderboard entries for server {ServerGuid}",
+            logger.LogDebug("Found {Count} placement leaderboard entries for server {ServerGuid}",
                 entries.Count, serverGuid);
 
             return entries;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching placement leaderboard for server {ServerGuid}", serverGuid);
+            logger.LogError(ex, "Error fetching placement leaderboard for server {ServerGuid}", serverGuid);
             return new List<PlacementLeaderboardEntry>();
         }
     }
@@ -370,16 +361,16 @@ FORMAT TabSeparated";
         double? minKdRatio = null, int? minPlayTimeMinutes = null, string? orderBy = "TotalScore", string? orderDirection = "desc")
     {
         // Check cache first
-        var cacheKey = _cacheKeyService.GetServerRankingsKey(serverName, year, page, pageSize, playerName, minScore, minKills, minDeaths, minKdRatio, minPlayTimeMinutes, orderBy, orderDirection);
-        var cachedResult = await _cacheService.GetAsync<PagedResult<ServerRanking>>(cacheKey);
+        var cacheKey = cacheKeyService.GetServerRankingsKey(serverName, year, page, pageSize, playerName, minScore, minKills, minDeaths, minKdRatio, minPlayTimeMinutes, orderBy, orderDirection);
+        var cachedResult = await cacheService.GetAsync<PagedResult<ServerRanking>>(cacheKey);
 
         if (cachedResult != null)
         {
-            _logger.LogDebug("Cache hit for server rankings: {ServerName}", serverName);
+            logger.LogDebug("Cache hit for server rankings: {ServerName}", serverName);
             return cachedResult;
         }
 
-        _logger.LogDebug("Cache miss for server rankings: {ServerName}", serverName);
+        logger.LogDebug("Cache miss for server rankings: {ServerName}", serverName);
 
         if (page < 1)
             throw new ArgumentException("Page number must be at least 1");
@@ -402,7 +393,7 @@ FORMAT TabSeparated";
         orderDirection = orderDirection ?? "desc";
         var isDescending = orderDirection.Equals("desc", StringComparison.OrdinalIgnoreCase);
 
-        IQueryable<ServerPlayerRanking> baseQuery = _dbContext.ServerPlayerRankings
+        IQueryable<ServerPlayerRanking> baseQuery = dbContext.ServerPlayerRankings
             .Include(sr => sr.Player)
             .Where(sr => sr.Server.Name == serverName && !sr.Player.AiBot);
 
@@ -513,8 +504,8 @@ FORMAT TabSeparated";
         };
 
         // Cache the result for 15 minutes
-        await _cacheService.SetAsync(cacheKey, result, TimeSpan.FromMinutes(15));
-        _logger.LogDebug("Cached server rankings: {ServerName}", serverName);
+        await cacheService.SetAsync(cacheKey, result, TimeSpan.FromMinutes(15));
+        logger.LogDebug("Cached server rankings: {ServerName}", serverName);
 
         return result;
     }
@@ -539,19 +530,19 @@ FORMAT TabSeparated";
         var granularity = CalculateGranularity(days);
 
         // Check cache first
-        var cacheKey = _cacheKeyService.GetServerInsightsKey(serverName, days);
-        var cachedResult = await _cacheService.GetAsync<ServerInsights>(cacheKey);
+        var cacheKey = cacheKeyService.GetServerInsightsKey(serverName, days);
+        var cachedResult = await cacheService.GetAsync<ServerInsights>(cacheKey);
 
         if (cachedResult != null)
         {
-            _logger.LogDebug("Cache hit for server insights: {ServerName}, days: {Days}", serverName, days);
+            logger.LogDebug("Cache hit for server insights: {ServerName}, days: {Days}", serverName, days);
             return cachedResult;
         }
 
-        _logger.LogDebug("Cache miss for server insights: {ServerName}, days: {Days}", serverName, days);
+        logger.LogDebug("Cache miss for server insights: {ServerName}, days: {Days}", serverName, days);
 
         // Get the server by name
-        var server = await _dbContext.Servers
+        var server = await dbContext.Servers
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Name == serverName);
 
@@ -573,17 +564,17 @@ FORMAT TabSeparated";
         // Fetch players online history
         try
         {
-            insights.PlayersOnlineHistory = await _playersOnlineHistoryService.GetPlayersOnlineHistory(
+            insights.PlayersOnlineHistory = await playersOnlineHistoryService.GetPlayersOnlineHistory(
                 server.GameId, period, rollingWindow, server.Guid);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching players online history");
+            logger.LogError(ex, "Error fetching players online history");
             insights.PlayersOnlineHistory = null;
         }
 
         // Cache the result for 20 minutes
-        await _cacheService.SetAsync(cacheKey, insights, TimeSpan.FromMinutes(20));
+        await cacheService.SetAsync(cacheKey, insights, TimeSpan.FromMinutes(20));
 
         return insights;
     }
@@ -599,19 +590,19 @@ FORMAT TabSeparated";
         var startPeriod = endPeriod.AddDays(-days);
 
         // Check cache first
-        var cacheKey = _cacheKeyService.GetServerMapsInsightsKey(serverName, days);
-        var cachedResult = await _cacheService.GetAsync<ServerMapsInsights>(cacheKey);
+        var cacheKey = cacheKeyService.GetServerMapsInsightsKey(serverName, days);
+        var cachedResult = await cacheService.GetAsync<ServerMapsInsights>(cacheKey);
 
         if (cachedResult != null)
         {
-            _logger.LogDebug("Cache hit for server maps insights: {ServerName}, days: {Days}", serverName, days);
+            logger.LogDebug("Cache hit for server maps insights: {ServerName}, days: {Days}", serverName, days);
             return cachedResult;
         }
 
-        _logger.LogDebug("Cache miss for server maps insights: {ServerName}, days: {Days}", serverName, days);
+        logger.LogDebug("Cache miss for server maps insights: {ServerName}, days: {Days}", serverName, days);
 
         // Get the server by name
-        var server = await _dbContext.Servers
+        var server = await dbContext.Servers
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Name == serverName);
 
@@ -634,12 +625,12 @@ FORMAT TabSeparated";
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching maps data");
+            logger.LogError(ex, "Error fetching maps data");
             mapsInsights.Maps = [];
         }
 
         // Cache the result for 20 minutes
-        await _cacheService.SetAsync(cacheKey, mapsInsights, TimeSpan.FromMinutes(20));
+        await cacheService.SetAsync(cacheKey, mapsInsights, TimeSpan.FromMinutes(20));
 
         return mapsInsights;
     }
@@ -733,15 +724,15 @@ CROSS JOIN total_data td
 ORDER BY md.data_points DESC, md.avg_players DESC
 FORMAT TabSeparated";
 
-        _logger.LogDebug("=== ALL MAPS QUERY (30-second intervals) ===");
-        _logger.LogDebug("Server GUID: {ServerGuid}", serverGuid);
-        _logger.LogDebug("Start Period: {StartPeriod}", startPeriod);
-        _logger.LogDebug("End Period: {EndPeriod}", endPeriod);
-        _logger.LogDebug("FULL QUERY:\n{Query}", query);
+        logger.LogDebug("=== ALL MAPS QUERY (30-second intervals) ===");
+        logger.LogDebug("Server GUID: {ServerGuid}", serverGuid);
+        logger.LogDebug("Start Period: {StartPeriod}", startPeriod);
+        logger.LogDebug("End Period: {EndPeriod}", endPeriod);
+        logger.LogDebug("FULL QUERY:\n{Query}", query);
 
-        var result = await _clickHouseReader.ExecuteQueryAsync(query);
+        var result = await clickHouseReader.ExecuteQueryAsync(query);
 
-        _logger.LogDebug("RAW RESULT:\n{Result}", result);
+        logger.LogDebug("RAW RESULT:\n{Result}", result);
 
         var allMaps = new List<PopularMapDataPoint>();
 
@@ -773,7 +764,7 @@ FORMAT TabSeparated";
             }
         }
 
-        _logger.LogDebug("All maps count: {Count}", allMaps.Count);
+        logger.LogDebug("All maps count: {Count}", allMaps.Count);
 
         return allMaps;
     }
@@ -786,16 +777,16 @@ FORMAT TabSeparated";
         ServerFilters? filters = null)
     {
         // Check cache first
-        var cacheKey = _cacheKeyService.GetServersPageKey(page, pageSize, sortBy, sortOrder, filters);
-        var cachedResult = await _cacheService.GetAsync<PagedResult<ServerBasicInfo>>(cacheKey);
+        var cacheKey = cacheKeyService.GetServersPageKey(page, pageSize, sortBy, sortOrder, filters);
+        var cachedResult = await cacheService.GetAsync<PagedResult<ServerBasicInfo>>(cacheKey);
 
         if (cachedResult != null)
         {
-            _logger.LogDebug("Cache hit for server search: page {Page}, pageSize {PageSize}", page, pageSize);
+            logger.LogDebug("Cache hit for server search: page {Page}, pageSize {PageSize}", page, pageSize);
             return cachedResult;
         }
 
-        _logger.LogDebug("Cache miss for server search: page {Page}, pageSize {PageSize}", page, pageSize);
+        logger.LogDebug("Cache miss for server search: page {Page}, pageSize {PageSize}", page, pageSize);
 
         if (page < 1)
             throw new ArgumentException("Page number must be at least 1");
@@ -816,7 +807,7 @@ FORMAT TabSeparated";
         filters ??= new ServerFilters();
 
         // Base query for servers
-        IQueryable<GameServer> baseQuery = _dbContext.Servers.AsNoTracking();
+        IQueryable<GameServer> baseQuery = dbContext.Servers.AsNoTracking();
 
         // Apply filters
         if (!string.IsNullOrWhiteSpace(filters.ServerName))
@@ -958,8 +949,8 @@ FORMAT TabSeparated";
         };
 
         // Cache the result for 5 minutes (servers change less frequently than players)
-        await _cacheService.SetAsync(cacheKey, result, TimeSpan.FromMinutes(5));
-        _logger.LogDebug("Cached server search results: page {Page}, pageSize {PageSize}", page, pageSize);
+        await cacheService.SetAsync(cacheKey, result, TimeSpan.FromMinutes(5));
+        logger.LogDebug("Cached server search results: page {Page}, pageSize {PageSize}", page, pageSize);
 
         return result;
     }
@@ -975,7 +966,7 @@ FORMAT TabSeparated";
         var clickHouseDayOfWeek = currentDayOfWeek == 0 ? 7 : currentDayOfWeek;
 
         // Get busy indicator data from GameTrendsService for this single server with 8 hours before/after
-        var busyIndicatorResult = await _gameTrendsService.GetServerBusyIndicatorAsync(new[] { serverGuid }, timelineHourRange: 8);
+        var busyIndicatorResult = await gameTrendsService.GetServerBusyIndicatorAsync(new[] { serverGuid }, timelineHourRange: 8);
         var serverResult = busyIndicatorResult.ServerResults.FirstOrDefault();
 
         if (serverResult == null)

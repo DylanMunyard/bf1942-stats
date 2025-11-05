@@ -11,9 +11,7 @@ namespace api.Gamification.Services;
 
 public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService> logger, HttpClient httpClient) : IDisposable
 {
-    private readonly ILogger<ClickHouseGamificationService> _logger = logger;
     private readonly ClickHouseConnection _connection = InitializeConnection(logger);
-    private readonly HttpClient _httpClient = httpClient;
     private bool _disposed;
 
     private static ClickHouseConnection InitializeConnection(ILogger<ClickHouseGamificationService> logger)
@@ -87,11 +85,11 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
             var fullRequest = query + "\n" + csvData;
 
             await ExecuteQueryAsync(fullRequest);
-            _logger.LogInformation("Successfully inserted {Count} achievements to ClickHouse with version {Version}", achievements.Count, insertVersion);
+            logger.LogInformation("Successfully inserted {Count} achievements to ClickHouse with version {Version}", achievements.Count, insertVersion);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to insert achievements to ClickHouse");
+            logger.LogError(ex, "Failed to insert achievements to ClickHouse");
             throw;
         }
     }
@@ -118,7 +116,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to get last processed timestamp, returning minimum date");
+            logger.LogWarning(ex, "Failed to get last processed timestamp, returning minimum date");
         }
 
         return DateTime.MinValue;
@@ -153,7 +151,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to get last placement processed timestamp, returning minimum date");
+            logger.LogWarning(ex, "Failed to get last placement processed timestamp, returning minimum date");
         }
 
         return DateTime.MinValue;
@@ -195,7 +193,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to get last team victory processed timestamp, returning minimum date");
+            logger.LogWarning(ex, "Failed to get last team victory processed timestamp, returning minimum date");
         }
 
         return DateTime.MinValue;
@@ -252,7 +250,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get player achievements for {PlayerName}", playerName);
+            logger.LogError(ex, "Failed to get player achievements for {PlayerName}", playerName);
             throw;
         }
     }
@@ -318,7 +316,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get player achievements by type for {PlayerName}, type {AchievementType}", playerName, achievementType);
+            logger.LogError(ex, "Failed to get player achievements by type for {PlayerName}, type {AchievementType}", playerName, achievementType);
             throw;
         }
     }
@@ -359,7 +357,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get player achievement IDs by type for {PlayerName}, type {AchievementType}", playerName, achievementType);
+            logger.LogError(ex, "Failed to get player achievement IDs by type for {PlayerName}, type {AchievementType}", playerName, achievementType);
             throw;
         }
     }
@@ -413,7 +411,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get achievements for round {RoundId}", roundId);
+            logger.LogError(ex, "Failed to get achievements for round {RoundId}", roundId);
             throw;
         }
     }
@@ -444,7 +442,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to check if player {PlayerName} has achievement {AchievementId}", playerName, achievementId);
+            logger.LogError(ex, "Failed to check if player {PlayerName} has achievement {AchievementId}", playerName, achievementId);
             throw;
         }
     }
@@ -481,7 +479,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get achievement IDs for player {PlayerName}", playerName);
+            logger.LogError(ex, "Failed to get achievement IDs for player {PlayerName}", playerName);
             throw;
         }
     }
@@ -649,7 +647,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get achievements with paging");
+            logger.LogError(ex, "Failed to get achievements with paging");
             throw;
         }
     }
@@ -697,7 +695,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get total stats for player {PlayerName}", playerName);
+            logger.LogError(ex, "Failed to get total stats for player {PlayerName}", playerName);
             throw;
         }
     }
@@ -746,7 +744,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get player stats before timestamp for {PlayerName}", playerName);
+            logger.LogError(ex, "Failed to get player stats before timestamp for {PlayerName}", playerName);
             throw;
         }
     }
@@ -796,7 +794,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get player rounds since {SinceTime}", sinceTime);
+            logger.LogError(ex, "Failed to get player rounds since {SinceTime}", sinceTime);
             throw;
         }
     }
@@ -847,7 +845,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get player rounds in period {StartTime} to {EndTime}", startTime, endTime);
+            logger.LogError(ex, "Failed to get player rounds in period {StartTime} to {EndTime}", startTime, endTime);
             throw;
         }
     }
@@ -898,7 +896,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get recent rounds for player {PlayerName}", playerName);
+            logger.LogError(ex, "Failed to get recent rounds for player {PlayerName}", playerName);
             throw;
         }
     }
@@ -946,7 +944,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get kill streak leaderboard");
+            logger.LogError(ex, "Failed to get kill streak leaderboard");
             throw;
         }
     }
@@ -1031,7 +1029,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get placement summary for player {PlayerName}", playerName);
+            logger.LogError(ex, "Failed to get placement summary for player {PlayerName}", playerName);
             throw;
         }
     }
@@ -1087,7 +1085,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get placement leaderboard");
+            logger.LogError(ex, "Failed to get placement leaderboard");
             throw;
         }
     }
@@ -1107,7 +1105,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
 
         var content = new StringContent(query, Encoding.UTF8, "text/plain");
-        var response = await _httpClient.PostAsync($"{clickHouseUrl.TrimEnd('/')}/", content);
+        var response = await httpClient.PostAsync($"{clickHouseUrl.TrimEnd('/')}/", content);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -1187,7 +1185,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get recent performance for player {PlayerName}", playerName);
+            logger.LogError(ex, "Failed to get recent performance for player {PlayerName}", playerName);
             throw;
         }
     }
@@ -1246,7 +1244,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get player metrics for round");
+            logger.LogError(ex, "Failed to get player metrics for round");
             throw;
         }
     }
@@ -1285,7 +1283,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to calculate KPM stats for player {PlayerName}", playerName);
+            logger.LogError(ex, "Failed to calculate KPM stats for player {PlayerName}", playerName);
             throw;
         }
     }

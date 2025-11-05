@@ -11,8 +11,6 @@ public class GamificationController(
     GamificationService gamificationService,
     ILogger<GamificationController> logger) : ControllerBase
 {
-    private readonly GamificationService _gamificationService = gamificationService;
-    private readonly ILogger<GamificationController> _logger = logger;
 
     /// <summary>
     /// Get comprehensive achievement summary for a player
@@ -25,12 +23,12 @@ public class GamificationController(
 
         try
         {
-            var summary = await _gamificationService.GetPlayerAchievementSummaryAsync(playerName);
+            var summary = await gamificationService.GetPlayerAchievementSummaryAsync(playerName);
             return Ok(summary);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting achievements for player {PlayerName}", playerName);
+            logger.LogError(ex, "Error getting achievements for player {PlayerName}", playerName);
             return StatusCode(500, "An internal server error occurred while retrieving player achievements.");
         }
     }
@@ -49,12 +47,12 @@ public class GamificationController(
 
         try
         {
-            var summary = await _gamificationService.GetPlayerPlacementSummaryAsync(playerName, serverGuid, mapName);
+            var summary = await gamificationService.GetPlayerPlacementSummaryAsync(playerName, serverGuid, mapName);
             return Ok(summary);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting placement summary for player {PlayerName}", playerName);
+            logger.LogError(ex, "Error getting placement summary for player {PlayerName}", playerName);
             return StatusCode(500, "An internal server error occurred while retrieving player placements.");
         }
     }
@@ -79,7 +77,7 @@ public class GamificationController(
 
         try
         {
-            var summary = await _gamificationService.GetPlayerAchievementSummaryAsync(playerName);
+            var summary = await gamificationService.GetPlayerAchievementSummaryAsync(playerName);
             var recentAchievements = summary.RecentAchievements
                 .Where(a => a.AchievedAt >= DateTime.UtcNow.AddDays(-days))
                 .Take(limit)
@@ -89,7 +87,7 @@ public class GamificationController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting recent achievements for player {PlayerName}", playerName);
+            logger.LogError(ex, "Error getting recent achievements for player {PlayerName}", playerName);
             return StatusCode(500, "An internal server error occurred while retrieving recent achievements.");
         }
     }
@@ -119,18 +117,18 @@ public class GamificationController(
             if (category.Equals("placements", StringComparison.OrdinalIgnoreCase))
             {
                 // For placements, return a strongly-typed leaderboard tailored to placements
-                var entries = await _gamificationService.GetPlacementLeaderboardAsync(limit: limit);
+                var entries = await gamificationService.GetPlacementLeaderboardAsync(limit: limit);
                 return Ok(entries);
             }
             else
             {
-                var leaderboard = await _gamificationService.GetLeaderboardAsync(category, period, limit);
+                var leaderboard = await gamificationService.GetLeaderboardAsync(category, period, limit);
                 return Ok(leaderboard);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting leaderboard for category {Category}, period {Period}",
+            logger.LogError(ex, "Error getting leaderboard for category {Category}, period {Period}",
                 category, period);
             return StatusCode(500, "An internal server error occurred while retrieving leaderboard.");
         }
@@ -144,12 +142,12 @@ public class GamificationController(
     {
         try
         {
-            var badges = _gamificationService.GetAllBadgeDefinitions();
+            var badges = gamificationService.GetAllBadgeDefinitions();
             return Ok(badges);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting badge definitions");
+            logger.LogError(ex, "Error getting badge definitions");
             return StatusCode(500, "An internal server error occurred while retrieving badge definitions.");
         }
     }
@@ -166,12 +164,12 @@ public class GamificationController(
 
         try
         {
-            var badges = _gamificationService.GetBadgeDefinitionsByCategory(category);
+            var badges = gamificationService.GetBadgeDefinitionsByCategory(category);
             return Ok(badges);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting badge definitions for category {Category}", category);
+            logger.LogError(ex, "Error getting badge definitions for category {Category}", category);
             return StatusCode(500, "An internal server error occurred while retrieving badge definitions.");
         }
     }
@@ -190,12 +188,12 @@ public class GamificationController(
 
         try
         {
-            var hasAchievement = await _gamificationService.PlayerHasAchievementAsync(playerName, achievementId);
+            var hasAchievement = await gamificationService.PlayerHasAchievementAsync(playerName, achievementId);
             return Ok(hasAchievement);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking achievement {AchievementId} for player {PlayerName}",
+            logger.LogError(ex, "Error checking achievement {AchievementId} for player {PlayerName}",
                 achievementId, playerName);
             return StatusCode(500, "An internal server error occurred while checking achievement.");
         }
@@ -217,12 +215,12 @@ public class GamificationController(
             {
                 try
                 {
-                    await _gamificationService.ProcessHistoricalDataAsync(fromDate, toDate);
-                    _logger.LogInformation("Historical gamification processing completed");
+                    await gamificationService.ProcessHistoricalDataAsync(fromDate, toDate);
+                    logger.LogInformation("Historical gamification processing completed");
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error during historical gamification processing");
+                    logger.LogError(ex, "Error during historical gamification processing");
                 }
             });
 
@@ -230,7 +228,7 @@ public class GamificationController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error starting historical processing");
+            logger.LogError(ex, "Error starting historical processing");
             return Task.FromResult<ActionResult>(StatusCode(500, "An internal server error occurred while starting historical processing."));
         }
     }
@@ -244,12 +242,12 @@ public class GamificationController(
         {
             try
             {
-                await _gamificationService.ProcessNewAchievementsAsync();
+                await gamificationService.ProcessNewAchievementsAsync();
                 return Ok("Incremental processing completed successfully.");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error during incremental processing");
+                logger.LogError(ex, "Error during incremental processing");
                 return StatusCode(500, "An internal server error occurred during incremental processing.");
             }
         } */
@@ -306,7 +304,7 @@ public class GamificationController(
 
         try
         {
-            var result = await _gamificationService.GetAllAchievementsWithPlayerIdsAsync(
+            var result = await gamificationService.GetAllAchievementsWithPlayerIdsAsync(
                 page, pageSize, sortBy, sortOrder, playerName, achievementType,
                 achievementId, tier, achievedFrom, achievedTo, serverGuid, mapName);
 
@@ -314,7 +312,7 @@ public class GamificationController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting achievements with paging");
+            logger.LogError(ex, "Error getting achievements with paging");
             return StatusCode(500, "An internal server error occurred while retrieving achievements.");
         }
     }
@@ -332,7 +330,7 @@ public class GamificationController(
             var stats = new
             {
                 Message = "Gamification system is active",
-                AvailableBadges = _gamificationService.GetAllBadgeDefinitions().Count,
+                AvailableBadges = gamificationService.GetAllBadgeDefinitions().Count,
                 Categories = new[] { "performance", "milestone", "social", "map_mastery", "consistency" },
                 LastUpdated = DateTime.UtcNow
             };
@@ -341,7 +339,7 @@ public class GamificationController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting gamification stats");
+            logger.LogError(ex, "Error getting gamification stats");
             return Task.FromResult<ActionResult>(StatusCode(500, "An internal server error occurred while retrieving stats."));
         }
     }

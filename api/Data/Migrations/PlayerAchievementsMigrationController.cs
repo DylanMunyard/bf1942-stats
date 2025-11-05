@@ -5,8 +5,6 @@ namespace api.Data.Migrations;
 
 public class PlayerAchievementsMigrationController(PlayerAchievementsMigrationService migrationService, ILogger<PlayerAchievementsMigrationController> logger)
 {
-    private readonly PlayerAchievementsMigrationService _migrationService = migrationService;
-    private readonly ILogger<PlayerAchievementsMigrationController> _logger = logger;
 
     public class MigrationResponse
     {
@@ -32,9 +30,9 @@ public class PlayerAchievementsMigrationController(PlayerAchievementsMigrationSe
     /// </summary>
     public async Task<MigrationResponse> MigrateToReplacingMergeTree()
     {
-        _logger.LogInformation("Player achievements migration request started");
+        logger.LogInformation("Player achievements migration request started");
 
-        var result = await _migrationService.MigrateToReplacingMergeTreeAsync();
+        var result = await migrationService.MigrateToReplacingMergeTreeAsync();
 
         var ended = DateTime.UtcNow;
         var response = new MigrationResponse
@@ -49,13 +47,13 @@ public class PlayerAchievementsMigrationController(PlayerAchievementsMigrationSe
 
         if (result.Success)
         {
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Player achievements migration completed successfully: migrated={Count} durationMs={DurationMs} verified={Verified}",
                 response.TotalMigrated, response.DurationMs, response.VerificationPassed);
         }
         else
         {
-            _logger.LogError(
+            logger.LogError(
                 "Player achievements migration failed: migrated={Count} durationMs={DurationMs} error={Error}",
                 response.TotalMigrated, response.DurationMs, response.ErrorMessage);
         }
@@ -69,9 +67,9 @@ public class PlayerAchievementsMigrationController(PlayerAchievementsMigrationSe
     /// </summary>
     public async Task<SwitchResponse> SwitchToNewTable()
     {
-        _logger.LogInformation("Player achievements table switch request started");
+        logger.LogInformation("Player achievements table switch request started");
 
-        var success = await _migrationService.SwitchToNewTableAsync();
+        var success = await migrationService.SwitchToNewTableAsync();
 
         var ended = DateTime.UtcNow;
         var response = new SwitchResponse
@@ -84,11 +82,11 @@ public class PlayerAchievementsMigrationController(PlayerAchievementsMigrationSe
 
         if (success)
         {
-            _logger.LogInformation("Player achievements table switch completed successfully");
+            logger.LogInformation("Player achievements table switch completed successfully");
         }
         else
         {
-            _logger.LogError("Player achievements table switch failed");
+            logger.LogError("Player achievements table switch failed");
         }
 
         return response;
@@ -100,9 +98,9 @@ public class PlayerAchievementsMigrationController(PlayerAchievementsMigrationSe
     /// </summary>
     public async Task<SwitchResponse> CleanupOldTable()
     {
-        _logger.LogInformation("Player achievements table cleanup request started");
+        logger.LogInformation("Player achievements table cleanup request started");
 
-        var success = await _migrationService.CleanupOldTableAsync();
+        var success = await migrationService.CleanupOldTableAsync();
 
         var ended = DateTime.UtcNow;
         var response = new SwitchResponse
@@ -115,11 +113,11 @@ public class PlayerAchievementsMigrationController(PlayerAchievementsMigrationSe
 
         if (success)
         {
-            _logger.LogInformation("Player achievements table cleanup completed successfully");
+            logger.LogInformation("Player achievements table cleanup completed successfully");
         }
         else
         {
-            _logger.LogError("Player achievements table cleanup failed");
+            logger.LogError("Player achievements table cleanup failed");
         }
 
         return response;

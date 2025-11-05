@@ -11,8 +11,6 @@ public class NotificationController(
     PlayerTrackerDbContext dbContext,
     ILogger<NotificationController> logger) : ControllerBase
 {
-    private readonly PlayerTrackerDbContext _dbContext = dbContext;
-    private readonly ILogger<NotificationController> _logger = logger;
 
     [HttpGet("users-with-buddy")]
     public async Task<ActionResult<IEnumerable<string>>> GetUsersWithBuddy(string buddyPlayerName)
@@ -24,20 +22,20 @@ public class NotificationController(
                 return BadRequest("buddyPlayerName is required");
             }
 
-            _logger.LogInformation("Getting users who have {BuddyName} as a buddy", buddyPlayerName);
+            logger.LogInformation("Getting users who have {BuddyName} as a buddy", buddyPlayerName);
 
-            var userEmails = await _dbContext.UserBuddies
+            var userEmails = await dbContext.UserBuddies
                 .Where(ub => ub.BuddyPlayerName == buddyPlayerName)
                 .Select(ub => ub.User.Email)
                 .ToListAsync();
 
-            _logger.LogInformation("Found {Count} users with {BuddyName} as a buddy", userEmails.Count, buddyPlayerName);
+            logger.LogInformation("Found {Count} users with {BuddyName} as a buddy", userEmails.Count, buddyPlayerName);
 
             return Ok(userEmails);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting users with buddy {BuddyName}", buddyPlayerName);
+            logger.LogError(ex, "Error getting users with buddy {BuddyName}", buddyPlayerName);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -52,20 +50,20 @@ public class NotificationController(
                 return BadRequest("serverGuid is required");
             }
 
-            _logger.LogInformation("Getting users who have server {ServerGuid} as a favourite", serverGuid);
+            logger.LogInformation("Getting users who have server {ServerGuid} as a favourite", serverGuid);
 
-            var userEmails = await _dbContext.UserFavoriteServers
+            var userEmails = await dbContext.UserFavoriteServers
                 .Where(ufs => ufs.ServerGuid == serverGuid)
                 .Select(ufs => ufs.User.Email)
                 .ToListAsync();
 
-            _logger.LogInformation("Found {Count} users with server {ServerGuid} as a favourite", userEmails.Count, serverGuid);
+            logger.LogInformation("Found {Count} users with server {ServerGuid} as a favourite", userEmails.Count, serverGuid);
 
             return Ok(userEmails);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting users with favourite server {ServerGuid}", serverGuid);
+            logger.LogError(ex, "Error getting users with favourite server {ServerGuid}", serverGuid);
             return StatusCode(500, "Internal server error");
         }
     }

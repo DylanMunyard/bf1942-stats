@@ -9,8 +9,6 @@ namespace api.ClickHouse;
 
 public class GameTrendsService(HttpClient httpClient, string clickHouseUrl, ILogger<GameTrendsService> logger, PlayerTrackerDbContext dbContext) : BaseClickHouseService(httpClient, clickHouseUrl), IGameTrendsService
 {
-    private readonly ILogger<GameTrendsService> _logger = logger;
-    private readonly PlayerTrackerDbContext _dbContext = dbContext;
 
     private async Task<List<T>> ReadAllAsync<T>(string query, params object[] parameters) where T : new()
     {
@@ -154,7 +152,7 @@ public class GameTrendsService(HttpClient httpClient, string clickHouseUrl, ILog
         // Use SQLite PlayerSessions for real-time data (sessions within last minute)
         var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
 
-        var query = _dbContext.PlayerSessions
+        var query = dbContext.PlayerSessions
             .Include(ps => ps.Server)
             .Include(ps => ps.Player)
             .Where(ps => ps.IsActive &&
@@ -239,7 +237,7 @@ public class GameTrendsService(HttpClient httpClient, string clickHouseUrl, ILog
 
         // Get current player count from SQLite using the same logic as GetCurrentActivityStatusAsync
         var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
-        var currentPlayerQuery = _dbContext.PlayerSessions
+        var currentPlayerQuery = dbContext.PlayerSessions
             .Include(ps => ps.Server)
             .Include(ps => ps.Player)
             .Where(ps => ps.IsActive &&
@@ -398,7 +396,7 @@ public class GameTrendsService(HttpClient httpClient, string clickHouseUrl, ILog
 
         // Get server info from SQLite instead of expensive ClickHouse query
         // This replaces a potentially expensive scan of player_metrics table
-        var serverInfos = await _dbContext.Servers
+        var serverInfos = await dbContext.Servers
             .Where(s => serverGuids.Contains(s.Guid))
             .Select(s => new GameTrendsServerInfo
             {

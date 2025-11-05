@@ -13,9 +13,6 @@ public class GameTrendsController(
     ICacheService cacheService,
     ILogger<GameTrendsController> logger) : ControllerBase
 {
-    private readonly GameTrendsService _gameTrendsService = gameTrendsService;
-    private readonly ICacheService _cacheService = cacheService;
-    private readonly ILogger<GameTrendsController> _logger = logger;
 
     /// <summary>
     /// Gets current activity status across all games and servers.
@@ -29,27 +26,27 @@ public class GameTrendsController(
         try
         {
             var cacheKey = $"trends:current:activity:{game ?? "all"}";
-            var cachedData = await _cacheService.GetAsync<List<CurrentActivityStatus>>(cacheKey);
+            var cachedData = await cacheService.GetAsync<List<CurrentActivityStatus>>(cacheKey);
 
             if (cachedData != null)
             {
-                _logger.LogDebug("Returning cached current activity status for game {Game}", game ?? "all");
+                logger.LogDebug("Returning cached current activity status for game {Game}", game ?? "all");
                 return Ok(cachedData);
             }
 
-            var currentActivity = await _gameTrendsService.GetCurrentActivityStatusAsync(game);
+            var currentActivity = await gameTrendsService.GetCurrentActivityStatusAsync(game);
 
             // Cache for 5 minutes - current activity needs to be relatively fresh
-            await _cacheService.SetAsync(cacheKey, currentActivity, TimeSpan.FromMinutes(1));
+            await cacheService.SetAsync(cacheKey, currentActivity, TimeSpan.FromMinutes(1));
 
-            _logger.LogInformation("Retrieved current activity status for {ServerCount} servers, game {Game}",
+            logger.LogInformation("Retrieved current activity status for {ServerCount} servers, game {Game}",
                 currentActivity.Count, game ?? "all");
 
             return Ok(currentActivity);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving current activity status for game {Game}", game);
+            logger.LogError(ex, "Error retrieving current activity status for game {Game}", game);
             return StatusCode(500, "Failed to retrieve current activity status");
         }
     }
@@ -69,27 +66,27 @@ public class GameTrendsController(
         try
         {
             var cacheKey = $"trends:weekly:{game ?? "all"}:{daysPeriod}";
-            var cachedData = await _cacheService.GetAsync<List<WeeklyActivityPattern>>(cacheKey);
+            var cachedData = await cacheService.GetAsync<List<WeeklyActivityPattern>>(cacheKey);
 
             if (cachedData != null)
             {
-                _logger.LogDebug("Returning cached weekly activity patterns for game {GameId}", game ?? "all");
+                logger.LogDebug("Returning cached weekly activity patterns for game {GameId}", game ?? "all");
                 return Ok(cachedData);
             }
 
-            var patterns = await _gameTrendsService.GetWeeklyActivityPatternsAsync(game, daysPeriod);
+            var patterns = await gameTrendsService.GetWeeklyActivityPatternsAsync(game, daysPeriod);
 
             // Cache for 1 hour - weekly patterns are stable
-            await _cacheService.SetAsync(cacheKey, patterns, TimeSpan.FromHours(1));
+            await cacheService.SetAsync(cacheKey, patterns, TimeSpan.FromHours(1));
 
-            _logger.LogInformation("Retrieved {PatternCount} weekly activity patterns for game {GameId}",
+            logger.LogInformation("Retrieved {PatternCount} weekly activity patterns for game {GameId}",
                 patterns.Count, game ?? "all");
 
             return Ok(patterns);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving weekly activity patterns for game {GameId}", game);
+            logger.LogError(ex, "Error retrieving weekly activity patterns for game {GameId}", game);
             return StatusCode(500, "Failed to retrieve weekly activity patterns");
         }
     }
@@ -113,28 +110,28 @@ public class GameTrendsController(
         {
             var serverGuidsKey = string.Join(",", serverGuids.OrderBy(x => x));
             var cacheKey = $"trends:busy:servers:{serverGuidsKey}";
-            var cachedData = await _cacheService.GetAsync<GroupedServerBusyIndicatorResult>(cacheKey);
+            var cachedData = await cacheService.GetAsync<GroupedServerBusyIndicatorResult>(cacheKey);
 
             if (cachedData != null)
             {
-                _logger.LogDebug("Returning cached server busy indicator for {ServerCount} servers",
+                logger.LogDebug("Returning cached server busy indicator for {ServerCount} servers",
                     serverGuids.Length);
                 return Ok(cachedData);
             }
 
-            var busyIndicator = await _gameTrendsService.GetServerBusyIndicatorAsync(serverGuids);
+            var busyIndicator = await gameTrendsService.GetServerBusyIndicatorAsync(serverGuids);
 
             // Cache for 5 minutes - busy indicator should be current
-            await _cacheService.SetAsync(cacheKey, busyIndicator, TimeSpan.FromMinutes(5));
+            await cacheService.SetAsync(cacheKey, busyIndicator, TimeSpan.FromMinutes(5));
 
-            _logger.LogInformation("Generated server busy indicator for {ServerCount} servers",
+            logger.LogInformation("Generated server busy indicator for {ServerCount} servers",
                 serverGuids.Length);
 
             return Ok(busyIndicator);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error generating server busy indicator for {ServerCount} servers",
+            logger.LogError(ex, "Error generating server busy indicator for {ServerCount} servers",
                 serverGuids?.Length ?? 0);
             return StatusCode(500, "Failed to generate server busy indicator");
         }
@@ -153,16 +150,16 @@ public class GameTrendsController(
         try
         {
             var cacheKey = $"trends:landing:{game ?? "all"}";
-            var cachedData = await _cacheService.GetAsync<LandingPageTrendSummary>(cacheKey);
+            var cachedData = await cacheService.GetAsync<LandingPageTrendSummary>(cacheKey);
 
             if (cachedData != null)
             {
-                _logger.LogDebug("Returning cached landing page trend summary for game {GameId}", game ?? "all");
+                logger.LogDebug("Returning cached landing page trend summary for game {GameId}", game ?? "all");
                 return Ok(cachedData);
             }
 
             // Get insights which now includes current player count and comparison
-            var insights = await _gameTrendsService.GetSmartPredictionInsightsAsync(game);
+            var insights = await gameTrendsService.GetSmartPredictionInsightsAsync(game);
 
             var summary = new LandingPageTrendSummary
             {
@@ -171,15 +168,15 @@ public class GameTrendsController(
             };
 
             // Cache for 10 minutes - landing page data should be fresh but not too frequent
-            await _cacheService.SetAsync(cacheKey, summary, TimeSpan.FromMinutes(10));
+            await cacheService.SetAsync(cacheKey, summary, TimeSpan.FromMinutes(10));
 
-            _logger.LogInformation("Generated landing page trend summary for game {GameId}", game ?? "all");
+            logger.LogInformation("Generated landing page trend summary for game {GameId}", game ?? "all");
 
             return Ok(summary);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error generating landing page trend summary for game {GameId}", game);
+            logger.LogError(ex, "Error generating landing page trend summary for game {GameId}", game);
             return StatusCode(500, "Failed to generate landing page trend summary");
         }
     }

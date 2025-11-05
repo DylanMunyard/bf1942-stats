@@ -5,8 +5,6 @@ namespace api.Data.Migrations;
 
 public class PlayerMetricsMigrationController(PlayerMetricsMigrationService migrationService, ILogger<PlayerMetricsMigrationController> logger)
 {
-    private readonly PlayerMetricsMigrationService _migrationService = migrationService;
-    private readonly ILogger<PlayerMetricsMigrationController> _logger = logger;
 
     public class MigrationRequest
     {
@@ -43,11 +41,11 @@ public class PlayerMetricsMigrationController(PlayerMetricsMigrationService migr
         CancellationToken cancellationToken)
     {
         var started = DateTime.UtcNow;
-        _logger.LogInformation(
+        logger.LogInformation(
             "Migration request started: batchSize={BatchSize} delayMs={DelayMs}",
             request.BatchSize, request.DelayMs);
 
-        var result = await _migrationService.MigrateToReplacingMergeTreeAsync(
+        var result = await migrationService.MigrateToReplacingMergeTreeAsync(
             request.BatchSize,
             request.DelayMs);
 
@@ -66,13 +64,13 @@ public class PlayerMetricsMigrationController(PlayerMetricsMigrationService migr
 
         if (result.Success)
         {
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Migration completed successfully: migrated={Count} durationMs={DurationMs} verified={Verified}",
                 response.TotalMigrated, response.DurationMs, response.VerificationPassed);
         }
         else
         {
-            _logger.LogError(
+            logger.LogError(
                 "Migration failed: migrated={Count} durationMs={DurationMs} error={Error}",
                 response.TotalMigrated, response.DurationMs, response.ErrorMessage);
         }
@@ -87,9 +85,9 @@ public class PlayerMetricsMigrationController(PlayerMetricsMigrationService migr
     public async Task<SwitchResponse> SwitchToNewTable()
     {
         var started = DateTime.UtcNow;
-        _logger.LogInformation("Table switch request started");
+        logger.LogInformation("Table switch request started");
 
-        var success = await _migrationService.SwitchToNewTableAsync();
+        var success = await migrationService.SwitchToNewTableAsync();
 
         var ended = DateTime.UtcNow;
         var response = new SwitchResponse
@@ -102,11 +100,11 @@ public class PlayerMetricsMigrationController(PlayerMetricsMigrationService migr
 
         if (success)
         {
-            _logger.LogInformation("Table switch completed successfully");
+            logger.LogInformation("Table switch completed successfully");
         }
         else
         {
-            _logger.LogError("Table switch failed");
+            logger.LogError("Table switch failed");
         }
 
         return response;
@@ -119,9 +117,9 @@ public class PlayerMetricsMigrationController(PlayerMetricsMigrationService migr
     public async Task<SwitchResponse> RollbackTableSwitch()
     {
         var started = DateTime.UtcNow;
-        _logger.LogInformation("Table rollback request started");
+        logger.LogInformation("Table rollback request started");
 
-        var success = await _migrationService.RollbackTableSwitchAsync();
+        var success = await migrationService.RollbackTableSwitchAsync();
 
         var ended = DateTime.UtcNow;
         var response = new SwitchResponse
@@ -134,11 +132,11 @@ public class PlayerMetricsMigrationController(PlayerMetricsMigrationService migr
 
         if (success)
         {
-            _logger.LogInformation("Table rollback completed successfully");
+            logger.LogInformation("Table rollback completed successfully");
         }
         else
         {
-            _logger.LogError("Table rollback failed");
+            logger.LogError("Table rollback failed");
         }
 
         return response;
@@ -151,9 +149,9 @@ public class PlayerMetricsMigrationController(PlayerMetricsMigrationService migr
     public async Task<SwitchResponse> CleanupOldTable()
     {
         var started = DateTime.UtcNow;
-        _logger.LogInformation("Table cleanup request started");
+        logger.LogInformation("Table cleanup request started");
 
-        var success = await _migrationService.CleanupOldTableAsync();
+        var success = await migrationService.CleanupOldTableAsync();
 
         var ended = DateTime.UtcNow;
         var response = new SwitchResponse
@@ -166,11 +164,11 @@ public class PlayerMetricsMigrationController(PlayerMetricsMigrationService migr
 
         if (success)
         {
-            _logger.LogInformation("Table cleanup completed successfully");
+            logger.LogInformation("Table cleanup completed successfully");
         }
         else
         {
-            _logger.LogError("Table cleanup failed");
+            logger.LogError("Table cleanup failed");
         }
 
         return response;

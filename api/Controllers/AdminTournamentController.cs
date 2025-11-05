@@ -19,11 +19,6 @@ public class AdminTournamentController(
     ITournamentMatchResultService matchResultService,
     ITeamRankingCalculator rankingCalculator) : ControllerBase
 {
-    private readonly PlayerTrackerDbContext _context = context;
-    private readonly ILogger<AdminTournamentController> _logger = logger;
-    private readonly IMarkdownSanitizationService _markdownSanitizer = markdownSanitizer;
-    private readonly ITournamentMatchResultService _matchResultService = matchResultService;
-    private readonly ITeamRankingCalculator _rankingCalculator = rankingCalculator;
 
     /// <summary>
     /// Get tournaments created by the current user
@@ -38,7 +33,7 @@ public class AdminTournamentController(
             if (string.IsNullOrEmpty(userEmail))
                 return Unauthorized(new { message = "User email not found in token" });
 
-            var tournaments = await _context.Tournaments
+            var tournaments = await context.Tournaments
                 .Include(t => t.OrganizerPlayer)
                 .Include(t => t.Server)
                 .Include(t => t.Theme)
@@ -49,14 +44,14 @@ public class AdminTournamentController(
             var tournamentIds = tournaments.Select(t => t.Id).ToList();
 
             // Batch load match counts
-            var matchCounts = await _context.TournamentMatches
+            var matchCounts = await context.TournamentMatches
                 .Where(tm => tournamentIds.Contains(tm.TournamentId))
                 .GroupBy(tm => tm.TournamentId)
                 .Select(g => new { TournamentId = g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.TournamentId, x => x.Count);
 
             // Batch load team counts
-            var teamCounts = await _context.TournamentTeams
+            var teamCounts = await context.TournamentTeams
                 .Where(tt => tournamentIds.Contains(tt.TournamentId))
                 .GroupBy(tt => tt.TournamentId)
                 .Select(g => new { TournamentId = g.Key, Count = g.Count() })
@@ -92,7 +87,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting tournaments");
+            logger.LogError(ex, "Error getting tournaments");
             return StatusCode(500, new { message = "Error retrieving tournaments" });
         }
     }
@@ -110,7 +105,7 @@ public class AdminTournamentController(
             if (string.IsNullOrEmpty(userEmail))
                 return Unauthorized(new { message = "User email not found in token" });
 
-            var tournament = await _context.Tournaments
+            var tournament = await context.Tournaments
                 .Include(t => t.OrganizerPlayer)
                 .Include(t => t.Server)
                 .Include(t => t.Theme)
@@ -121,7 +116,7 @@ public class AdminTournamentController(
                 return NotFound(new { message = "Tournament not found" });
 
             // Load teams and their players separately to avoid cartesian product
-            var teams = await _context.TournamentTeams
+            var teams = await context.TournamentTeams
                 .Include(tt => tt.TeamPlayers)
                 .Where(tt => tt.TournamentId == id)
                 .Select(tt => new TournamentTeamResponse
@@ -137,7 +132,7 @@ public class AdminTournamentController(
                 .ToListAsync();
 
             // Load matches with team names and maps
-            var matchResponses = await _context.TournamentMatches
+            var matchResponses = await context.TournamentMatches
                 .Where(tm => tm.TournamentId == id)
                 .Select(tm => new TournamentMatchResponse
                 {
@@ -218,7 +213,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting tournament {TournamentId}", id);
+            logger.LogError(ex, "Error getting tournament {TournamentId}", id);
             return StatusCode(500, new { message = "Error retrieving tournament" });
         }
     }
@@ -253,13 +248,13 @@ public class AdminTournamentController(
             if (!allowedGames.Contains(request.Game.ToLower()))
                 return BadRequest(new { message = $"Invalid game. Allowed values: {string.Join(", ", allowedGames)}" });
 
-            var organizer = await _context.Players.FirstOrDefaultAsync(p => p.Name == request.Organizer);
+            var organizer = await context.Players.FirstOrDefaultAsync(p => p.Name == request.Organizer);
             if (organizer == null)
                 return BadRequest(new { message = $"Player '{request.Organizer}' not found" });
 
             if (!string.IsNullOrWhiteSpace(request.ServerGuid))
             {
-                var server = await _context.Servers.FirstOrDefaultAsync(s => s.Guid == request.ServerGuid);
+                var server = await context.Servers.FirstOrDefaultAsync(s => s.Guid == request.ServerGuid);
                 if (server == null)
                     return BadRequest(new { message = $"Server with GUID '{request.ServerGuid}' not found" });
             }
@@ -285,7 +280,7 @@ public class AdminTournamentController(
             if (!string.IsNullOrWhiteSpace(request.Rules))
             {
                 // Validate markdown for XSS risks
-                var validationResult = _markdownSanitizer.ValidateMarkdown(request.Rules);
+                var validationResult = markdownSanitizer.ValidateMarkdown(request.Rules);
                 if (!validationResult.IsValid)
                     return BadRequest(new { message = validationResult.Error });
 
@@ -313,7 +308,7 @@ public class AdminTournamentController(
                 ForumUrl = request.ForumUrl
             };
 
-            _context.Tournaments.Add(tournament);
+            context.Tournaments.Add(tournament);
 
             // Create theme if provided
             if (request.Theme != null)
@@ -325,10 +320,10 @@ public class AdminTournamentController(
                     AccentColour = request.Theme.AccentColour,
                     Tournament = tournament
                 };
-                _context.Add(theme);
+                context.Add(theme);
             }
 
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
 
             return CreatedAtAction(
                 nameof(GetTournament),
@@ -337,7 +332,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating tournament");
+            logger.LogError(ex, "Error creating tournament");
             return StatusCode(500, new { message = "Error creating tournament" });
         }
     }
@@ -359,7 +354,7 @@ public class AdminTournamentController(
             if (string.IsNullOrEmpty(userEmail))
                 return Unauthorized(new { message = "User email not found in token" });
 
-            var tournament = await _context.Tournaments
+            var tournament = await context.Tournaments
                 .Include(t => t.Theme)
                 .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
                 .FirstOrDefaultAsync();
@@ -372,7 +367,7 @@ public class AdminTournamentController(
 
             if (!string.IsNullOrWhiteSpace(request.Organizer))
             {
-                var organizer = await _context.Players.FirstOrDefaultAsync(p => p.Name == request.Organizer);
+                var organizer = await context.Players.FirstOrDefaultAsync(p => p.Name == request.Organizer);
                 if (organizer == null)
                     return BadRequest(new { message = $"Player '{request.Organizer}' not found" });
 
@@ -395,7 +390,7 @@ public class AdminTournamentController(
             {
                 if (!string.IsNullOrWhiteSpace(request.ServerGuid))
                 {
-                    var server = await _context.Servers.FirstOrDefaultAsync(s => s.Guid == request.ServerGuid);
+                    var server = await context.Servers.FirstOrDefaultAsync(s => s.Guid == request.ServerGuid);
                     if (server == null)
                         return BadRequest(new { message = $"Server with GUID '{request.ServerGuid}' not found" });
 
@@ -444,7 +439,7 @@ public class AdminTournamentController(
                 if (!string.IsNullOrWhiteSpace(request.Rules))
                 {
                     // Validate markdown for XSS risks
-                    var validationResult = _markdownSanitizer.ValidateMarkdown(request.Rules);
+                    var validationResult = markdownSanitizer.ValidateMarkdown(request.Rules);
                     if (!validationResult.IsValid)
                         return BadRequest(new { message = validationResult.Error });
 
@@ -479,7 +474,7 @@ public class AdminTournamentController(
                         AccentColour = request.Theme.AccentColour,
                         Tournament = tournament
                     };
-                    _context.Add(tournament.Theme);
+                    context.Add(tournament.Theme);
                 }
                 else
                 {
@@ -490,13 +485,13 @@ public class AdminTournamentController(
                 }
             }
 
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
 
             return Ok(await GetTournamentDetailOptimizedAsync(tournament.Id));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating tournament {TournamentId}", id);
+            logger.LogError(ex, "Error updating tournament {TournamentId}", id);
             return StatusCode(500, new { message = "Error updating tournament" });
         }
     }
@@ -518,21 +513,21 @@ public class AdminTournamentController(
             if (string.IsNullOrEmpty(userEmail))
                 return Unauthorized(new { message = "User email not found in token" });
 
-            var tournament = await _context.Tournaments
+            var tournament = await context.Tournaments
                 .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
                 .FirstOrDefaultAsync();
 
             if (tournament == null)
                 return NotFound(new { message = "Tournament not found" });
 
-            _context.Tournaments.Remove(tournament);
-            await _context.SaveChangesAsync();
+            context.Tournaments.Remove(tournament);
+            await context.SaveChangesAsync();
 
             return NoContent();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting tournament {TournamentId}", id);
+            logger.LogError(ex, "Error deleting tournament {TournamentId}", id);
             return StatusCode(500, new { message = "Error deleting tournament" });
         }
     }
@@ -550,7 +545,7 @@ public class AdminTournamentController(
             if (string.IsNullOrEmpty(userEmail))
                 return Unauthorized(new { message = "User email not found in token" });
 
-            var tournament = await _context.Tournaments
+            var tournament = await context.Tournaments
                 .Where(t => t.Id == id && t.CreatedByUserEmail == userEmail)
                 .Select(t => new { t.HeroImage, t.HeroImageContentType })
                 .FirstOrDefaultAsync();
@@ -565,7 +560,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting tournament image {TournamentId}", id);
+            logger.LogError(ex, "Error getting tournament image {TournamentId}", id);
             return StatusCode(500, new { message = "Error retrieving tournament image" });
         }
     }
@@ -583,7 +578,7 @@ public class AdminTournamentController(
             if (string.IsNullOrEmpty(userEmail))
                 return Unauthorized(new { message = "User email not found in token" });
 
-            var tournament = await _context.Tournaments
+            var tournament = await context.Tournaments
                 .Where(t => t.Id == id && t.CreatedByUserEmail == userEmail)
                 .Select(t => new { t.CommunityLogo, t.CommunityLogoContentType })
                 .FirstOrDefaultAsync();
@@ -598,7 +593,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting tournament logo {TournamentId}", id);
+            logger.LogError(ex, "Error getting tournament logo {TournamentId}", id);
             return StatusCode(500, new { message = "Error retrieving tournament logo" });
         }
     }
@@ -610,7 +605,7 @@ public class AdminTournamentController(
         if (string.IsNullOrEmpty(userId) || !int.TryParse(userId, out var id))
             return null;
 
-        return await _context.Users.FirstOrDefaultAsync(u => u.Id == id);
+        return await context.Users.FirstOrDefaultAsync(u => u.Id == id);
     }
 
     /// <summary>
@@ -620,26 +615,26 @@ public class AdminTournamentController(
     private async Task<int> CleanupOrphanedMatchResultsAsync(int tournamentId)
     {
         // Find all MatchResults in this tournament that reference non-existent maps
-        var orphanedResults = await _context.TournamentMatchResults
+        var orphanedResults = await context.TournamentMatchResults
             .Where(mr => mr.TournamentId == tournamentId)
-            .Where(mr => !_context.TournamentMatchMaps.Any(m => m.Id == mr.MapId))
+            .Where(mr => !context.TournamentMatchMaps.Any(m => m.Id == mr.MapId))
             .ToListAsync();
 
         if (orphanedResults.Count > 0)
         {
-            _logger.LogWarning(
+            logger.LogWarning(
                 "Found {Count} orphaned match results in tournament {TournamentId}. Cleaning up...",
                 orphanedResults.Count, tournamentId);
 
             foreach (var result in orphanedResults)
             {
-                _logger.LogInformation(
+                logger.LogInformation(
                     "Deleting orphaned match result {ResultId} (referenced non-existent map {MapId})",
                     result.Id, result.MapId);
-                _context.TournamentMatchResults.Remove(result);
+                context.TournamentMatchResults.Remove(result);
             }
 
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
         }
 
         return orphanedResults.Count;
@@ -704,17 +699,17 @@ public class AdminTournamentController(
         {
             try
             {
-                _logger.LogInformation(
+                logger.LogInformation(
                     "Starting async ranking recalculation for tournament {TournamentId}",
                     tournamentId);
-                await _rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
-                _logger.LogInformation(
+                await rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
+                logger.LogInformation(
                     "Completed async ranking recalculation for tournament {TournamentId}",
                     tournamentId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex,
+                logger.LogError(ex,
                     "Error during async ranking recalculation for tournament {TournamentId}",
                     tournamentId);
             }
@@ -723,13 +718,13 @@ public class AdminTournamentController(
 
     private async Task<TournamentDetailResponse> GetTournamentDetailOptimizedAsync(int tournamentId)
     {
-        var tournament = await _context.Tournaments
+        var tournament = await context.Tournaments
             .Include(t => t.OrganizerPlayer)
             .Include(t => t.Server)
             .Include(t => t.Theme)
             .FirstAsync(t => t.Id == tournamentId);
 
-        var teams = await _context.TournamentTeams
+        var teams = await context.TournamentTeams
             .Include(tt => tt.TeamPlayers)
             .Where(tt => tt.TournamentId == tournamentId)
             .Select(tt => new TournamentTeamResponse
@@ -744,7 +739,7 @@ public class AdminTournamentController(
             })
             .ToListAsync();
 
-        var matches = await _context.TournamentMatches
+        var matches = await context.TournamentMatches
             .Where(tm => tm.TournamentId == tournamentId)
             .Select(tm => new TournamentMatchResponse
             {
@@ -837,7 +832,7 @@ public class AdminTournamentController(
             if (string.IsNullOrEmpty(userEmail))
                 return Unauthorized(new { message = "User email not found in token" });
 
-            var tournament = await _context.Tournaments
+            var tournament = await context.Tournaments
                 .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
                 .FirstOrDefaultAsync();
 
@@ -848,7 +843,7 @@ public class AdminTournamentController(
                 return BadRequest(new { message = "Team name is required" });
 
             // Check if team name already exists in this tournament
-            var existingTeam = await _context.TournamentTeams
+            var existingTeam = await context.TournamentTeams
                 .Where(tt => tt.TournamentId == tournamentId && tt.Name == request.Name)
                 .FirstOrDefaultAsync();
 
@@ -862,8 +857,8 @@ public class AdminTournamentController(
                 CreatedAt = SystemClock.Instance.GetCurrentInstant()
             };
 
-            _context.TournamentTeams.Add(team);
-            await _context.SaveChangesAsync();
+            context.TournamentTeams.Add(team);
+            await context.SaveChangesAsync();
 
             var response = new TournamentTeamResponse
             {
@@ -880,7 +875,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating team for tournament {TournamentId}", tournamentId);
+            logger.LogError(ex, "Error creating team for tournament {TournamentId}", tournamentId);
             return StatusCode(500, new { message = "Error creating team" });
         }
     }
@@ -898,7 +893,7 @@ public class AdminTournamentController(
             if (string.IsNullOrEmpty(userEmail))
                 return Unauthorized(new { message = "User email not found in token" });
 
-            var team = await _context.TournamentTeams
+            var team = await context.TournamentTeams
                 .Where(tt => tt.Id == teamId && tt.TournamentId == tournamentId && tt.Tournament.CreatedByUserEmail == userEmail)
                 .Select(tt => new TournamentTeamResponse
                 {
@@ -919,7 +914,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting team {TeamId} for tournament {TournamentId}", teamId, tournamentId);
+            logger.LogError(ex, "Error getting team {TeamId} for tournament {TournamentId}", teamId, tournamentId);
             return StatusCode(500, new { message = "Error retrieving team" });
         }
     }
@@ -937,7 +932,7 @@ public class AdminTournamentController(
             if (string.IsNullOrEmpty(userEmail))
                 return Unauthorized(new { message = "User email not found in token" });
 
-            var team = await _context.TournamentTeams
+            var team = await context.TournamentTeams
                 .Where(tt => tt.Id == teamId && tt.TournamentId == tournamentId && tt.Tournament.CreatedByUserEmail == userEmail)
                 .FirstOrDefaultAsync();
 
@@ -947,7 +942,7 @@ public class AdminTournamentController(
             if (!string.IsNullOrWhiteSpace(request.Name))
             {
                 // Check if new name conflicts with existing team
-                var existingTeam = await _context.TournamentTeams
+                var existingTeam = await context.TournamentTeams
                     .Where(tt => tt.TournamentId == tournamentId && tt.Name == request.Name && tt.Id != teamId)
                     .FirstOrDefaultAsync();
 
@@ -957,10 +952,10 @@ public class AdminTournamentController(
                 team.Name = request.Name;
             }
 
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
 
             // Return updated team with players
-            var response = await _context.TournamentTeams
+            var response = await context.TournamentTeams
                 .Where(tt => tt.Id == teamId)
                 .Select(tt => new TournamentTeamResponse
                 {
@@ -978,7 +973,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating team {TeamId} for tournament {TournamentId}", teamId, tournamentId);
+            logger.LogError(ex, "Error updating team {TeamId} for tournament {TournamentId}", teamId, tournamentId);
             return StatusCode(500, new { message = "Error updating team" });
         }
     }
@@ -996,28 +991,28 @@ public class AdminTournamentController(
             if (string.IsNullOrEmpty(userEmail))
                 return Unauthorized(new { message = "User email not found in token" });
 
-            var team = await _context.TournamentTeams
+            var team = await context.TournamentTeams
                 .Where(tt => tt.Id == teamId && tt.TournamentId == tournamentId && tt.Tournament.CreatedByUserEmail == userEmail)
                 .FirstOrDefaultAsync();
 
             if (team == null)
                 return NotFound(new { message = "Team not found" });
 
-            var matchesUsingTeam = await _context.TournamentMatches
+            var matchesUsingTeam = await context.TournamentMatches
                 .Where(tm => tm.Team1Id == teamId || tm.Team2Id == teamId)
                 .CountAsync();
 
             if (matchesUsingTeam > 0)
                 return BadRequest(new { message = "Cannot delete team that is used in matches" });
 
-            _context.TournamentTeams.Remove(team);
-            await _context.SaveChangesAsync();
+            context.TournamentTeams.Remove(team);
+            await context.SaveChangesAsync();
 
             return NoContent();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting team {TeamId} for tournament {TournamentId}", teamId, tournamentId);
+            logger.LogError(ex, "Error deleting team {TeamId} for tournament {TournamentId}", teamId, tournamentId);
             return StatusCode(500, new { message = "Error deleting team" });
         }
     }
@@ -1035,7 +1030,7 @@ public class AdminTournamentController(
             if (string.IsNullOrEmpty(userEmail))
                 return Unauthorized(new { message = "User email not found in token" });
 
-            var teamExists = await _context.TournamentTeams
+            var teamExists = await context.TournamentTeams
                 .Where(tt => tt.Id == teamId && tt.TournamentId == tournamentId && tt.Tournament.CreatedByUserEmail == userEmail)
                 .AnyAsync();
 
@@ -1045,18 +1040,18 @@ public class AdminTournamentController(
             if (string.IsNullOrWhiteSpace(request.PlayerName))
                 return BadRequest(new { message = "Player name is required" });
 
-            var player = await _context.Players.FirstOrDefaultAsync(p => p.Name == request.PlayerName);
+            var player = await context.Players.FirstOrDefaultAsync(p => p.Name == request.PlayerName);
             if (player == null)
                 return BadRequest(new { message = $"Player '{request.PlayerName}' not found" });
 
-            var existingTeamPlayer = await _context.TournamentTeamPlayers
+            var existingTeamPlayer = await context.TournamentTeamPlayers
                 .Where(ttp => ttp.TournamentTeamId == teamId && ttp.PlayerName == request.PlayerName)
                 .FirstOrDefaultAsync();
 
             if (existingTeamPlayer != null)
                 return BadRequest(new { message = $"Player '{request.PlayerName}' is already in this team" });
 
-            var playerInOtherTeam = await _context.TournamentTeamPlayers
+            var playerInOtherTeam = await context.TournamentTeamPlayers
                 .Where(ttp => ttp.PlayerName == request.PlayerName && ttp.TournamentTeam.TournamentId == tournamentId)
                 .AnyAsync();
 
@@ -1069,10 +1064,10 @@ public class AdminTournamentController(
                 PlayerName = request.PlayerName
             };
 
-            _context.TournamentTeamPlayers.Add(teamPlayer);
-            await _context.SaveChangesAsync();
+            context.TournamentTeamPlayers.Add(teamPlayer);
+            await context.SaveChangesAsync();
 
-            var response = await _context.TournamentTeams
+            var response = await context.TournamentTeams
                 .Where(tt => tt.Id == teamId)
                 .Select(tt => new TournamentTeamResponse
                 {
@@ -1090,7 +1085,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error adding player to team {TeamId} for tournament {TournamentId}", teamId, tournamentId);
+            logger.LogError(ex, "Error adding player to team {TeamId} for tournament {TournamentId}", teamId, tournamentId);
             return StatusCode(500, new { message = "Error adding player to team" });
         }
     }
@@ -1108,24 +1103,24 @@ public class AdminTournamentController(
             if (string.IsNullOrEmpty(userEmail))
                 return Unauthorized(new { message = "User email not found in token" });
 
-            var teamExists = await _context.TournamentTeams
+            var teamExists = await context.TournamentTeams
                 .Where(tt => tt.Id == teamId && tt.TournamentId == tournamentId && tt.Tournament.CreatedByUserEmail == userEmail)
                 .AnyAsync();
 
             if (!teamExists)
                 return NotFound(new { message = "Team not found" });
 
-            var teamPlayer = await _context.TournamentTeamPlayers
+            var teamPlayer = await context.TournamentTeamPlayers
                 .Where(ttp => ttp.TournamentTeamId == teamId && ttp.PlayerName == playerName)
                 .FirstOrDefaultAsync();
 
             if (teamPlayer == null)
                 return NotFound(new { message = $"Player '{playerName}' not found in this team" });
 
-            _context.TournamentTeamPlayers.Remove(teamPlayer);
-            await _context.SaveChangesAsync();
+            context.TournamentTeamPlayers.Remove(teamPlayer);
+            await context.SaveChangesAsync();
 
-            var response = await _context.TournamentTeams
+            var response = await context.TournamentTeams
                 .Where(tt => tt.Id == teamId)
                 .Select(tt => new TournamentTeamResponse
                 {
@@ -1143,7 +1138,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error removing player from team {TeamId} for tournament {TournamentId}", teamId, tournamentId);
+            logger.LogError(ex, "Error removing player from team {TeamId} for tournament {TournamentId}", teamId, tournamentId);
             return StatusCode(500, new { message = "Error removing player from team" });
         }
     }
@@ -1163,7 +1158,7 @@ public class AdminTournamentController(
             if (string.IsNullOrEmpty(userEmail))
                 return Unauthorized(new { message = "User email not found in token" });
 
-            var tournament = await _context.Tournaments
+            var tournament = await context.Tournaments
                 .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
                 .FirstOrDefaultAsync();
 
@@ -1184,7 +1179,7 @@ public class AdminTournamentController(
                 return BadRequest(new { message = "All map names must be non-empty" });
 
             var teamIds = new[] { request.Team1Id, request.Team2Id };
-            var teams = await _context.TournamentTeams
+            var teams = await context.TournamentTeams
                 .Where(tt => teamIds.Contains(tt.Id) && tt.TournamentId == tournamentId)
                 .Select(tt => new { tt.Id, tt.Name })
                 .ToListAsync();
@@ -1199,7 +1194,7 @@ public class AdminTournamentController(
             // Validate server if provided
             if (!string.IsNullOrWhiteSpace(request.ServerGuid))
             {
-                var serverExists = await _context.Servers.AnyAsync(s => s.Guid == request.ServerGuid);
+                var serverExists = await context.Servers.AnyAsync(s => s.Guid == request.ServerGuid);
                 if (!serverExists)
                     return BadRequest(new { message = $"Server with GUID '{request.ServerGuid}' not found" });
             }
@@ -1216,8 +1211,8 @@ public class AdminTournamentController(
                 CreatedAt = SystemClock.Instance.GetCurrentInstant()
             };
 
-            _context.TournamentMatches.Add(match);
-            await _context.SaveChangesAsync();
+            context.TournamentMatches.Add(match);
+            await context.SaveChangesAsync();
 
             // Create map entries
             var maps = request.MapNames.Select((mapName, index) => new TournamentMatchMap
@@ -1227,8 +1222,8 @@ public class AdminTournamentController(
                 MapOrder = index
             }).ToList();
 
-            _context.TournamentMatchMaps.AddRange(maps);
-            await _context.SaveChangesAsync();
+            context.TournamentMatchMaps.AddRange(maps);
+            await context.SaveChangesAsync();
 
             // Create response with team names from our batch query
             var team1Name = teams.First(t => t.Id == request.Team1Id).Name;
@@ -1264,7 +1259,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating match for tournament {TournamentId}", tournamentId);
+            logger.LogError(ex, "Error creating match for tournament {TournamentId}", tournamentId);
             return StatusCode(500, new { message = "Error creating match" });
         }
     }
@@ -1282,7 +1277,7 @@ public class AdminTournamentController(
             if (string.IsNullOrEmpty(userEmail))
                 return Unauthorized(new { message = "User email not found in token" });
 
-            var match = await _context.TournamentMatches
+            var match = await context.TournamentMatches
                 .Where(tm => tm.Id == matchId && tm.TournamentId == tournamentId && tm.Tournament.CreatedByUserEmail == userEmail)
                 .Select(tm => new TournamentMatchResponse
                 {
@@ -1326,7 +1321,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting match {MatchId} for tournament {TournamentId}", matchId, tournamentId);
+            logger.LogError(ex, "Error getting match {MatchId} for tournament {TournamentId}", matchId, tournamentId);
             return StatusCode(500, new { message = "Error retrieving match" });
         }
     }
@@ -1344,7 +1339,7 @@ public class AdminTournamentController(
             if (string.IsNullOrEmpty(userEmail))
                 return Unauthorized(new { message = "User email not found in token" });
 
-            var match = await _context.TournamentMatches
+            var match = await context.TournamentMatches
                 .Where(tm => tm.Id == matchId && tm.TournamentId == tournamentId && tm.Tournament.CreatedByUserEmail == userEmail)
                 .FirstOrDefaultAsync();
 
@@ -1368,7 +1363,7 @@ public class AdminTournamentController(
                 if (newTeam1Id == newTeam2Id)
                     return BadRequest(new { message = "Team 1 and Team 2 cannot be the same" });
 
-                var validTeams = await _context.TournamentTeams
+                var validTeams = await context.TournamentTeams
                     .Where(tt => teamUpdates.Contains(tt.Id) && tt.TournamentId == tournamentId)
                     .Select(tt => tt.Id)
                     .ToListAsync();
@@ -1387,7 +1382,7 @@ public class AdminTournamentController(
             {
                 if (!string.IsNullOrWhiteSpace(request.ServerGuid))
                 {
-                    var serverExists = await _context.Servers.AnyAsync(s => s.Guid == request.ServerGuid);
+                    var serverExists = await context.Servers.AnyAsync(s => s.Guid == request.ServerGuid);
                     if (!serverExists)
                         return BadRequest(new { message = $"Server with GUID '{request.ServerGuid}' not found" });
 
@@ -1416,7 +1411,7 @@ public class AdminTournamentController(
                     return BadRequest(new { message = "All map names must be non-empty" });
 
                 // Load existing maps WITH their MatchResults to ensure cascade delete works
-                var existingMaps = await _context.TournamentMatchMaps
+                var existingMaps = await context.TournamentMatchMaps
                     .Include(m => m.MatchResults)
                     .Where(tmm => tmm.MatchId == matchId)
                     .ToListAsync();
@@ -1439,12 +1434,12 @@ public class AdminTournamentController(
                 {
                     foreach (var matchResult in mapToRemove.MatchResults)
                     {
-                        _logger.LogInformation(
+                        logger.LogInformation(
                             "Deleting orphaned match result {ResultId} when removing map {MapId} from match {MatchId}",
                             matchResult.Id, mapToRemove.Id, matchId);
-                        _context.TournamentMatchResults.Remove(matchResult);
+                        context.TournamentMatchResults.Remove(matchResult);
                     }
-                    _context.TournamentMatchMaps.Remove(mapToRemove);
+                    context.TournamentMatchMaps.Remove(mapToRemove);
                 }
 
                 // Update existing maps that are being kept (preserve MatchResults)
@@ -1457,7 +1452,7 @@ public class AdminTournamentController(
                         // Update map order only if it changed
                         if (existingMap.MapOrder != newMapOrder)
                         {
-                            _logger.LogInformation(
+                            logger.LogInformation(
                                 "Updating map order for map {MapId} from {OldOrder} to {NewOrder}",
                                 existingMap.Id, existingMap.MapOrder, newMapOrder);
                             existingMap.MapOrder = newMapOrder;
@@ -1472,18 +1467,18 @@ public class AdminTournamentController(
                             MapName = mapName,
                             MapOrder = newMapOrder
                         };
-                        _logger.LogInformation(
+                        logger.LogInformation(
                             "Adding new map '{MapName}' at order {MapOrder} to match {MatchId}",
                             mapName, newMapOrder, matchId);
-                        _context.TournamentMatchMaps.Add(newMap);
+                        context.TournamentMatchMaps.Add(newMap);
                     }
                     newMapOrder++;
                 }
             }
 
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
 
-            var response = await _context.TournamentMatches
+            var response = await context.TournamentMatches
                 .Where(tm => tm.Id == matchId)
                 .Select(tm => new TournamentMatchResponse
                 {
@@ -1524,7 +1519,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating match {MatchId} for tournament {TournamentId}", matchId, tournamentId);
+            logger.LogError(ex, "Error updating match {MatchId} for tournament {TournamentId}", matchId, tournamentId);
             return StatusCode(500, new { message = "Error updating match" });
         }
     }
@@ -1548,14 +1543,14 @@ public class AdminTournamentController(
                 return Unauthorized(new { message = "User email not found in token" });
 
             // Verify the match belongs to this tournament and user owns it
-            var match = await _context.TournamentMatches
+            var match = await context.TournamentMatches
                 .Where(tm => tm.Id == matchId && tm.TournamentId == tournamentId && tm.Tournament.CreatedByUserEmail == userEmail)
                 .FirstOrDefaultAsync();
 
             if (match == null)
                 return NotFound(new { message = "Match not found" });
 
-            var map = await _context.TournamentMatchMaps
+            var map = await context.TournamentMatchMaps
                 .Where(tmm => tmm.Id == mapId && tmm.MatchId == matchId)
                 .FirstOrDefaultAsync();
 
@@ -1566,9 +1561,9 @@ public class AdminTournamentController(
             if (!string.IsNullOrWhiteSpace(request.MapName))
                 map.MapName = request.MapName;
 
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
 
-            var response = await _context.TournamentMatchMaps
+            var response = await context.TournamentMatchMaps
                 .Where(tmm => tmm.Id == mapId)
                 .Select(m => new TournamentMatchMapResponse
                 {
@@ -1596,7 +1591,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating map {MapId} for match {MatchId}", mapId, matchId);
+            logger.LogError(ex, "Error updating map {MapId} for match {MatchId}", mapId, matchId);
             return StatusCode(500, new { message = "Error updating map" });
         }
     }
@@ -1615,21 +1610,21 @@ public class AdminTournamentController(
             if (string.IsNullOrEmpty(userEmail))
                 return Unauthorized(new { message = "User email not found in token" });
 
-            var match = await _context.TournamentMatches
+            var match = await context.TournamentMatches
                 .Where(tm => tm.Id == matchId && tm.TournamentId == tournamentId && tm.Tournament.CreatedByUserEmail == userEmail)
                 .FirstOrDefaultAsync();
 
             if (match == null)
                 return NotFound(new { message = "Match not found" });
 
-            _context.TournamentMatches.Remove(match);
-            await _context.SaveChangesAsync();
+            context.TournamentMatches.Remove(match);
+            await context.SaveChangesAsync();
 
             return NoContent();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting match {MatchId} for tournament {TournamentId}", matchId, tournamentId);
+            logger.LogError(ex, "Error deleting match {MatchId} for tournament {TournamentId}", matchId, tournamentId);
             return StatusCode(500, new { message = "Error deleting match" });
         }
     }
@@ -1655,7 +1650,7 @@ public class AdminTournamentController(
                 return Unauthorized(new { message = "User email not found in token" });
 
             // Verify tournament belongs to user
-            var tournament = await _context.Tournaments
+            var tournament = await context.Tournaments
                 .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
                 .FirstOrDefaultAsync();
 
@@ -1663,7 +1658,7 @@ public class AdminTournamentController(
                 return NotFound(new { message = "Tournament not found" });
 
             // Verify match belongs to tournament
-            var match = await _context.TournamentMatches
+            var match = await context.TournamentMatches
                 .Where(tm => tm.Id == matchId && tm.TournamentId == tournamentId)
                 .FirstOrDefaultAsync();
 
@@ -1671,7 +1666,7 @@ public class AdminTournamentController(
                 return NotFound(new { message = "Match not found" });
 
             // Verify map belongs to match
-            var map = await _context.TournamentMatchMaps
+            var map = await context.TournamentMatchMaps
                 .Where(m => m.Id == mapId && m.MatchId == matchId)
                 .FirstOrDefaultAsync();
 
@@ -1692,7 +1687,7 @@ public class AdminTournamentController(
             if (hasTeam1 && hasTeam2)
             {
                 var teamIds = new[] { request.Team1Id!.Value, request.Team2Id!.Value };
-                var validTeams = await _context.TournamentTeams
+                var validTeams = await context.TournamentTeams
                     .Where(tt => teamIds.Contains(tt.Id) && tt.TournamentId == tournamentId)
                     .Select(tt => tt.Id)
                     .ToListAsync();
@@ -1707,7 +1702,7 @@ public class AdminTournamentController(
             var team1Id = hasTeam1 ? request.Team1Id : (int?)null;
             var team2Id = hasTeam2 ? request.Team2Id : (int?)null;
 
-            var (resultId, teamMappingWarning) = await _matchResultService.CreateOrUpdateManualMatchResultAsync(
+            var (resultId, teamMappingWarning) = await matchResultService.CreateOrUpdateManualMatchResultAsync(
                 tournamentId,
                 matchId,
                 mapId,
@@ -1718,20 +1713,20 @@ public class AdminTournamentController(
                 request.WinningTeamId,
                 request.RoundId);
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Created manual match result {ResultId} for tournament {TournamentId}, match {MatchId}, map {MapId}" +
                 (request.RoundId != null ? ", linked to round {RoundId}" : ""),
                 resultId, tournamentId, matchId, mapId, request.RoundId);
 
             if (teamMappingWarning != null)
             {
-                _logger.LogWarning(
+                logger.LogWarning(
                     "Team mapping warning for match result {ResultId}: {Warning}",
                     resultId, teamMappingWarning);
             }
 
             // Get the created/updated result before starting background task to avoid DbContext threading issues
-            var result = await _matchResultService.GetMatchResultAsync(resultId);
+            var result = await matchResultService.GetMatchResultAsync(resultId);
 
             // Trigger ranking recalculation asynchronously
             TriggerAsyncRankingRecalculation(tournamentId);
@@ -1763,12 +1758,12 @@ public class AdminTournamentController(
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Invalid operation when creating manual match result");
+            logger.LogWarning(ex, "Invalid operation when creating manual match result");
             return BadRequest(new { message = ex.Message });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating manual match result for tournament {TournamentId}, match {MatchId}", tournamentId, matchId);
+            logger.LogError(ex, "Error creating manual match result for tournament {TournamentId}, match {MatchId}", tournamentId, matchId);
             return StatusCode(500, new { message = "Error creating match result" });
         }
     }
@@ -1791,7 +1786,7 @@ public class AdminTournamentController(
                 return Unauthorized(new { message = "User email not found in token" });
 
             // Verify tournament belongs to user
-            var tournament = await _context.Tournaments
+            var tournament = await context.Tournaments
                 .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
                 .FirstOrDefaultAsync();
 
@@ -1799,7 +1794,7 @@ public class AdminTournamentController(
                 return NotFound(new { message = "Tournament not found" });
 
             // Get result and verify it belongs to the tournament
-            var result = await _context.TournamentMatchResults
+            var result = await context.TournamentMatchResults
                 .FirstOrDefaultAsync(r => r.Id == resultId && r.TournamentId == tournamentId);
 
             if (result == null)
@@ -1819,14 +1814,14 @@ public class AdminTournamentController(
                     return BadRequest(new { message = "Winning team must be one of the two teams in the match" });
             }
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Updating manual match result {ResultId} in tournament {TournamentId}",
                 resultId, tournamentId);
 
             // Override team mapping if teams differ from current
             if (result.Team1Id != request.Team1Id || result.Team2Id != request.Team2Id)
             {
-                await _matchResultService.OverrideTeamMappingAsync(resultId, request.Team1Id, request.Team2Id);
+                await matchResultService.OverrideTeamMappingAsync(resultId, request.Team1Id, request.Team2Id);
             }
 
             // Update scores and winning team
@@ -1842,11 +1837,11 @@ public class AdminTournamentController(
 
             result.UpdatedAt = SystemClock.Instance.GetCurrentInstant();
 
-            _context.TournamentMatchResults.Update(result);
-            await _context.SaveChangesAsync();
+            context.TournamentMatchResults.Update(result);
+            await context.SaveChangesAsync();
 
             // Get updated result before starting background task to avoid DbContext threading issues
-            var updatedResult = await _matchResultService.GetMatchResultAsync(resultId);
+            var updatedResult = await matchResultService.GetMatchResultAsync(resultId);
 
             // Trigger ranking recalculation asynchronously
             TriggerAsyncRankingRecalculation(tournamentId);
@@ -1873,7 +1868,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating manual match result {ResultId}", resultId);
+            logger.LogError(ex, "Error updating manual match result {ResultId}", resultId);
             return StatusCode(500, new { message = "Error updating match result" });
         }
     }
@@ -1895,7 +1890,7 @@ public class AdminTournamentController(
                 return Unauthorized(new { message = "User email not found in token" });
 
             // Verify tournament belongs to user
-            var tournament = await _context.Tournaments
+            var tournament = await context.Tournaments
                 .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
                 .FirstOrDefaultAsync();
 
@@ -1903,7 +1898,7 @@ public class AdminTournamentController(
                 return NotFound(new { message = "Tournament not found" });
 
             // Get result and verify it belongs to the tournament
-            var result = await _context.TournamentMatchResults
+            var result = await context.TournamentMatchResults
                 .FirstOrDefaultAsync(r => r.Id == resultId && r.TournamentId == tournamentId);
 
             if (result == null)
@@ -1914,18 +1909,18 @@ public class AdminTournamentController(
             // Validate round if provided
             if (!string.IsNullOrEmpty(request.RoundId))
             {
-                var roundExists = await _context.Rounds
+                var roundExists = await context.Rounds
                     .AnyAsync(r => r.RoundId == request.RoundId);
 
                 if (!roundExists)
                     return BadRequest(new { message = "Round not found" });
 
-                _logger.LogInformation(
+                logger.LogInformation(
                     "Updating round for match result {ResultId} in tournament {TournamentId} to {RoundId}",
                     resultId, tournamentId, request.RoundId);
 
                 // Use the service to link the round - this will auto-detect teams and populate scores
-                var (newResultId, warning) = await _matchResultService.CreateOrUpdateMatchResultAsync(
+                var (newResultId, warning) = await matchResultService.CreateOrUpdateMatchResultAsync(
                     tournamentId,
                     result.MatchId,
                     result.MapId,
@@ -1933,26 +1928,26 @@ public class AdminTournamentController(
 
                 if (warning != null)
                 {
-                    _logger.LogWarning("Team mapping warning when updating round: {Warning}", warning);
+                    logger.LogWarning("Team mapping warning when updating round: {Warning}", warning);
                     teamMappingWarning = warning;
                 }
             }
             else
             {
                 // Unlinking the round
-                _logger.LogInformation(
+                logger.LogInformation(
                     "Unlinking round for match result {ResultId} in tournament {TournamentId}",
                     resultId, tournamentId);
 
                 result.RoundId = null;
                 result.UpdatedAt = SystemClock.Instance.GetCurrentInstant();
 
-                _context.TournamentMatchResults.Update(result);
-                await _context.SaveChangesAsync();
+                context.TournamentMatchResults.Update(result);
+                await context.SaveChangesAsync();
             }
 
             // Return updated result
-            var updatedResult = await _matchResultService.GetMatchResultAsync(resultId);
+            var updatedResult = await matchResultService.GetMatchResultAsync(resultId);
             var response = new TournamentMatchResultAdminResponse
             {
                 Id = updatedResult!.Id,
@@ -1977,7 +1972,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating round for match result {ResultId}", resultId);
+            logger.LogError(ex, "Error updating round for match result {ResultId}", resultId);
             return StatusCode(500, new { message = "Error updating match result round" });
         }
     }
@@ -1996,7 +1991,7 @@ public class AdminTournamentController(
         try
         {
             // Verify tournament belongs to user
-            var tournament = await _context.Tournaments
+            var tournament = await context.Tournaments
                 .Where(t => t.CreatedByUserEmail == User.FindFirstValue(ClaimTypes.Email) && t.Id == tournamentId)
                 .FirstOrDefaultAsync();
 
@@ -2004,7 +1999,7 @@ public class AdminTournamentController(
                 return NotFound(new { message = "Tournament not found" });
 
             // Get rankings from database - Week == week OR (Week == null AND week == null) for cumulative
-            var rankings = await _context.TournamentTeamRankings
+            var rankings = await context.TournamentTeamRankings
                 .Where(r => r.TournamentId == tournamentId && r.Week == week)
                 .OrderBy(r => r.Rank)
                 .Select(r => new TournamentTeamRankingResponse
@@ -2031,7 +2026,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting leaderboard for tournament {TournamentId}, week {Week}", tournamentId, week);
+            logger.LogError(ex, "Error getting leaderboard for tournament {TournamentId}, week {Week}", tournamentId, week);
             return StatusCode(500, new { message = "Error retrieving leaderboard" });
         }
     }
@@ -2046,7 +2041,7 @@ public class AdminTournamentController(
         try
         {
             // Verify tournament belongs to user
-            var tournament = await _context.Tournaments
+            var tournament = await context.Tournaments
                 .Where(t => t.CreatedByUserEmail == User.FindFirstValue(ClaimTypes.Email) && t.Id == tournamentId)
                 .FirstOrDefaultAsync();
 
@@ -2054,34 +2049,34 @@ public class AdminTournamentController(
                 return NotFound(new { message = "Tournament not found" });
 
             // Get result and verify it belongs to the tournament
-            var result = await _context.TournamentMatchResults
+            var result = await context.TournamentMatchResults
                 .FirstOrDefaultAsync(r => r.Id == resultId && r.TournamentId == tournamentId);
 
             if (result == null)
                 return NotFound(new { message = "Match result not found" });
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Deleting match result {ResultId} from tournament {TournamentId}",
                 resultId, tournamentId);
 
-            await _matchResultService.DeleteMatchResultAsync(resultId);
+            await matchResultService.DeleteMatchResultAsync(resultId);
 
             // Trigger ranking recalculation asynchronously
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    _logger.LogInformation(
+                    logger.LogInformation(
                         "Starting async ranking recalculation after result deletion for tournament {TournamentId}",
                         tournamentId);
-                    await _rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
-                    _logger.LogInformation(
+                    await rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
+                    logger.LogInformation(
                         "Completed async ranking recalculation after result deletion for tournament {TournamentId}",
                         tournamentId);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex,
+                    logger.LogError(ex,
                         "Error during async ranking recalculation for tournament {TournamentId}",
                         tournamentId);
                 }
@@ -2091,7 +2086,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting match result {ResultId}", resultId);
+            logger.LogError(ex, "Error deleting match result {ResultId}", resultId);
             return StatusCode(500, new { message = "Error deleting match result" });
         }
     }
@@ -2116,7 +2111,7 @@ public class AdminTournamentController(
                 return Unauthorized(new { message = "User email not found in token" });
 
             // Verify tournament belongs to user
-            var tournament = await _context.Tournaments
+            var tournament = await context.Tournaments
                 .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
                 .FirstOrDefaultAsync();
 
@@ -2125,12 +2120,12 @@ public class AdminTournamentController(
 
             request ??= new RecalculateRankingsAdvancedRequest();
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Enhanced ranking recalculation triggered for tournament {TournamentId} with request: {Request}",
                 tournamentId, System.Text.Json.JsonSerializer.Serialize(request));
 
             // Load team names mapping
-            var teamNamesMap = await _context.TournamentTeams
+            var teamNamesMap = await context.TournamentTeams
                 .ToDictionaryAsync(t => t.Id, t => t.Name);
 
             var weeksToRecalculate = new List<string?>();
@@ -2140,7 +2135,7 @@ public class AdminTournamentController(
             {
                 // Single week recalculation
                 weeksToRecalculate.Add(request.Week);
-                _logger.LogInformation(
+                logger.LogInformation(
                     "Recalculating rankings for specific week: {Week}",
                     request.Week);
             }
@@ -2153,14 +2148,14 @@ public class AdminTournamentController(
 
                 if (!weeksFromStartingPoint.Any())
                 {
-                    _logger.LogWarning(
+                    logger.LogWarning(
                         "Requested FromWeek '{FromWeek}' not found in tournament {TournamentId}. Available weeks: {AvailableWeeks}",
                         request.FromWeek, tournamentId, string.Join(", ", allWeeks));
                     return BadRequest(new { message = $"Week '{request.FromWeek}' not found in tournament" });
                 }
 
                 weeksToRecalculate.AddRange(weeksFromStartingPoint);
-                _logger.LogInformation(
+                logger.LogInformation(
                     "Recalculating rankings from week '{FromWeek}' onwards. Weeks to recalculate: {Weeks}",
                     request.FromWeek, string.Join(", ", weeksToRecalculate));
             }
@@ -2168,7 +2163,7 @@ public class AdminTournamentController(
             {
                 // All weeks recalculation (default)
                 weeksToRecalculate.AddRange(allWeeks);
-                _logger.LogInformation(
+                logger.LogInformation(
                     "Recalculating rankings for all weeks: {Weeks}",
                     string.Join(", ", allWeeks));
             }
@@ -2205,15 +2200,15 @@ public class AdminTournamentController(
             }
 
             // Get cumulative rankings
-            var cumulativeRankingsList = await _rankingCalculator.CalculateRankingsAsync(tournamentId, null);
+            var cumulativeRankingsList = await rankingCalculator.CalculateRankingsAsync(tournamentId, null);
 
             // Save cumulative rankings to database
-            var oldCumulativeRankings = await _context.TournamentTeamRankings
+            var oldCumulativeRankings = await context.TournamentTeamRankings
                 .Where(r => r.TournamentId == tournamentId && r.Week == null)
                 .ToListAsync();
-            _context.TournamentTeamRankings.RemoveRange(oldCumulativeRankings);
-            await _context.TournamentTeamRankings.AddRangeAsync(cumulativeRankingsList);
-            await _context.SaveChangesAsync();
+            context.TournamentTeamRankings.RemoveRange(oldCumulativeRankings);
+            await context.TournamentTeamRankings.AddRangeAsync(cumulativeRankingsList);
+            await context.SaveChangesAsync();
 
             cumulativeRankings = cumulativeRankingsList
                 .OrderBy(r => r.Rank)
@@ -2226,16 +2221,16 @@ public class AdminTournamentController(
                 if (string.IsNullOrWhiteSpace(week))
                     continue;
 
-                var rankings = await _rankingCalculator.CalculateRankingsAsync(tournamentId, week);
+                var rankings = await rankingCalculator.CalculateRankingsAsync(tournamentId, week);
                 weeklyRankingsUpdated += rankings.Count;
 
                 // Save weekly rankings to database
-                var oldWeeklyRankings = await _context.TournamentTeamRankings
+                var oldWeeklyRankings = await context.TournamentTeamRankings
                     .Where(r => r.TournamentId == tournamentId && r.Week == week)
                     .ToListAsync();
-                _context.TournamentTeamRankings.RemoveRange(oldWeeklyRankings);
-                await _context.TournamentTeamRankings.AddRangeAsync(rankings);
-                await _context.SaveChangesAsync();
+                context.TournamentTeamRankings.RemoveRange(oldWeeklyRankings);
+                await context.TournamentTeamRankings.AddRangeAsync(rankings);
+                await context.SaveChangesAsync();
 
                 var response = rankings
                     .OrderBy(r => r.Rank)
@@ -2244,7 +2239,7 @@ public class AdminTournamentController(
 
                 updatedRankingsByWeek[week] = response;
 
-                _logger.LogInformation(
+                logger.LogInformation(
                     "Updated {Count} rankings for tournament {TournamentId}, week \"{Week}\"",
                     rankings.Count, tournamentId, week);
             }
@@ -2263,7 +2258,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error recalculating rankings for tournament {TournamentId}", tournamentId);
+            logger.LogError(ex, "Error recalculating rankings for tournament {TournamentId}", tournamentId);
             return StatusCode(500, new { message = "Error recalculating rankings" });
         }
     }
@@ -2274,7 +2269,7 @@ public class AdminTournamentController(
     private async Task<(List<string?>, int)> GetAllWeeksAndRecalculateCumulativeAsync(int tournamentId)
     {
         // Get all distinct weeks from match results
-        var weeks = await _context.TournamentMatchResults
+        var weeks = await context.TournamentMatchResults
             .Where(mr => mr.TournamentId == tournamentId && mr.Week != null)
             .Select(mr => mr.Week)
             .Distinct()
@@ -2282,9 +2277,9 @@ public class AdminTournamentController(
             .ToListAsync();
 
         // Always recalculate cumulative rankings (week = null)
-        var cumulativeRankings = await _rankingCalculator.CalculateRankingsAsync(tournamentId, null);
+        var cumulativeRankings = await rankingCalculator.CalculateRankingsAsync(tournamentId, null);
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Recalculated cumulative rankings for tournament {TournamentId}: {Count} rankings",
             tournamentId, cumulativeRankings.Count);
 
@@ -2307,14 +2302,14 @@ public class AdminTournamentController(
                 return Unauthorized(new { message = "User email not found in token" });
 
             // Verify tournament belongs to user
-            var tournament = await _context.Tournaments
+            var tournament = await context.Tournaments
                 .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
                 .FirstOrDefaultAsync();
 
             if (tournament == null)
                 return NotFound(new { message = "Tournament not found" });
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Manual cleanup of orphaned match results triggered for tournament {TournamentId}",
                 tournamentId);
 
@@ -2322,12 +2317,12 @@ public class AdminTournamentController(
 
             if (orphanedCount > 0)
             {
-                _logger.LogInformation(
+                logger.LogInformation(
                     "Cleaned up {Count} orphaned match results from tournament {TournamentId}. Recalculating rankings...",
                     orphanedCount, tournamentId);
 
                 // Recalculate rankings after cleanup
-                await _rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
+                await rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
             }
 
             return Ok(new CleanupOrphanedResultsResponse
@@ -2339,7 +2334,7 @@ public class AdminTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error cleaning up orphaned results for tournament {TournamentId}", tournamentId);
+            logger.LogError(ex, "Error cleaning up orphaned results for tournament {TournamentId}", tournamentId);
             return StatusCode(500, new { message = "Error cleaning up orphaned results" });
         }
     }

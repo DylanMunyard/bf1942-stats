@@ -6,8 +6,6 @@ namespace api.ClickHouse;
 
 public class PlayersOnlineHistoryService(IClickHouseReader clickHouseReader, ILogger<PlayersOnlineHistoryService> logger)
 {
-    private readonly IClickHouseReader _clickHouseReader = clickHouseReader;
-    private readonly ILogger<PlayersOnlineHistoryService> _logger = logger;
 
     public async Task<PlayersOnlineHistoryResponse> GetPlayersOnlineHistory(string game, string period, int rollingWindowDays, string? serverGuid = null)
     {
@@ -55,7 +53,7 @@ GROUP BY time_bucket
 ORDER BY time_bucket
 FORMAT TabSeparated";
 
-        var result = await _clickHouseReader.ExecuteQueryAsync(query);
+        var result = await clickHouseReader.ExecuteQueryAsync(query);
         var dataPoints = new List<PlayersOnlineDataPoint>();
 
         foreach (var line in result?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? [])

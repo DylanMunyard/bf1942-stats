@@ -11,10 +11,6 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
     PlayerRoundsReadService playerRoundsReadService,
     ILogger<PlayerStatsService> logger) : IPlayerStatsService
 {
-    private readonly PlayerTrackerDbContext _dbContext = dbContext;
-    private readonly PlayerInsightsService _playerInsightsService = playerInsightsService;
-    private readonly PlayerRoundsReadService _playerRoundsReadService = playerRoundsReadService;
-    private readonly ILogger<PlayerStatsService> _logger = logger;
 
     // Define a threshold for considering a player "active" (e.g., 5 minutes)
     private readonly TimeSpan _activeThreshold = TimeSpan.FromMinutes(1);
@@ -26,7 +22,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         string sortOrder,
         PlayerFilters? filters = null)
     {
-        var baseQuery = _dbContext.Players.Where(p => !p.AiBot);
+        var baseQuery = dbContext.Players.Where(p => !p.AiBot);
 
         // Apply filters at the database level first
         if (filters != null)
@@ -162,7 +158,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
     public async Task<PlayerTimeStatistics> GetPlayerStatistics(string playerName)
     {
         // First check if the player exists
-        var player = await _dbContext.Players
+        var player = await dbContext.Players
             .FirstOrDefaultAsync(p => p.Name == playerName);
 
         if (player == null)
@@ -173,7 +169,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         // Execute all independent queries in parallel for better performance
         var clickHouseStatsTask = GetPlayerStatsFromClickHouse(playerName);
 
-        var sessionStatsTask = _dbContext.PlayerSessions
+        var sessionStatsTask = dbContext.PlayerSessions
             .Where(ps => ps.PlayerName == playerName)
             .GroupBy(ps => ps.PlayerName)
             .Select(g => new
@@ -183,7 +179,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             })
             .FirstOrDefaultAsync();
 
-        var recentSessionsTask = _dbContext.PlayerSessions
+        var recentSessionsTask = dbContext.PlayerSessions
             .Where(ps => ps.PlayerName == playerName)
             .OrderByDescending(s => s.LastSeenTime)
             .Include(s => s.Server)
@@ -212,7 +208,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         {
             try
             {
-                return await _playerInsightsService.GetPlayerServerInsightsAsync(playerName);
+                return await playerInsightsService.GetPlayerServerInsightsAsync(playerName);
             }
             catch (Exception)
             {
@@ -226,11 +222,11 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         {
             try
             {
-                return await _playerRoundsReadService.GetPlayerBestScoresAsync(playerName);
+                return await playerRoundsReadService.GetPlayerBestScoresAsync(playerName);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to get best scores for player: {PlayerName}", playerName);
+                logger.LogWarning(ex, "Failed to get best scores for player: {PlayerName}", playerName);
                 return new PlayerBestScores();
             }
         });
@@ -265,7 +261,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         if (serverInsights.Any())
         {
             var serverGuids = serverInsights.Select(si => si.ServerGuid).ToList();
-            var servers = await _dbContext.Servers
+            var servers = await dbContext.Servers
                 .Where(s => serverGuids.Contains(s.Guid))
                 .Select(s => new { s.Guid, s.Name, s.GameId })
                 .ToListAsync();
@@ -323,7 +319,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
 
     public async Task<SessionDetail?> GetSession(string playerName, int sessionId)
     {
-        var session = await _dbContext.PlayerSessions
+        var session = await dbContext.PlayerSessions
             .Where(s => s.SessionId == sessionId && s.PlayerName == playerName)
             .Include(s => s.Player)
             .Include(s => s.Server)
@@ -413,7 +409,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         }
 
         // Check if the player exists
-        var player = await _dbContext.Players
+        var player = await dbContext.Players
             .FirstOrDefaultAsync(p => p.Name == playerName);
 
         if (player == null)
@@ -445,7 +441,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
     {
         try
         {
-            var result = await _playerRoundsReadService.GetPlayerStatsAsync(playerName);
+            var result = await playerRoundsReadService.GetPlayerStatsAsync(playerName);
 
             // Parse the tab-separated results
             // Expected format: player_name	total_rounds	total_kills	total_deaths	total_play_time_minutes	avg_score_per_round	kd_ratio
@@ -473,7 +469,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         catch (Exception)
         {
             // Log error but don't fail the request
-            // _logger?.LogError(ex, "Failed to get player stats from ClickHouse for player: {PlayerName}", playerName);
+            // logger?.LogError(ex, "Failed to get player stats from ClickHouse for player: {PlayerName}", playerName);
         }
 
         return null;
@@ -483,22 +479,22 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
     {
         try
         {
-            _logger.LogDebug("Calculating time series trend data for player: {PlayerName}", playerName);
+            logger.LogDebug("Calculating time series trend data for player: {PlayerName}", playerName);
 
             // Look back 6 months for trend analysis
             var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
 
             // Get time series data from ClickHouse
-            var timeSeriesResult = await _playerRoundsReadService.GetPlayerTimeSeriesTrendAsync(playerName, sixMonthsAgo);
+            var timeSeriesResult = await playerRoundsReadService.GetPlayerTimeSeriesTrendAsync(playerName, sixMonthsAgo);
 
-            _logger.LogDebug("ClickHouse time series result for {PlayerName}: {Result}", playerName,
+            logger.LogDebug("ClickHouse time series result for {PlayerName}: {Result}", playerName,
                 timeSeriesResult?.Substring(0, Math.Min(200, timeSeriesResult?.Length ?? 0)));
 
             // Parse time series data
             var trendPoints = ParseTimeSeriesData(timeSeriesResult ?? "");
             if (!trendPoints.Any())
             {
-                _logger.LogWarning("No time series data found for player: {PlayerName}. Raw result: {RawResult}",
+                logger.LogWarning("No time series data found for player: {PlayerName}. Raw result: {RawResult}",
                     playerName, timeSeriesResult);
                 return null;
             }
@@ -527,7 +523,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to calculate time series trend for player: {PlayerName}", playerName);
+            logger.LogError(ex, "Failed to calculate time series trend for player: {PlayerName}", playerName);
             return null;
         }
     }
@@ -536,7 +532,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
     {
         try
         {
-            var countResult = await _playerRoundsReadService.ExecuteQueryAsync($@"
+            var countResult = await playerRoundsReadService.ExecuteQueryAsync($@"
                 SELECT COUNT(*) as round_count
                 FROM player_rounds
                 WHERE player_name = '{playerName.Replace("'", "''")}'
@@ -551,7 +547,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to get round count for player: {PlayerName}", playerName);
+            logger.LogWarning(ex, "Failed to get round count for player: {PlayerName}", playerName);
         }
 
         return 0;
@@ -563,12 +559,12 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
 
         if (string.IsNullOrWhiteSpace(result))
         {
-            _logger.LogWarning("Empty or null time series result from ClickHouse");
+            logger.LogWarning("Empty or null time series result from ClickHouse");
             return points;
         }
 
         var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        _logger.LogDebug("Parsing {LineCount} lines of time series data", lines.Length);
+        logger.LogDebug("Parsing {LineCount} lines of time series data", lines.Length);
 
         // Skip header row
         var dataLines = lines.Skip(1);
@@ -589,23 +585,23 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                 }
                 else
                 {
-                    _logger.LogWarning("Invalid time series line format (expected 3+ parts, got {PartCount}): {Line}", parts.Length, line);
+                    logger.LogWarning("Invalid time series line format (expected 3+ parts, got {PartCount}): {Line}", parts.Length, line);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to parse time series line: {Line}", line);
+                logger.LogWarning(ex, "Failed to parse time series line: {Line}", line);
             }
         }
 
-        _logger.LogDebug("Successfully parsed {PointCount} time series points", points.Count);
+        logger.LogDebug("Successfully parsed {PointCount} time series points", points.Count);
         return points;
     }
 
     private async Task<List<ServerRanking>> GetServerRankingsWithPing(string playerName)
     {
         // First, get the player's server stats efficiently
-        var playerServerStats = await _dbContext.ServerPlayerRankings
+        var playerServerStats = await dbContext.ServerPlayerRankings
             .Where(r => r.PlayerName == playerName)
             .GroupBy(r => r.ServerGuid)
             .Select(g => new
@@ -620,7 +616,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
 
         // Get server names separately
         var serverGuids = playerServerStats.Select(s => s.ServerGuid).ToList();
-        var servers = await _dbContext.Servers
+        var servers = await dbContext.Servers
             .Where(s => serverGuids.Contains(s.Guid))
             .ToDictionaryAsync(s => s.Guid, s => s.Name);
 
@@ -645,7 +641,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                      FROM ServerPlayerRankings
                      WHERE ServerGuid = @serverGuid) as TotalPlayers";
 
-            var rankingResult = await _dbContext.Database
+            var rankingResult = await dbContext.Database
                 .SqlQueryRaw<RankingResult>(rankingSql,
                     new Microsoft.Data.Sqlite.SqliteParameter("@serverGuid", serverStat.ServerGuid),
                     new Microsoft.Data.Sqlite.SqliteParameter("@playerScore", serverStat.TotalScore))
@@ -689,7 +685,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                     AND round_start_time >= now() - INTERVAL 6 MONTH
                 GROUP BY server_guid";
 
-            var result = await _playerRoundsReadService.ExecuteQueryAsync(query);
+            var result = await playerRoundsReadService.ExecuteQueryAsync(query);
             var pingResults = new List<ClickHousePingResult>();
 
             foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
@@ -711,7 +707,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to get ping data from ClickHouse for player {PlayerName}", playerName);
+            logger.LogWarning(ex, "Failed to get ping data from ClickHouse for player {PlayerName}", playerName);
             return new Dictionary<string, double>();
         }
     }
@@ -781,7 +777,7 @@ GROUP BY hour
 ORDER BY total_minutes DESC
 FORMAT TabSeparated";
 
-            var result = await _playerInsightsService.ExecuteQueryAsync(query);
+            var result = await playerInsightsService.ExecuteQueryAsync(query);
             var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
             var hourlyActivity = new List<HourlyActivity>();
@@ -815,7 +811,7 @@ FORMAT TabSeparated";
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to get activity by hour from ClickHouse for player {PlayerName}, falling back to SQLite calculation", playerName);
+            logger.LogWarning(ex, "Failed to get activity by hour from ClickHouse for player {PlayerName}, falling back to SQLite calculation", playerName);
 
             // Fallback to original SQLite-based calculation if ClickHouse fails
             return await GetActivityByHourFromSessions(playerName, startPeriod, endPeriod);
@@ -825,7 +821,7 @@ FORMAT TabSeparated";
     private async Task<List<HourlyActivity>> GetActivityByHourFromSessions(string playerName, DateTime startPeriod, DateTime endPeriod)
     {
         // Fallback method using the original SQLite-based calculation
-        var sessions = await _dbContext.PlayerSessions
+        var sessions = await dbContext.PlayerSessions
             .Where(ps => ps.PlayerName == playerName && ps.StartTime >= startPeriod && ps.LastSeenTime <= endPeriod)
             .ToListAsync();
 

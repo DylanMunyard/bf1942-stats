@@ -4,8 +4,6 @@ namespace api.Data.Migrations;
 
 public class BackfillController(RoundBackfillService backfillService, ILogger<BackfillController> logger)
 {
-    private readonly RoundBackfillService _backfillService = backfillService;
-    private readonly ILogger<BackfillController> _logger = logger;
 
     public class BackfillRequest
     {
@@ -32,8 +30,8 @@ public class BackfillController(RoundBackfillService backfillService, ILogger<Ba
     public async Task<BackfillResponse> BackfillRounds(BackfillRequest request, CancellationToken cancellationToken)
     {
         var started = DateTime.UtcNow;
-        _logger.LogInformation("Backfill request started: server={ServerGuid} from={From} to={To}", request.ServerGuid ?? "ALL", request.FromUtc, request.ToUtc);
-        var count = await _backfillService.BackfillRoundsAsync(request.FromUtc, request.ToUtc, request.ServerGuid, request.MarkLatestPerServerActive, cancellationToken);
+        logger.LogInformation("Backfill request started: server={ServerGuid} from={From} to={To}", request.ServerGuid ?? "ALL", request.FromUtc, request.ToUtc);
+        var count = await backfillService.BackfillRoundsAsync(request.FromUtc, request.ToUtc, request.ServerGuid, request.MarkLatestPerServerActive, cancellationToken);
         var ended = DateTime.UtcNow;
         var response = new BackfillResponse
         {
@@ -44,7 +42,7 @@ public class BackfillController(RoundBackfillService backfillService, ILogger<Ba
             ExecutedAtUtc = ended,
             DurationMs = (long)(ended - started).TotalMilliseconds
         };
-        _logger.LogInformation("Backfill completed: upserted={Count} durationMs={DurationMs}", response.UpsertedRounds, response.DurationMs);
+        logger.LogInformation("Backfill completed: upserted={Count} durationMs={DurationMs}", response.UpsertedRounds, response.DurationMs);
         return response;
     }
 }

@@ -19,12 +19,6 @@ public class AppController(
     IClickHouseReader clickHouseReader,
     PlayerTrackerDbContext dbContext) : ControllerBase
 {
-    private readonly IBadgeDefinitionsService _badgeDefinitionsService = badgeDefinitionsService;
-    private readonly IGameTrendsService _gameTrendsService = gameTrendsService;
-    private readonly ICacheService _cacheService = cacheService;
-    private readonly ILogger<AppController> _logger = logger;
-    private readonly IClickHouseReader _clickHouseReader = clickHouseReader;
-    private readonly PlayerTrackerDbContext _dbContext = dbContext;
 
     /// <summary>
     /// Get initial data required by the UI on page load, heavily cached for performance
@@ -38,15 +32,15 @@ public class AppController(
         try
         {
             // Try to get from cache first
-            var cachedData = await _cacheService.GetAsync<AppInitialData>(cacheKey);
+            var cachedData = await cacheService.GetAsync<AppInitialData>(cacheKey);
             if (cachedData != null)
             {
-                _logger.LogDebug("Returning cached initial data");
+                logger.LogDebug("Returning cached initial data");
                 return Ok(cachedData);
             }
 
             // Generate fresh data
-            var badgeDefinitions = _badgeDefinitionsService.GetAllBadges();
+            var badgeDefinitions = badgeDefinitionsService.GetAllBadges();
 
             var initialData = new AppInitialData
             {
@@ -78,15 +72,15 @@ public class AppController(
             };
 
             // Cache for 1 hour - static data doesn't change often
-            await _cacheService.SetAsync(cacheKey, initialData, TimeSpan.FromHours(1));
+            await cacheService.SetAsync(cacheKey, initialData, TimeSpan.FromHours(1));
 
-            _logger.LogInformation("Generated and cached fresh initial data with {BadgeCount} badges", badgeDefinitions.Count);
+            logger.LogInformation("Generated and cached fresh initial data with {BadgeCount} badges", badgeDefinitions.Count);
 
             return Ok(initialData);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error generating initial data");
+            logger.LogError(ex, "Error generating initial data");
             return StatusCode(500, "An internal server error occurred while retrieving initial data.");
         }
     }
@@ -103,15 +97,15 @@ public class AppController(
         try
         {
             // Try to get from cache first
-            var cachedData = await _cacheService.GetAsync<LandingPageData>(cacheKey);
+            var cachedData = await cacheService.GetAsync<LandingPageData>(cacheKey);
             if (cachedData != null)
             {
-                _logger.LogDebug("Returning cached landing page data");
+                logger.LogDebug("Returning cached landing page data");
                 return Ok(cachedData);
             }
 
             // Generate fresh data - fetch trends and badges in parallel
-            var badgeDefinitionsTask = Task.FromResult(_badgeDefinitionsService.GetAllBadges());
+            var badgeDefinitionsTask = Task.FromResult(badgeDefinitionsService.GetAllBadges());
 
             await Task.WhenAll(badgeDefinitionsTask);
 
@@ -145,16 +139,16 @@ public class AppController(
             };
 
             // Cache for 10 minutes - landing page data should be fresh but not too frequent
-            await _cacheService.SetAsync(cacheKey, landingData, TimeSpan.FromMinutes(10));
+            await cacheService.SetAsync(cacheKey, landingData, TimeSpan.FromMinutes(10));
 
-            _logger.LogInformation("Generated and cached fresh landing page data with {BadgeCount} badges and trend data",
+            logger.LogInformation("Generated and cached fresh landing page data with {BadgeCount} badges and trend data",
                 badgeDefinitionsTask.Result.Count);
 
             return Ok(landingData);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error generating landing page data");
+            logger.LogError(ex, "Error generating landing page data");
             return StatusCode(500, "An internal server error occurred while retrieving landing page data.");
         }
     }
@@ -171,18 +165,18 @@ public class AppController(
         try
         {
             // Try to get from cache first (5 minute cache)
-            var cachedData = await _cacheService.GetAsync<SystemStats>(cacheKey);
+            var cachedData = await cacheService.GetAsync<SystemStats>(cacheKey);
             if (cachedData != null)
             {
-                _logger.LogDebug("Returning cached system stats");
+                logger.LogDebug("Returning cached system stats");
                 return Ok(cachedData);
             }
 
             // Execute all count queries in parallel for maximum performance
             var roundsCountTask = GetClickHouseCountAsync("player_rounds", "Rounds Tracked");
             var metricsCountTask = GetClickHouseCountAsync("player_metrics", "Player Metrics Tracked");
-            var serversCountTask = _dbContext.Servers.CountAsync();
-            var playersCountTask = _dbContext.Players.CountAsync();
+            var serversCountTask = dbContext.Servers.CountAsync();
+            var playersCountTask = dbContext.Players.CountAsync();
 
             await Task.WhenAll(roundsCountTask, metricsCountTask, serversCountTask, playersCountTask);
 
@@ -202,9 +196,9 @@ public class AppController(
             };
 
             // Cache for 5 minutes - good balance between freshness and performance
-            await _cacheService.SetAsync(cacheKey, stats, TimeSpan.FromMinutes(5));
+            await cacheService.SetAsync(cacheKey, stats, TimeSpan.FromMinutes(5));
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Generated system stats: {RoundsCount} rounds, {MetricsCount} metrics, {ServersCount} servers, {PlayersCount} players",
                 stats.ClickHouseMetrics.RoundsTracked,
                 stats.ClickHouseMetrics.PlayerMetricsTracked,
@@ -215,7 +209,7 @@ public class AppController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error generating system stats");
+            logger.LogError(ex, "Error generating system stats");
             return StatusCode(500, "An internal server error occurred while retrieving system statistics.");
         }
     }
@@ -228,7 +222,7 @@ public class AppController(
         try
         {
             var query = $"SELECT COUNT(*) FROM {tableName}";
-            var result = await _clickHouseReader.ExecuteQueryAsync(query);
+            var result = await clickHouseReader.ExecuteQueryAsync(query);
 
             // ClickHouse returns the count as a plain number in the response
             if (long.TryParse(result.Trim(), out var count))
@@ -236,12 +230,12 @@ public class AppController(
                 return count;
             }
 
-            _logger.LogWarning("Failed to parse ClickHouse count for {Table}: {Result}", tableName, result);
+            logger.LogWarning("Failed to parse ClickHouse count for {Table}: {Result}", tableName, result);
             return 0;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting count from ClickHouse table {Table}", tableName);
+            logger.LogError(ex, "Error getting count from ClickHouse table {Table}", tableName);
             return 0;
         }
     }

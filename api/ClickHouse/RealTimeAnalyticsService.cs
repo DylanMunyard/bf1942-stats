@@ -6,7 +6,6 @@ namespace api.ClickHouse;
 
 public class RealTimeAnalyticsService(ILogger<RealTimeAnalyticsService> logger) : IDisposable
 {
-    private readonly ILogger<RealTimeAnalyticsService> _logger = logger;
     private readonly ClickHouseConnection _connection = InitializeConnection(logger);
     private bool _disposed;
 
@@ -234,7 +233,7 @@ ORDER BY total_penalties_last_10min DESC, unexplained_drops_last_10min DESC";
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving teamkiller data");
+            logger.LogError(ex, "Error retrieving teamkiller data");
             throw;
         }
     }

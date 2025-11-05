@@ -7,7 +7,6 @@ namespace api.StatsCollectors;
 
 public class RankingCalculationService(IServiceProvider services) : BackgroundService
 {
-    private readonly IServiceProvider _services = services;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -16,7 +15,7 @@ public class RankingCalculationService(IServiceProvider services) : BackgroundSe
             await Task.Delay(TimeSpan.FromHours(1), stoppingToken);
             try
             {
-                using var scope = _services.CreateScope();
+                using var scope = services.CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
 
                 await CalculateRankingsForAllServers(dbContext);

@@ -19,12 +19,6 @@ public class AuthController(
     IRefreshTokenService refreshTokenService,
     IConfiguration configuration) : ControllerBase
 {
-    private readonly PlayerTrackerDbContext _context = context;
-    private readonly IDiscordAuthService _discordAuthService = discordAuthService;
-    private readonly ILogger<AuthController> _logger = logger;
-    private readonly ITokenService _tokenService = tokenService;
-    private readonly IRefreshTokenService _refreshTokenService = refreshTokenService;
-    private readonly IConfiguration _configuration = configuration;
 
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
@@ -37,7 +31,7 @@ public class AuthController(
 
             if (!string.IsNullOrEmpty(request.DiscordCode) && !string.IsNullOrEmpty(request.RedirectUri))
             {
-                var discordPayload = await _discordAuthService.ExchangeCodeForUserAsync(request.DiscordCode, request.RedirectUri, ipAddress);
+                var discordPayload = await discordAuthService.ExchangeCodeForUserAsync(request.DiscordCode, request.RedirectUri, ipAddress);
                 email = discordPayload.Email;
                 name = discordPayload.Username;
             }
@@ -48,9 +42,9 @@ public class AuthController(
 
             var user = await CreateOrUpdateUserAsync(email, name);
 
-            var (accessToken, expiresAt) = _tokenService.CreateAccessToken(user);
-            var (rawRefresh, rtEntity) = await _refreshTokenService.CreateAsync(user, ipAddress, Request.Headers.UserAgent.ToString());
-            _refreshTokenService.SetCookie(Response, rawRefresh, rtEntity.ExpiresAt);
+            var (accessToken, expiresAt) = tokenService.CreateAccessToken(user);
+            var (rawRefresh, rtEntity) = await refreshTokenService.CreateAsync(user, ipAddress, Request.Headers.UserAgent.ToString());
+            refreshTokenService.SetCookie(Response, rawRefresh, rtEntity.ExpiresAt);
 
             return Ok(new LoginResponse
             {
@@ -61,12 +55,12 @@ public class AuthController(
         }
         catch (UnauthorizedAccessException ex)
         {
-            _logger.LogWarning(ex, "Authentication failed");
+            logger.LogWarning(ex, "Authentication failed");
             return Unauthorized(new { message = "Invalid authentication credentials" });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Login error");
+            logger.LogError(ex, "Login error");
             return StatusCode(500, new { message = "Login failed" });
         }
     }
@@ -77,14 +71,14 @@ public class AuthController(
         try
         {
             EnforceCsrfForCookieEndpoints();
-            var raw = Request.Cookies[_configuration["RefreshToken:CookieName"] ?? "rt"];
+            var raw = Request.Cookies[configuration["RefreshToken:CookieName"] ?? "rt"];
             if (string.IsNullOrEmpty(raw)) return Unauthorized(new { message = "Missing refresh token" });
 
-            var (token, user) = await _refreshTokenService.ValidateAsync(raw);
-            var (newRaw, newEntity) = await _refreshTokenService.RotateAsync(token, GetClientIpAddress(), Request.Headers.UserAgent.ToString());
-            _refreshTokenService.SetCookie(Response, newRaw, newEntity.ExpiresAt);
+            var (token, user) = await refreshTokenService.ValidateAsync(raw);
+            var (newRaw, newEntity) = await refreshTokenService.RotateAsync(token, GetClientIpAddress(), Request.Headers.UserAgent.ToString());
+            refreshTokenService.SetCookie(Response, newRaw, newEntity.ExpiresAt);
 
-            var (accessToken, expiresAt) = _tokenService.CreateAccessToken(user);
+            var (accessToken, expiresAt) = tokenService.CreateAccessToken(user);
             return Ok(new { accessToken, expiresAt });
         }
         catch (UnauthorizedAccessException)
@@ -93,7 +87,7 @@ public class AuthController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Refresh error");
+            logger.LogError(ex, "Refresh error");
             return StatusCode(500, new { message = "Refresh failed" });
         }
     }
@@ -104,22 +98,22 @@ public class AuthController(
         try
         {
             EnforceCsrfForCookieEndpoints();
-            var raw = Request.Cookies[_configuration["RefreshToken:CookieName"] ?? "rt"];
+            var raw = Request.Cookies[configuration["RefreshToken:CookieName"] ?? "rt"];
             if (!string.IsNullOrEmpty(raw))
             {
                 try
                 {
-                    var (token, _) = await _refreshTokenService.ValidateAsync(raw);
-                    await _refreshTokenService.RevokeFamilyAsync(token);
+                    var (token, _) = await refreshTokenService.ValidateAsync(raw);
+                    await refreshTokenService.RevokeFamilyAsync(token);
                 }
                 catch { /* ignore */ }
             }
-            _refreshTokenService.ClearCookie(Response);
+            refreshTokenService.ClearCookie(Response);
             return NoContent();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Logout error");
+            logger.LogError(ex, "Logout error");
             return StatusCode(500);
         }
     }
@@ -132,7 +126,7 @@ public class AuthController(
         var email = User.FindFirstValue(ClaimTypes.Email);
         if (string.IsNullOrEmpty(userId)) return Unauthorized();
         var id = int.Parse(userId);
-        var user = _context.Users.FirstOrDefault(u => u.Id == id);
+        var user = context.Users.FirstOrDefault(u => u.Id == id);
         if (user == null) return NotFound();
         return Ok(new { user = new UserDto { Id = user.Id, Email = user.Email, Name = email ?? user.Email } });
     }
@@ -144,14 +138,14 @@ public class AuthController(
         if (string.IsNullOrEmpty(userId) || !int.TryParse(userId, out var id))
             return null;
 
-        return await _context.Users.FirstOrDefaultAsync(u => u.Id == id);
+        return await context.Users.FirstOrDefaultAsync(u => u.Id == id);
     }
 
     private void EnforceCsrfForCookieEndpoints()
     {
         var origin = Request.Headers["Origin"].FirstOrDefault();
         var referer = Request.Headers["Referer"].FirstOrDefault();
-        var allowedOrigin = _configuration["Cors:AllowedOrigins"];
+        var allowedOrigin = configuration["Cors:AllowedOrigins"];
         if (!string.IsNullOrEmpty(allowedOrigin))
         {
             if (!string.Equals(origin, allowedOrigin, StringComparison.OrdinalIgnoreCase) &&
@@ -173,7 +167,7 @@ public class AuthController(
             if (user == null)
                 return StatusCode(500, new { message = "User not found" });
 
-            var userWithData = await _context.Users
+            var userWithData = await context.Users
                 .Include(u => u.PlayerNames)
                     .ThenInclude(pn => pn.Player)
                 .Include(u => u.FavoriteServers)
@@ -217,7 +211,7 @@ public class AuthController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving user profile");
+            logger.LogError(ex, "Error retrieving user profile");
             return StatusCode(500, new { message = "Error retrieving profile" });
         }
     }
@@ -233,7 +227,7 @@ public class AuthController(
             if (user == null)
                 return StatusCode(500, new { message = "User not found" });
 
-            var userPlayerNames = await _context.UserPlayerNames
+            var userPlayerNames = await context.UserPlayerNames
                 .Include(upn => upn.Player)
                 .Where(upn => upn.UserId == user.Id)
                 .OrderBy(upn => upn.CreatedAt)
@@ -251,7 +245,7 @@ public class AuthController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving player names");
+            logger.LogError(ex, "Error retrieving player names");
             return StatusCode(500, new { message = "Error retrieving player names" });
         }
     }
@@ -269,7 +263,7 @@ public class AuthController(
             if (string.IsNullOrWhiteSpace(request.PlayerName))
                 return BadRequest(new { message = "Player name is required" });
 
-            var existing = await _context.UserPlayerNames
+            var existing = await context.UserPlayerNames
                 .FirstOrDefaultAsync(upn => upn.UserId == user.Id && upn.PlayerName == request.PlayerName);
 
             if (existing != null)
@@ -289,8 +283,8 @@ public class AuthController(
                 CreatedAt = DateTime.UtcNow
             };
 
-            _context.UserPlayerNames.Add(userPlayerName);
-            await _context.SaveChangesAsync();
+            context.UserPlayerNames.Add(userPlayerName);
+            await context.SaveChangesAsync();
 
             return CreatedAtAction(nameof(GetPlayerNames), new UserPlayerNameResponse
             {
@@ -301,7 +295,7 @@ public class AuthController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error adding player name");
+            logger.LogError(ex, "Error adding player name");
             return StatusCode(500, new { message = "Error adding player name" });
         }
     }
@@ -316,20 +310,20 @@ public class AuthController(
             if (user == null)
                 return StatusCode(500, new { message = "User not found" });
 
-            var playerName = await _context.UserPlayerNames
+            var playerName = await context.UserPlayerNames
                 .FirstOrDefaultAsync(upn => upn.Id == id && upn.UserId == user.Id);
 
             if (playerName == null)
                 return NotFound(new { message = "Player name not found" });
 
-            _context.UserPlayerNames.Remove(playerName);
-            await _context.SaveChangesAsync();
+            context.UserPlayerNames.Remove(playerName);
+            await context.SaveChangesAsync();
 
             return NoContent();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error removing player name");
+            logger.LogError(ex, "Error removing player name");
             return StatusCode(500, new { message = "Error removing player name" });
         }
     }
@@ -344,7 +338,7 @@ public class AuthController(
             if (user == null)
                 return StatusCode(500, new { message = "User not found" });
 
-            var favoriteServers = await _context.UserFavoriteServers
+            var favoriteServers = await context.UserFavoriteServers
                 .Include(ufs => ufs.Server)
                 .Where(ufs => ufs.UserId == user.Id)
                 .OrderBy(ufs => ufs.CreatedAt)
@@ -357,7 +351,7 @@ public class AuthController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving favorite servers");
+            logger.LogError(ex, "Error retrieving favorite servers");
             return StatusCode(500, new { message = "Error retrieving favorite servers" });
         }
     }
@@ -375,11 +369,11 @@ public class AuthController(
             if (string.IsNullOrWhiteSpace(request.ServerGuid))
                 return BadRequest(new { message = "Server GUID is required" });
 
-            var server = await _context.Servers.FirstOrDefaultAsync(s => s.Guid == request.ServerGuid);
+            var server = await context.Servers.FirstOrDefaultAsync(s => s.Guid == request.ServerGuid);
             if (server == null)
                 return BadRequest(new { message = "Server not found" });
 
-            var existing = await _context.UserFavoriteServers
+            var existing = await context.UserFavoriteServers
                 .Include(ufs => ufs.Server)
                 .FirstOrDefaultAsync(ufs => ufs.UserId == user.Id && ufs.ServerGuid == request.ServerGuid);
 
@@ -395,8 +389,8 @@ public class AuthController(
                 CreatedAt = DateTime.UtcNow
             };
 
-            _context.UserFavoriteServers.Add(userFavoriteServer);
-            await _context.SaveChangesAsync();
+            context.UserFavoriteServers.Add(userFavoriteServer);
+            await context.SaveChangesAsync();
 
             userFavoriteServer.Server = server;
 
@@ -404,7 +398,7 @@ public class AuthController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error adding favorite server");
+            logger.LogError(ex, "Error adding favorite server");
             return StatusCode(500, new { message = "Error adding favorite server" });
         }
     }
@@ -419,20 +413,20 @@ public class AuthController(
             if (user == null)
                 return StatusCode(500, new { message = "User not found" });
 
-            var favoriteServer = await _context.UserFavoriteServers
+            var favoriteServer = await context.UserFavoriteServers
                 .FirstOrDefaultAsync(ufs => ufs.Id == id && ufs.UserId == user.Id);
 
             if (favoriteServer == null)
                 return NotFound(new { message = "Favorite server not found" });
 
-            _context.UserFavoriteServers.Remove(favoriteServer);
-            await _context.SaveChangesAsync();
+            context.UserFavoriteServers.Remove(favoriteServer);
+            await context.SaveChangesAsync();
 
             return NoContent();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error removing favorite server");
+            logger.LogError(ex, "Error removing favorite server");
             return StatusCode(500, new { message = "Error removing favorite server" });
         }
     }
@@ -447,7 +441,7 @@ public class AuthController(
             if (user == null)
                 return StatusCode(500, new { message = "User not found" });
 
-            var userBuddies = await _context.UserBuddies
+            var userBuddies = await context.UserBuddies
                 .Include(ub => ub.Player)
                 .Where(ub => ub.UserId == user.Id)
                 .OrderBy(ub => ub.CreatedAt)
@@ -465,7 +459,7 @@ public class AuthController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving buddies");
+            logger.LogError(ex, "Error retrieving buddies");
             return StatusCode(500, new { message = "Error retrieving buddies" });
         }
     }
@@ -483,7 +477,7 @@ public class AuthController(
             if (string.IsNullOrWhiteSpace(request.BuddyPlayerName))
                 return BadRequest(new { message = "Buddy player name is required" });
 
-            var existing = await _context.UserBuddies
+            var existing = await context.UserBuddies
                 .FirstOrDefaultAsync(ub => ub.UserId == user.Id && ub.BuddyPlayerName == request.BuddyPlayerName);
 
             if (existing != null)
@@ -503,8 +497,8 @@ public class AuthController(
                 CreatedAt = DateTime.UtcNow
             };
 
-            _context.UserBuddies.Add(userBuddy);
-            await _context.SaveChangesAsync();
+            context.UserBuddies.Add(userBuddy);
+            await context.SaveChangesAsync();
 
             return CreatedAtAction(nameof(GetBuddies), new UserBuddyResponse
             {
@@ -515,7 +509,7 @@ public class AuthController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error adding buddy");
+            logger.LogError(ex, "Error adding buddy");
             return StatusCode(500, new { message = "Error adding buddy" });
         }
     }
@@ -530,20 +524,20 @@ public class AuthController(
             if (user == null)
                 return StatusCode(500, new { message = "User not found" });
 
-            var buddy = await _context.UserBuddies
+            var buddy = await context.UserBuddies
                 .FirstOrDefaultAsync(ub => ub.Id == id && ub.UserId == user.Id);
 
             if (buddy == null)
                 return NotFound(new { message = "Buddy not found" });
 
-            _context.UserBuddies.Remove(buddy);
-            await _context.SaveChangesAsync();
+            context.UserBuddies.Remove(buddy);
+            await context.SaveChangesAsync();
 
             return NoContent();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error removing buddy");
+            logger.LogError(ex, "Error removing buddy");
             return StatusCode(500, new { message = "Error removing buddy" });
         }
     }
@@ -562,9 +556,9 @@ public class AuthController(
             var activeThreshold = now.AddMinutes(-5);
 
             // Get online buddies
-            var onlineBuddies = await _context.UserBuddies
+            var onlineBuddies = await context.UserBuddies
                 .Where(ub => ub.UserId == user.Id)
-                .Join(_context.PlayerSessions.Include(ps => ps.Server),
+                .Join(context.PlayerSessions.Include(ps => ps.Server),
                       ub => ub.BuddyPlayerName,
                       ps => ps.PlayerName,
                       (ub, ps) => ps)
@@ -588,7 +582,7 @@ public class AuthController(
 
             // Get offline buddies
             var onlineBuddyNames = onlineBuddies.Select(ob => ob.PlayerName).ToHashSet();
-            var offlineBuddies = await _context.UserBuddies
+            var offlineBuddies = await context.UserBuddies
                 .Include(ub => ub.Player)
                 .Where(ub => ub.UserId == user.Id && !onlineBuddyNames.Contains(ub.BuddyPlayerName))
                 .Where(ub => ub.Player != null)
@@ -604,7 +598,7 @@ public class AuthController(
                 .ToListAsync();
 
             // Get favorite server statuses
-            var favoriteServers = await _context.UserFavoriteServers
+            var favoriteServers = await context.UserFavoriteServers
                 .Include(fs => fs.Server)
                 .Where(fs => fs.UserId == user.Id)
                 .Select(fs => new FavoriteServerStatusResponse
@@ -612,7 +606,7 @@ public class AuthController(
                     Id = fs.Id,
                     ServerGuid = fs.ServerGuid,
                     ServerName = fs.Server.Name,
-                    CurrentPlayers = _context.PlayerSessions
+                    CurrentPlayers = context.PlayerSessions
                         .Count(ps => ps.ServerGuid == fs.ServerGuid && ps.IsActive && ps.LastSeenTime >= activeThreshold),
                     MaxPlayers = fs.Server.MaxPlayers,
                     CurrentMap = fs.Server.MapName,
@@ -629,14 +623,14 @@ public class AuthController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving dashboard data");
+            logger.LogError(ex, "Error retrieving dashboard data");
             return StatusCode(500, new { message = "Error retrieving dashboard data" });
         }
     }
 
     private async Task<User> CreateOrUpdateUserAsync(string email, string name)
     {
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+        var user = await context.Users.FirstOrDefaultAsync(u => u.Email == email);
         var now = DateTime.UtcNow;
 
         if (user == null)
@@ -648,17 +642,17 @@ public class AuthController(
                 LastLoggedIn = now,
                 IsActive = true
             };
-            _context.Users.Add(user);
-            _logger.LogInformation("Creating new user with email: {Email}", email);
+            context.Users.Add(user);
+            logger.LogInformation("Creating new user with email: {Email}", email);
         }
         else
         {
             user.LastLoggedIn = now;
             user.IsActive = true;
-            _logger.LogDebug("Updating last login for user: {Email}", email);
+            logger.LogDebug("Updating last login for user: {Email}", email);
         }
 
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync();
         return user;
     }
 
@@ -684,7 +678,7 @@ public class AuthController(
         var now = DateTime.UtcNow;
         var activeThreshold = now.AddMinutes(-5);
 
-        var activeSession = await _context.PlayerSessions
+        var activeSession = await context.PlayerSessions
             .Include(ps => ps.Server)
             .Where(ps => ps.PlayerName == player.Name &&
                          ps.IsActive &&
@@ -717,7 +711,7 @@ public class AuthController(
         var now = DateTime.UtcNow;
         var activeThreshold = now.AddMinutes(-5);
 
-        var activeSessions = await _context.PlayerSessions
+        var activeSessions = await context.PlayerSessions
             .Include(ps => ps.Player)
             .Where(ps => ps.ServerGuid == favoriteServer.ServerGuid &&
                          ps.IsActive &&

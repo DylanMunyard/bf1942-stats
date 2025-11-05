@@ -9,13 +9,11 @@ namespace api.Servers;
 
 public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsService> logger, PlayerRoundsReadService? clickHouseReader = null)
 {
-    private readonly PlayerTrackerDbContext _dbContext = dbContext;
-    private readonly ILogger<RoundsService> _logger = logger;
     private readonly PlayerRoundsReadService? _clickHouseReader = clickHouseReader;
 
     public async Task<List<RoundInfo>> GetRecentRoundsAsync(string serverGuid, int limit)
     {
-        var rounds = await _dbContext.Rounds
+        var rounds = await dbContext.Rounds
             .AsNoTracking()
             .Where(r => r.ServerGuid == serverGuid && (r.ParticipantCount ?? 0) > 0)
             .OrderByDescending(r => r.StartTime)
@@ -37,7 +35,7 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
 
         var roundIds = rounds.Select(r => r.RoundId).ToList();
 
-        var topPlayers = await _dbContext.PlayerSessions
+        var topPlayers = await dbContext.PlayerSessions
             .AsNoTracking()
             .Where(ps => ps.RoundId != null && roundIds.Contains(ps.RoundId) && !ps.Player.AiBot)
             .GroupBy(ps => ps.RoundId)
@@ -99,7 +97,7 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
         bool includePlayers = true,
         bool onlySpecifiedPlayers = false)
     {
-        var query = _dbContext.Rounds.AsNoTracking();
+        var query = dbContext.Rounds.AsNoTracking();
 
         // Apply filters
         if (!string.IsNullOrWhiteSpace(filters.ServerName))
@@ -183,10 +181,10 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
 
             if (names.Count > 0)
             {
-                _logger.LogInformation("Filtering rounds by ALL player names: {PlayerNames}", string.Join(", ", names));
+                logger.LogInformation("Filtering rounds by ALL player names: {PlayerNames}", string.Join(", ", names));
 
                 // Subquery: find roundIds that contain all requested player names
-                var matchingRoundIds = _dbContext.PlayerSessions
+                var matchingRoundIds = dbContext.PlayerSessions
                     .AsNoTracking()
                     .Where(ps => ps.RoundId != null && names.Contains(ps.PlayerName))
                     .GroupBy(ps => ps.RoundId!)
@@ -263,7 +261,7 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
 
             if (roundIds.Any())
             {
-                var playerQuery = _dbContext.PlayerSessions
+                var playerQuery = dbContext.PlayerSessions
                     .AsNoTracking()
                     .Where(ps => ps.RoundId != null && roundIds.Contains(ps.RoundId));
 
@@ -318,7 +316,7 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
     public async Task<SessionRoundReport?> GetRoundReport(string roundId, Gamification.Services.ClickHouseGamificationService gamificationService)
     {
         // First, get just the round data we need
-        var roundData = await _dbContext.Rounds
+        var roundData = await dbContext.Rounds
             .AsNoTracking()
             .Where(r => r.RoundId == roundId)
             .Select(r => new
@@ -346,7 +344,7 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
             if (!string.IsNullOrEmpty(resolvedRoundId) && resolvedRoundId != roundId)
             {
                 // Retry with resolved RoundId
-                roundData = await _dbContext.Rounds
+                roundData = await dbContext.Rounds
                     .AsNoTracking()
                     .Where(r => r.RoundId == resolvedRoundId)
                     .Select(r => new
@@ -373,7 +371,7 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
             return null;
 
         // Get all observations for the round with player names
-        var roundObservations = await _dbContext.PlayerObservations
+        var roundObservations = await dbContext.PlayerObservations
             .Include(o => o.Session)
             .Where(o => roundData.SessionIds.Contains(o.SessionId))
             .OrderBy(o => o.Timestamp)
@@ -453,7 +451,7 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to get achievements for round {RoundId}", roundId);
+            logger.LogWarning(ex, "Failed to get achievements for round {RoundId}", roundId);
         }
 
         return new SessionRoundReport
@@ -486,7 +484,7 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
     {
         if (_clickHouseReader == null)
         {
-            _logger.LogDebug("ClickHouse reader not available for RoundId resolution: {RoundId}", clickHouseRoundId);
+            logger.LogDebug("ClickHouse reader not available for RoundId resolution: {RoundId}", clickHouseRoundId);
             return null;
         }
 
@@ -507,7 +505,7 @@ FORMAT TabSeparated";
             var result = await _clickHouseReader.ExecuteQueryAsync(query);
             if (string.IsNullOrWhiteSpace(result) || result.Trim().Length == 0)
             {
-                _logger.LogDebug("No data found in ClickHouse for RoundId: {RoundId}", clickHouseRoundId);
+                logger.LogDebug("No data found in ClickHouse for RoundId: {RoundId}", clickHouseRoundId);
                 return null;
             }
 
@@ -520,7 +518,7 @@ FORMAT TabSeparated";
             var parts = lines[0].Split('\t');
             if (parts.Length < 4)
             {
-                _logger.LogWarning("Invalid data format from ClickHouse for RoundId: {RoundId}", clickHouseRoundId);
+                logger.LogWarning("Invalid data format from ClickHouse for RoundId: {RoundId}", clickHouseRoundId);
                 return null;
             }
 
@@ -531,7 +529,7 @@ FORMAT TabSeparated";
 
             if (startTime == DateTime.MinValue)
             {
-                _logger.LogWarning("Invalid start time from ClickHouse for RoundId: {RoundId}", clickHouseRoundId);
+                logger.LogWarning("Invalid start time from ClickHouse for RoundId: {RoundId}", clickHouseRoundId);
                 return null;
             }
 
@@ -541,7 +539,7 @@ FORMAT TabSeparated";
             var searchStartTime = startTime - timeTolerance;
             var searchEndTime = startTime + timeTolerance;
 
-            var sqliteRound = (await _dbContext.Rounds
+            var sqliteRound = (await dbContext.Rounds
                 .AsNoTracking()
                 .Where(r => r.ServerGuid == serverGuid
                            && r.MapName == mapName
@@ -553,17 +551,17 @@ FORMAT TabSeparated";
 
             if (sqliteRound != null)
             {
-                _logger.LogDebug("Resolved ClickHouse RoundId {ClickHouseRoundId} to SQLite RoundId {SQLiteRoundId}",
+                logger.LogDebug("Resolved ClickHouse RoundId {ClickHouseRoundId} to SQLite RoundId {SQLiteRoundId}",
                     clickHouseRoundId, sqliteRound.RoundId);
                 return sqliteRound.RoundId;
             }
 
-            _logger.LogDebug("Could not resolve ClickHouse RoundId {ClickHouseRoundId} to SQLite RoundId", clickHouseRoundId);
+            logger.LogDebug("Could not resolve ClickHouse RoundId {ClickHouseRoundId} to SQLite RoundId", clickHouseRoundId);
             return null;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error resolving ClickHouse RoundId {ClickHouseRoundId} to SQLite RoundId", clickHouseRoundId);
+            logger.LogError(ex, "Error resolving ClickHouse RoundId {ClickHouseRoundId} to SQLite RoundId", clickHouseRoundId);
             return null;
         }
     }

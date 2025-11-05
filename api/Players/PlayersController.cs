@@ -17,11 +17,6 @@ public class PlayersController(
     PlayerRoundsReadService playerRoundsService,
     ILogger<PlayersController> logger) : ControllerBase
 {
-    private readonly IPlayerStatsService _playerStatsService = playerStatsService;
-    private readonly IServerStatisticsService _serverStatisticsService = serverStatisticsService;
-    private readonly IPlayerComparisonService _playerComparisonService = playerComparisonService;
-    private readonly PlayerRoundsReadService _playerRoundsService = playerRoundsService;
-    private readonly ILogger<PlayersController> _logger = logger;
 
     /// <summary>
     /// Retrieves a paginated list of all players with optional filtering and sorting.
@@ -105,7 +100,7 @@ public class PlayersController(
                 MapName = mapName
             };
 
-            var result = await _playerStatsService.GetAllPlayersWithPaging(page, pageSize, sortBy, sortOrder, filters);
+            var result = await playerStatsService.GetAllPlayersWithPaging(page, pageSize, sortBy, sortOrder, filters);
             return Ok(result);
         }
         catch (ArgumentException ex)
@@ -124,7 +119,7 @@ public class PlayersController(
         // Use modern URL decoding that preserves + signs
         playerName = Uri.UnescapeDataString(playerName);
 
-        var stats = await _playerStatsService.GetPlayerStatistics(playerName);
+        var stats = await playerStatsService.GetPlayerStatistics(playerName);
 
         // Copy ranking from insights.ServerRankings to servers array
         foreach (var server in stats.Servers)
@@ -150,7 +145,7 @@ public class PlayersController(
         // Use modern URL decoding that preserves + signs
         playerName = Uri.UnescapeDataString(playerName);
 
-        var stats = await _playerStatsService.GetSession(playerName, sessionId);
+        var stats = await playerStatsService.GetSession(playerName, sessionId);
 
         if (stats is null)
         {
@@ -181,7 +176,7 @@ public class PlayersController(
 
         try
         {
-            var stats = await _serverStatisticsService.GetServerStats(playerName, period, serverGuid);
+            var stats = await serverStatisticsService.GetServerStats(playerName, period, serverGuid);
 
             if (!stats.Any())
                 return NotFound($"No statistics found for player '{playerName}' on server '{serverGuid}' for the specified period");
@@ -216,7 +211,7 @@ public class PlayersController(
                 PlayerName = query.Trim()
             };
 
-            var result = await _playerStatsService.GetAllPlayersWithPaging(
+            var result = await playerStatsService.GetAllPlayersWithPaging(
                 page, pageSize, "PlayerName", "asc", filters);
 
             return Ok(result);
@@ -239,13 +234,13 @@ public class PlayersController(
 
         try
         {
-            var result = await _playerComparisonService.ComparePlayersAsync(player1, player2, serverGuid);
+            var result = await playerComparisonService.ComparePlayersAsync(player1, player2, serverGuid);
             return Ok(result);
         }
         catch (Exception ex)
         {
             // Log the exception
-            _logger.LogError(ex, "Error comparing players {Player1} and {Player2}", player1, player2);
+            logger.LogError(ex, "Error comparing players {Player1} and {Player2}", player1, player2);
             // Return a generic 500 error
             return StatusCode(500, "An internal server error occurred while comparing players.");
         }
@@ -269,7 +264,7 @@ public class PlayersController(
 
         try
         {
-            var result = await _playerComparisonService.FindSimilarPlayersAsync(playerName, limit, true, similarityMode);
+            var result = await playerComparisonService.FindSimilarPlayersAsync(playerName, limit, true, similarityMode);
 
             if (result.TargetPlayerStats == null)
                 return NotFound($"Player '{playerName}' not found or has insufficient data");
@@ -278,7 +273,7 @@ public class PlayersController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error finding similar players for {PlayerName} with mode {Mode}", playerName, mode);
+            logger.LogError(ex, "Error finding similar players for {PlayerName} with mode {Mode}", playerName, mode);
             return StatusCode(500, "An internal server error occurred while finding similar players.");
         }
     }
@@ -295,12 +290,12 @@ public class PlayersController(
 
         try
         {
-            var result = await _playerComparisonService.ComparePlayersActivityHoursAsync(player1, player2);
+            var result = await playerComparisonService.ComparePlayersActivityHoursAsync(player1, player2);
             return Ok(result);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error comparing activity hours for players {Player1} and {Player2}", player1, player2);
+            logger.LogError(ex, "Error comparing activity hours for players {Player1} and {Player2}", player1, player2);
             return StatusCode(500, "An internal server error occurred while comparing player activity hours.");
         }
     }

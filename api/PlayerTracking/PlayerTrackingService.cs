@@ -11,10 +11,8 @@ namespace api.PlayerTracking;
 
 public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetectionService botDetectionService, IPlayerEventPublisher? eventPublisher = null, ILogger<PlayerTrackingService>? logger = null)
 {
-    private readonly PlayerTrackerDbContext _dbContext = dbContext;
     private readonly IPlayerEventPublisher? _eventPublisher = eventPublisher;
     private readonly ILogger<PlayerTrackingService> _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<PlayerTrackingService>.Instance;
-    private readonly IBotDetectionService _botDetectionService = botDetectionService;
     private readonly TimeSpan _sessionTimeout = TimeSpan.FromMinutes(5);
     private static readonly SemaphoreSlim IpInfoSemaphore = new(10); // max 10 concurrent
     private static DateTime _lastIpInfoRequest = DateTime.MinValue;
@@ -59,7 +57,7 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
         var playerNames = server.Players.Select(p => p.Name).ToList();
 
         // Get players from database and attach to context
-        var existingPlayers = await _dbContext.Players
+        var existingPlayers = await dbContext.Players
             .Where(p => playerNames.Contains(p.Name))
             .ToListAsync();
 
@@ -81,7 +79,7 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
         foreach (var playerInfo in server.Players)
         {
             // Skip bot players entirely - don't store them in database at all
-            if (_botDetectionService.IsBotPlayer(playerInfo.Name, playerInfo.AiBot))
+            if (botDetectionService.IsBotPlayer(playerInfo.Name, playerInfo.AiBot))
             {
                 continue;
             }
@@ -102,7 +100,7 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
             {
                 // Update existing player
                 player.LastSeen = timestamp;
-                _dbContext.Players.Update(player);
+                dbContext.Players.Update(player);
             }
 
             // Handle sessions
@@ -161,28 +159,28 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
         }
 
         // Execute all database operations
-        using (var transaction = await _dbContext.Database.BeginTransactionAsync())
+        using (var transaction = await dbContext.Database.BeginTransactionAsync())
         {
             try
             {
                 // 1. Save new players first
                 if (newPlayers.Any())
                 {
-                    await _dbContext.Players.AddRangeAsync(newPlayers);
-                    await _dbContext.SaveChangesAsync();
+                    await dbContext.Players.AddRangeAsync(newPlayers);
+                    await dbContext.SaveChangesAsync();
                 }
 
                 // 2. Save sessions
                 if (sessionsToCreate.Any())
                 {
-                    await _dbContext.PlayerSessions.AddRangeAsync(sessionsToCreate);
-                    await _dbContext.SaveChangesAsync();
+                    await dbContext.PlayerSessions.AddRangeAsync(sessionsToCreate);
+                    await dbContext.SaveChangesAsync();
                 }
 
                 if (sessionsToUpdate.Any())
                 {
-                    _dbContext.PlayerSessions.UpdateRange(sessionsToUpdate);
-                    await _dbContext.SaveChangesAsync();
+                    dbContext.PlayerSessions.UpdateRange(sessionsToUpdate);
+                    await dbContext.SaveChangesAsync();
                 }
 
                 // 3. Save observations
@@ -214,14 +212,14 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
 
                 if (observations.Any())
                 {
-                    await _dbContext.PlayerObservations.AddRangeAsync(observations);
-                    await _dbContext.SaveChangesAsync();
+                    await dbContext.PlayerObservations.AddRangeAsync(observations);
+                    await dbContext.SaveChangesAsync();
                 }
 
                 // Update participant count for the round (all players since bots are no longer stored)
                 if (activeRound != null)
                 {
-                    var playerCount = await _dbContext.PlayerSessions
+                    var playerCount = await dbContext.PlayerSessions
                         .Where(ps => ps.RoundId == activeRound.RoundId)
                         .Select(ps => ps.PlayerName)
                         .Distinct()
@@ -230,8 +228,8 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
                     activeRound.ParticipantCount = playerCount;
                     activeRound.Tickets1 = server.Tickets1;
                     activeRound.Tickets2 = server.Tickets2;
-                    _dbContext.Rounds.Update(activeRound);
-                    await _dbContext.SaveChangesAsync();
+                    dbContext.Rounds.Update(activeRound);
+                    await dbContext.SaveChangesAsync();
                 }
 
                 await transaction.CommitAsync();
@@ -256,7 +254,7 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
 
     private async Task<(GameServer server, string? oldMapName)> GetOrCreateServerAsync(IGameServer serverInfo, string game)
     {
-        var server = await _dbContext.Servers
+        var server = await dbContext.Servers
             .FirstOrDefaultAsync(s => s.Guid == serverInfo.Guid);
 
         bool ipChanged = false;
@@ -277,7 +275,7 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
                 JoinLink = serverInfo.JoinLink,
                 CurrentMap = serverInfo.MapName
             };
-            _dbContext.Servers.Add(server);
+            dbContext.Servers.Add(server);
             ipChanged = true;
         }
         else
@@ -335,14 +333,14 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
             }
         }
 
-        await _dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync();
         return (server, oldMapName);
     }
 
     private async Task<List<PlayerSession>> GetActiveSessionsAsync(
         IEnumerable<string> playerNames, string serverGuid)
     {
-        return await _dbContext.PlayerSessions
+        return await dbContext.PlayerSessions
             .Where(s => s.IsActive &&
                        playerNames.Contains(s.PlayerName) &&
                        s.ServerGuid == serverGuid)
@@ -357,7 +355,7 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
         {
             // Directly query and close all timed-out sessions in one batch
             var timeoutThreshold = currentTime - _sessionTimeout;
-            var timedOutSessions = await _dbContext.PlayerSessions
+            var timedOutSessions = await dbContext.PlayerSessions
                 .Where(s => s.IsActive && s.LastSeenTime < timeoutThreshold)
                 .ToListAsync();
 
@@ -369,7 +367,7 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
 
             if (timedOutSessions.Any())
             {
-                await _dbContext.SaveChangesAsync();
+                await dbContext.SaveChangesAsync();
             }
         }
         catch (Exception ex)
@@ -384,7 +382,7 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
         {
             var offlineThreshold = currentTime.AddMinutes(-5); // Mark servers offline if not seen for 5 minutes
 
-            var serversToMarkOffline = await _dbContext.Servers
+            var serversToMarkOffline = await dbContext.Servers
                 .Where(s => s.IsOnline && s.LastSeenTime < offlineThreshold)
                 .ToListAsync();
 
@@ -396,7 +394,7 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
             if (serversToMarkOffline.Any())
             {
                 Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Marked {serversToMarkOffline.Count} servers as offline");
-                await _dbContext.SaveChangesAsync();
+                await dbContext.SaveChangesAsync();
             }
         }
         catch (Exception ex)
@@ -476,7 +474,7 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
             var sessionIds = sessionsList.Select(s => s.SessionId).ToList();
 
             // Calculate average ping for all sessions in one query
-            var avgPings = await _dbContext.PlayerObservations
+            var avgPings = await dbContext.PlayerObservations
                 .Where(o => sessionIds.Contains(o.SessionId) && o.Ping > 0)
                 .GroupBy(o => o.SessionId)
                 .Select(g => new { SessionId = g.Key, AvgPing = g.Average(o => (double)o.Ping) })
@@ -519,7 +517,7 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
         // Skip round tracking if map name is empty
         if (string.IsNullOrWhiteSpace(server.MapName)) return null;
 
-        var active = await _dbContext.Rounds
+        var active = await dbContext.Rounds
             .Where(r => r.ServerGuid == server.Guid && r.IsActive)
             .OrderByDescending(r => r.StartTime)
             .FirstOrDefaultAsync();
@@ -532,8 +530,8 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
             active.IsActive = false;
             active.EndTime = timestamp;
             active.DurationMinutes = (int)Math.Max(0, (active.EndTime.Value - active.StartTime).TotalMinutes);
-            _dbContext.Rounds.Update(active);
-            await _dbContext.SaveChangesAsync();
+            dbContext.Rounds.Update(active);
+            await dbContext.SaveChangesAsync();
             active = null;
         }
 
@@ -557,11 +555,11 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
             newRound.RoundId = ComputeRoundId(newRound.ServerGuid, newRound.MapName, newRound.StartTime.ToUniversalTime());
 
             // Upsert semantics: if a round with same RoundId exists, load it
-            var existing = await _dbContext.Rounds.FindAsync(newRound.RoundId);
+            var existing = await dbContext.Rounds.FindAsync(newRound.RoundId);
             if (existing == null)
             {
-                await _dbContext.Rounds.AddAsync(newRound);
-                await _dbContext.SaveChangesAsync();
+                await dbContext.Rounds.AddAsync(newRound);
+                await dbContext.SaveChangesAsync();
                 active = newRound;
             }
             else
@@ -570,8 +568,8 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
                 active = existing;
                 active.IsActive = true;
                 active.EndTime = null;
-                _dbContext.Rounds.Update(active);
-                await _dbContext.SaveChangesAsync();
+                dbContext.Rounds.Update(active);
+                await dbContext.SaveChangesAsync();
             }
         }
         else
@@ -585,8 +583,8 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
             active.Team1Label = team1Label;
             active.Team2Label = team2Label;
             active.RoundTimeRemain = server.RoundTimeRemain;
-            _dbContext.Rounds.Update(active);
-            await _dbContext.SaveChangesAsync();
+            dbContext.Rounds.Update(active);
+            await dbContext.SaveChangesAsync();
         }
 
         return active;
@@ -622,8 +620,8 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
             Team2Label = team2Label,
             RoundTimeRemain = server.RoundTimeRemain
         };
-        await _dbContext.RoundObservations.AddAsync(observation);
-        await _dbContext.SaveChangesAsync();
+        await dbContext.RoundObservations.AddAsync(observation);
+        await dbContext.SaveChangesAsync();
     }
 
     private int CalculatePlayTime(PlayerSession session, DateTime timestamp)

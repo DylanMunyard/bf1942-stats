@@ -14,7 +14,6 @@ public interface ITokenService
 
 public class TokenService(IConfiguration configuration) : ITokenService
 {
-    private readonly IConfiguration _configuration = configuration;
     private readonly JwtSecurityTokenHandler _tokenHandler = new();
     private readonly SigningCredentials _signingCredentials = InitializeSigningCredentials(configuration);
     private readonly RsaSecurityKey _securityKey = InitializeSecurityKey(configuration);

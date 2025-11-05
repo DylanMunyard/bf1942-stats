@@ -16,8 +16,6 @@ public class DiscordAuthService(
     ICacheService cacheService,
     IHttpClientFactory httpClientFactory) : IDiscordAuthService
 {
-    private readonly ILogger<DiscordAuthService> _logger = logger;
-    private readonly ICacheService _cacheService = cacheService;
     private readonly HttpClient _httpClient = httpClientFactory.CreateClient();
     private readonly string _clientId = configuration["DiscordOAuth:ClientId"] ?? throw new InvalidOperationException("DiscordOAuth:ClientId not configured");
     private readonly string _clientSecret = configuration["DiscordOAuth:ClientSecret"] ?? throw new InvalidOperationException("DiscordOAuth:ClientSecret not configured");
@@ -44,18 +42,18 @@ public class DiscordAuthService(
                 throw new UnauthorizedAccessException("Discord account does not have a verified email");
             }
 
-            _logger.LogInformation("Successful Discord authentication for email: {Email}", userPayload.Email);
+            logger.LogInformation("Successful Discord authentication for email: {Email}", userPayload.Email);
             return userPayload;
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Discord API request failed from IP: {IpAddress}", ipAddress);
+            logger.LogError(ex, "Discord API request failed from IP: {IpAddress}", ipAddress);
             await IncrementRateLimitAsync(ipAddress);
             throw new UnauthorizedAccessException("Discord authentication failed");
         }
         catch (Exception ex) when (!(ex is UnauthorizedAccessException))
         {
-            _logger.LogError(ex, "Discord token exchange failed from IP: {IpAddress}", ipAddress);
+            logger.LogError(ex, "Discord token exchange failed from IP: {IpAddress}", ipAddress);
             await IncrementRateLimitAsync(ipAddress);
             throw new UnauthorizedAccessException("Discord authentication failed");
         }
@@ -80,7 +78,7 @@ public class DiscordAuthService(
         if (!response.IsSuccessStatusCode)
         {
             var errorContent = await response.Content.ReadAsStringAsync();
-            _logger.LogError("Discord token exchange failed: {StatusCode} - {Error} - RedirectUri: {RedirectUri}",
+            logger.LogError("Discord token exchange failed: {StatusCode} - {Error} - RedirectUri: {RedirectUri}",
                 response.StatusCode, errorContent, redirectUri);
             throw new UnauthorizedAccessException($"Failed to exchange Discord authorization code: {response.StatusCode} - {errorContent}");
         }
@@ -106,7 +104,7 @@ public class DiscordAuthService(
         if (!response.IsSuccessStatusCode)
         {
             var errorContent = await response.Content.ReadAsStringAsync();
-            _logger.LogWarning("Discord user fetch failed: {StatusCode} - {Error}", response.StatusCode, errorContent);
+            logger.LogWarning("Discord user fetch failed: {StatusCode} - {Error}", response.StatusCode, errorContent);
             throw new UnauthorizedAccessException("Failed to fetch Discord user information");
         }
 
@@ -134,7 +132,7 @@ public class DiscordAuthService(
         if (string.IsNullOrEmpty(ipAddress)) return true;
 
         var rateLimitKey = $"auth_attempts:{ipAddress}";
-        var rateLimitData = await _cacheService.GetAsync<RateLimitData>(rateLimitKey);
+        var rateLimitData = await cacheService.GetAsync<RateLimitData>(rateLimitKey);
         var attempts = rateLimitData?.Attempts ?? 0;
         return attempts < 20;
     }
@@ -144,9 +142,9 @@ public class DiscordAuthService(
         if (string.IsNullOrEmpty(ipAddress)) return;
 
         var rateLimitKey = $"auth_attempts:{ipAddress}";
-        var rateLimitData = await _cacheService.GetAsync<RateLimitData>(rateLimitKey);
+        var rateLimitData = await cacheService.GetAsync<RateLimitData>(rateLimitKey);
         var attempts = rateLimitData?.Attempts ?? 0;
-        await _cacheService.SetAsync(rateLimitKey, new RateLimitData { Attempts = attempts + 1 }, TimeSpan.FromHours(1));
+        await cacheService.SetAsync(rateLimitKey, new RateLimitData { Attempts = attempts + 1 }, TimeSpan.FromHours(1));
     }
 }
 

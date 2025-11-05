@@ -9,9 +9,6 @@ public class MilestoneCalculator(
     BadgeDefinitionsService badgeService,
     ILogger<MilestoneCalculator> logger)
 {
-    private readonly ClickHouseGamificationService _readService = readService;
-    private readonly BadgeDefinitionsService _badgeService = badgeService;
-    private readonly ILogger<MilestoneCalculator> _logger = logger;
 
     // Milestone thresholds
     private readonly int[] _killMilestones = [100, 500, 1000, 2500, 5000, 10000, 25000, 50000];
@@ -25,11 +22,11 @@ public class MilestoneCalculator(
         try
         {
             // Pull only the milestone IDs (not full records) the player already owns - much more memory efficient
-            var existingMilestoneIds = await _readService.GetPlayerAchievementIdsByTypeAsync(
+            var existingMilestoneIds = await readService.GetPlayerAchievementIdsByTypeAsync(
                 round.PlayerName, AchievementTypes.Milestone);
 
             // Get player's totals before this round
-            var previousStats = await _readService.GetPlayerStatsBeforeTimestampAsync(
+            var previousStats = await readService.GetPlayerStatsBeforeTimestampAsync(
                 round.PlayerName, round.RoundEndTime) ?? new PlayerGameStats { PlayerName = round.PlayerName };
 
             // Calculate new totals after this round
@@ -63,7 +60,7 @@ public class MilestoneCalculator(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking milestones for player {PlayerName}, round {RoundId}",
+            logger.LogError(ex, "Error checking milestones for player {PlayerName}, round {RoundId}",
                 round.PlayerName, round.RoundId);
             return new List<Achievement>();
         }
@@ -79,7 +76,7 @@ public class MilestoneCalculator(
             if (previousStats.TotalKills < milestone && newStats.TotalKills >= milestone)
             {
                 // Player crossed this kill milestone
-                var badgeDefinition = _badgeService.GetBadgeDefinition($"total_kills_{milestone}");
+                var badgeDefinition = badgeService.GetBadgeDefinition($"total_kills_{milestone}");
                 if (badgeDefinition != null)
                 {
                     achievements.Add(new Achievement
@@ -100,7 +97,7 @@ public class MilestoneCalculator(
                         Version = round.RoundEndTime  // Use round end time as deterministic version for idempotency
                     });
 
-                    _logger.LogInformation("Kill milestone achieved: {PlayerName} reached {Milestone} total kills",
+                    logger.LogInformation("Kill milestone achieved: {PlayerName} reached {Milestone} total kills",
                         round.PlayerName, milestone);
                 }
             }
@@ -122,7 +119,7 @@ public class MilestoneCalculator(
                 newStats.TotalPlayTimeMinutes >= milestoneMinutes)
             {
                 // Player crossed this playtime milestone
-                var badgeDefinition = _badgeService.GetBadgeDefinition($"milestone_playtime_{milestoneHours}h");
+                var badgeDefinition = badgeService.GetBadgeDefinition($"milestone_playtime_{milestoneHours}h");
                 if (badgeDefinition != null)
                 {
                     achievements.Add(new Achievement
@@ -143,7 +140,7 @@ public class MilestoneCalculator(
                         Version = round.RoundEndTime  // Use round end time as deterministic version for idempotency
                     });
 
-                    _logger.LogInformation("Playtime milestone achieved: {PlayerName} reached {Milestone} hours played",
+                    logger.LogInformation("Playtime milestone achieved: {PlayerName} reached {Milestone} hours played",
                         round.PlayerName, milestoneHours);
                 }
             }
@@ -162,7 +159,7 @@ public class MilestoneCalculator(
             if (previousStats.TotalScore < milestone && newStats.TotalScore >= milestone)
             {
                 // Player crossed this score milestone
-                var badgeDefinition = _badgeService.GetBadgeDefinition($"total_score_{milestone}");
+                var badgeDefinition = badgeService.GetBadgeDefinition($"total_score_{milestone}");
                 if (badgeDefinition != null)
                 {
                     achievements.Add(new Achievement
@@ -183,7 +180,7 @@ public class MilestoneCalculator(
                         Version = round.RoundEndTime  // Use round end time as deterministic version for idempotency
                     });
 
-                    _logger.LogInformation("Score milestone achieved: {PlayerName} reached {Milestone:N0} total score",
+                    logger.LogInformation("Score milestone achieved: {PlayerName} reached {Milestone:N0} total score",
                         round.PlayerName, milestone);
                 }
             }
@@ -198,17 +195,17 @@ public class MilestoneCalculator(
     {
         try
         {
-            return await _readService.GetPlayerAchievementsByTypeAsync(playerName, AchievementTypes.Milestone);
+            return await readService.GetPlayerAchievementsByTypeAsync(playerName, AchievementTypes.Milestone);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting milestones for player {PlayerName}", playerName);
+            logger.LogError(ex, "Error getting milestones for player {PlayerName}", playerName);
             return new List<Achievement>();
         }
     }
 
     public List<BadgeDefinition> GetAvailableMilestones()
     {
-        return _badgeService.GetBadgesByCategory(BadgeCategories.Milestone);
+        return badgeService.GetBadgesByCategory(BadgeCategories.Milestone);
     }
 }

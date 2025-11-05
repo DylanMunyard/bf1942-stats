@@ -12,8 +12,6 @@ namespace api.StatsCollectors;
 
 public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory, IConfiguration configuration) : IHostedService, IDisposable
 {
-    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
-    private readonly IConfiguration _configuration = configuration;
 
     // Read interval from config, default to 30 seconds
     private readonly TimeSpan _collectionInterval = TimeSpan.FromSeconds(configuration.GetValue<int?>("STATS_COLLECTION_INTERVAL_SECONDS") ?? 30);
@@ -59,7 +57,7 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
             using (LogContext.PushProperty("operation_type", "stats_collection"))
             using (LogContext.PushProperty("bulk_operation", true))
             using (LogContext.PushProperty("cycle_number", currentCycle))
-            using (var scope = _scopeFactory.CreateScope())
+            using (var scope = scopeFactory.CreateScope())
             {
                 var playerTrackingService = scope.ServiceProvider.GetRequiredService<PlayerTrackingService>();
                 var bfListApiService = scope.ServiceProvider.GetRequiredService<IBfListApiService>();

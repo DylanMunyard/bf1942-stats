@@ -14,8 +14,6 @@ namespace api.ClickHouse;
 
 public class PlayerRoundsWriteService(HttpClient httpClient, string clickHouseUrl, IServiceScopeFactory scopeFactory, ILogger<PlayerRoundsWriteService> logger, IClickHouseReader? reader = null) : BaseClickHouseService(httpClient, clickHouseUrl), IClickHouseWriter
 {
-    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
-    private readonly ILogger<PlayerRoundsWriteService> _logger = logger;
     private readonly IClickHouseReader? _reader = reader;
 
     private static int GetEnvInt(string name, int defaultValue)
@@ -36,11 +34,11 @@ public class PlayerRoundsWriteService(HttpClient httpClient, string clickHouseUr
         try
         {
             await CreatePlayerRoundsTableAsync();
-            _logger.LogInformation("ClickHouse player_rounds schema verified/created successfully");
+            logger.LogInformation("ClickHouse player_rounds schema verified/created successfully");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to ensure ClickHouse player_rounds schema");
+            logger.LogError(ex, "Failed to ensure ClickHouse player_rounds schema");
             throw;
         }
     }
@@ -92,7 +90,7 @@ SETTINGS index_granularity = 8192";
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to create index, might already exist: {Query}", indexQuery);
+                logger.LogWarning(ex, "Failed to create index, might already exist: {Query}", indexQuery);
             }
         }
     }
@@ -126,7 +124,7 @@ SETTINGS index_granularity = 8192";
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to get last synced timestamp, will sync from beginning");
+            logger.LogWarning(ex, "Failed to get last synced timestamp, will sync from beginning");
         }
 
         return null;
@@ -152,12 +150,12 @@ SETTINGS index_granularity = 8192";
             var fromDate = lastSyncedTime ?? DateTime.MinValue;
             var mode = lastSyncedTime.HasValue ? "Incremental" : "InitialLoad";
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Starting sync of completed sessions. Mode={Mode}, BatchSize={BatchSize}, DelayMs={DelayMs}, FromDate={FromDate:o}, LastSynced={LastSynced:o}",
                 mode, effectiveBatchSize, delayMs, fromDate, lastSyncedTime);
 
             // Use scoped DbContext for database access
-            using var scope = _scopeFactory.CreateScope();
+            using var scope = scopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
 
             // Get total count for progress reporting (exclude bot players)
@@ -168,7 +166,7 @@ SETTINGS index_granularity = 8192";
             var totalCount = await totalQuery.CountAsync();
             if (totalCount == 0)
             {
-                _logger.LogInformation("No completed sessions found to sync");
+                logger.LogInformation("No completed sessions found to sync");
                 return new SyncResult
                 {
                     ProcessedCount = 0,
@@ -176,7 +174,7 @@ SETTINGS index_granularity = 8192";
                 };
             }
 
-            _logger.LogInformation("Found {TotalCount} sessions to sync", totalCount);
+            logger.LogInformation("Found {TotalCount} sessions to sync", totalCount);
 
             // Process all records in batches
             var processedSoFar = 0;
@@ -250,7 +248,7 @@ SETTINGS index_granularity = 8192";
                 totalProcessedCount += playerRounds.Count;
 
                 var batchDuration = DateTime.UtcNow - batchStartTime;
-                _logger.LogInformation("Batch {BatchNumber}: Synced {BatchCount} sessions ({ProcessedSoFar}/{TotalCount}) in {Duration}ms",
+                logger.LogInformation("Batch {BatchNumber}: Synced {BatchCount} sessions ({ProcessedSoFar}/{TotalCount}) in {Duration}ms",
                     batchNumber, playerRounds.Count, processedSoFar, totalCount, batchDuration.TotalMilliseconds);
 
                 // Small delay to prevent overwhelming the database
@@ -261,7 +259,7 @@ SETTINGS index_granularity = 8192";
             }
 
             var duration = DateTime.UtcNow - startTime;
-            _logger.LogInformation("Successfully synced all {Count} completed sessions to ClickHouse in {Duration}ms across {BatchCount} batches",
+            logger.LogInformation("Successfully synced all {Count} completed sessions to ClickHouse in {Duration}ms across {BatchCount} batches",
                 totalProcessedCount, duration.TotalMilliseconds, batchNumber);
 
             return new SyncResult
@@ -273,7 +271,7 @@ SETTINGS index_granularity = 8192";
         catch (Exception ex)
         {
             var duration = DateTime.UtcNow - startTime;
-            _logger.LogError(ex, "Failed to sync completed sessions after processing {ProcessedCount} records", totalProcessedCount);
+            logger.LogError(ex, "Failed to sync completed sessions after processing {ProcessedCount} records", totalProcessedCount);
             return new SyncResult
             {
                 ProcessedCount = totalProcessedCount,
@@ -331,11 +329,11 @@ SETTINGS index_granularity = 8192";
             var fullRequest = query + "\n" + csvData;
 
             await ExecuteCommandAsync(fullRequest);
-            _logger.LogInformation("Successfully inserted {Count} player rounds to ClickHouse", rounds.Count);
+            logger.LogInformation("Successfully inserted {Count} player rounds to ClickHouse", rounds.Count);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to insert player rounds to ClickHouse");
+            logger.LogError(ex, "Failed to insert player rounds to ClickHouse");
             throw;
         }
     }

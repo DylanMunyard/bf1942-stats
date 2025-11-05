@@ -8,9 +8,6 @@ namespace api.Data.Migrations;
 
 public class ServerOnlineCountsMigrationController(ILogger<ServerOnlineCountsMigrationController> logger, PlayerMetricsWriteService writer, PlayerTrackerDbContext db)
 {
-    private readonly ILogger<ServerOnlineCountsMigrationController> _logger = logger;
-    private readonly PlayerMetricsWriteService _writer = writer;
-    private readonly PlayerTrackerDbContext _db = db;
 
     public class RepopulateRequest
     {
@@ -43,11 +40,11 @@ public class ServerOnlineCountsMigrationController(ILogger<ServerOnlineCountsMig
         try
         {
             // Derive range from SQLite sessions if unspecified
-            var fromUtc = request.FromUtc ?? await _db.PlayerSessions.MinAsync(ps => (DateTime?)ps.StartTime) ?? DateTime.UtcNow.AddDays(-1);
-            var toUtc = request.ToUtc ?? await _db.PlayerSessions.MaxAsync(ps => (DateTime?)ps.LastSeenTime) ?? DateTime.UtcNow;
+            var fromUtc = request.FromUtc ?? await db.PlayerSessions.MinAsync(ps => (DateTime?)ps.StartTime) ?? DateTime.UtcNow.AddDays(-1);
+            var toUtc = request.ToUtc ?? await db.PlayerSessions.MaxAsync(ps => (DateTime?)ps.LastSeenTime) ?? DateTime.UtcNow;
 
             // Load all servers once; only a few hundred total
-            var serversByGuid = await _db.Servers
+            var serversByGuid = await db.Servers
                 .AsNoTracking()
                 .Select(s => new { s.Guid, s.Game })
                 .ToDictionaryAsync(s => s.Guid, s => s.Game);
@@ -60,7 +57,7 @@ public class ServerOnlineCountsMigrationController(ILogger<ServerOnlineCountsMig
                  windowStart = windowStart.AddMinutes(request.BatchMinutes))
             {
                 var windowEnd = windowStart.AddMinutes(request.BatchMinutes);
-                var counts = await ComputeServerOnlineCountsAsync(_db, windowStart, windowEnd, serversByGuid);
+                var counts = await ComputeServerOnlineCountsAsync(db, windowStart, windowEnd, serversByGuid);
                 if (counts.Count > 0)
                 {
                     // Buffer rows for larger bulk inserts
@@ -68,7 +65,7 @@ public class ServerOnlineCountsMigrationController(ILogger<ServerOnlineCountsMig
                     total += counts.Count;
                     if (buffer.Count >= MaxRowsPerInsert)
                     {
-                        await _writer.WriteServerOnlineCountsAsync(buffer);
+                        await writer.WriteServerOnlineCountsAsync(buffer);
                         buffer.Clear();
                     }
                 }
@@ -76,7 +73,7 @@ public class ServerOnlineCountsMigrationController(ILogger<ServerOnlineCountsMig
 
             if (buffer.Count > 0)
             {
-                await _writer.WriteServerOnlineCountsAsync(buffer);
+                await writer.WriteServerOnlineCountsAsync(buffer);
                 buffer.Clear();
             }
 
@@ -91,7 +88,7 @@ public class ServerOnlineCountsMigrationController(ILogger<ServerOnlineCountsMig
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Server online counts repopulate failed");
+            logger.LogError(ex, "Server online counts repopulate failed");
             var ended = DateTime.UtcNow;
             return new RepopulateResponse
             {

@@ -10,8 +10,6 @@ public class RoundsController(
     RoundsService roundsService,
     ILogger<RoundsController> logger) : ControllerBase
 {
-    private readonly RoundsService _roundsService = roundsService;
-    private readonly ILogger<RoundsController> _logger = logger;
 
     // Get all rounds with filtering and pagination support
     [HttpGet]
@@ -106,7 +104,7 @@ public class RoundsController(
                     : null
             };
 
-            var result = await _roundsService.GetRounds(page, pageSize, sortBy, sortOrder, filters, includePlayers, onlySpecifiedPlayers);
+            var result = await roundsService.GetRounds(page, pageSize, sortBy, sortOrder, filters, includePlayers, onlySpecifiedPlayers);
 
             if (result.TotalItems == 0)
                 return NotFound("No rounds found with the specified filters");
@@ -119,7 +117,7 @@ public class RoundsController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving rounds with filters");
+            logger.LogError(ex, "Error retrieving rounds with filters");
             return StatusCode(500, "An internal server error occurred while retrieving rounds");
         }
     }
@@ -135,7 +133,7 @@ public class RoundsController(
 
         try
         {
-            var roundReport = await _roundsService.GetRoundReport(roundId, gamificationService);
+            var roundReport = await roundsService.GetRoundReport(roundId, gamificationService);
 
             if (roundReport == null)
                 return NotFound($"Round '{roundId}' not found");
@@ -144,7 +142,7 @@ public class RoundsController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving round report for round {RoundId}", roundId);
+            logger.LogError(ex, "Error retrieving round report for round {RoundId}", roundId);
             return StatusCode(500, $"Error retrieving round report: {ex.Message}");
         }
     }

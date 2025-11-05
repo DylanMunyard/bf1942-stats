@@ -12,8 +12,6 @@ namespace api.ClickHouse;
 
 public class PlayerRoundsReadService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerRoundsReadService> logger, IServiceProvider serviceProvider) : BaseClickHouseService(httpClient, clickHouseUrl), IClickHouseReader
 {
-    private readonly ILogger<PlayerRoundsReadService> _logger = logger;
-    private readonly IServiceProvider _serviceProvider = serviceProvider;
 
     private static int CalculateMinimumRounds(DateTime startPeriod, DateTime endPeriod, int? minRoundsOverride = null)
     {
@@ -494,7 +492,7 @@ FORMAT TabSeparated";
             return;
 
         // Look up server names from the database
-        using var scope = _serviceProvider.CreateScope();
+        using var scope = serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
 
         var serverLookup = await dbContext.Servers

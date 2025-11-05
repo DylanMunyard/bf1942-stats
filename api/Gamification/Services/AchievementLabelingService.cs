@@ -7,8 +7,6 @@ public class AchievementLabelingService(
     BadgeDefinitionsService badgeDefinitionsService,
     ILogger<AchievementLabelingService> logger)
 {
-    private readonly BadgeDefinitionsService _badgeDefinitionsService = badgeDefinitionsService;
-    private readonly ILogger<AchievementLabelingService> _logger = logger;
     private readonly Dictionary<string, AchievementLabel> _achievementLabels = InitializeAchievementLabelsStatic(badgeDefinitionsService);
 
     /// <summary>

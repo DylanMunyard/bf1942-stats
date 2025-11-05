@@ -60,21 +60,20 @@ namespace api.PlayerTracking
 
     public class BfvietnamServerAdapter(BfvietnamServerInfo serverInfo) : IGameServer
     {
-        private readonly BfvietnamServerInfo _serverInfo = serverInfo;
-        public string Guid => _serverInfo.Guid;
-        public string Name => _serverInfo.Name;
-        public string Ip => _serverInfo.Ip;
-        public int Port => _serverInfo.Port;
+        public string Guid => serverInfo.Guid;
+        public string Name => serverInfo.Name;
+        public string Ip => serverInfo.Ip;
+        public int Port => serverInfo.Port;
         public string GameId => "bfvietnam";
-        public string GameType => _serverInfo.GameType;
-        public string MapName => _serverInfo.MapName;
-        public int? Tickets1 => _serverInfo.Tickets1;
-        public int? Tickets2 => _serverInfo.Tickets2;
-        public int? MaxPlayers => _serverInfo.MaxPlayers;
-        public string? JoinLink => _serverInfo.JoinLink;
+        public string GameType => serverInfo.GameType;
+        public string MapName => serverInfo.MapName;
+        public int? Tickets1 => serverInfo.Tickets1;
+        public int? Tickets2 => serverInfo.Tickets2;
+        public int? MaxPlayers => serverInfo.MaxPlayers;
+        public string? JoinLink => serverInfo.JoinLink;
         public int? RoundTimeRemain => 0; // BFV doesn't have this field in the provided sample
 
-        public IEnumerable<PlayerInfo> Players => _serverInfo.Players;
-        public IEnumerable<TeamInfo> Teams => _serverInfo.Teams;
+        public IEnumerable<PlayerInfo> Players => serverInfo.Players;
+        public IEnumerable<TeamInfo> Teams => serverInfo.Teams;
     }
 }

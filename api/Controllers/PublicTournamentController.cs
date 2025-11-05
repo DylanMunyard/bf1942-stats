@@ -12,8 +12,6 @@ public class PublicTournamentController(
     PlayerTrackerDbContext context,
     ILogger<PublicTournamentController> logger) : ControllerBase
 {
-    private readonly PlayerTrackerDbContext _context = context;
-    private readonly ILogger<PublicTournamentController> _logger = logger;
 
     /// <summary>
     /// Get tournament details by ID or name (public, no auth required)
@@ -28,7 +26,7 @@ public class PublicTournamentController(
             // Try to parse as integer first (ID lookup)
             if (int.TryParse(idOrName, out int id))
             {
-                tournament = await _context.Tournaments
+                tournament = await context.Tournaments
                     .Include(t => t.OrganizerPlayer)
                     .Include(t => t.Server)
                     .Include(t => t.Theme)
@@ -37,7 +35,7 @@ public class PublicTournamentController(
             else
             {
                 // If not a number, search by name
-                tournament = await _context.Tournaments
+                tournament = await context.Tournaments
                     .Include(t => t.OrganizerPlayer)
                     .Include(t => t.Server)
                     .Include(t => t.Theme)
@@ -51,7 +49,7 @@ public class PublicTournamentController(
             var tournamentId = tournament.Id;
 
             // Load teams for this tournament
-            var teams = await _context.TournamentTeams
+            var teams = await context.TournamentTeams
                 .Where(tt => tt.TournamentId == tournamentId)
                 .Select(tt => new { tt.Id, tt.Name, tt.CreatedAt })
                 .ToListAsync();
@@ -60,7 +58,7 @@ public class PublicTournamentController(
             var teamIds = teams.Select(t => t.Id).ToList();
 
             // Batch load all team players
-            var teamPlayers = await _context.TournamentTeamPlayers
+            var teamPlayers = await context.TournamentTeamPlayers
                 .Where(ttp => teamIds.Contains(ttp.TournamentTeamId))
                 .Select(ttp => new { ttp.TournamentTeamId, ttp.PlayerName })
                 .ToListAsync();
@@ -81,7 +79,7 @@ public class PublicTournamentController(
             }).ToList();
 
             // Load matches for this tournament
-            var matches = await _context.TournamentMatches
+            var matches = await context.TournamentMatches
                 .Where(tm => tm.TournamentId == tournamentId)
                 .Select(tm => new
                 {
@@ -101,7 +99,7 @@ public class PublicTournamentController(
             var matchIds = matches.Select(m => m.Id).ToList();
 
             // Batch load all match maps with their match results
-            var matchMaps = await _context.TournamentMatchMaps
+            var matchMaps = await context.TournamentMatchMaps
                 .Where(tmm => matchIds.Contains(tmm.MatchId))
                 .Select(tmm => new
                 {
@@ -223,7 +221,7 @@ public class PublicTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting public tournament {TournamentId}", idOrName);
+            logger.LogError(ex, "Error getting public tournament {TournamentId}", idOrName);
             return StatusCode(500, new { message = "Error retrieving tournament" });
         }
     }
@@ -236,7 +234,7 @@ public class PublicTournamentController(
     {
         try
         {
-            var tournament = await _context.Tournaments
+            var tournament = await context.Tournaments
                 .Where(t => t.Id == id)
                 .Select(t => new { t.HeroImage, t.HeroImageContentType })
                 .FirstOrDefaultAsync();
@@ -251,7 +249,7 @@ public class PublicTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting tournament image {TournamentId}", id);
+            logger.LogError(ex, "Error getting tournament image {TournamentId}", id);
             return StatusCode(500, new { message = "Error retrieving tournament image" });
         }
     }
@@ -264,7 +262,7 @@ public class PublicTournamentController(
     {
         try
         {
-            var tournament = await _context.Tournaments
+            var tournament = await context.Tournaments
                 .Where(t => t.Id == id)
                 .Select(t => new { t.CommunityLogo, t.CommunityLogoContentType })
                 .FirstOrDefaultAsync();
@@ -279,7 +277,7 @@ public class PublicTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting tournament logo {TournamentId}", id);
+            logger.LogError(ex, "Error getting tournament logo {TournamentId}", id);
             return StatusCode(500, new { message = "Error retrieving tournament logo" });
         }
     }
@@ -300,13 +298,13 @@ public class PublicTournamentController(
             // Try to parse as integer first (ID lookup)
             if (int.TryParse(idOrName, out int id))
             {
-                tournament = await _context.Tournaments
+                tournament = await context.Tournaments
                     .FirstOrDefaultAsync(t => t.Id == id);
             }
             else
             {
                 // If not a number, search by name
-                tournament = await _context.Tournaments
+                tournament = await context.Tournaments
                     .FirstOrDefaultAsync(t => t.Name == idOrName);
             }
 
@@ -316,7 +314,7 @@ public class PublicTournamentController(
             // Get rankings for this tournament and week
             // If week is null, returns cumulative standings (Week == null)
             // If week is specified, returns week-specific standings
-            var rankings = await _context.TournamentTeamRankings
+            var rankings = await context.TournamentTeamRankings
                 .Where(r => r.TournamentId == tournament.Id && r.Week == week)
                 .OrderBy(r => r.Rank)
                 .Select(r => new PublicTeamRankingResponse
@@ -351,7 +349,7 @@ public class PublicTournamentController(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting leaderboard for tournament {TournamentId}, week {Week}", idOrName, week);
+            logger.LogError(ex, "Error getting leaderboard for tournament {TournamentId}, week {Week}", idOrName, week);
             return StatusCode(500, new { message = "Error retrieving leaderboard" });
         }
     }

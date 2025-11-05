@@ -9,7 +9,6 @@ namespace api.ClickHouse;
 
 public class PlayerInsightsService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerInsightsService> logger) : BaseClickHouseService(httpClient, clickHouseUrl), IClickHouseReader, IPlayerInsightsService
 {
-    private readonly ILogger<PlayerInsightsService> _logger = logger;
 
     public async Task<string> ExecuteQueryAsync(string query)
     {

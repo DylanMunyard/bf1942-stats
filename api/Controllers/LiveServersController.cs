@@ -16,10 +16,6 @@ public class LiveServersController(
     PlayerTrackerDbContext dbContext,
     PlayersOnlineHistoryService playersOnlineHistoryService) : ControllerBase
 {
-    private readonly IBfListApiService _bfListApiService = bfListApiService;
-    private readonly ILogger<LiveServersController> _logger = logger;
-    private readonly PlayerTrackerDbContext _dbContext = dbContext;
-    private readonly PlayersOnlineHistoryService _playersOnlineHistoryService = playersOnlineHistoryService;
 
     private static readonly string[] ValidGames = ["bf1942", "fh2", "bfvietnam"];
 
@@ -42,12 +38,12 @@ public class LiveServersController(
 
         try
         {
-            _logger.LogInformation("API REQUEST - Starting GetServers for game {Game}, showAll: {ShowAll}", game, showAll);
+            logger.LogInformation("API REQUEST - Starting GetServers for game {Game}, showAll: {ShowAll}", game, showAll);
 
             stepStopwatch.Restart();
             var servers = await GetServersFromDatabaseAsync(game, showAll);
             stepStopwatch.Stop();
-            _logger.LogInformation("API TIMING - Database operations completed in {DatabaseMs}ms. Retrieved {ServerCount} servers",
+            logger.LogInformation("API TIMING - Database operations completed in {DatabaseMs}ms. Retrieved {ServerCount} servers",
                 stepStopwatch.ElapsedMilliseconds, servers?.Length ?? 0);
 
             stepStopwatch.Restart();
@@ -59,8 +55,8 @@ public class LiveServersController(
             stepStopwatch.Stop();
 
             totalStopwatch.Stop();
-            _logger.LogInformation("API TIMING - Response object creation took {ResponseMs}ms", stepStopwatch.ElapsedMilliseconds);
-            _logger.LogInformation("API COMPLETE - Total GetServers time: {TotalMs}ms for game {Game}",
+            logger.LogInformation("API TIMING - Response object creation took {ResponseMs}ms", stepStopwatch.ElapsedMilliseconds);
+            logger.LogInformation("API COMPLETE - Total GetServers time: {TotalMs}ms for game {Game}",
                 totalStopwatch.ElapsedMilliseconds, game);
 
             return Ok(response);
@@ -68,7 +64,7 @@ public class LiveServersController(
         catch (Exception ex)
         {
             totalStopwatch.Stop();
-            _logger.LogError(ex, "API ERROR - Unexpected error fetching all servers for game {Game} after {ElapsedMs}ms", game, totalStopwatch.ElapsedMilliseconds);
+            logger.LogError(ex, "API ERROR - Unexpected error fetching all servers for game {Game} after {ElapsedMs}ms", game, totalStopwatch.ElapsedMilliseconds);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -97,7 +93,7 @@ public class LiveServersController(
 
         try
         {
-            var server = await _bfListApiService.FetchSingleServerSummaryAsync(game, serverIdentifier);
+            var server = await bfListApiService.FetchSingleServerSummaryAsync(game, serverIdentifier);
             if (server == null)
             {
                 return NotFound($"Server {serverIdentifier} not found");
@@ -111,13 +107,13 @@ public class LiveServersController(
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "Failed to fetch server {ServerIdentifier} from BFList API for game {Game}",
+            logger.LogError(ex, "Failed to fetch server {ServerIdentifier} from BFList API for game {Game}",
                 serverIdentifier, game);
             return StatusCode(502, "Failed to fetch server data from upstream API");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error fetching server {ServerIdentifier} for game {Game}",
+            logger.LogError(ex, "Unexpected error fetching server {ServerIdentifier} for game {Game}",
                 serverIdentifier, game);
             return StatusCode(500, "Internal server error");
         }
@@ -128,13 +124,13 @@ public class LiveServersController(
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var stepStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        _logger.LogInformation("Starting GetServersFromDatabaseAsync for game {Game}, showAll: {ShowAll}", game, showAll);
+        logger.LogInformation("Starting GetServersFromDatabaseAsync for game {Game}, showAll: {ShowAll}", game, showAll);
 
         var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
 
         // Get servers filtering only by online status
         stepStopwatch.Restart();
-        var serverQuery = _dbContext.Servers
+        var serverQuery = dbContext.Servers
             .Where(s => s.Game.ToLower() == game.ToLower());
 
         // Filter by online status unless showing all servers
@@ -145,23 +141,23 @@ public class LiveServersController(
 
         var servers = await serverQuery.ToListAsync();
         stepStopwatch.Stop();
-        _logger.LogInformation("Step 1 - Servers query completed in {ElapsedMs}ms. Found {ServerCount} servers",
+        logger.LogInformation("Step 1 - Servers query completed in {ElapsedMs}ms. Found {ServerCount} servers",
             stepStopwatch.ElapsedMilliseconds, servers.Count);
 
         if (servers.Count == 0)
         {
             totalStopwatch.Stop();
-            _logger.LogInformation("No servers found, returning empty array. Total time: {TotalMs}ms", totalStopwatch.ElapsedMilliseconds);
+            logger.LogInformation("No servers found, returning empty array. Total time: {TotalMs}ms", totalStopwatch.ElapsedMilliseconds);
             return Array.Empty<ServerSummary>();
         }
 
         var serverGuids = servers.Select(s => s.Guid).ToList();
-        _logger.LogDebug("Processing {ServerCount} servers with GUIDs: {ServerGuids}",
+        logger.LogDebug("Processing {ServerCount} servers with GUIDs: {ServerGuids}",
             servers.Count, string.Join(", ", serverGuids.Take(5)) + (serverGuids.Count > 5 ? "..." : ""));
 
         // Get active player sessions efficiently (excluding bots) - ALL DATA NOW IN ONE QUERY!
         stepStopwatch.Restart();
-        var activeSessions = await _dbContext.PlayerSessions
+        var activeSessions = await dbContext.PlayerSessions
             .Where(ps => serverGuids.Contains(ps.ServerGuid)
                          && ps.IsActive
                          && ps.LastSeenTime >= oneMinuteAgo
@@ -169,19 +165,19 @@ public class LiveServersController(
             .Include(ps => ps.Player)
             .ToListAsync();
         stepStopwatch.Stop();
-        _logger.LogInformation("Step 2 - Active player sessions query completed in {ElapsedMs}ms. Found {SessionCount} sessions WITH ALL DATA",
+        logger.LogInformation("Step 2 - Active player sessions query completed in {ElapsedMs}ms. Found {SessionCount} sessions WITH ALL DATA",
             stepStopwatch.ElapsedMilliseconds, activeSessions.Count);
 
         // ELIMINATED: PlayerObservations query - no longer needed!
-        _logger.LogInformation("Step 3 - SKIPPED PlayerObservations query - using denormalized data from PlayerSession!");
+        logger.LogInformation("Step 3 - SKIPPED PlayerObservations query - using denormalized data from PlayerSession!");
 
         // Get current rounds efficiently
         stepStopwatch.Restart();
-        var currentRounds = await _dbContext.Rounds
+        var currentRounds = await dbContext.Rounds
             .Where(r => serverGuids.Contains(r.ServerGuid) && r.IsActive)
             .ToDictionaryAsync(r => r.ServerGuid, r => r);
         stepStopwatch.Stop();
-        _logger.LogInformation("Step 4 - Current rounds query completed in {ElapsedMs}ms. Found {RoundCount} active rounds",
+        logger.LogInformation("Step 4 - Current rounds query completed in {ElapsedMs}ms. Found {RoundCount} active rounds",
             stepStopwatch.ElapsedMilliseconds, currentRounds.Count);
 
         // Build response by combining the data - NOW MUCH SIMPLER!
@@ -233,15 +229,15 @@ public class LiveServersController(
             };
         }).ToList();
         stepStopwatch.Stop();
-        _logger.LogInformation("Step 5 - Response building completed in {ElapsedMs}ms (MUCH FASTER - no observation lookups!)", stepStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("Step 5 - Response building completed in {ElapsedMs}ms (MUCH FASTER - no observation lookups!)", stepStopwatch.ElapsedMilliseconds);
 
         stepStopwatch.Restart();
         var sortedSummaries = serverSummaries.OrderByDescending(s => s.NumPlayers).ToArray();
         stepStopwatch.Stop();
         totalStopwatch.Stop();
 
-        _logger.LogInformation("Step 6 - Sorting completed in {ElapsedMs}ms", stepStopwatch.ElapsedMilliseconds);
-        _logger.LogInformation("OPTIMIZED GetServersFromDatabaseAsync completed. Total time: {TotalMs}ms, returning {ServerCount} servers - ELIMINATED 7+ SECOND QUERY!",
+        logger.LogInformation("Step 6 - Sorting completed in {ElapsedMs}ms", stepStopwatch.ElapsedMilliseconds);
+        logger.LogInformation("OPTIMIZED GetServersFromDatabaseAsync completed. Total time: {TotalMs}ms, returning {ServerCount} servers - ELIMINATED 7+ SECOND QUERY!",
             totalStopwatch.ElapsedMilliseconds, sortedSummaries.Length);
 
         return sortedSummaries;
@@ -278,7 +274,7 @@ public class LiveServersController(
 
         // Create lookup table for server geo data by GUID
         var serverGuids = servers.Select(s => s.Guid).ToArray();
-        var geoData = await _dbContext.Servers
+        var geoData = await dbContext.Servers
             .Where(gs => serverGuids.Contains(gs.Guid))
             .ToDictionaryAsync(gs => gs.Guid, gs => gs);
 
@@ -342,12 +338,12 @@ public class LiveServersController(
 
         try
         {
-            var history = await _playersOnlineHistoryService.GetPlayersOnlineHistory(game.ToLower(), period.ToLower(), rollingWindowDays);
+            var history = await playersOnlineHistoryService.GetPlayersOnlineHistory(game.ToLower(), period.ToLower(), rollingWindowDays);
             return Ok(history);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error fetching players online history for game {Game} with period {Period}", game, period);
+            logger.LogError(ex, "Unexpected error fetching players online history for game {Game} with period {Period}", game, period);
             return StatusCode(500, "Internal server error");
         }
     }

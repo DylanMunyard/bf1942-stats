@@ -7,7 +7,6 @@ namespace api.ClickHouse;
 
 public class ServerStatisticsService(ILogger<ServerStatisticsService> logger) : IServerStatisticsService
 {
-    private readonly ILogger<ServerStatisticsService> _logger = logger;
     private readonly ClickHouseConnection _connection = InitializeConnection(logger);
     private bool _disposed;
 
@@ -97,7 +96,7 @@ ORDER BY total_kills DESC";
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving server statistics for player {PlayerName}", playerName);
+            logger.LogError(ex, "Error retrieving server statistics for player {PlayerName}", playerName);
             throw;
         }
     }

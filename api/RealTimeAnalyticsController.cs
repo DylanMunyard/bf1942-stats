@@ -8,14 +8,13 @@ namespace api;
 [Route("stats/[controller]")]
 public class RealTimeAnalyticsController(RealTimeAnalyticsService analyticsService) : ControllerBase
 {
-    private readonly RealTimeAnalyticsService _analyticsService = analyticsService;
 
     [HttpGet("teamkillers")]
     public async Task<ActionResult<List<TeamKillerMetrics>>> GetTeamkillers()
     {
         try
         {
-            var teamkillers = await _analyticsService.MonitorTeamkillers();
+            var teamkillers = await analyticsService.MonitorTeamkillers();
             return Ok(teamkillers);
         }
         catch (Exception ex)

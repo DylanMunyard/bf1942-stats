@@ -13,9 +13,6 @@ namespace api.StatsCollectors;
 
 public class ClickHouseSyncBackgroundService(IServiceScopeFactory scopeFactory, IConfiguration configuration, ILogger<ClickHouseSyncBackgroundService> logger) : IHostedService, IDisposable
 {
-    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
-    private readonly IConfiguration _configuration = configuration;
-    private readonly ILogger<ClickHouseSyncBackgroundService> _logger = logger;
     private readonly TimeSpan _syncInterval = TimeSpan.FromMinutes(1);
     private Timer? _timer;
     private int _isRunning = 0;
@@ -29,18 +26,18 @@ public class ClickHouseSyncBackgroundService(IServiceScopeFactory scopeFactory, 
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Config ENABLE_PLAYER_METRICS_SYNCING: {Enabled}", _enablePlayerMetricsSyncing);
-        _logger.LogInformation("Config ENABLE_SERVER_ONLINE_COUNTS_SYNCING: {Enabled}", _enableServerOnlineCountsSyncing);
-        _logger.LogInformation("Config ENABLE_CLICKHOUSE_ROUND_SYNCING: {Enabled}", _enableRoundsSyncing);
+        logger.LogInformation("Config ENABLE_PLAYER_METRICS_SYNCING: {Enabled}", _enablePlayerMetricsSyncing);
+        logger.LogInformation("Config ENABLE_SERVER_ONLINE_COUNTS_SYNCING: {Enabled}", _enableServerOnlineCountsSyncing);
+        logger.LogInformation("Config ENABLE_CLICKHOUSE_ROUND_SYNCING: {Enabled}", _enableRoundsSyncing);
 
         var clickHouseReadUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
         var clickHouseWriteUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") ?? clickHouseReadUrl;
         var isWriteUrlSet = Environment.GetEnvironmentVariable("CLICKHOUSE_WRITE_URL") != null;
 
-        _logger.LogInformation("ClickHouse Read URL: {ReadUrl}", clickHouseReadUrl);
-        _logger.LogInformation("ClickHouse Write URL: {WriteUrl} {Source}", clickHouseWriteUrl, isWriteUrlSet ? "(custom)" : "(fallback to read URL)");
+        logger.LogInformation("ClickHouse Read URL: {ReadUrl}", clickHouseReadUrl);
+        logger.LogInformation("ClickHouse Write URL: {WriteUrl} {Source}", clickHouseWriteUrl, isWriteUrlSet ? "(custom)" : "(fallback to read URL)");
 
-        _logger.LogInformation("ClickHouse sync service starting (1m intervals)...");
+        logger.LogInformation("ClickHouse sync service starting (1m intervals)...");
         _timer = new Timer(ExecuteSyncCycle, null, TimeSpan.Zero, _syncInterval);
         return Task.CompletedTask;
     }
@@ -56,7 +53,7 @@ public class ClickHouseSyncBackgroundService(IServiceScopeFactory scopeFactory, 
         var cycleStopwatch = Stopwatch.StartNew();
         try
         {
-            using var scope = _scopeFactory.CreateScope();
+            using var scope = scopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
             var metricsWriter = scope.ServiceProvider.GetRequiredService<PlayerMetricsWriteService>();
             var roundsWriter = scope.ServiceProvider.GetRequiredService<PlayerRoundsWriteService>();
@@ -101,7 +98,7 @@ public class ClickHouseSyncBackgroundService(IServiceScopeFactory scopeFactory, 
                 }
 
                 metricsStopwatch.Stop();
-                _logger.LogInformation("ClickHouse player_metrics sync: {TotalMetrics} rows ({Duration}ms)", totalMetrics, metricsStopwatch.ElapsedMilliseconds);
+                logger.LogInformation("ClickHouse player_metrics sync: {TotalMetrics} rows ({Duration}ms)", totalMetrics, metricsStopwatch.ElapsedMilliseconds);
                 activity?.SetTag("player_metrics_count", totalMetrics);
                 activity?.SetTag("player_metrics_duration_ms", metricsStopwatch.ElapsedMilliseconds);
             }
@@ -115,7 +112,7 @@ public class ClickHouseSyncBackgroundService(IServiceScopeFactory scopeFactory, 
                     await metricsWriter.WriteServerOnlineCountsAsync(counts);
                 }
                 countsStopwatch.Stop();
-                _logger.LogInformation("ClickHouse online_counts sync: {Count} rows ({Duration}ms)", counts.Count, countsStopwatch.ElapsedMilliseconds);
+                logger.LogInformation("ClickHouse online_counts sync: {Count} rows ({Duration}ms)", counts.Count, countsStopwatch.ElapsedMilliseconds);
                 activity?.SetTag("online_counts_count", counts.Count);
                 activity?.SetTag("online_counts_duration_ms", countsStopwatch.ElapsedMilliseconds);
             }
@@ -125,14 +122,14 @@ public class ClickHouseSyncBackgroundService(IServiceScopeFactory scopeFactory, 
                 var roundsStopwatch = Stopwatch.StartNew();
                 var result = await roundsWriter.SyncCompletedSessionsAsync();
                 roundsStopwatch.Stop();
-                _logger.LogInformation("ClickHouse player_rounds sync: {ProcessedCount} records ({Duration}ms)", result.ProcessedCount, roundsStopwatch.ElapsedMilliseconds);
+                logger.LogInformation("ClickHouse player_rounds sync: {ProcessedCount} records ({Duration}ms)", result.ProcessedCount, roundsStopwatch.ElapsedMilliseconds);
                 activity?.SetTag("rounds_synced_count", result.ProcessedCount);
                 activity?.SetTag("rounds_sync_duration_ms", roundsStopwatch.ElapsedMilliseconds);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error in ClickHouse sync cycle");
+            logger.LogError(ex, "Error in ClickHouse sync cycle");
             activity?.SetTag("error", ex.Message);
             activity?.SetStatus(ActivityStatusCode.Error, $"ClickHouse sync cycle failed: {ex.Message}");
         }
@@ -318,7 +315,7 @@ public class ClickHouseSyncBackgroundService(IServiceScopeFactory scopeFactory, 
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("ClickHouse sync service stopping...");
+        logger.LogInformation("ClickHouse sync service stopping...");
         _timer?.Change(Timeout.Infinite, 0);
         return Task.CompletedTask;
     }

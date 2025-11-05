@@ -10,9 +10,6 @@ public class TournamentMatchResultService(
     ITeamMappingService teamMappingService,
     ILogger<TournamentMatchResultService> logger) : ITournamentMatchResultService
 {
-    private readonly PlayerTrackerDbContext _dbContext = dbContext;
-    private readonly ITeamMappingService _teamMappingService = teamMappingService;
-    private readonly ILogger<TournamentMatchResultService> _logger = logger;
 
     public async Task<(int ResultId, string? WarningMessage)> CreateOrUpdateMatchResultAsync(
         int tournamentId,
@@ -23,30 +20,30 @@ public class TournamentMatchResultService(
         try
         {
             // Get the round to extract ticket information
-            var round = await _dbContext.Rounds
+            var round = await dbContext.Rounds
                 .FirstOrDefaultAsync(r => r.RoundId == roundId);
 
             if (round == null)
                 return (0, $"Round {roundId} not found");
 
             // Get the match to extract week information
-            var match = await _dbContext.TournamentMatches
+            var match = await dbContext.TournamentMatches
                 .FirstOrDefaultAsync(m => m.Id == matchId && m.TournamentId == tournamentId);
 
             if (match == null)
                 return (0, $"Match {matchId} not found in tournament {tournamentId}");
 
             // Attempt to auto-detect team mapping
-            var (team1Id, team2Id, warning) = await _teamMappingService.DetectTeamMappingAsync(roundId, tournamentId);
+            var (team1Id, team2Id, warning) = await teamMappingService.DetectTeamMappingAsync(roundId, tournamentId);
 
             if (warning != null)
             {
                 // Team detection failed - log warning but continue with null teams
-                _logger.LogWarning("Team mapping detection failed for round {RoundId}: {Warning}", roundId, warning);
+                logger.LogWarning("Team mapping detection failed for round {RoundId}: {Warning}", roundId, warning);
             }
             else
             {
-                _logger.LogInformation(
+                logger.LogInformation(
                     "Successfully detected team mapping for round {RoundId}: Team1={Team1Id}, Team2={Team2Id}",
                     roundId, team1Id, team2Id);
             }
@@ -63,7 +60,7 @@ public class TournamentMatchResultService(
             }
 
             // Check if result already exists for this map
-            var existingResult = await _dbContext.TournamentMatchResults
+            var existingResult = await dbContext.TournamentMatchResults
                 .FirstOrDefaultAsync(r => r.MatchId == matchId && r.MapId == mapId);
 
             TournamentMatchResult result;
@@ -79,7 +76,7 @@ public class TournamentMatchResultService(
                 existingResult.Team2Tickets = round.Tickets2 ?? 0;
                 existingResult.UpdatedAt = SystemClock.Instance.GetCurrentInstant();
 
-                _dbContext.TournamentMatchResults.Update(existingResult);
+                dbContext.TournamentMatchResults.Update(existingResult);
                 result = existingResult;
             }
             else
@@ -101,12 +98,12 @@ public class TournamentMatchResultService(
                     UpdatedAt = SystemClock.Instance.GetCurrentInstant()
                 };
 
-                _dbContext.TournamentMatchResults.Add(result);
+                dbContext.TournamentMatchResults.Add(result);
             }
 
-            await _dbContext.SaveChangesAsync();
+            await dbContext.SaveChangesAsync();
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Created/updated match result for tournament {TournamentId}, match {MatchId}, map {MapId}",
                 tournamentId, matchId, mapId);
 
@@ -114,7 +111,7 @@ public class TournamentMatchResultService(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex,
+            logger.LogError(ex,
                 "Error creating/updating match result for tournament {TournamentId}, match {MatchId}, map {MapId}, round {RoundId}",
                 tournamentId, matchId, mapId, roundId);
             throw;
@@ -123,7 +120,7 @@ public class TournamentMatchResultService(
 
     public async Task<TournamentMatchResult?> GetMatchResultAsync(int resultId)
     {
-        return await _dbContext.TournamentMatchResults
+        return await dbContext.TournamentMatchResults
             .AsNoTracking()
             .Include(mr => mr.Tournament)
             .Include(mr => mr.Match)
@@ -138,14 +135,14 @@ public class TournamentMatchResultService(
     {
         try
         {
-            var result = await _dbContext.TournamentMatchResults.FindAsync(resultId);
+            var result = await dbContext.TournamentMatchResults.FindAsync(resultId);
             if (result == null)
                 throw new InvalidOperationException($"Match result {resultId} not found");
 
             // Validate that both teams exist in the tournament
-            var team1 = await _dbContext.TournamentTeams
+            var team1 = await dbContext.TournamentTeams
                 .FirstOrDefaultAsync(t => t.Id == team1Id && t.TournamentId == result.TournamentId);
-            var team2 = await _dbContext.TournamentTeams
+            var team2 = await dbContext.TournamentTeams
                 .FirstOrDefaultAsync(t => t.Id == team2Id && t.TournamentId == result.TournamentId);
 
             if (team1 == null || team2 == null)
@@ -166,16 +163,16 @@ public class TournamentMatchResultService(
             result.WinningTeamId = winningTeamId;
             result.UpdatedAt = SystemClock.Instance.GetCurrentInstant();
 
-            _dbContext.TournamentMatchResults.Update(result);
-            await _dbContext.SaveChangesAsync();
+            dbContext.TournamentMatchResults.Update(result);
+            await dbContext.SaveChangesAsync();
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Overrode team mapping for result {ResultId}: Team1={Team1Id}, Team2={Team2Id}, Winner={WinningTeamId}",
                 resultId, team1Id, team2Id, winningTeamId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error overriding team mapping for result {ResultId}", resultId);
+            logger.LogError(ex, "Error overriding team mapping for result {ResultId}", resultId);
             throw;
         }
     }
@@ -184,18 +181,18 @@ public class TournamentMatchResultService(
     {
         try
         {
-            var result = await _dbContext.TournamentMatchResults.FindAsync(resultId);
+            var result = await dbContext.TournamentMatchResults.FindAsync(resultId);
             if (result == null)
                 throw new InvalidOperationException($"Match result {resultId} not found");
 
-            _dbContext.TournamentMatchResults.Remove(result);
-            await _dbContext.SaveChangesAsync();
+            dbContext.TournamentMatchResults.Remove(result);
+            await dbContext.SaveChangesAsync();
 
-            _logger.LogInformation("Deleted match result {ResultId}", resultId);
+            logger.LogInformation("Deleted match result {ResultId}", resultId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting match result {ResultId}", resultId);
+            logger.LogError(ex, "Error deleting match result {ResultId}", resultId);
             throw;
         }
     }
@@ -208,7 +205,7 @@ public class TournamentMatchResultService(
     {
         try
         {
-            var query = _dbContext.TournamentMatchResults
+            var query = dbContext.TournamentMatchResults
                 .Where(mr => mr.TournamentId == tournamentId)
                 .Include(mr => mr.Tournament)
                 .Include(mr => mr.Match)
@@ -230,7 +227,7 @@ public class TournamentMatchResultService(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving match results for tournament {TournamentId}", tournamentId);
+            logger.LogError(ex, "Error retrieving match results for tournament {TournamentId}", tournamentId);
             throw;
         }
     }
@@ -249,7 +246,7 @@ public class TournamentMatchResultService(
         try
         {
             // Get the match to extract week information
-            var match = await _dbContext.TournamentMatches
+            var match = await dbContext.TournamentMatches
                 .FirstOrDefaultAsync(m => m.Id == matchId && m.TournamentId == tournamentId);
 
             if (match == null)
@@ -261,7 +258,7 @@ public class TournamentMatchResultService(
 
             if (!string.IsNullOrWhiteSpace(roundId))
             {
-                round = await _dbContext.Rounds.FirstOrDefaultAsync(r => r.RoundId == roundId);
+                round = await dbContext.Rounds.FirstOrDefaultAsync(r => r.RoundId == roundId);
                 if (round == null)
                     throw new InvalidOperationException($"Round '{roundId}' not found");
 
@@ -269,7 +266,7 @@ public class TournamentMatchResultService(
                 if (!team1Id.HasValue && !team2Id.HasValue)
                 {
                     var (detectedTeam1Id, detectedTeam2Id, warning) =
-                        await _teamMappingService.DetectTeamMappingAsync(roundId, tournamentId);
+                        await teamMappingService.DetectTeamMappingAsync(roundId, tournamentId);
 
                     teamMappingWarning = warning;
 
@@ -286,9 +283,9 @@ public class TournamentMatchResultService(
             // Validate that teams exist in the tournament (only if teams are provided)
             if (team1Id.HasValue && team1Id > 0 && team2Id.HasValue && team2Id > 0)
             {
-                var team1 = await _dbContext.TournamentTeams
+                var team1 = await dbContext.TournamentTeams
                     .FirstOrDefaultAsync(t => t.Id == team1Id && t.TournamentId == tournamentId);
-                var team2 = await _dbContext.TournamentTeams
+                var team2 = await dbContext.TournamentTeams
                     .FirstOrDefaultAsync(t => t.Id == team2Id && t.TournamentId == tournamentId);
 
                 if (team1 == null || team2 == null)
@@ -306,7 +303,7 @@ public class TournamentMatchResultService(
             var finalTeam1Tickets = team1Tickets.HasValue ? team1Tickets.Value : (round?.Tickets1 ?? 0);
             var finalTeam2Tickets = team2Tickets.HasValue ? team2Tickets.Value : (round?.Tickets2 ?? 0);
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Creating match result - Team1Tickets: requested={RequestedTeam1}, round={RoundTeam1}, final={FinalTeam1} | " +
                 "Team2Tickets: requested={RequestedTeam2}, round={RoundTeam2}, final={FinalTeam2} | RoundId={RoundId}",
                 team1Tickets, round?.Tickets1, finalTeam1Tickets,
@@ -336,10 +333,10 @@ public class TournamentMatchResultService(
                 UpdatedAt = SystemClock.Instance.GetCurrentInstant()
             };
 
-            _dbContext.TournamentMatchResults.Add(result);
-            await _dbContext.SaveChangesAsync();
+            dbContext.TournamentMatchResults.Add(result);
+            await dbContext.SaveChangesAsync();
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Created manual match result {ResultId} for tournament {TournamentId}, match {MatchId}, map {MapId}" +
                 (roundId != null ? ", linked to round {RoundId}" : ""),
                 result.Id, tournamentId, matchId, mapId, roundId);
@@ -348,7 +345,7 @@ public class TournamentMatchResultService(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex,
+            logger.LogError(ex,
                 "Error creating manual match result for tournament {TournamentId}, match {MatchId}, map {MapId}",
                 tournamentId, matchId, mapId);
             throw;

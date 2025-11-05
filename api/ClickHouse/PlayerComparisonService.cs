@@ -21,26 +21,20 @@ public class PlayerComparisonService(
     ICacheKeyService cacheKeyService,
     PlayerInsightsService playerInsightsService) : IPlayerComparisonService
 {
-    private readonly ClickHouseConnection _connection = connection;
-    private readonly ILogger<PlayerComparisonService> _logger = logger;
-    private readonly PlayerTrackerDbContext _dbContext = dbContext;
-    private readonly ICacheService _cacheService = cacheService;
-    private readonly ICacheKeyService _cacheKeyService = cacheKeyService;
-    private readonly PlayerInsightsService _playerInsightsService = playerInsightsService;
 
     public async Task<PlayerComparisonResult> ComparePlayersAsync(string player1, string player2, string? serverGuid = null)
     {
         // Check cache first
-        var cacheKey = _cacheKeyService.GetPlayerComparisonKey(player1, player2, serverGuid);
-        var cachedResult = await _cacheService.GetAsync<PlayerComparisonResult>(cacheKey);
+        var cacheKey = cacheKeyService.GetPlayerComparisonKey(player1, player2, serverGuid);
+        var cachedResult = await cacheService.GetAsync<PlayerComparisonResult>(cacheKey);
 
         if (cachedResult != null)
         {
-            _logger.LogDebug("Cache hit for player comparison: {Player1} vs {Player2}", player1, player2);
+            logger.LogDebug("Cache hit for player comparison: {Player1} vs {Player2}", player1, player2);
             return cachedResult;
         }
 
-        _logger.LogDebug("Cache miss for player comparison: {Player1} vs {Player2}", player1, player2);
+        logger.LogDebug("Cache miss for player comparison: {Player1} vs {Player2}", player1, player2);
 
         var result = new PlayerComparisonResult
         {
@@ -80,7 +74,7 @@ public class PlayerComparisonService(
         serverGuidsToConvert.UnionWith(commonServersData.serverGuids);
 
         // 7. Kill Milestones for both players
-        var killMilestones = await _playerInsightsService.GetPlayersKillMilestonesAsync(new List<string> { player1, player2 });
+        var killMilestones = await playerInsightsService.GetPlayersKillMilestonesAsync(new List<string> { player1, player2 });
         result.Player1KillMilestones = killMilestones.Where(m => m.PlayerName == player1).Select(m => new KillMilestone
         {
             Milestone = m.Milestone,
@@ -110,7 +104,7 @@ public class PlayerComparisonService(
         // If serverGuid was provided, look up server details
         if (!string.IsNullOrEmpty(serverGuid))
         {
-            var server = await _dbContext.Servers
+            var server = await dbContext.Servers
                 .Where(s => s.Guid == serverGuid)
                 .Select(s => new ServerDetails
                 {
@@ -131,17 +125,17 @@ public class PlayerComparisonService(
         }
 
         // Cache the result for 45 minutes
-        await _cacheService.SetAsync(cacheKey, result, TimeSpan.FromMinutes(45));
-        _logger.LogDebug("Cached player comparison result: {Player1} vs {Player2}", player1, player2);
+        await cacheService.SetAsync(cacheKey, result, TimeSpan.FromMinutes(45));
+        logger.LogDebug("Cached player comparison result: {Player1} vs {Player2}", player1, player2);
 
         return result;
     }
 
     private async Task EnsureConnectionOpenAsync()
     {
-        if (_connection.State != System.Data.ConnectionState.Open)
+        if (connection.State != System.Data.ConnectionState.Open)
         {
-            await _connection.OpenAsync();
+            await connection.OpenAsync();
         }
     }
 
@@ -157,7 +151,7 @@ WHERE player_name IN ({ClickHouseHelpers.QuoteString(player1)}, {ClickHouseHelpe
 GROUP BY player_name";
 
         var result = new List<KillRateComparison>();
-        await using var cmd = _connection.CreateCommand();
+        await using var cmd = connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
@@ -196,7 +190,7 @@ FROM player_rounds
 WHERE player_name IN ({ClickHouseHelpers.QuoteString(player1)}, {ClickHouseHelpers.QuoteString(player2)}) AND {condition}{serverFilter}
 GROUP BY player_name";
 
-            await using var cmd = _connection.CreateCommand();
+            await using var cmd = connection.CreateCommand();
             cmd.CommandText = query;
             await using var reader = await cmd.ExecuteReaderAsync();
             var bucket = new BucketTotalsComparison { Bucket = label };
@@ -234,7 +228,7 @@ WHERE player_name IN ({ClickHouseHelpers.QuoteString(player1)}, {ClickHouseHelpe
 GROUP BY player_name";
 
         var result = new List<PingComparison>();
-        await using var cmd = _connection.CreateCommand();
+        await using var cmd = connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
@@ -262,7 +256,7 @@ WHERE player_name IN ({ClickHouseHelpers.QuoteString(player1)}, {ClickHouseHelpe
 GROUP BY map_name, player_name";
 
         var mapStats = new Dictionary<string, MapPerformanceComparison>();
-        await using var cmd = _connection.CreateCommand();
+        await using var cmd = connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
@@ -305,7 +299,7 @@ LIMIT 50";
         var serverGuids = new HashSet<string>();
         var sessionData = new List<(DateTime, string, string, int?, int?, int?, int?, int?, int?, DateTime?, string?)>();
 
-        await using var cmd = _connection.CreateCommand();
+        await using var cmd = connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
@@ -364,7 +358,7 @@ FROM player_rounds
 WHERE player_name = {ClickHouseHelpers.QuoteString(player2)} AND round_start_time >= now() - INTERVAL 6 MONTH";
 
         var serverGuids = new HashSet<string>();
-        await using var cmd = _connection.CreateCommand();
+        await using var cmd = connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
@@ -444,7 +438,7 @@ ORDER BY hour_of_day";
             hourlyActivity.Add(new HourlyActivity { Hour = hour, MinutesActive = 0 });
         }
 
-        await using var cmd = _connection.CreateCommand();
+        await using var cmd = connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
 
@@ -481,7 +475,7 @@ ORDER BY hour_of_day";
         var (targetStats, targetServerGuids) = await GetPlayerStatsForSimilarityWithGuids(targetPlayer);
         if (targetStats == null)
         {
-            _logger.LogWarning("Target player {PlayerName} not found", targetPlayer);
+            logger.LogWarning("Target player {PlayerName} not found", targetPlayer);
             return result;
         }
 
@@ -570,7 +564,7 @@ CROSS JOIN server_playtime s
 CROSS JOIN game_ids g
 GROUP BY t.total_kills, t.total_deaths, t.total_play_time_minutes, s.server_guid, s.total_minutes";
 
-        await using var cmd = _connection.CreateCommand();
+        await using var cmd = connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
 
@@ -641,7 +635,7 @@ WHERE player_name = {ClickHouseHelpers.QuoteString(playerName)}
   AND play_time_minutes > 5";
 
         var serverGuids = new List<string>();
-        await using var cmd = _connection.CreateCommand();
+        await using var cmd = connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
 
@@ -683,7 +677,7 @@ WHERE total_minutes >= p95_minutes * 0.5  -- Include hours with at least 50% of 
 ORDER BY hour_of_day";
 
         var activeHours = new List<int>();
-        await using var cmd = _connection.CreateCommand();
+        await using var cmd = connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
 
@@ -718,7 +712,7 @@ HAVING count(*) >= 10  -- Require at least 10 measurements for reliability";
 
         var serverPingsWithGuids = new Dictionary<string, double>();
         var collectedServerGuids = new HashSet<string>();
-        await using var cmd = _connection.CreateCommand();
+        await using var cmd = connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
 
@@ -779,7 +773,7 @@ FROM player_map_stats p
 JOIN map_averages a ON p.map_name = a.map_name";
 
         var mapDominance = new Dictionary<string, double>();
-        await using var cmd = _connection.CreateCommand();
+        await using var cmd = connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
 
@@ -795,7 +789,7 @@ JOIN map_averages a ON p.map_name = a.map_name";
 
     private async Task<Dictionary<string, string>> GetServerGuidToNameMappingAsync(List<string> serverGuids)
     {
-        return await _dbContext.Servers
+        return await dbContext.Servers
             .Where(s => serverGuids.Contains(s.Guid))
             .ToDictionaryAsync(s => s.Guid, s => s.Name);
     }
@@ -989,7 +983,7 @@ LIMIT {limit * 5}";
 
         var players = new List<PlayerSimilarityStats>();
         var allServerGuids = new HashSet<string>();
-        await using var cmd = _connection.CreateCommand();
+        await using var cmd = connection.CreateCommand();
         cmd.CommandText = bulkQuery;
         await using var reader = await cmd.ExecuteReaderAsync();
 
@@ -1152,7 +1146,7 @@ WHERE player_name NOT IN (SELECT player_name FROM overlapping_sessions)";
 
         var overlaps = new Dictionary<string, double>();
 
-        await using var cmd = _connection.CreateCommand();
+        await using var cmd = connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
 
@@ -1452,7 +1446,7 @@ WHERE player_name = {ClickHouseHelpers.QuoteString(playerName)}
 ORDER BY achieved_at DESC";
 
         var achievements = new List<MilestoneAchievement>();
-        await using var cmd = _connection.CreateCommand();
+        await using var cmd = connection.CreateCommand();
         cmd.CommandText = query;
         await using var reader = await cmd.ExecuteReaderAsync();
 

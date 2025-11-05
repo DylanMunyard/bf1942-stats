@@ -7,15 +7,6 @@ namespace api.Gamification.Services;
 
 public class GamificationService(ClickHouseGamificationService gamificationService, KillStreakDetector killStreakDetector, MilestoneCalculator milestoneCalculator, PerformanceBadgeCalculator performanceBadgeCalculator, BadgeDefinitionsService badgeDefinitionsService, HistoricalProcessor historicalProcessor, AchievementLabelingService achievementLabelingService, PlacementProcessor placementProcessor, TeamVictoryProcessor teamVictoryProcessor, IConfiguration configuration, ILogger<GamificationService> logger) : IDisposable
 {
-    private readonly ClickHouseGamificationService _gamificationService = gamificationService;
-    private readonly KillStreakDetector _killStreakDetector = killStreakDetector;
-    private readonly MilestoneCalculator _milestoneCalculator = milestoneCalculator;
-    private readonly PerformanceBadgeCalculator _performanceBadgeCalculator = performanceBadgeCalculator;
-    private readonly BadgeDefinitionsService _badgeDefinitionsService = badgeDefinitionsService;
-    private readonly HistoricalProcessor _historicalProcessor = historicalProcessor;
-    private readonly AchievementLabelingService _achievementLabelingService = achievementLabelingService;
-    private readonly PlacementProcessor _placementProcessor = placementProcessor;
-    private readonly TeamVictoryProcessor _teamVictoryProcessor = teamVictoryProcessor;
     private readonly ILogger<GamificationService> _logger = InitializeLogger(logger, configuration);
     private readonly int _maxConcurrentRounds = configuration.GetValue<int>("GAMIFICATION_MAX_CONCURRENT_ROUNDS", 10);
     private readonly SemaphoreSlim _concurrencyThrottle = InitializeConcurrencyThrottle(configuration);
@@ -41,13 +32,13 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
         try
         {
             // Get the last time we processed achievements
-            var lastProcessed = await _gamificationService.GetLastProcessedTimestampAsync();
+            var lastProcessed = await gamificationService.GetLastProcessedTimestampAsync();
             var now = DateTime.UtcNow;
 
             _logger.LogInformation("Completed gamification processing cycle {LastProcessed}", lastProcessed);
 
             // Only process new player_rounds since last run
-            var newRounds = await _gamificationService.GetPlayerRoundsSinceAsync(lastProcessed);
+            var newRounds = await gamificationService.GetPlayerRoundsSinceAsync(lastProcessed);
 
             List<Achievement> allAchievements = [];
             if (newRounds.Any())
@@ -59,16 +50,16 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
             }
 
             // Additionally, calculate placements for rounds since last placement processed
-            var lastPlacementProcessed = await _gamificationService.GetLastPlacementProcessedTimestampAsync();
-            var placementAchievements = await _placementProcessor.ProcessPlacementsSinceAsync(lastPlacementProcessed);
+            var lastPlacementProcessed = await gamificationService.GetLastPlacementProcessedTimestampAsync();
+            var placementAchievements = await placementProcessor.ProcessPlacementsSinceAsync(lastPlacementProcessed);
             if (placementAchievements.Any())
             {
                 allAchievements.AddRange(placementAchievements);
             }
 
             // Process team victory achievements for rounds since last team victory processed
-            var lastTeamVictoryProcessed = await _gamificationService.GetLastTeamVictoryProcessedTimestampAsync();
-            var teamVictoryAchievements = await _teamVictoryProcessor.ProcessTeamVictoriesSinceAsync(lastTeamVictoryProcessed);
+            var lastTeamVictoryProcessed = await gamificationService.GetLastTeamVictoryProcessedTimestampAsync();
+            var teamVictoryAchievements = await teamVictoryProcessor.ProcessTeamVictoriesSinceAsync(lastTeamVictoryProcessed);
             if (teamVictoryAchievements.Any())
             {
                 allAchievements.AddRange(teamVictoryAchievements);
@@ -77,7 +68,7 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
             // Store achievements in batch for efficiency
             if (allAchievements.Any())
             {
-                await _gamificationService.InsertAchievementsBatchAsync(allAchievements);
+                await gamificationService.InsertAchievementsBatchAsync(allAchievements);
                 _logger.LogInformation("Stored {AchievementCount} new achievements", allAchievements.Count);
             }
         }
@@ -124,15 +115,15 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
             var roundAchievements = new List<Achievement>();
 
             // 1. Kill Streak Achievements using ClickHouse player_metrics
-            var streakAchievements = await _killStreakDetector.CalculateKillStreaksForRoundAsync(round);
+            var streakAchievements = await killStreakDetector.CalculateKillStreaksForRoundAsync(round);
             roundAchievements.AddRange(streakAchievements);
 
             // 2. Milestone Achievements 
-            var milestoneAchievements = await _milestoneCalculator.CheckMilestoneCrossedAsync(round);
+            var milestoneAchievements = await milestoneCalculator.CheckMilestoneCrossedAsync(round);
             roundAchievements.AddRange(milestoneAchievements);
 
             // 3. Performance Badge Checks using ClickHouse player_metrics
-            var performanceAchievements = await _performanceBadgeCalculator.CheckPerformanceBadgesAsync(round);
+            var performanceAchievements = await performanceBadgeCalculator.CheckPerformanceBadgesAsync(round);
             roundAchievements.AddRange(performanceAchievements);
 
             allAchievements.AddRange(roundAchievements);
@@ -172,7 +163,7 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
                 await _concurrencyThrottle.WaitAsync();
                 try
                 {
-                    return await _killStreakDetector.CalculateKillStreaksForRoundAsync(round);
+                    return await killStreakDetector.CalculateKillStreaksForRoundAsync(round);
                 }
                 catch (Exception ex)
                 {
@@ -194,7 +185,7 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
                 await _concurrencyThrottle.WaitAsync();
                 try
                 {
-                    return await _milestoneCalculator.CheckMilestoneCrossedAsync(round);
+                    return await milestoneCalculator.CheckMilestoneCrossedAsync(round);
                 }
                 catch (Exception ex)
                 {
@@ -213,7 +204,7 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
             // 3. Process performance badges in batch (more efficient)
             try
             {
-                var performanceAchievements = await _performanceBadgeCalculator.ProcessPerformanceBadgesBatchAsync(rounds);
+                var performanceAchievements = await performanceBadgeCalculator.ProcessPerformanceBadgesBatchAsync(rounds);
                 allAchievements.AddRange(performanceAchievements);
             }
             catch (Exception ex)
@@ -247,10 +238,10 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
         try
         {
             // Get all achievements for the player
-            var allAchievements = await _gamificationService.GetPlayerAchievementsAsync(playerName, 1000);
+            var allAchievements = await gamificationService.GetPlayerAchievementsAsync(playerName, 1000);
 
             // Get kill streak stats
-            var streakStats = await _killStreakDetector.GetPlayerKillStreakStatsAsync(playerName);
+            var streakStats = await killStreakDetector.GetPlayerKillStreakStatsAsync(playerName);
 
             // Categorize achievements
             var recentAchievements = allAchievements
@@ -301,7 +292,7 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
         {
             var entries = category.ToLower() switch
             {
-                "kill_streaks" => await _gamificationService.GetKillStreakLeaderboardAsync(limit),
+                "kill_streaks" => await gamificationService.GetKillStreakLeaderboardAsync(limit),
                 _ => new List<LeaderboardEntry>()
             };
 
@@ -322,12 +313,12 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
 
     public Task<PlayerPlacementSummary> GetPlayerPlacementSummaryAsync(string playerName, string? serverGuid = null, string? mapName = null)
     {
-        return _gamificationService.GetPlayerPlacementSummaryAsync(playerName, serverGuid, mapName);
+        return gamificationService.GetPlayerPlacementSummaryAsync(playerName, serverGuid, mapName);
     }
 
     public async Task<List<PlacementLeaderboardEntry>> GetPlacementLeaderboardAsync(string? serverGuid = null, string? mapName = null, int limit = 100)
     {
-        return await _gamificationService.GetPlacementLeaderboardAsync(serverGuid, mapName, limit);
+        return await gamificationService.GetPlacementLeaderboardAsync(serverGuid, mapName, limit);
     }
 
     /// <summary>
@@ -345,7 +336,7 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
 
             // Use the injected historical processor that leverages ClickHouse native operations
             // This reduces query count from ~100k individual queries to ~10-50 aggregate queries
-            await _historicalProcessor.ProcessHistoricalDataAsync(startDate, endDate);
+            await historicalProcessor.ProcessHistoricalDataAsync(startDate, endDate);
 
             _logger.LogInformation("Historical gamification processing completed");
         }
@@ -361,7 +352,7 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
     /// </summary>
     public List<BadgeDefinition> GetAllBadgeDefinitions()
     {
-        return _badgeDefinitionsService.GetAllBadges();
+        return badgeDefinitionsService.GetAllBadges();
     }
 
     /// <summary>
@@ -369,7 +360,7 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
     /// </summary>
     public List<BadgeDefinition> GetBadgeDefinitionsByCategory(string category)
     {
-        return _badgeDefinitionsService.GetBadgesByCategory(category);
+        return badgeDefinitionsService.GetBadgesByCategory(category);
     }
 
     /// <summary>
@@ -377,7 +368,7 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
     /// </summary>
     public async Task<bool> PlayerHasAchievementAsync(string playerName, string achievementId)
     {
-        return await _gamificationService.PlayerHasAchievementAsync(playerName, achievementId);
+        return await gamificationService.PlayerHasAchievementAsync(playerName, achievementId);
     }
 
     /// <summary>
@@ -407,7 +398,7 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
     {
         try
         {
-            var (achievements, totalCount) = await _gamificationService.GetAllAchievementsWithPagingAsync(
+            var (achievements, totalCount) = await gamificationService.GetAllAchievementsWithPagingAsync(
                 page, pageSize, sortBy, sortOrder, playerName, achievementType,
                 achievementId, tier, achievedFrom, achievedTo, serverGuid, mapName);
 
@@ -417,11 +408,11 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
             var playerAchievementIds = new List<string>();
             if (!string.IsNullOrWhiteSpace(playerName))
             {
-                playerAchievementIds = await _gamificationService.GetPlayerAchievementIdsAsync(playerName);
+                playerAchievementIds = await gamificationService.GetPlayerAchievementIdsAsync(playerName);
             }
 
             // Get labeled achievement information for the player's achievements
-            var playerAchievementLabels = _achievementLabelingService.GetAchievementLabels(playerAchievementIds);
+            var playerAchievementLabels = achievementLabelingService.GetAchievementLabels(playerAchievementIds);
 
             return new AchievementResponse
             {

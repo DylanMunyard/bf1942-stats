@@ -12,8 +12,6 @@ public class ServersController(
     IServerStatsService serverStatsService,
     ILogger<ServersController> logger) : ControllerBase
 {
-    private readonly IServerStatsService _serverStatsService = serverStatsService;
-    private readonly ILogger<ServersController> _logger = logger;
 
     /// <summary>
     /// Retrieves detailed statistics for a specific server.
@@ -38,15 +36,15 @@ public class ServersController(
         // Use modern URL decoding that preserves + signs
         serverName = Uri.UnescapeDataString(serverName);
 
-        _logger.LogInformation("Looking up server statistics for server name: '{ServerName}'", serverName);
+        logger.LogInformation("Looking up server statistics for server name: '{ServerName}'", serverName);
 
-        var stats = await _serverStatsService.GetServerStatistics(
+        var stats = await serverStatsService.GetServerStatistics(
             serverName,
             days ?? ApiConstants.TimePeriods.DefaultDays);
 
         if (string.IsNullOrEmpty(stats.ServerGuid))
         {
-            _logger.LogWarning("Server not found in database: '{ServerName}'", serverName);
+            logger.LogWarning("Server not found in database: '{ServerName}'", serverName);
             return NotFound($"Server '{serverName}' not found");
         }
 
@@ -66,18 +64,18 @@ public class ServersController(
         // Use modern URL decoding that preserves + signs
         serverName = Uri.UnescapeDataString(serverName);
 
-        _logger.LogInformation("Getting server leaderboards for '{ServerName}' with {Days} days", serverName, days);
+        logger.LogInformation("Getting server leaderboards for '{ServerName}' with {Days} days", serverName, days);
 
         try
         {
-            var leaderboards = await _serverStatsService.GetServerLeaderboards(
+            var leaderboards = await serverStatsService.GetServerLeaderboards(
                 serverName,
                 days,
                 minPlayersForWeighting);
 
             if (string.IsNullOrEmpty(leaderboards.ServerGuid))
             {
-                _logger.LogWarning("Server not found in database: '{ServerName}'", serverName);
+                logger.LogWarning("Server not found in database: '{ServerName}'", serverName);
                 return NotFound($"Server '{serverName}' not found");
             }
 
@@ -110,7 +108,7 @@ public class ServersController(
             // Use modern URL decoding that preserves + signs
             serverName = Uri.UnescapeDataString(serverName);
 
-            var result = await _serverStatsService.GetServerRankings(
+            var result = await serverStatsService.GetServerRankings(
                 serverName, year, page, pageSize, playerName,
                 minScore, minKills, minDeaths, minKdRatio, minPlayTimeMinutes,
                 orderBy, orderDirection);
@@ -134,17 +132,17 @@ public class ServersController(
         // Use modern URL decoding that preserves + signs
         serverName = Uri.UnescapeDataString(serverName);
 
-        _logger.LogInformation("Looking up server insights for server name: '{ServerName}' with days: {Days}", serverName, days);
+        logger.LogInformation("Looking up server insights for server name: '{ServerName}' with days: {Days}", serverName, days);
 
         try
         {
-            var insights = await _serverStatsService.GetServerInsights(
+            var insights = await serverStatsService.GetServerInsights(
                 serverName,
                 days ?? ApiConstants.TimePeriods.DefaultDays);
 
             if (string.IsNullOrEmpty(insights.ServerGuid))
             {
-                _logger.LogWarning("Server not found: '{ServerName}'", serverName);
+                logger.LogWarning("Server not found: '{ServerName}'", serverName);
                 return NotFound($"Server '{serverName}' not found");
             }
 
@@ -167,17 +165,17 @@ public class ServersController(
         // Use modern URL decoding that preserves + signs
         serverName = Uri.UnescapeDataString(serverName);
 
-        _logger.LogInformation("Looking up server maps insights for server name: '{ServerName}' with days: {Days}", serverName, days);
+        logger.LogInformation("Looking up server maps insights for server name: '{ServerName}' with days: {Days}", serverName, days);
 
         try
         {
-            var mapsInsights = await _serverStatsService.GetServerMapsInsights(
+            var mapsInsights = await serverStatsService.GetServerMapsInsights(
                 serverName,
                 days ?? ApiConstants.TimePeriods.DefaultDays);
 
             if (string.IsNullOrEmpty(mapsInsights.ServerGuid))
             {
-                _logger.LogWarning("Server not found: '{ServerName}'", serverName);
+                logger.LogWarning("Server not found: '{ServerName}'", serverName);
                 return NotFound($"Server '{serverName}' not found");
             }
 
@@ -271,7 +269,7 @@ public class ServersController(
                 MaxActivePlayersLast24h = maxActivePlayersLast24h
             };
 
-            var result = await _serverStatsService.GetAllServersWithPaging(page, pageSize, sortBy, sortOrder, filters);
+            var result = await serverStatsService.GetAllServersWithPaging(page, pageSize, sortBy, sortOrder, filters);
             return Ok(result);
         }
         catch (ArgumentException ex)
@@ -313,7 +311,7 @@ public class ServersController(
                 Game = game?.Trim().ToLower()
             };
 
-            var result = await _serverStatsService.GetAllServersWithPaging(
+            var result = await serverStatsService.GetAllServersWithPaging(
                 page, pageSize, "ServerName", "asc", filters);
 
             return Ok(result);

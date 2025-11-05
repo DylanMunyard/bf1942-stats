@@ -26,7 +26,6 @@ public interface IMarkdownSanitizationService
 public class MarkdownSanitizationService(ILogger<MarkdownSanitizationService> logger) : IMarkdownSanitizationService
 {
     private const int MaxMarkdownLength = 50000;
-    private readonly ILogger<MarkdownSanitizationService> _logger = logger;
 
     // Configure Markdig pipeline with code block support
     // DisableHtml is the critical security feature - it prevents raw HTML/scripts
@@ -42,7 +41,7 @@ public class MarkdownSanitizationService(ILogger<MarkdownSanitizationService> lo
         // Check size limit
         if (markdown.Length > MaxMarkdownLength)
         {
-            _logger.LogWarning("Markdown exceeds size limit: {Length} > {MaxLength}",
+            logger.LogWarning("Markdown exceeds size limit: {Length} > {MaxLength}",
                 markdown.Length, MaxMarkdownLength);
             return new ValidationResult
             {
@@ -55,7 +54,7 @@ public class MarkdownSanitizationService(ILogger<MarkdownSanitizationService> lo
         // These should be caught by Markdig's DisableHtml, but we'll be defensive
         if (ContainsSuspiciousPatterns(markdown))
         {
-            _logger.LogWarning("Markdown contains suspicious HTML patterns");
+            logger.LogWarning("Markdown contains suspicious HTML patterns");
             return new ValidationResult
             {
                 IsValid = false,
@@ -80,12 +79,12 @@ public class MarkdownSanitizationService(ILogger<MarkdownSanitizationService> lo
             // - Links and inline code
             var html = Markdown.ToHtml(markdown, _markdownPipeline);
 
-            _logger.LogDebug("Successfully converted markdown to safe HTML");
+            logger.LogDebug("Successfully converted markdown to safe HTML");
             return html;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error converting markdown to HTML");
+            logger.LogError(ex, "Error converting markdown to HTML");
             // Return empty string on error rather than throwing
             return string.Empty;
         }

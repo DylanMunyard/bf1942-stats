@@ -5,7 +5,6 @@ namespace api.ClickHouse;
 
 public class PlayerAchievementsMigrationService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerAchievementsMigrationService> logger) : BaseClickHouseService(httpClient, clickHouseUrl)
 {
-    private readonly ILogger<PlayerAchievementsMigrationService> _logger = logger;
 
     public async Task<MigrationResult> MigrateToReplacingMergeTreeAsync()
     {
@@ -14,7 +13,7 @@ public class PlayerAchievementsMigrationService(HttpClient httpClient, string cl
 
         try
         {
-            _logger.LogInformation("Starting team victory achievements migration to ReplacingMergeTree for idempotency");
+            logger.LogInformation("Starting team victory achievements migration to ReplacingMergeTree for idempotency");
 
             // Create new table structure with ReplacingMergeTree for idempotency
             await CreatePlayerAchievementsV2TableAsync();
@@ -52,7 +51,7 @@ FROM player_achievements";
             var verificationResult = await VerifyMigrationAsync();
 
             var duration = DateTime.UtcNow - startTime;
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Migration completed: {TotalMigrated} rows migrated in {Duration}. Verification: {Verified}",
                 totalMigrated, duration, verificationResult ? "PASSED" : "FAILED");
 
@@ -67,7 +66,7 @@ FROM player_achievements";
         catch (Exception ex)
         {
             var duration = DateTime.UtcNow - startTime;
-            _logger.LogError(ex, "Migration failed after {Migrated} records in {Duration}", totalMigrated, duration);
+            logger.LogError(ex, "Migration failed after {Migrated} records in {Duration}", totalMigrated, duration);
 
             return new MigrationResult
             {
@@ -106,7 +105,7 @@ PARTITION BY toYYYYMM(achieved_at)
 ORDER BY (player_name, achievement_type, achievement_id, round_id, achieved_at)";
 
         await ExecuteCommandAsync(createTableQuery);
-        _logger.LogInformation("Created player_achievements_v2 table with ReplacingMergeTree(version) for idempotency");
+        logger.LogInformation("Created player_achievements_v2 table with ReplacingMergeTree(version) for idempotency");
     }
 
     private async Task<bool> VerifyMigrationAsync()
@@ -120,13 +119,13 @@ ORDER BY (player_name, achievement_type, achievement_id, round_id, achieved_at)"
             var oldUnique = long.Parse((await ExecuteQueryInternalAsync(oldUniqueQuery)).Trim());
             var newUnique = long.Parse((await ExecuteQueryInternalAsync(newUniqueQuery)).Trim());
 
-            _logger.LogInformation("Verification: Old unique={OldUnique}, New unique={NewUnique}", oldUnique, newUnique);
+            logger.LogInformation("Verification: Old unique={OldUnique}, New unique={NewUnique}", oldUnique, newUnique);
 
             return oldUnique == newUnique;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Verification failed");
+            logger.LogError(ex, "Verification failed");
             return false;
         }
     }
@@ -135,17 +134,17 @@ ORDER BY (player_name, achievement_type, achievement_id, round_id, achieved_at)"
     {
         try
         {
-            _logger.LogInformation("Switching tables: player_achievements -> player_achievements_backup, player_achievements_v2 -> player_achievements");
+            logger.LogInformation("Switching tables: player_achievements -> player_achievements_backup, player_achievements_v2 -> player_achievements");
 
             await ExecuteCommandAsync("RENAME TABLE player_achievements TO player_achievements_backup");
             await ExecuteCommandAsync("RENAME TABLE player_achievements_v2 TO player_achievements");
 
-            _logger.LogInformation("Table switch completed successfully");
+            logger.LogInformation("Table switch completed successfully");
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to switch tables");
+            logger.LogError(ex, "Failed to switch tables");
             return false;
         }
     }
@@ -154,16 +153,16 @@ ORDER BY (player_name, achievement_type, achievement_id, round_id, achieved_at)"
     {
         try
         {
-            _logger.LogInformation("Dropping old backup table player_achievements_backup");
+            logger.LogInformation("Dropping old backup table player_achievements_backup");
 
             await ExecuteCommandAsync("DROP TABLE IF EXISTS player_achievements_backup");
 
-            _logger.LogInformation("Cleanup completed successfully");
+            logger.LogInformation("Cleanup completed successfully");
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to cleanup old table");
+            logger.LogError(ex, "Failed to cleanup old table");
             return false;
         }
     }

@@ -28,10 +28,6 @@ public class BfListApiService(
     PlayerTrackerDbContext dbContext,
     IConfiguration configuration) : IBfListApiService
 {
-    private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
-    private readonly ICacheService _cacheService = cacheService;
-    private readonly ILogger<BfListApiService> _logger = logger;
-    private readonly PlayerTrackerDbContext _dbContext = dbContext;
     private readonly Models.ServerFilteringConfig _serverFilteringConfig = configuration.GetSection("ServerFiltering").Get<Models.ServerFilteringConfig>() ?? new Models.ServerFilteringConfig();
 
     private const int ServerListCacheSeconds = 30;
@@ -45,7 +41,7 @@ public class BfListApiService(
         activity?.SetTag("bflist.has_cursor", !string.IsNullOrEmpty(cursor));
         activity?.SetTag("bflist.has_after", !string.IsNullOrEmpty(after));
 
-        var httpClient = _httpClientFactory.CreateClient("BfListApi");
+        var httpClient = httpClientFactory.CreateClient("BfListApi");
         var baseUrl = $"https://api.bflist.io/v2/{game}/servers?perPage={perPage}";
 
         if (!string.IsNullOrEmpty(cursor))
@@ -59,7 +55,7 @@ public class BfListApiService(
 
         activity?.SetTag("bflist.url", baseUrl);
 
-        _logger.LogDebug("Fetching servers from BFList API: {Url}", baseUrl);
+        logger.LogDebug("Fetching servers from BFList API: {Url}", baseUrl);
 
         var response = await httpClient.GetAsync(baseUrl);
         response.EnsureSuccessStatusCode();
@@ -99,58 +95,58 @@ public class BfListApiService(
         if (game.ToLower() == "bf1942")
         {
             var cacheKey = $"raw_servers:{game}";
-            var cachedResult = await _cacheService.GetAsync<Bf1942ServerInfo[]>(cacheKey);
+            var cachedResult = await cacheService.GetAsync<Bf1942ServerInfo[]>(cacheKey);
 
             if (cachedResult != null)
             {
-                _logger.LogDebug("Cache hit for raw servers of game {Game}", game);
+                logger.LogDebug("Cache hit for raw servers of game {Game}", game);
                 return cachedResult.Cast<object>().ToArray();
             }
 
-            _logger.LogDebug("Cache miss for raw servers of game {Game}", game);
+            logger.LogDebug("Cache miss for raw servers of game {Game}", game);
             var freshServers = await FetchAllServersFromApiAsync(game);
             var typedServers = freshServers.Cast<Bf1942ServerInfo>()
                 .Where(server => !IsStuckServer(server.Name))
                 .ToArray();
-            await _cacheService.SetAsync(cacheKey, typedServers, TimeSpan.FromSeconds(ServerListCacheSeconds));
+            await cacheService.SetAsync(cacheKey, typedServers, TimeSpan.FromSeconds(ServerListCacheSeconds));
             return typedServers.Cast<object>().ToArray();
         }
         else if (game.ToLower() == "bfvietnam")
         {
             var cacheKey = $"raw_servers:{game}";
-            var cachedResult = await _cacheService.GetAsync<BfvietnamServerInfo[]>(cacheKey);
+            var cachedResult = await cacheService.GetAsync<BfvietnamServerInfo[]>(cacheKey);
 
             if (cachedResult != null)
             {
-                _logger.LogDebug("Cache hit for raw servers of game {Game}", game);
+                logger.LogDebug("Cache hit for raw servers of game {Game}", game);
                 return cachedResult.Cast<object>().ToArray();
             }
 
-            _logger.LogDebug("Cache miss for raw servers of game {Game}", game);
+            logger.LogDebug("Cache miss for raw servers of game {Game}", game);
             var freshServers = await FetchAllServersFromApiAsync(game);
             var typedServers = freshServers.Cast<BfvietnamServerInfo>()
                 .Where(server => !IsStuckServer(server.Name))
                 .ToArray();
-            await _cacheService.SetAsync(cacheKey, typedServers, TimeSpan.FromSeconds(ServerListCacheSeconds));
+            await cacheService.SetAsync(cacheKey, typedServers, TimeSpan.FromSeconds(ServerListCacheSeconds));
             return typedServers.Cast<object>().ToArray();
         }
         else // fh2
         {
             var cacheKey = $"raw_servers:{game}";
-            var cachedResult = await _cacheService.GetAsync<Fh2ServerInfo[]>(cacheKey);
+            var cachedResult = await cacheService.GetAsync<Fh2ServerInfo[]>(cacheKey);
 
             if (cachedResult != null)
             {
-                _logger.LogDebug("Cache hit for raw servers of game {Game}", game);
+                logger.LogDebug("Cache hit for raw servers of game {Game}", game);
                 return cachedResult.Cast<object>().ToArray();
             }
 
-            _logger.LogDebug("Cache miss for raw servers of game {Game}", game);
+            logger.LogDebug("Cache miss for raw servers of game {Game}", game);
             var freshServers = await FetchAllServersFromApiAsync(game);
             var typedServers = freshServers.Cast<Fh2ServerInfo>()
                 .Where(server => !IsStuckServer(server.Name))
                 .ToArray();
-            await _cacheService.SetAsync(cacheKey, typedServers, TimeSpan.FromSeconds(ServerListCacheSeconds));
+            await cacheService.SetAsync(cacheKey, typedServers, TimeSpan.FromSeconds(ServerListCacheSeconds));
             return typedServers.Cast<object>().ToArray();
         }
     }
@@ -168,7 +164,7 @@ public class BfListApiService(
         {
             pageCount++;
 
-            var httpClient = _httpClientFactory.CreateClient("BfListApi");
+            var httpClient = httpClientFactory.CreateClient("BfListApi");
             var baseUrl = $"https://api.bflist.io/v2/{game}/servers?perPage=100";
 
             if (!string.IsNullOrEmpty(cursor))
@@ -180,7 +176,7 @@ public class BfListApiService(
                 baseUrl += $"&after={Uri.EscapeDataString(after)}";
             }
 
-            _logger.LogDebug("Fetching servers page {PageCount} from BFList API: {Url}", pageCount, baseUrl);
+            logger.LogDebug("Fetching servers page {PageCount} from BFList API: {Url}", pageCount, baseUrl);
 
             var response = await httpClient.GetAsync(baseUrl);
             response.EnsureSuccessStatusCode();
@@ -253,20 +249,20 @@ public class BfListApiService(
 
         if (pageCount >= maxPages && hasMore)
         {
-            _logger.LogWarning("Reached maximum pages ({MaxPages}) while fetching all servers for game {Game}, there may be more servers", maxPages, game);
+            logger.LogWarning("Reached maximum pages ({MaxPages}) while fetching all servers for game {Game}, there may be more servers", maxPages, game);
         }
 
-        _logger.LogDebug("Fetched {TotalServers} servers across {PageCount} pages for game {Game}", allServers.Count, pageCount, game);
+        logger.LogDebug("Fetched {TotalServers} servers across {PageCount} pages for game {Game}", allServers.Count, pageCount, game);
 
         return allServers.ToArray();
     }
 
     public async Task<object?> FetchSingleServerAsync(string game, string serverIdentifier)
     {
-        var httpClient = _httpClientFactory.CreateClient("BfListApi");
+        var httpClient = httpClientFactory.CreateClient("BfListApi");
         var baseUrl = $"https://api.bflist.io/v2/{game}/servers/{serverIdentifier}";
 
-        _logger.LogDebug("Fetching single server from BFList API: {Url}", baseUrl);
+        logger.LogDebug("Fetching single server from BFList API: {Url}", baseUrl);
 
         try
         {
@@ -304,7 +300,7 @@ public class BfListApiService(
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning("Failed to fetch single server {ServerIdentifier}: {Error}", serverIdentifier, ex.Message);
+            logger.LogWarning("Failed to fetch single server {ServerIdentifier}: {Error}", serverIdentifier, ex.Message);
             return null;
         }
     }
@@ -330,15 +326,15 @@ public class BfListApiService(
     public async Task<Models.ServerSummary?> FetchSingleServerSummaryAsync(string game, string serverIdentifier)
     {
         var cacheKey = $"server:{game}:{serverIdentifier}";
-        var cachedResult = await _cacheService.GetAsync<Models.ServerSummary>(cacheKey);
+        var cachedResult = await cacheService.GetAsync<Models.ServerSummary>(cacheKey);
 
         if (cachedResult != null)
         {
-            _logger.LogDebug("Cache hit for server {Game}:{ServerIdentifier}", game, serverIdentifier);
+            logger.LogDebug("Cache hit for server {Game}:{ServerIdentifier}", game, serverIdentifier);
             return cachedResult;
         }
 
-        _logger.LogDebug("Cache miss for server {Game}:{ServerIdentifier}", game, serverIdentifier);
+        logger.LogDebug("Cache miss for server {Game}:{ServerIdentifier}", game, serverIdentifier);
         var server = await FetchSingleServerAsync(game, serverIdentifier);
 
         if (server == null) return null;
@@ -346,19 +342,19 @@ public class BfListApiService(
         if (game.ToLower() == "bf1942" && server is Bf1942ServerInfo bf1942Server)
         {
             var summary = MapBf1942ToSummary(bf1942Server);
-            await _cacheService.SetAsync(cacheKey, summary, TimeSpan.FromSeconds(SingleServerCacheSeconds));
+            await cacheService.SetAsync(cacheKey, summary, TimeSpan.FromSeconds(SingleServerCacheSeconds));
             return summary;
         }
         else if (game.ToLower() == "bfvietnam" && server is BfvietnamServerInfo bfvServer)
         {
             var summary = MapBfvToSummary(bfvServer);
-            await _cacheService.SetAsync(cacheKey, summary, TimeSpan.FromSeconds(SingleServerCacheSeconds));
+            await cacheService.SetAsync(cacheKey, summary, TimeSpan.FromSeconds(SingleServerCacheSeconds));
             return summary;
         }
         else if (server is Fh2ServerInfo fh2Server)
         {
             var summary = MapFh2ToSummary(fh2Server);
-            await _cacheService.SetAsync(cacheKey, summary, TimeSpan.FromSeconds(SingleServerCacheSeconds));
+            await cacheService.SetAsync(cacheKey, summary, TimeSpan.FromSeconds(SingleServerCacheSeconds));
             return summary;
         }
 
@@ -394,7 +390,7 @@ public class BfListApiService(
     {
         if (_serverFilteringConfig.StuckServers.Contains(serverName))
         {
-            _logger.LogDebug("Filtering out stuck server: {ServerName}", serverName);
+            logger.LogDebug("Filtering out stuck server: {ServerName}", serverName);
             return true;
         }
         return false;
@@ -410,7 +406,7 @@ public class BfListApiService(
 
         if (duplicateGroups.Any())
         {
-            _logger.LogWarning("Found {DuplicateCount} duplicate player groups in server {ServerName}: {DuplicateNames}",
+            logger.LogWarning("Found {DuplicateCount} duplicate player groups in server {ServerName}: {DuplicateNames}",
                 duplicateGroups.Length,
                 serverName,
                 string.Join(", ", duplicateGroups.Select(g => $"{g.Key} (x{g.Count()})")));
