@@ -1,26 +1,20 @@
-using api.PlayerStats.Models;
-using api.PlayerTracking;
 using api.ClickHouse;
-using api.Caching;
+using api.Players.Models;
+using api.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Configuration;
 
-namespace api.PlayerStats;
+namespace api.Players;
 
 public class PlayerStatsService(PlayerTrackerDbContext dbContext,
     PlayerInsightsService playerInsightsService,
     PlayerRoundsReadService playerRoundsReadService,
-    ICacheService cacheService,
-    ILogger<PlayerStatsService> logger,
-    IConfiguration configuration) : IPlayerStatsService
+    ILogger<PlayerStatsService> logger) : IPlayerStatsService
 {
     private readonly PlayerTrackerDbContext _dbContext = dbContext;
     private readonly PlayerInsightsService _playerInsightsService = playerInsightsService;
     private readonly PlayerRoundsReadService _playerRoundsReadService = playerRoundsReadService;
-    private readonly ICacheService _cacheService = cacheService;
     private readonly ILogger<PlayerStatsService> _logger = logger;
-    private readonly IConfiguration _configuration = configuration;
 
     // Define a threshold for considering a player "active" (e.g., 5 minutes)
     private readonly TimeSpan _activeThreshold = TimeSpan.FromMinutes(1);
@@ -640,15 +634,15 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         {
             // Count players with higher scores + get total players in one query per server
             var rankingSql = @"
-                SELECT 
-                    (SELECT COUNT(*) + 1 
-                     FROM (SELECT PlayerName, SUM(TotalScore) as Total 
-                           FROM ServerPlayerRankings 
-                           WHERE ServerGuid = @serverGuid 
-                           GROUP BY PlayerName) 
+                SELECT
+                    (SELECT COUNT(*) + 1
+                     FROM (SELECT PlayerName, SUM(TotalScore) as Total
+                           FROM ServerPlayerRankings
+                           WHERE ServerGuid = @serverGuid
+                           GROUP BY PlayerName)
                      WHERE Total > @playerScore) as PlayerRank,
-                    (SELECT COUNT(DISTINCT PlayerName) 
-                     FROM ServerPlayerRankings 
+                    (SELECT COUNT(DISTINCT PlayerName)
+                     FROM ServerPlayerRankings
                      WHERE ServerGuid = @serverGuid) as TotalPlayers";
 
             var rankingResult = await _dbContext.Database
@@ -730,18 +724,18 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             // This query aggregates session time directly in the database
             var query = $@"
 WITH sessions_with_duration AS (
-    SELECT 
+    SELECT
         toHour(round_start_time) as start_hour,
         toHour(round_end_time) as end_hour,
         round_start_time as start_time,
         round_end_time as last_seen_time,
-        CASE 
-            WHEN toHour(round_start_time) = toHour(round_end_time) THEN 
+        CASE
+            WHEN toHour(round_start_time) = toHour(round_end_time) THEN
                 -- Session within same hour
                 dateDiff('minute', round_start_time, round_end_time)
             ELSE 0
         END as same_hour_minutes
-    FROM player_rounds 
+    FROM player_rounds
     WHERE player_name = '{playerName.Replace("'", "''")}'
       AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
       AND round_end_time <= '{endPeriod:yyyy-MM-dd HH:mm:ss}'
@@ -752,23 +746,23 @@ hour_breakdown AS (
     FROM numbers(24)
 ),
 session_hours AS (
-    SELECT 
+    SELECT
         h.hour,
         s.start_time,
         s.last_seen_time,
-        CASE 
-            WHEN s.start_hour = s.end_hour AND s.start_hour = h.hour THEN 
+        CASE
+            WHEN s.start_hour = s.end_hour AND s.start_hour = h.hour THEN
                 -- Entire session in this hour
                 s.same_hour_minutes
-            WHEN s.start_hour <= h.hour AND h.hour <= s.end_hour THEN 
-                CASE 
-                    WHEN h.hour = s.start_hour THEN 
+            WHEN s.start_hour <= h.hour AND h.hour <= s.end_hour THEN
+                CASE
+                    WHEN h.hour = s.start_hour THEN
                         -- First hour of multi-hour session
                         dateDiff('minute', s.start_time, toStartOfHour(s.start_time) + INTERVAL 1 HOUR)
-                    WHEN h.hour = s.end_hour THEN 
-                        -- Last hour of multi-hour session  
+                    WHEN h.hour = s.end_hour THEN
+                        -- Last hour of multi-hour session
                         dateDiff('minute', toStartOfHour(s.last_seen_time), s.last_seen_time)
-                    ELSE 
+                    ELSE
                         -- Full hour in middle of session
                         60
                 END
@@ -778,7 +772,7 @@ session_hours AS (
     CROSS JOIN sessions_with_duration s
     WHERE s.start_hour <= h.hour AND h.hour <= s.end_hour
 )
-SELECT 
+SELECT
     hour,
     SUM(minutes_in_hour) as total_minutes
 FROM session_hours

@@ -1,7 +1,7 @@
 using System.Runtime.Serialization;
 using api.Gamification.Models;
 
-namespace api.ServerStats.Models;
+namespace api.Servers.Models;
 
 [DataContract(Name = "ServerStatsServerStatistics")]
 public class ServerStatistics

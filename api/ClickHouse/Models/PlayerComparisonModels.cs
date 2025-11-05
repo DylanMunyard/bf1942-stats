@@ -1,4 +1,4 @@
-using api.PlayerStats.Models;
+using api.Players.Models;
 
 namespace api.ClickHouse.Models;
 

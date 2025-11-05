@@ -1,4 +1,4 @@
-namespace api.PlayerStats.Models;
+namespace api.Players.Models;
 
 // Time Series Trend Analysis for Player Performance (6-month lookback)
 public class RecentStats

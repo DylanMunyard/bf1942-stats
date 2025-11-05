@@ -1,8 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
-using api.ServerStats.Models;
 
-namespace api.ServerStats;
+namespace api.Servers;
 
 public interface IBotDetectionService
 {

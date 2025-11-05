@@ -1,5 +1,5 @@
-using api.ServerStats;
-using api.ServerStats.Models;
+using api.Servers;
+using api.Servers.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -114,7 +114,7 @@ public class ServersControllerTests
     public async Task GetAllServers_ReturnsOkResult_WithServersList()
     {
         // Arrange
-        var mockServers = new api.ServerStats.Models.PagedResult<ServerBasicInfo>
+        var mockServers = new PagedResult<ServerBasicInfo>
         {
             Items =
             [
@@ -138,7 +138,7 @@ public class ServersControllerTests
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
-        var returnedData = Assert.IsType<api.ServerStats.Models.PagedResult<ServerBasicInfo>>(okResult.Value);
+        var returnedData = Assert.IsType<PagedResult<ServerBasicInfo>>(okResult.Value);
         Assert.Single(returnedData.Items);
         Assert.Equal("Server1", returnedData.Items.First().ServerName);
     }
@@ -198,7 +198,7 @@ public class ServersControllerTests
     {
         // Arrange
         const string query = "BF1942";
-        var mockResults = new api.ServerStats.Models.PagedResult<ServerBasicInfo>
+        var mockResults = new PagedResult<ServerBasicInfo>
         {
             Items =
             [
@@ -222,7 +222,7 @@ public class ServersControllerTests
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
-        var returnedData = Assert.IsType<api.ServerStats.Models.PagedResult<ServerBasicInfo>>(okResult.Value);
+        var returnedData = Assert.IsType<PagedResult<ServerBasicInfo>>(okResult.Value);
         Assert.Single(returnedData.Items);
         Assert.Equal("BF1942Server", returnedData.Items.First().ServerName);
     }

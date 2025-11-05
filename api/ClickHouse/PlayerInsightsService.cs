@@ -1,7 +1,7 @@
 using api.ClickHouse.Base;
 using api.ClickHouse.Interfaces;
 using api.ClickHouse.Models;
-using api.PlayerStats.Models;
+using api.Players.Models;
 using Microsoft.Extensions.Logging;
 using api.Telemetry;
 

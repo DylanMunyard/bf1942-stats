@@ -1,4 +1,4 @@
-namespace api.PlayerStats.Models;
+namespace api.Players.Models;
 
 // New class to hold player context information
 public class PlayerContextInfo

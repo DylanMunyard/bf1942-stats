@@ -1,12 +1,12 @@
-using api.PlayerStats.Models;
-using Microsoft.AspNetCore.Mvc;
 using api.ClickHouse;
 using api.ClickHouse.Models;
 using api.Constants;
-using Microsoft.Extensions.Logging;
+using api.Players.Models;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
-namespace api.PlayerStats;
+namespace api.Players;
 
 [ApiController]
 [Route("stats/[controller]")]

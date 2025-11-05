@@ -1,5 +1,5 @@
+using api.Players.Models;
 using Microsoft.EntityFrameworkCore;
-using api.PlayerStats.Models;
 using NodaTime;
 
 namespace api.PlayerTracking;

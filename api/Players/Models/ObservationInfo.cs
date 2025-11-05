@@ -1,4 +1,4 @@
-namespace api.PlayerStats.Models;
+namespace api.Players.Models;
 
 public class ObservationInfo
 {

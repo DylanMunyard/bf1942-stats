@@ -1,6 +1,6 @@
 using api.Bflist.Models;
 
-namespace api.ServerStats.Models
+namespace api.Servers.Models
 {
     public class ServerInsights
     {

@@ -1,10 +1,11 @@
-using api.PlayerTracking;
-using api.ServerStats.Models;
 using api.ClickHouse;
+using api.Players.Models;
+using api.PlayerTracking;
+using api.Servers.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace api.ServerStats;
+namespace api.Servers;
 
 public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsService> logger, PlayerRoundsReadService? clickHouseReader = null)
 {
@@ -89,7 +90,7 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
         return Math.Min(tickets1.Value, tickets2.Value);
     }
 
-    public async Task<PlayerStats.Models.PagedResult<RoundWithPlayers>> GetRounds(
+    public async Task<Players.Models.PagedResult<RoundWithPlayers>> GetRounds(
         int page,
         int pageSize,
         string sortBy,
@@ -252,7 +253,7 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
             IsActive = round.IsActive,
             Team1Label = round.Team1Label,
             Team2Label = round.Team2Label,
-            Players = new List<PlayerStats.Models.SessionListItem>()
+            Players = new List<SessionListItem>()
         }).ToList();
 
         // If players are requested, load them all in a single query
@@ -276,7 +277,7 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
                 var allPlayers = await playerQuery
                     .OrderBy(ps => ps.RoundId)
                     .ThenBy(ps => ps.PlayerName)
-                    .Select(ps => new PlayerStats.Models.SessionListItem
+                    .Select(ps => new SessionListItem
                     {
                         SessionId = ps.SessionId,
                         RoundId = ps.RoundId!,
@@ -304,7 +305,7 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
             }
         }
 
-        return new PlayerStats.Models.PagedResult<RoundWithPlayers>
+        return new Players.Models.PagedResult<RoundWithPlayers>
         {
             Items = result,
             Page = page,
@@ -390,7 +391,7 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
             .ToListAsync();
 
         // Create leaderboard snapshots starting from round start
-        var leaderboardSnapshots = new List<ServerStats.Models.LeaderboardSnapshot>();
+        var leaderboardSnapshots = new List<LeaderboardSnapshot>();
         var currentTime = roundData.StartTime;
         var endTime = roundData.EndTime ?? DateTime.UtcNow;
 
@@ -417,7 +418,7 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
                 })
                 .Where(x => x.LastSeen >= currentTime.AddMinutes(-1)) // Only include players seen in last minute
                 .OrderByDescending(x => x.Score)
-                .Select((x, i) => new ServerStats.Models.LeaderboardEntry
+                .Select((x, i) => new LeaderboardEntry
                 {
                     Rank = i + 1,
                     PlayerName = x.PlayerName,
@@ -430,7 +431,7 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
                 })
                 .ToList();
 
-            leaderboardSnapshots.Add(new ServerStats.Models.LeaderboardSnapshot
+            leaderboardSnapshots.Add(new LeaderboardSnapshot
             {
                 Timestamp = currentTime,
                 Entries = playerScores
@@ -457,8 +458,8 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
 
         return new SessionRoundReport
         {
-            Session = new ServerStats.Models.SessionInfo(), // Empty since UI doesn't use it
-            Round = new ServerStats.Models.RoundReportInfo
+            Session = new SessionInfo(), // Empty since UI doesn't use it
+            Round = new RoundReportInfo
             {
                 MapName = roundData.MapName,
                 GameType = roundData.GameType,

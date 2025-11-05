@@ -1,6 +1,6 @@
 using api.ClickHouse;
-using api.PlayerStats;
-using api.PlayerStats.Models;
+using api.Players;
+using api.Players.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using NSubstitute;

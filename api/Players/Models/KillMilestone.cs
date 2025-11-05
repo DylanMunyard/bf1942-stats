@@ -1,4 +1,4 @@
-namespace api.PlayerStats.Models;
+namespace api.Players.Models;
 
 // New model classes for enhanced insights
 public class KillMilestone

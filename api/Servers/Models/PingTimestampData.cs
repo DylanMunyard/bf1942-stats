@@ -1,4 +1,4 @@
-namespace api.ServerStats.Models;
+namespace api.Servers.Models;
 
 // Helper class for raw SQL query results
 public class PingTimestampData

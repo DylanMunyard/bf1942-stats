@@ -1,8 +1,8 @@
 using api.ClickHouse.Interfaces;
 using api.ClickHouse.Base;
-using api.ServerStats.Models;
-using api.PlayerStats.Models;
+using api.Players.Models;
 using api.PlayerTracking;
+using api.Servers.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;

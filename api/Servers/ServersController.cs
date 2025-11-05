@@ -1,10 +1,10 @@
-using api.ServerStats.Models;
+using api.Constants;
+using api.Servers.Models;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
-using api.Constants;
-using Microsoft.AspNetCore.Http;
 
-namespace api.ServerStats;
+namespace api.Servers;
 
 [ApiController]
 [Route("stats/[controller]")]

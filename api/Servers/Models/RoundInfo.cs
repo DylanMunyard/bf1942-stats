@@ -1,4 +1,4 @@
-namespace api.ServerStats.Models;
+namespace api.Servers.Models;
 
 public class RoundInfo
 {

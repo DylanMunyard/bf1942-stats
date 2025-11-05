@@ -1,6 +1,6 @@
-using api.ServerStats.Models;
+using api.Servers.Models;
 
-namespace api.ServerStats;
+namespace api.Servers;
 
 /// <summary>
 /// Interface for server statistics service.

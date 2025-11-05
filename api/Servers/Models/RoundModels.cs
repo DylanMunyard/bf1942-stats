@@ -1,6 +1,6 @@
-using PlayerStatsModels = api.PlayerStats.Models;
+using SessionListItem = api.Players.Models.SessionListItem;
 
-namespace api.ServerStats.Models;
+namespace api.Servers.Models;
 
 public class RoundListItem
 {
@@ -42,6 +42,6 @@ public class RoundFilters
 
 public class RoundWithPlayers : RoundListItem
 {
-    public List<PlayerStatsModels.SessionListItem> Players { get; set; } = new List<PlayerStatsModels.SessionListItem>();
+    public List<SessionListItem> Players { get; set; } = new List<SessionListItem>();
 }
 

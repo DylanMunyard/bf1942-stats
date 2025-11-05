@@ -94,3 +94,7 @@ csharp_style_conditional_delegate_call = true:suggestion
 dotnet_style_coalesce_expression = true:suggestion
 dotnet_style_null_propagation = true:suggestion
 csharp_style_pattern_matching_over_null_check = true:suggestion
+
+# Unused members detection
+dotnet_diagnostic.IDE0051.severity = warning
+dotnet_diagnostic.IDE0052.severity = warning

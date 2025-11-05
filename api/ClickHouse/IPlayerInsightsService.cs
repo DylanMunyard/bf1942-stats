@@ -1,5 +1,5 @@
 using api.ClickHouse.Models;
-using api.PlayerStats.Models;
+using api.Players.Models;
 
 namespace api.ClickHouse;
 

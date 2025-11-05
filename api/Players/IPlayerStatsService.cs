@@ -1,6 +1,6 @@
-using api.PlayerStats.Models;
+using api.Players.Models;
 
-namespace api.PlayerStats;
+namespace api.Players;
 
 /// <summary>
 /// Interface for player statistics service.

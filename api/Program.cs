@@ -1,10 +1,8 @@
-using api.PlayerStats;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using api.PlayerTracking;
-using api.ServerStats;
 using api.StatsCollectors;
 using api.ClickHouse;
 using api.ClickHouse.Interfaces;
@@ -33,6 +31,8 @@ using Serilog.Sinks.Grafana.Loki;
 using Microsoft.AspNetCore.ResponseCompression;
 using System.IO.Compression;
 using api.Data.Migrations;
+using api.Players;
+using api.Servers;
 
 // Configure Serilog
 var lokiUrl = Environment.GetEnvironmentVariable("LOKI_URL") ?? "http://localhost:3100";

@@ -1,4 +1,4 @@
-namespace api.PlayerStats.Models;
+namespace api.Players.Models;
 
 // Best scores for different time periods
 public class PlayerBestScores

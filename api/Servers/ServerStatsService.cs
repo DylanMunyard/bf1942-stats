@@ -1,13 +1,13 @@
-using api.PlayerTracking;
-using api.ServerStats.Models;
 using api.Caching;
 using api.ClickHouse;
 using api.ClickHouse.Interfaces;
 using api.Gamification.Models;
+using api.PlayerTracking;
+using api.Servers.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace api.ServerStats;
+namespace api.Servers;
 
 public class ServerStatsService(
     PlayerTrackerDbContext dbContext,
@@ -778,20 +778,6 @@ FORMAT TabSeparated";
         return allMaps;
     }
 
-
-    private string GetClickHouseTimeGrouping(TimeGranularity granularity)
-    {
-        return granularity switch
-        {
-            TimeGranularity.Hourly => "toStartOfHour(round_start_time)",
-            TimeGranularity.FourHourly => "toDateTime(toUnixTimestamp(toStartOfHour(round_start_time)) - (toUnixTimestamp(toStartOfHour(round_start_time)) % 14400))",
-            TimeGranularity.Daily => "toStartOfDay(round_start_time)",
-            TimeGranularity.Weekly => "toMonday(round_start_time)",
-            TimeGranularity.Monthly => "toStartOfMonth(round_start_time)",
-            _ => throw new ArgumentException($"Invalid granularity: {granularity}")
-        };
-    }
-
     public async Task<PagedResult<ServerBasicInfo>> GetAllServersWithPaging(
         int page = 1,
         int pageSize = 50,
@@ -1006,7 +992,7 @@ FORMAT TabSeparated";
                     Percentile = 0,
                     GeneratedAt = DateTime.UtcNow
                 },
-                HourlyTimeline = new List<api.ServerStats.Models.HourlyBusyData>(),
+                HourlyTimeline = new List<HourlyBusyData>(),
                 GeneratedAt = DateTime.UtcNow
             };
         }
@@ -1022,7 +1008,7 @@ FORMAT TabSeparated";
                 TypicalPlayers = serverResult.BusyIndicator.TypicalPlayers,
                 Percentile = serverResult.BusyIndicator.Percentile,
                 HistoricalRange = serverResult.BusyIndicator.HistoricalRange != null ?
-                    new api.ServerStats.Models.HistoricalRange
+                    new HistoricalRange
                     {
                         Min = serverResult.BusyIndicator.HistoricalRange.Min,
                         Q25 = serverResult.BusyIndicator.HistoricalRange.Q25,
@@ -1034,13 +1020,13 @@ FORMAT TabSeparated";
                     } : null,
                 GeneratedAt = serverResult.BusyIndicator.GeneratedAt
             },
-            HourlyTimeline = serverResult.HourlyTimeline?.Select(ht => new api.ServerStats.Models.HourlyBusyData
+            HourlyTimeline = serverResult.HourlyTimeline?.Select(ht => new HourlyBusyData
             {
                 Hour = ht.Hour,
                 TypicalPlayers = ht.TypicalPlayers,
                 BusyLevel = ht.BusyLevel,
                 IsCurrentHour = ht.IsCurrentHour
-            }).ToList() ?? new List<api.ServerStats.Models.HourlyBusyData>(),
+            }).ToList() ?? new List<HourlyBusyData>(),
             GeneratedAt = busyIndicatorResult.GeneratedAt
         };
 

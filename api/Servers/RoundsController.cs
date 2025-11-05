@@ -1,8 +1,8 @@
-using api.ServerStats.Models;
+using api.Servers.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
-namespace api.ServerStats;
+namespace api.Servers;
 
 [ApiController]
 [Route("stats/[controller]")]
@@ -19,7 +19,7 @@ public class RoundsController : ControllerBase
 
     // Get all rounds with filtering and pagination support
     [HttpGet]
-    public async Task<ActionResult<PlayerStats.Models.PagedResult<RoundWithPlayers>>> GetRounds(
+    public async Task<ActionResult<Players.Models.PagedResult<RoundWithPlayers>>> GetRounds(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 100,
         [FromQuery] string sortBy = "StartTime",
