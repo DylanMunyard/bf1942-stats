@@ -1,12 +1,9 @@
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using api.ClickHouse;
 
 namespace api.Data.Migrations;
 
-[ApiController]
-[Route("stats/admin/[controller]")]
-public class PlayerMetricsMigrationController : ControllerBase
+public class PlayerMetricsMigrationController
 {
     private readonly PlayerMetricsMigrationService _migrationService;
     private readonly ILogger<PlayerMetricsMigrationController> _logger;
@@ -49,29 +46,17 @@ public class PlayerMetricsMigrationController : ControllerBase
     /// Migrates player_metrics table from MergeTree to ReplacingMergeTree engine.
     /// This creates a new table (player_metrics_v2) and migrates all data with generated metric_ids.
     /// </summary>
-    [HttpPost("migrate")]
-    public async Task<ActionResult<MigrationResponse>> MigrateToReplacingMergeTree(
-        [FromBody] MigrationRequest request,
+    public async Task<MigrationResponse> MigrateToReplacingMergeTree(
+        MigrationRequest request,
         CancellationToken cancellationToken)
     {
-        _logger.LogWarning(
-            "PlayerMetricsMigrationController is disabled. Returning 401 Unauthorized. Request: batchSize={BatchSize} delayMs={DelayMs}",
-            request.BatchSize, request.DelayMs);
-
-        return StatusCode(401, new
-        {
-            message = "PlayerMetricsMigrationController is disabled and no longer available. This endpoint has been disabled for security reasons.",
-            timestamp = DateTime.UtcNow
-        });
-
-        /*
         var started = DateTime.UtcNow;
         _logger.LogInformation(
-            "API migration request started: batchSize={BatchSize} delayMs={DelayMs}", 
+            "Migration request started: batchSize={BatchSize} delayMs={DelayMs}",
             request.BatchSize, request.DelayMs);
 
         var result = await _migrationService.MigrateToReplacingMergeTreeAsync(
-            request.BatchSize, 
+            request.BatchSize,
             request.DelayMs);
 
         var ended = DateTime.UtcNow;
@@ -90,38 +75,27 @@ public class PlayerMetricsMigrationController : ControllerBase
         if (result.Success)
         {
             _logger.LogInformation(
-                "API migration completed successfully: migrated={Count} durationMs={DurationMs} verified={Verified}",
+                "Migration completed successfully: migrated={Count} durationMs={DurationMs} verified={Verified}",
                 response.TotalMigrated, response.DurationMs, response.VerificationPassed);
         }
         else
         {
             _logger.LogError(
-                "API migration failed: migrated={Count} durationMs={DurationMs} error={Error}",
+                "Migration failed: migrated={Count} durationMs={DurationMs} error={Error}",
                 response.TotalMigrated, response.DurationMs, response.ErrorMessage);
         }
 
-        return Ok(response);
-        */
+        return response;
     }
 
     /// <summary>
     /// Switches the tables: player_metrics -> player_metrics_backup, player_metrics_v2 -> player_metrics.
     /// This should only be called AFTER migration is complete and verified, and AFTER application code is updated.
     /// </summary>
-    [HttpPost("switch")]
-    public async Task<ActionResult<SwitchResponse>> SwitchToNewTable()
+    public async Task<SwitchResponse> SwitchToNewTable()
     {
-        _logger.LogWarning("PlayerMetricsMigrationController is disabled. Returning 401 Unauthorized.");
-
-        return StatusCode(401, new
-        {
-            message = "PlayerMetricsMigrationController is disabled and no longer available. This endpoint has been disabled for security reasons.",
-            timestamp = DateTime.UtcNow
-        });
-
-        /*
         var started = DateTime.UtcNow;
-        _logger.LogInformation("API table switch request started");
+        _logger.LogInformation("Table switch request started");
 
         var success = await _migrationService.SwitchToNewTableAsync();
 
@@ -136,35 +110,24 @@ public class PlayerMetricsMigrationController : ControllerBase
 
         if (success)
         {
-            _logger.LogInformation("API table switch completed successfully");
+            _logger.LogInformation("Table switch completed successfully");
         }
         else
         {
-            _logger.LogError("API table switch failed");
+            _logger.LogError("Table switch failed");
         }
 
-        return Ok(response);
-        */
+        return response;
     }
 
     /// <summary>
     /// Rollback the table switch if there are issues after switching.
     /// This restores player_metrics_backup -> player_metrics and moves the new table to player_metrics_failed.
     /// </summary>
-    [HttpPost("rollback")]
-    public async Task<ActionResult<SwitchResponse>> RollbackTableSwitch()
+    public async Task<SwitchResponse> RollbackTableSwitch()
     {
-        _logger.LogWarning("PlayerMetricsMigrationController is disabled. Returning 401 Unauthorized.");
-
-        return StatusCode(401, new
-        {
-            message = "PlayerMetricsMigrationController is disabled and no longer available. This endpoint has been disabled for security reasons.",
-            timestamp = DateTime.UtcNow
-        });
-
-        /*
         var started = DateTime.UtcNow;
-        _logger.LogInformation("API table rollback request started");
+        _logger.LogInformation("Table rollback request started");
 
         var success = await _migrationService.RollbackTableSwitchAsync();
 
@@ -179,35 +142,24 @@ public class PlayerMetricsMigrationController : ControllerBase
 
         if (success)
         {
-            _logger.LogInformation("API table rollback completed successfully");
+            _logger.LogInformation("Table rollback completed successfully");
         }
         else
         {
-            _logger.LogError("API table rollback failed");
+            _logger.LogError("Table rollback failed");
         }
 
-        return Ok(response);
-        */
+        return response;
     }
 
     /// <summary>
     /// Cleans up the old backup table after migration is verified successful.
     /// This should only be called after you're confident the migration worked correctly.
     /// </summary>
-    [HttpPost("cleanup")]
-    public async Task<ActionResult<SwitchResponse>> CleanupOldTable()
+    public async Task<SwitchResponse> CleanupOldTable()
     {
-        _logger.LogWarning("PlayerMetricsMigrationController is disabled. Returning 401 Unauthorized.");
-
-        return StatusCode(401, new
-        {
-            message = "PlayerMetricsMigrationController is disabled and no longer available. This endpoint has been disabled for security reasons.",
-            timestamp = DateTime.UtcNow
-        });
-
-        /*
         var started = DateTime.UtcNow;
-        _logger.LogInformation("API table cleanup request started");
+        _logger.LogInformation("Table cleanup request started");
 
         var success = await _migrationService.CleanupOldTableAsync();
 
@@ -222,14 +174,13 @@ public class PlayerMetricsMigrationController : ControllerBase
 
         if (success)
         {
-            _logger.LogInformation("API table cleanup completed successfully");
+            _logger.LogInformation("Table cleanup completed successfully");
         }
         else
         {
-            _logger.LogError("API table cleanup failed");
+            _logger.LogError("Table cleanup failed");
         }
 
-        return Ok(response);
-        */
+        return response;
     }
 }

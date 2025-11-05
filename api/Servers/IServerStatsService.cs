@@ -1,5 +1,4 @@
 using api.ServerStats.Models;
-using api.Gamification.Models;
 
 namespace api.ServerStats;
 

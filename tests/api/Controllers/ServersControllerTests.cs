@@ -1,10 +1,8 @@
-using api.PlayerStats.Models;
 using api.ServerStats;
 using api.ServerStats.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using Xunit;
 
 namespace api.tests.Controllers;
 

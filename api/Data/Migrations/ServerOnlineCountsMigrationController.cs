@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using api.ClickHouse;
@@ -7,9 +6,7 @@ using api.PlayerTracking;
 
 namespace api.Data.Migrations;
 
-[ApiController]
-[Route("stats/admin/[controller]")]
-public class ServerOnlineCountsMigrationController : ControllerBase
+public class ServerOnlineCountsMigrationController
 {
     private readonly ILogger<ServerOnlineCountsMigrationController> _logger;
     private readonly PlayerMetricsWriteService _writer;
@@ -50,20 +47,8 @@ public class ServerOnlineCountsMigrationController : ControllerBase
         public string ServerName { get; set; } = "";
     }
 
-    [HttpPost("repopulate")]
-    public async Task<ActionResult<RepopulateResponse>> Repopulate([FromBody] RepopulateRequest request)
+    public async Task<RepopulateResponse> Repopulate(RepopulateRequest request)
     {
-        _logger.LogWarning(
-            "ServerOnlineCountsMigrationController is disabled. Returning 401 Unauthorized. Request: from={From} to={To} batchMinutes={BatchMinutes}",
-            request.FromUtc, request.ToUtc, request.BatchMinutes);
-
-        return StatusCode(401, new
-        {
-            message = "ServerOnlineCountsMigrationController is disabled and no longer available. This endpoint has been disabled for security reasons.",
-            timestamp = DateTime.UtcNow
-        });
-
-        /*
         var started = DateTime.UtcNow;
         try
         {
@@ -106,28 +91,27 @@ public class ServerOnlineCountsMigrationController : ControllerBase
             }
 
             var ended = DateTime.UtcNow;
-            return Ok(new RepopulateResponse
+            return new RepopulateResponse
             {
                 Success = true,
                 TotalRows = total,
                 DurationMs = (long)(ended - started).TotalMilliseconds,
                 ExecutedAtUtc = ended
-            });
+            };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Server online counts repopulate failed");
             var ended = DateTime.UtcNow;
-            return Ok(new RepopulateResponse
+            return new RepopulateResponse
             {
                 Success = false,
                 TotalRows = 0,
                 DurationMs = (long)(ended - started).TotalMilliseconds,
                 ExecutedAtUtc = ended,
                 ErrorMessage = ex.Message
-            });
+            };
         }
-        */
     }
 
     // Minimal local copy to avoid making method public elsewhere

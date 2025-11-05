@@ -4,7 +4,6 @@ using api.ClickHouse.Models;
 using api.PlayerStats.Models;
 using Microsoft.Extensions.Logging;
 using api.Telemetry;
-using System.Diagnostics;
 
 namespace api.ClickHouse;
 

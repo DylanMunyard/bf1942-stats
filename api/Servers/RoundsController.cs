@@ -1,4 +1,3 @@
-using api.PlayerStats.Models;
 using api.ServerStats.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;

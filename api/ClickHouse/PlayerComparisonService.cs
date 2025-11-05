@@ -1,9 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using ClickHouse.Client.ADO;
-using ClickHouse.Client.ADO.Readers;
 using api.PlayerStats.Models;
 using api.ClickHouse.Models;
 using api.PlayerTracking;

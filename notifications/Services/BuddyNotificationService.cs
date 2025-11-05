@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 using notifications.Telemetry;
 using System.Diagnostics;

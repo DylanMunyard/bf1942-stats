@@ -1,13 +1,9 @@
 using System.Text.Json;
-using api.Bflist;
 using api.Bflist.Models;
-using api.StatsCollectors.Models;
 using api.Caching;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using api.Telemetry;
-using System.Diagnostics;
-using Microsoft.EntityFrameworkCore;
 using api.PlayerTracking;
 
 namespace api.Bflist;

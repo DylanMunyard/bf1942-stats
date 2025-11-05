@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Runtime.Serialization;
 using api.Gamification.Models;
 

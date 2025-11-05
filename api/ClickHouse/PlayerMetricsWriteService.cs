@@ -1,12 +1,9 @@
 using System.Globalization;
-using System.Text;
 using CsvHelper;
 using CsvHelper.Configuration;
 using api.ClickHouse.Interfaces;
 using api.ClickHouse.Base;
 using api.ClickHouse.Models;
-using api.PlayerTracking;
-using Microsoft.EntityFrameworkCore;
 
 namespace api.ClickHouse;
 

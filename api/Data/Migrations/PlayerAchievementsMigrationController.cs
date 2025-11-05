@@ -1,12 +1,9 @@
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using api.ClickHouse;
 
 namespace api.Data.Migrations;
 
-[ApiController]
-[Route("stats/admin/[controller]")]
-public class PlayerAchievementsMigrationController : ControllerBase
+public class PlayerAchievementsMigrationController
 {
     private readonly PlayerAchievementsMigrationService _migrationService;
     private readonly ILogger<PlayerAchievementsMigrationController> _logger;
@@ -41,8 +38,7 @@ public class PlayerAchievementsMigrationController : ControllerBase
     /// Migrates player_achievements table from MergeTree to ReplacingMergeTree engine for idempotency.
     /// This creates a new table (player_achievements_v2) and migrates all data with version column.
     /// </summary>
-    [HttpPost("migrate")]
-    public async Task<ActionResult<MigrationResponse>> MigrateToReplacingMergeTree()
+    public async Task<MigrationResponse> MigrateToReplacingMergeTree()
     {
         _logger.LogInformation("Player achievements migration request started");
 
@@ -72,15 +68,14 @@ public class PlayerAchievementsMigrationController : ControllerBase
                 response.TotalMigrated, response.DurationMs, response.ErrorMessage);
         }
 
-        return Ok(response);
+        return response;
     }
 
     /// <summary>
     /// Switches the tables: player_achievements -> player_achievements_backup, player_achievements_v2 -> player_achievements.
     /// This should only be called AFTER migration is complete and verified, and AFTER application code is updated.
     /// </summary>
-    [HttpPost("switch")]
-    public async Task<ActionResult<SwitchResponse>> SwitchToNewTable()
+    public async Task<SwitchResponse> SwitchToNewTable()
     {
         _logger.LogInformation("Player achievements table switch request started");
 
@@ -104,15 +99,14 @@ public class PlayerAchievementsMigrationController : ControllerBase
             _logger.LogError("Player achievements table switch failed");
         }
 
-        return Ok(response);
+        return response;
     }
 
     /// <summary>
     /// Cleans up the old backup table after migration is verified successful.
     /// This should only be called after you're confident the migration worked correctly.
     /// </summary>
-    [HttpPost("cleanup")]
-    public async Task<ActionResult<SwitchResponse>> CleanupOldTable()
+    public async Task<SwitchResponse> CleanupOldTable()
     {
         _logger.LogInformation("Player achievements table cleanup request started");
 
@@ -136,6 +130,6 @@ public class PlayerAchievementsMigrationController : ControllerBase
             _logger.LogError("Player achievements table cleanup failed");
         }
 
-        return Ok(response);
+        return response;
     }
 }

@@ -3,12 +3,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using api.PlayerTracking;
-using api.Services;
 using api.Gamification.Services;
 using api.Utils;
 using Microsoft.Extensions.Logging;
 using NodaTime;
-using Markdig;
 
 namespace api.Controllers;
 
@@ -2232,8 +2230,8 @@ public class AdminTournamentController : ControllerBase
             // Helper function to map rankings to response objects
             TournamentTeamRankingResponse MapRankingToResponse(TournamentTeamRanking ranking)
             {
-                var teamName = teamNamesMap.TryGetValue(ranking.TeamId, out var name) 
-                    ? name 
+                var teamName = teamNamesMap.TryGetValue(ranking.TeamId, out var name)
+                    ? name
                     : $"Team {ranking.TeamId}";
                 return new TournamentTeamRankingResponse
                 {
@@ -2257,7 +2255,7 @@ public class AdminTournamentController : ControllerBase
 
             // Get cumulative rankings
             var cumulativeRankingsList = await _rankingCalculator.CalculateRankingsAsync(tournamentId, null);
-            
+
             // Save cumulative rankings to database
             var oldCumulativeRankings = await _context.TournamentTeamRankings
                 .Where(r => r.TournamentId == tournamentId && r.Week == null)
@@ -2265,7 +2263,7 @@ public class AdminTournamentController : ControllerBase
             _context.TournamentTeamRankings.RemoveRange(oldCumulativeRankings);
             await _context.TournamentTeamRankings.AddRangeAsync(cumulativeRankingsList);
             await _context.SaveChangesAsync();
-            
+
             cumulativeRankings = cumulativeRankingsList
                 .OrderBy(r => r.Rank)
                 .Select(MapRankingToResponse)
@@ -2334,7 +2332,7 @@ public class AdminTournamentController : ControllerBase
 
         // Always recalculate cumulative rankings (week = null)
         var cumulativeRankings = await _rankingCalculator.CalculateRankingsAsync(tournamentId, null);
-        
+
         _logger.LogInformation(
             "Recalculated cumulative rankings for tournament {TournamentId}: {Count} rankings",
             tournamentId, cumulativeRankings.Count);
@@ -2613,23 +2611,23 @@ public class TournamentTeamRankingResponse
     public int TeamId { get; set; }
     public string TeamName { get; set; } = "";
     public string? Week { get; set; }
-    
+
     // Match-level statistics
     public int MatchesPlayed { get; set; }
     public int Victories { get; set; }
     public int Ties { get; set; }
     public int Losses { get; set; }
-    
+
     // Round-level statistics
     public int RoundsWon { get; set; }
     public int RoundsTied { get; set; }
     public int RoundsLost { get; set; }
-    
+
     // Ticket statistics
     public int TicketsFor { get; set; }
     public int TicketsAgainst { get; set; }
     public int TicketDifferential { get; set; }
-    
+
     // Points (primary ranking metric)
     public int Points { get; set; }
 }

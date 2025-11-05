@@ -2,7 +2,6 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using StackExchange.Redis;
 using notifications.Services;
-using Xunit;
 
 namespace notifications.tests.Services;
 

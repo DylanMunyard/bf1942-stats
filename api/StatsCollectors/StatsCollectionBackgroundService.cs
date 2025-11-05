@@ -5,8 +5,6 @@ using Microsoft.Extensions.Configuration;
 using api.PlayerTracking;
 using api.Bflist;
 using api.Bflist.Models;
-using api.ClickHouse;
-using api.Services;
 using api.Telemetry;
 using Serilog.Context;
 

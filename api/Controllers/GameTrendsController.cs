@@ -3,7 +3,6 @@ using api.ClickHouse;
 using api.ClickHouse.Models;
 using api.Caching;
 using Microsoft.Extensions.Logging;
-using System.Linq;
 
 namespace api.Controllers;
 

@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.Extensions.Logging;
 using notifications.Models;
 using notifications.Hubs;
 using notifications.Services;

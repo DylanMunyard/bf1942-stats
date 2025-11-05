@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Configuration;
 using notifications.Telemetry;
 using System.Diagnostics;
 

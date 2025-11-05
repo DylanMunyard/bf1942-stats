@@ -1,10 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
-using api.ClickHouse;
-using api.Auth;
 using api.Auth.Models;
 using Microsoft.Extensions.Configuration;
 using api.PlayerTracking;

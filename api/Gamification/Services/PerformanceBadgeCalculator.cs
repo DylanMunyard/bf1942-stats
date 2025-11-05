@@ -1,7 +1,6 @@
 using api.Gamification.Models;
 using api.ClickHouse.Models;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace api.Gamification.Services;
 

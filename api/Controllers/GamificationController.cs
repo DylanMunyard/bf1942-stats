@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using api.Gamification.Models;
 using api.Gamification.Services;
-using api.PlayerStats.Models;
 using Microsoft.Extensions.Logging;
 
 namespace api.Controllers;

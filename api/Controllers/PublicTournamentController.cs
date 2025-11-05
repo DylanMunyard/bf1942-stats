@@ -486,26 +486,26 @@ public class PublicTeamRankingResponse
     public int Rank { get; set; }
     public int TeamId { get; set; }
     public string TeamName { get; set; } = "";
-    
+
     // Match-level statistics
     public int MatchesPlayed { get; set; }
     public int Victories { get; set; }
     public int Ties { get; set; }
     public int Losses { get; set; }
-    
+
     // Round-level statistics
     public int RoundsWon { get; set; }
     public int RoundsTied { get; set; }
     public int RoundsLost { get; set; }
-    
+
     // Ticket statistics
     public int TicketsFor { get; set; }
     public int TicketsAgainst { get; set; }
     public int TicketDifferential { get; set; }
-    
+
     // Points (primary ranking metric)
     public int Points { get; set; }
-    
+
     // Calculated field for compatibility
     public int TotalRounds { get; set; }
 }

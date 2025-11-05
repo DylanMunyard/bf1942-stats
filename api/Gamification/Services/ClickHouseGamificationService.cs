@@ -2,7 +2,6 @@ using api.Gamification.Models;
 using api.ClickHouse.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
-using System.Text.Json;
 using System.Text;
 using System.Globalization;
 using CsvHelper;

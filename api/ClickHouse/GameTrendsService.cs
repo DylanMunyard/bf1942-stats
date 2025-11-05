@@ -1,5 +1,4 @@
 using api.ClickHouse.Base;
-using api.ClickHouse.Interfaces;
 using api.ClickHouse.Models;
 using api.PlayerTracking;
 using Microsoft.EntityFrameworkCore;

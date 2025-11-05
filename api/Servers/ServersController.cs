@@ -1,7 +1,6 @@
 using api.ServerStats.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
-using System;
 using api.Constants;
 using Microsoft.AspNetCore.Http;
 

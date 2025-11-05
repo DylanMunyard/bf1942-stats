@@ -1,4 +1,3 @@
-using System.Net.Http;
 using System.Text;
 using api.ClickHouse.Interfaces;
 using api.Telemetry;

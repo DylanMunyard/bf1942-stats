@@ -4,7 +4,6 @@ using api.PlayerStats.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using Xunit;
 
 namespace api.tests.Controllers;
 

@@ -1,5 +1,3 @@
-using System;
-
 namespace api.ClickHouse.Models;
 
 public class TeamKillerMetrics

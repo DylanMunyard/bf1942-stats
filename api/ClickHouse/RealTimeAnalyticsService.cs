@@ -1,11 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using ClickHouse.Client;
 using ClickHouse.Client.ADO;
 using api.ClickHouse.Models;
 using Microsoft.Extensions.Configuration;
-using System.Data.Common;
 using Microsoft.Extensions.Logging;
 
 namespace api.ClickHouse;

@@ -1,5 +1,3 @@
-using api.PlayerStats.Models;
-
 namespace api.ClickHouse.Models;
 
 /// <summary>

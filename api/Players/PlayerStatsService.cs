@@ -5,9 +5,6 @@ using api.Caching;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
-using api.Telemetry;
-using System.Diagnostics;
-using System.Threading;
 
 namespace api.PlayerStats;
 

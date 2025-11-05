@@ -2,7 +2,6 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using api.Telemetry;
-using System.Diagnostics;
 
 namespace api.Caching;
 

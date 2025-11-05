@@ -1,5 +1,3 @@
-using System.Net.Http;
-using api.ClickHouse.Models;
 using api.ClickHouse.Interfaces;
 using api.ClickHouse.Base;
 using api.ServerStats.Models;
@@ -9,7 +7,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using api.Telemetry;
-using System.Diagnostics;
 
 namespace api.ClickHouse;
 

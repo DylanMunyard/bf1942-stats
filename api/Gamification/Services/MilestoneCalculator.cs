@@ -1,8 +1,6 @@
 using api.Gamification.Models;
 using api.ClickHouse.Models;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.DependencyInjection;
-using System.Linq;
 
 namespace api.Gamification.Services;
 

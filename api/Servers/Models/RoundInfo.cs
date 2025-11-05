@@ -1,5 +1,3 @@
-using System;
-
 namespace api.ServerStats.Models;
 
 public class RoundInfo
