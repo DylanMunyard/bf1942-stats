@@ -3,15 +3,9 @@ using api.ClickHouse.Base;
 
 namespace api.ClickHouse;
 
-public class PlayerMetricsMigrationService : BaseClickHouseService
+public class PlayerMetricsMigrationService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerMetricsMigrationService> logger) : BaseClickHouseService(httpClient, clickHouseUrl)
 {
-    private readonly ILogger<PlayerMetricsMigrationService> _logger;
-
-    public PlayerMetricsMigrationService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerMetricsMigrationService> logger)
-        : base(httpClient, clickHouseUrl)
-    {
-        _logger = logger;
-    }
+    private readonly ILogger<PlayerMetricsMigrationService> _logger = logger;
 
     public async Task<MigrationResult> MigrateToReplacingMergeTreeAsync(
         int batchSize = 1_000_000,

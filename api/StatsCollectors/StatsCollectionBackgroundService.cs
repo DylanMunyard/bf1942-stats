@@ -10,26 +10,16 @@ using Serilog.Context;
 
 namespace api.StatsCollectors;
 
-public class StatsCollectionBackgroundService : IHostedService, IDisposable
+public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory, IConfiguration configuration) : IHostedService, IDisposable
 {
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IConfiguration _configuration;
-    private readonly TimeSpan _collectionInterval;
+    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
+    private readonly IConfiguration _configuration = configuration;
+
+    // Read interval from config, default to 30 seconds
+    private readonly TimeSpan _collectionInterval = TimeSpan.FromSeconds(configuration.GetValue<int?>("STATS_COLLECTION_INTERVAL_SECONDS") ?? 30);
     private Timer? _timer;
     private int _isRunning = 0;
     private int _cycleCount = 0;
-
-
-
-    public StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory, IConfiguration configuration)
-    {
-        _scopeFactory = scopeFactory;
-        _configuration = configuration;
-
-        // Read interval from config, default to 30 seconds
-        var intervalSeconds = _configuration.GetValue<int?>("STATS_COLLECTION_INTERVAL_SECONDS") ?? 30;
-        _collectionInterval = TimeSpan.FromSeconds(intervalSeconds);
-    }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {

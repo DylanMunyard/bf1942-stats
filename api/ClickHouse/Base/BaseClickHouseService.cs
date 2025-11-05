@@ -5,16 +5,10 @@ using System.Diagnostics;
 
 namespace api.ClickHouse.Base;
 
-public abstract class BaseClickHouseService
+public abstract class BaseClickHouseService(HttpClient httpClient, string clickHouseUrl)
 {
-    protected readonly HttpClient _httpClient;
-    protected readonly string _clickHouseUrl;
-
-    protected BaseClickHouseService(HttpClient httpClient, string clickHouseUrl)
-    {
-        _httpClient = httpClient;
-        _clickHouseUrl = clickHouseUrl.TrimEnd('/');
-    }
+    protected readonly HttpClient _httpClient = httpClient;
+    protected readonly string _clickHouseUrl = clickHouseUrl.TrimEnd('/');
 
     protected async Task<string> ExecuteQueryInternalAsync(string query)
     {

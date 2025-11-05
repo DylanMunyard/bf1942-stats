@@ -23,22 +23,16 @@ public interface IMarkdownSanitizationService
     string ConvertToSafeHtml(string? markdown);
 }
 
-public class MarkdownSanitizationService : IMarkdownSanitizationService
+public class MarkdownSanitizationService(ILogger<MarkdownSanitizationService> logger) : IMarkdownSanitizationService
 {
     private const int MaxMarkdownLength = 50000;
-    private readonly ILogger<MarkdownSanitizationService> _logger;
-    private readonly MarkdownPipeline _markdownPipeline;
+    private readonly ILogger<MarkdownSanitizationService> _logger = logger;
 
-    public MarkdownSanitizationService(ILogger<MarkdownSanitizationService> logger)
-    {
-        _logger = logger;
-
-        // Configure Markdig pipeline with code block support
-        // DisableHtml is the critical security feature - it prevents raw HTML/scripts
-        _markdownPipeline = new MarkdownPipelineBuilder()
-            .DisableHtml()  // ⭐ CRITICAL: Prevents <script>, <iframe>, <embed>, etc.
-            .Build();
-    }
+    // Configure Markdig pipeline with code block support
+    // DisableHtml is the critical security feature - it prevents raw HTML/scripts
+    private readonly MarkdownPipeline _markdownPipeline = new MarkdownPipelineBuilder()
+        .DisableHtml()  // ⭐ CRITICAL: Prevents <script>, <iframe>, <embed>, etc.
+        .Build();
 
     public ValidationResult ValidateMarkdown(string? markdown)
     {

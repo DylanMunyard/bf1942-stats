@@ -7,17 +7,10 @@ using Microsoft.Extensions.Logging;
 
 namespace api.ClickHouse;
 
-public class GameTrendsService : BaseClickHouseService, IGameTrendsService
+public class GameTrendsService(HttpClient httpClient, string clickHouseUrl, ILogger<GameTrendsService> logger, PlayerTrackerDbContext dbContext) : BaseClickHouseService(httpClient, clickHouseUrl), IGameTrendsService
 {
-    private readonly ILogger<GameTrendsService> _logger;
-    private readonly PlayerTrackerDbContext _dbContext;
-
-    public GameTrendsService(HttpClient httpClient, string clickHouseUrl, ILogger<GameTrendsService> logger, PlayerTrackerDbContext dbContext)
-        : base(httpClient, clickHouseUrl)
-    {
-        _logger = logger;
-        _dbContext = dbContext;
-    }
+    private readonly ILogger<GameTrendsService> _logger = logger;
+    private readonly PlayerTrackerDbContext _dbContext = dbContext;
 
     private async Task<List<T>> ReadAllAsync<T>(string query, params object[] parameters) where T : new()
     {

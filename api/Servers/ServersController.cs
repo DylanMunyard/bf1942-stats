@@ -8,16 +8,12 @@ namespace api.Servers;
 
 [ApiController]
 [Route("stats/[controller]")]
-public class ServersController : ControllerBase
+public class ServersController(
+    IServerStatsService serverStatsService,
+    ILogger<ServersController> logger) : ControllerBase
 {
-    private readonly IServerStatsService _serverStatsService;
-    private readonly ILogger<ServersController> _logger;
-
-    public ServersController(IServerStatsService serverStatsService, ILogger<ServersController> logger)
-    {
-        _serverStatsService = serverStatsService;
-        _logger = logger;
-    }
+    private readonly IServerStatsService _serverStatsService = serverStatsService;
+    private readonly ILogger<ServersController> _logger = logger;
 
     /// <summary>
     /// Retrieves detailed statistics for a specific server.

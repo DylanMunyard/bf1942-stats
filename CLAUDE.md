@@ -88,4 +88,5 @@ junie-des-1942stats/
 ## Conventions
 
 - When we document our decisions or iterate on a design, we store the outcomes / tasklist / progress in a markdown file in `features/<feature-name>` where feature name is a brief descriptive name of the feature separated by hyphens
-- Use the latest C# language features, e.g. use collection expressions Tiers = ["bronze"] instead of Tiers = new[] { "bronze" }, and other features like range expressions and pattern matching.
+- Use the latest C# language features, e.g. primary constructors, collection expressions Tiers = ["bronze"] instead of Tiers = new[] { "bronze" }, and other features like range expressions and pattern matching.
+- Use record types for DTOs and data structures that are primarily data carriers.

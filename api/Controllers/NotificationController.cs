@@ -7,16 +7,12 @@ namespace api.Controllers;
 
 [ApiController]
 [Route("stats/[controller]")]
-public class NotificationController : ControllerBase
+public class NotificationController(
+    PlayerTrackerDbContext dbContext,
+    ILogger<NotificationController> logger) : ControllerBase
 {
-    private readonly PlayerTrackerDbContext _dbContext;
-    private readonly ILogger<NotificationController> _logger;
-
-    public NotificationController(PlayerTrackerDbContext dbContext, ILogger<NotificationController> logger)
-    {
-        _dbContext = dbContext;
-        _logger = logger;
-    }
+    private readonly PlayerTrackerDbContext _dbContext = dbContext;
+    private readonly ILogger<NotificationController> _logger = logger;
 
     [HttpGet("users-with-buddy")]
     public async Task<ActionResult<IEnumerable<string>>> GetUsersWithBuddy(string buddyPlayerName)

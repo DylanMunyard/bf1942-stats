@@ -6,14 +6,9 @@ namespace api;
 
 [ApiController]
 [Route("stats/[controller]")]
-public class RealTimeAnalyticsController : ControllerBase
+public class RealTimeAnalyticsController(RealTimeAnalyticsService analyticsService) : ControllerBase
 {
-    private readonly RealTimeAnalyticsService _analyticsService;
-
-    public RealTimeAnalyticsController(RealTimeAnalyticsService analyticsService)
-    {
-        _analyticsService = analyticsService;
-    }
+    private readonly RealTimeAnalyticsService _analyticsService = analyticsService;
 
     [HttpGet("teamkillers")]
     public async Task<ActionResult<List<TeamKillerMetrics>>> GetTeamkillers()

@@ -6,21 +6,11 @@ using api.PlayerTracking;
 
 namespace api.Data.Migrations;
 
-public class ServerOnlineCountsMigrationController
+public class ServerOnlineCountsMigrationController(ILogger<ServerOnlineCountsMigrationController> logger, PlayerMetricsWriteService writer, PlayerTrackerDbContext db)
 {
-    private readonly ILogger<ServerOnlineCountsMigrationController> _logger;
-    private readonly PlayerMetricsWriteService _writer;
-    private readonly PlayerTrackerDbContext _db;
-
-    public ServerOnlineCountsMigrationController(
-        ILogger<ServerOnlineCountsMigrationController> logger,
-        PlayerMetricsWriteService writer,
-        PlayerTrackerDbContext db)
-    {
-        _logger = logger;
-        _writer = writer;
-        _db = db;
-    }
+    private readonly ILogger<ServerOnlineCountsMigrationController> _logger = logger;
+    private readonly PlayerMetricsWriteService _writer = writer;
+    private readonly PlayerTrackerDbContext _db = db;
 
     public class RepopulateRequest
     {

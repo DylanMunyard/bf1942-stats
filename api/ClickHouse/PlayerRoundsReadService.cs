@@ -10,17 +10,10 @@ using api.Telemetry;
 
 namespace api.ClickHouse;
 
-public class PlayerRoundsReadService : BaseClickHouseService, IClickHouseReader
+public class PlayerRoundsReadService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerRoundsReadService> logger, IServiceProvider serviceProvider) : BaseClickHouseService(httpClient, clickHouseUrl), IClickHouseReader
 {
-    private readonly ILogger<PlayerRoundsReadService> _logger;
-    private readonly IServiceProvider _serviceProvider;
-
-    public PlayerRoundsReadService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerRoundsReadService> logger, IServiceProvider serviceProvider)
-        : base(httpClient, clickHouseUrl)
-    {
-        _logger = logger;
-        _serviceProvider = serviceProvider;
-    }
+    private readonly ILogger<PlayerRoundsReadService> _logger = logger;
+    private readonly IServiceProvider _serviceProvider = serviceProvider;
 
     private static int CalculateMinimumRounds(DateTime startPeriod, DateTime endPeriod, int? minRoundsOverride = null)
     {

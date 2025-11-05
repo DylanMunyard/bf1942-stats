@@ -12,11 +12,11 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace api.ClickHouse;
 
-public class PlayerRoundsWriteService : BaseClickHouseService, IClickHouseWriter
+public class PlayerRoundsWriteService(HttpClient httpClient, string clickHouseUrl, IServiceScopeFactory scopeFactory, ILogger<PlayerRoundsWriteService> logger, IClickHouseReader? reader = null) : BaseClickHouseService(httpClient, clickHouseUrl), IClickHouseWriter
 {
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<PlayerRoundsWriteService> _logger;
-    private readonly IClickHouseReader? _reader;
+    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
+    private readonly ILogger<PlayerRoundsWriteService> _logger = logger;
+    private readonly IClickHouseReader? _reader = reader;
 
     private static int GetEnvInt(string name, int defaultValue)
     {
@@ -26,19 +26,6 @@ public class PlayerRoundsWriteService : BaseClickHouseService, IClickHouseWriter
             return parsed;
         }
         return defaultValue;
-    }
-
-    public PlayerRoundsWriteService(
-        HttpClient httpClient,
-        string clickHouseUrl,
-        IServiceScopeFactory scopeFactory,
-        ILogger<PlayerRoundsWriteService> logger,
-        IClickHouseReader? reader = null)
-        : base(httpClient, clickHouseUrl)
-    {
-        _scopeFactory = scopeFactory;
-        _logger = logger;
-        _reader = reader;
     }
 
     /// <summary>

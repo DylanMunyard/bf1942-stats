@@ -6,16 +6,12 @@ namespace api.Servers;
 
 [ApiController]
 [Route("stats/[controller]")]
-public class RoundsController : ControllerBase
+public class RoundsController(
+    RoundsService roundsService,
+    ILogger<RoundsController> logger) : ControllerBase
 {
-    private readonly RoundsService _roundsService;
-    private readonly ILogger<RoundsController> _logger;
-
-    public RoundsController(RoundsService roundsService, ILogger<RoundsController> logger)
-    {
-        _roundsService = roundsService;
-        _logger = logger;
-    }
+    private readonly RoundsService _roundsService = roundsService;
+    private readonly ILogger<RoundsController> _logger = logger;
 
     // Get all rounds with filtering and pagination support
     [HttpGet]

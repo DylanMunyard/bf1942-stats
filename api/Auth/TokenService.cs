@@ -12,33 +12,31 @@ public interface ITokenService
     (string accessToken, DateTime expiresAt) CreateAccessToken(User user);
 }
 
-public class TokenService : ITokenService
+public class TokenService(IConfiguration configuration) : ITokenService
 {
-    private readonly IConfiguration _configuration;
+    private readonly IConfiguration _configuration = configuration;
     private readonly JwtSecurityTokenHandler _tokenHandler = new();
-    private readonly SigningCredentials _signingCredentials;
-    private readonly RsaSecurityKey _securityKey;
-    private readonly string _issuer;
-    private readonly string _audience;
-    private readonly int _accessMinutes;
+    private readonly SigningCredentials _signingCredentials = InitializeSigningCredentials(configuration);
+    private readonly RsaSecurityKey _securityKey = InitializeSecurityKey(configuration);
+    private readonly string _issuer = configuration["Jwt:Issuer"] ?? "";
+    private readonly string _audience = configuration["Jwt:Audience"] ?? "";
+    private readonly int _accessMinutes = int.TryParse(configuration["Jwt:AccessTokenMinutes"], out var m) ? m : 10080 /* 7 days */;
 
-    public TokenService(IConfiguration configuration)
+    private static RsaSecurityKey InitializeSecurityKey(IConfiguration configuration)
     {
-        _configuration = configuration;
-
-        _issuer = _configuration["Jwt:Issuer"] ?? "";
-        _audience = _configuration["Jwt:Audience"] ?? "";
-        _accessMinutes = int.TryParse(_configuration["Jwt:AccessTokenMinutes"], out var m) ? m : 10080 /* 7 days */;
-
-        // RS256 only: load RSA private key from inline PEM or file path
-        var privateKeyPem = TokenServiceConfigHelpers.ReadConfigStringOrFile(_configuration, "Jwt:PrivateKey", "Jwt:PrivateKeyPath");
+        var privateKeyPem = TokenServiceConfigHelpers.ReadConfigStringOrFile(configuration, "Jwt:PrivateKey", "Jwt:PrivateKeyPath");
         if (string.IsNullOrWhiteSpace(privateKeyPem))
             throw new InvalidOperationException("JWT private key not configured. Set Jwt:PrivateKey (inline PEM) or Jwt:PrivateKeyPath (file path) for RS256.");
 
         var rsa = RSA.Create();
         rsa.ImportFromPem(privateKeyPem);
-        _securityKey = new RsaSecurityKey(rsa);
-        _signingCredentials = new SigningCredentials(_securityKey, SecurityAlgorithms.RsaSha256);
+        return new RsaSecurityKey(rsa);
+    }
+
+    private static SigningCredentials InitializeSigningCredentials(IConfiguration configuration)
+    {
+        var securityKey = InitializeSecurityKey(configuration);
+        return new SigningCredentials(securityKey, SecurityAlgorithms.RsaSha256);
     }
 
     public (string accessToken, DateTime expiresAt) CreateAccessToken(User user)

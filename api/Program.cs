@@ -715,6 +715,7 @@ try
 
     // Register Gamification Services
     builder.Services.AddScoped<api.Gamification.Services.BadgeDefinitionsService>();
+    builder.Services.AddScoped<api.Gamification.Services.IBadgeDefinitionsService, api.Gamification.Services.BadgeDefinitionsService>();
     builder.Services.AddScoped<api.Gamification.Services.AchievementLabelingService>();
 
     // Register HttpClient for ClickHouse Gamification Service

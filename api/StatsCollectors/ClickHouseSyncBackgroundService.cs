@@ -11,30 +11,24 @@ using api.Telemetry;
 
 namespace api.StatsCollectors;
 
-public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
+public class ClickHouseSyncBackgroundService(IServiceScopeFactory scopeFactory, IConfiguration configuration, ILogger<ClickHouseSyncBackgroundService> logger) : IHostedService, IDisposable
 {
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IConfiguration _configuration;
-    private readonly ILogger<ClickHouseSyncBackgroundService> _logger;
+    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
+    private readonly IConfiguration _configuration = configuration;
+    private readonly ILogger<ClickHouseSyncBackgroundService> _logger = logger;
     private readonly TimeSpan _syncInterval = TimeSpan.FromMinutes(1);
     private Timer? _timer;
     private int _isRunning = 0;
     private int _cycleCount = 0;
 
-    private readonly bool _enablePlayerMetricsSyncing;
-    private readonly bool _enableServerOnlineCountsSyncing;
-    private readonly bool _enableRoundsSyncing;
+    private readonly bool _enablePlayerMetricsSyncing = Environment.GetEnvironmentVariable("ENABLE_PLAYER_METRICS_SYNCING")?.ToLowerInvariant() == "true";
+    private readonly bool _enableServerOnlineCountsSyncing = Environment.GetEnvironmentVariable("ENABLE_SERVER_ONLINE_COUNTS_SYNCING")?.ToLowerInvariant() == "true";
+    private readonly bool _enableRoundsSyncing = Environment.GetEnvironmentVariable("ENABLE_CLICKHOUSE_ROUND_SYNCING")?.ToLowerInvariant() == "true";
 
-    public ClickHouseSyncBackgroundService(IServiceScopeFactory scopeFactory, IConfiguration configuration, ILogger<ClickHouseSyncBackgroundService> logger)
+    // Log configuration in StartAsync instead of constructor to avoid issues with logging in field initializers
+
+    public Task StartAsync(CancellationToken cancellationToken)
     {
-        _scopeFactory = scopeFactory;
-        _configuration = configuration;
-        _logger = logger;
-
-        _enablePlayerMetricsSyncing = Environment.GetEnvironmentVariable("ENABLE_PLAYER_METRICS_SYNCING")?.ToLowerInvariant() == "true";
-        _enableServerOnlineCountsSyncing = Environment.GetEnvironmentVariable("ENABLE_SERVER_ONLINE_COUNTS_SYNCING")?.ToLowerInvariant() == "true";
-        _enableRoundsSyncing = Environment.GetEnvironmentVariable("ENABLE_CLICKHOUSE_ROUND_SYNCING")?.ToLowerInvariant() == "true";
-
         _logger.LogInformation("Config ENABLE_PLAYER_METRICS_SYNCING: {Enabled}", _enablePlayerMetricsSyncing);
         _logger.LogInformation("Config ENABLE_SERVER_ONLINE_COUNTS_SYNCING: {Enabled}", _enableServerOnlineCountsSyncing);
         _logger.LogInformation("Config ENABLE_CLICKHOUSE_ROUND_SYNCING: {Enabled}", _enableRoundsSyncing);
@@ -45,10 +39,7 @@ public class ClickHouseSyncBackgroundService : IHostedService, IDisposable
 
         _logger.LogInformation("ClickHouse Read URL: {ReadUrl}", clickHouseReadUrl);
         _logger.LogInformation("ClickHouse Write URL: {WriteUrl} {Source}", clickHouseWriteUrl, isWriteUrlSet ? "(custom)" : "(fallback to read URL)");
-    }
 
-    public Task StartAsync(CancellationToken cancellationToken)
-    {
         _logger.LogInformation("ClickHouse sync service starting (1m intervals)...");
         _timer = new Timer(ExecuteSyncCycle, null, TimeSpan.Zero, _syncInterval);
         return Task.CompletedTask;

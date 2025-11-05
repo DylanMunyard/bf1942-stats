@@ -10,27 +10,17 @@ public interface IDiscordAuthService
     Task<DiscordUserPayload> ExchangeCodeForUserAsync(string code, string redirectUri, string? ipAddress = null);
 }
 
-public class DiscordAuthService : IDiscordAuthService
+public class DiscordAuthService(
+    IConfiguration configuration,
+    ILogger<DiscordAuthService> logger,
+    ICacheService cacheService,
+    IHttpClientFactory httpClientFactory) : IDiscordAuthService
 {
-    private readonly ILogger<DiscordAuthService> _logger;
-    private readonly ICacheService _cacheService;
-    private readonly HttpClient _httpClient;
-    private readonly string _clientId;
-    private readonly string _clientSecret;
-
-    public DiscordAuthService(
-        IConfiguration configuration,
-        ILogger<DiscordAuthService> logger,
-        ICacheService cacheService,
-        IHttpClientFactory httpClientFactory)
-    {
-        _logger = logger;
-        _cacheService = cacheService;
-        _httpClient = httpClientFactory.CreateClient();
-
-        _clientId = configuration["DiscordOAuth:ClientId"] ?? throw new InvalidOperationException("DiscordOAuth:ClientId not configured");
-        _clientSecret = configuration["DiscordOAuth:ClientSecret"] ?? throw new InvalidOperationException("DiscordOAuth:ClientSecret not configured");
-    }
+    private readonly ILogger<DiscordAuthService> _logger = logger;
+    private readonly ICacheService _cacheService = cacheService;
+    private readonly HttpClient _httpClient = httpClientFactory.CreateClient();
+    private readonly string _clientId = configuration["DiscordOAuth:ClientId"] ?? throw new InvalidOperationException("DiscordOAuth:ClientId not configured");
+    private readonly string _clientSecret = configuration["DiscordOAuth:ClientSecret"] ?? throw new InvalidOperationException("DiscordOAuth:ClientSecret not configured");
 
     public async Task<DiscordUserPayload> ExchangeCodeForUserAsync(string code, string redirectUri, string? ipAddress = null)
     {

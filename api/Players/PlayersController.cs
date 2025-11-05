@@ -10,22 +10,18 @@ namespace api.Players;
 
 [ApiController]
 [Route("stats/[controller]")]
-public class PlayersController : ControllerBase
+public class PlayersController(
+    IPlayerStatsService playerStatsService,
+    IServerStatisticsService serverStatisticsService,
+    IPlayerComparisonService playerComparisonService,
+    PlayerRoundsReadService playerRoundsService,
+    ILogger<PlayersController> logger) : ControllerBase
 {
-    private readonly IPlayerStatsService _playerStatsService;
-    private readonly IServerStatisticsService _serverStatisticsService;
-    private readonly IPlayerComparisonService _playerComparisonService;
-    private readonly PlayerRoundsReadService _playerRoundsService;
-    private readonly ILogger<PlayersController> _logger;
-
-    public PlayersController(IPlayerStatsService playerStatsService, IServerStatisticsService serverStatisticsService, IPlayerComparisonService playerComparisonService, PlayerRoundsReadService playerRoundsService, ILogger<PlayersController> logger)
-    {
-        _playerStatsService = playerStatsService;
-        _serverStatisticsService = serverStatisticsService;
-        _playerComparisonService = playerComparisonService;
-        _playerRoundsService = playerRoundsService;
-        _logger = logger;
-    }
+    private readonly IPlayerStatsService _playerStatsService = playerStatsService;
+    private readonly IServerStatisticsService _serverStatisticsService = serverStatisticsService;
+    private readonly IPlayerComparisonService _playerComparisonService = playerComparisonService;
+    private readonly PlayerRoundsReadService _playerRoundsService = playerRoundsService;
+    private readonly ILogger<PlayersController> _logger = logger;
 
     /// <summary>
     /// Retrieves a paginated list of all players with optional filtering and sorting.

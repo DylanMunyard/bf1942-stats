@@ -2,14 +2,9 @@ using api.Gamification.Models;
 
 namespace api.Gamification.Services;
 
-public class BadgeDefinitionsService : IBadgeDefinitionsService
+public class BadgeDefinitionsService() : IBadgeDefinitionsService
 {
-    private readonly Dictionary<string, BadgeDefinition> _badgeDefinitions;
-
-    public BadgeDefinitionsService()
-    {
-        _badgeDefinitions = InitializeBadgeDefinitions();
-    }
+    private readonly Dictionary<string, BadgeDefinition> _badgeDefinitions = InitializeBadgeDefinitionsStatic();
 
     public BadgeDefinition? GetBadgeDefinition(string badgeId)
     {
@@ -31,7 +26,7 @@ public class BadgeDefinitionsService : IBadgeDefinitionsService
         return _badgeDefinitions.Values.Where(b => b.Tier == tier).ToList();
     }
 
-    private Dictionary<string, BadgeDefinition> InitializeBadgeDefinitions()
+    private static Dictionary<string, BadgeDefinition> InitializeBadgeDefinitionsStatic()
     {
         var badges = new Dictionary<string, BadgeDefinition>();
 
@@ -62,7 +57,7 @@ public class BadgeDefinitionsService : IBadgeDefinitionsService
         return badges;
     }
 
-    private void AddKillStreakBadges(Dictionary<string, BadgeDefinition> badges)
+    private static void AddKillStreakBadges(Dictionary<string, BadgeDefinition> badges)
     {
         var streakBadges = new[]
         {
@@ -90,7 +85,7 @@ public class BadgeDefinitionsService : IBadgeDefinitionsService
         }
     }
 
-    private void AddPerformanceBadges(Dictionary<string, BadgeDefinition> badges)
+    private static void AddPerformanceBadges(Dictionary<string, BadgeDefinition> badges)
     {
         var kpmBadges = new[]
         {
@@ -146,7 +141,7 @@ public class BadgeDefinitionsService : IBadgeDefinitionsService
         }
     }
 
-    private void AddMapMasteryBadges(Dictionary<string, BadgeDefinition> badges)
+    private static void AddMapMasteryBadges(Dictionary<string, BadgeDefinition> badges)
     {
         badges["map_specialist"] = new BadgeDefinition
         {
@@ -194,7 +189,7 @@ public class BadgeDefinitionsService : IBadgeDefinitionsService
         };
     }
 
-    private void AddConsistencyBadges(Dictionary<string, BadgeDefinition> badges)
+    private static void AddConsistencyBadges(Dictionary<string, BadgeDefinition> badges)
     {
         badges["consistent_killer"] = new BadgeDefinition
         {
@@ -242,7 +237,7 @@ public class BadgeDefinitionsService : IBadgeDefinitionsService
         };
     }
 
-    private void AddMilestoneBadges(Dictionary<string, BadgeDefinition> badges)
+    private static void AddMilestoneBadges(Dictionary<string, BadgeDefinition> badges)
     {
         var killMilestones = new[]
         {
@@ -318,7 +313,7 @@ public class BadgeDefinitionsService : IBadgeDefinitionsService
         }
     }
 
-    private void AddSocialBadges(Dictionary<string, BadgeDefinition> badges)
+    private static void AddSocialBadges(Dictionary<string, BadgeDefinition> badges)
     {
         badges["server_regular"] = new BadgeDefinition
         {
@@ -375,7 +370,7 @@ public class BadgeDefinitionsService : IBadgeDefinitionsService
         };
     }
 
-    private void AddPlacementBadges(Dictionary<string, BadgeDefinition> badges)
+    private static void AddPlacementBadges(Dictionary<string, BadgeDefinition> badges)
     {
         var placementBadges = new[]
         {
@@ -402,7 +397,7 @@ public class BadgeDefinitionsService : IBadgeDefinitionsService
         }
     }
 
-    private void AddTeamVictoryBadges(Dictionary<string, BadgeDefinition> badges)
+    private static void AddTeamVictoryBadges(Dictionary<string, BadgeDefinition> badges)
     {
         // Regular Team Victory Badge
         badges["team_victory"] = new BadgeDefinition

@@ -5,21 +5,14 @@ using NodaTime;
 
 namespace api.Gamification.Services;
 
-public class TournamentMatchResultService : ITournamentMatchResultService
+public class TournamentMatchResultService(
+    PlayerTrackerDbContext dbContext,
+    ITeamMappingService teamMappingService,
+    ILogger<TournamentMatchResultService> logger) : ITournamentMatchResultService
 {
-    private readonly PlayerTrackerDbContext _dbContext;
-    private readonly ITeamMappingService _teamMappingService;
-    private readonly ILogger<TournamentMatchResultService> _logger;
-
-    public TournamentMatchResultService(
-        PlayerTrackerDbContext dbContext,
-        ITeamMappingService teamMappingService,
-        ILogger<TournamentMatchResultService> logger)
-    {
-        _dbContext = dbContext;
-        _teamMappingService = teamMappingService;
-        _logger = logger;
-    }
+    private readonly PlayerTrackerDbContext _dbContext = dbContext;
+    private readonly ITeamMappingService _teamMappingService = teamMappingService;
+    private readonly ILogger<TournamentMatchResultService> _logger = logger;
 
     public async Task<(int ResultId, string? WarningMessage)> CreateOrUpdateMatchResultAsync(
         int tournamentId,

@@ -13,30 +13,20 @@ namespace api.ClickHouse;
 /// Optimized to use post-processing for server GUID to name conversion
 /// to avoid multiple individual database queries during player comparison operations.
 /// </summary>
-public class PlayerComparisonService : IPlayerComparisonService
+public class PlayerComparisonService(
+    ClickHouseConnection connection,
+    ILogger<PlayerComparisonService> logger,
+    PlayerTrackerDbContext dbContext,
+    ICacheService cacheService,
+    ICacheKeyService cacheKeyService,
+    PlayerInsightsService playerInsightsService) : IPlayerComparisonService
 {
-    private readonly ClickHouseConnection _connection;
-    private readonly ILogger<PlayerComparisonService> _logger;
-    private readonly PlayerTrackerDbContext _dbContext;
-    private readonly ICacheService _cacheService;
-    private readonly ICacheKeyService _cacheKeyService;
-    private readonly PlayerInsightsService _playerInsightsService;
-
-    public PlayerComparisonService(
-        ClickHouseConnection connection,
-        ILogger<PlayerComparisonService> logger,
-        PlayerTrackerDbContext dbContext,
-        ICacheService cacheService,
-        ICacheKeyService cacheKeyService,
-        PlayerInsightsService playerInsightsService)
-    {
-        _connection = connection;
-        _logger = logger;
-        _dbContext = dbContext;
-        _cacheService = cacheService;
-        _cacheKeyService = cacheKeyService;
-        _playerInsightsService = playerInsightsService;
-    }
+    private readonly ClickHouseConnection _connection = connection;
+    private readonly ILogger<PlayerComparisonService> _logger = logger;
+    private readonly PlayerTrackerDbContext _dbContext = dbContext;
+    private readonly ICacheService _cacheService = cacheService;
+    private readonly ICacheKeyService _cacheKeyService = cacheKeyService;
+    private readonly PlayerInsightsService _playerInsightsService = playerInsightsService;
 
     public async Task<PlayerComparisonResult> ComparePlayersAsync(string player1, string player2, string? serverGuid = null)
     {

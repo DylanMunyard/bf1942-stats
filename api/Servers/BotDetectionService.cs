@@ -8,19 +8,17 @@ public interface IBotDetectionService
     bool IsBotPlayer(string playerName, bool apiBotFlag);
 }
 
-public class BotDetectionService : IBotDetectionService
+public class BotDetectionService(IConfiguration configuration) : IBotDetectionService
 {
-    private readonly Models.BotDetectionConfig _config;
-    private readonly Regex _duplicateNamePattern;
+    private readonly Models.BotDetectionConfig _config = configuration.GetSection("BotDetection").Get<Models.BotDetectionConfig>() ?? new Models.BotDetectionConfig();
+    private readonly Regex _duplicateNamePattern = InitializeDuplicatePattern(configuration.GetSection("BotDetection").Get<Models.BotDetectionConfig>() ?? new Models.BotDetectionConfig());
 
-    public BotDetectionService(IConfiguration configuration)
+    private static Regex InitializeDuplicatePattern(Models.BotDetectionConfig config)
     {
-        _config = configuration.GetSection("BotDetection").Get<Models.BotDetectionConfig>() ?? new Models.BotDetectionConfig();
-
         // Create regex pattern for duplicate detection: name followed by underscore and number
-        var escapedNames = _config.DefaultPlayerNames.Select(Regex.Escape);
+        var escapedNames = config.DefaultPlayerNames.Select(Regex.Escape);
         var pattern = $@"^({string.Join("|", escapedNames)})_\d+$";
-        _duplicateNamePattern = new Regex(pattern, RegexOptions.Compiled);
+        return new Regex(pattern, RegexOptions.Compiled);
     }
 
     public bool IsBotPlayer(string playerName, bool apiBotFlag)

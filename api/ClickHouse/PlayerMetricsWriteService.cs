@@ -7,12 +7,8 @@ using api.ClickHouse.Models;
 
 namespace api.ClickHouse;
 
-public class PlayerMetricsWriteService : BaseClickHouseService, IClickHouseWriter
+public class PlayerMetricsWriteService(HttpClient httpClient, string clickHouseUrl) : BaseClickHouseService(httpClient, clickHouseUrl), IClickHouseWriter
 {
-    public PlayerMetricsWriteService(HttpClient httpClient, string clickHouseUrl)
-        : base(httpClient, clickHouseUrl)
-    {
-    }
 
     /// <summary>
     /// Ensures the ClickHouse schema (tables and views) are created

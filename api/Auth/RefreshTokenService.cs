@@ -18,30 +18,17 @@ public interface IRefreshTokenService
     void ClearCookie(HttpResponse response);
 }
 
-public class RefreshTokenService : IRefreshTokenService
+public class RefreshTokenService(PlayerTrackerDbContext db, IConfiguration config, ILogger<RefreshTokenService> logger) : IRefreshTokenService
 {
-    private readonly PlayerTrackerDbContext _db;
-    private readonly IConfiguration _config;
-    private readonly ILogger<RefreshTokenService> _logger;
-    private readonly string _cookieName;
-    private readonly string? _cookieDomain;
-    private readonly string _cookiePath;
-    private readonly int _days;
-    private readonly string _hmacSecret;
-    private readonly bool _isDevelopment;
-
-    public RefreshTokenService(PlayerTrackerDbContext db, IConfiguration config, ILogger<RefreshTokenService> logger)
-    {
-        _db = db;
-        _config = config;
-        _logger = logger;
-        _cookieName = _config["RefreshToken:CookieName"] ?? "rt";
-        _cookieDomain = _config["RefreshToken:CookieDomain"];
-        _cookiePath = _config["RefreshToken:CookiePath"] ?? "/stats";
-        _days = int.TryParse(_config["RefreshToken:Days"], out var d) ? d : 60;
-        _hmacSecret = _config["RefreshToken:Secret"] ?? throw new InvalidOperationException("RefreshToken:Secret missing");
-        _isDevelopment = (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development") == "Development";
-    }
+    private readonly PlayerTrackerDbContext _db = db;
+    private readonly IConfiguration _config = config;
+    private readonly ILogger<RefreshTokenService> _logger = logger;
+    private readonly string _cookieName = config["RefreshToken:CookieName"] ?? "rt";
+    private readonly string? _cookieDomain = config["RefreshToken:CookieDomain"];
+    private readonly string _cookiePath = config["RefreshToken:CookiePath"] ?? "/stats";
+    private readonly int _days = int.TryParse(config["RefreshToken:Days"], out var d) ? d : 60;
+    private readonly string _hmacSecret = config["RefreshToken:Secret"] ?? throw new InvalidOperationException("RefreshToken:Secret missing");
+    private readonly bool _isDevelopment = (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development") == "Development";
 
     public async Task<(string rawToken, RefreshToken entity)> CreateAsync(User user, string? ip, string? userAgent, CancellationToken ct = default)
     {

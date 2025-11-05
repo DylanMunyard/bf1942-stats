@@ -4,16 +4,10 @@ using api.PlayerTracking;
 
 namespace api.Gamification.Services;
 
-public class TeamMappingService : ITeamMappingService
+public class TeamMappingService(PlayerTrackerDbContext dbContext, ILogger<TeamMappingService> logger) : ITeamMappingService
 {
-    private readonly PlayerTrackerDbContext _dbContext;
-    private readonly ILogger<TeamMappingService> _logger;
-
-    public TeamMappingService(PlayerTrackerDbContext dbContext, ILogger<TeamMappingService> logger)
-    {
-        _dbContext = dbContext;
-        _logger = logger;
-    }
+    private readonly PlayerTrackerDbContext _dbContext = dbContext;
+    private readonly ILogger<TeamMappingService> _logger = logger;
 
     public async Task<(int Team1Id, int Team2Id, string? WarningMessage)> DetectTeamMappingAsync(string roundId, int tournamentId)
     {

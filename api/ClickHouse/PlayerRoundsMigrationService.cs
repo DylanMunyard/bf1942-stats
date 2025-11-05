@@ -3,15 +3,9 @@ using api.ClickHouse.Base;
 
 namespace api.ClickHouse;
 
-public class PlayerRoundsMigrationService : BaseClickHouseService
+public class PlayerRoundsMigrationService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerRoundsMigrationService> logger) : BaseClickHouseService(httpClient, clickHouseUrl)
 {
-    private readonly ILogger<PlayerRoundsMigrationService> _logger;
-
-    public PlayerRoundsMigrationService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerRoundsMigrationService> logger)
-        : base(httpClient, clickHouseUrl)
-    {
-        _logger = logger;
-    }
+    private readonly ILogger<PlayerRoundsMigrationService> _logger = logger;
 
     public async Task<MigrationResult> MigrateToAddGameColumnAsync(
         int batchSize = 1_000_000,

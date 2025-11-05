@@ -4,21 +4,14 @@ using Microsoft.Extensions.Logging;
 
 namespace api.Gamification.Services;
 
-public class KillStreakDetector
+public class KillStreakDetector(
+    ClickHouseGamificationService readService,
+    BadgeDefinitionsService badgeService,
+    ILogger<KillStreakDetector> logger)
 {
-    private readonly ClickHouseGamificationService _readService;
-    private readonly BadgeDefinitionsService _badgeService;
-    private readonly ILogger<KillStreakDetector> _logger;
-
-    public KillStreakDetector(
-        ClickHouseGamificationService readService,
-        BadgeDefinitionsService badgeService,
-        ILogger<KillStreakDetector> logger)
-    {
-        _readService = readService;
-        _badgeService = badgeService;
-        _logger = logger;
-    }
+    private readonly ClickHouseGamificationService _readService = readService;
+    private readonly BadgeDefinitionsService _badgeService = badgeService;
+    private readonly ILogger<KillStreakDetector> _logger = logger;
 
     public async Task<List<Achievement>> CalculateKillStreaksForRoundAsync(PlayerRound round)
     {

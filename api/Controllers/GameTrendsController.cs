@@ -8,21 +8,14 @@ namespace api.Controllers;
 
 [ApiController]
 [Route("stats/[controller]")]
-public class GameTrendsController : ControllerBase
+public class GameTrendsController(
+    GameTrendsService gameTrendsService,
+    ICacheService cacheService,
+    ILogger<GameTrendsController> logger) : ControllerBase
 {
-    private readonly GameTrendsService _gameTrendsService;
-    private readonly ICacheService _cacheService;
-    private readonly ILogger<GameTrendsController> _logger;
-
-    public GameTrendsController(
-        GameTrendsService gameTrendsService,
-        ICacheService cacheService,
-        ILogger<GameTrendsController> logger)
-    {
-        _gameTrendsService = gameTrendsService;
-        _cacheService = cacheService;
-        _logger = logger;
-    }
+    private readonly GameTrendsService _gameTrendsService = gameTrendsService;
+    private readonly ICacheService _cacheService = cacheService;
+    private readonly ILogger<GameTrendsController> _logger = logger;
 
     /// <summary>
     /// Gets current activity status across all games and servers.

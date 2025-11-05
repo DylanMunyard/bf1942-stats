@@ -6,16 +6,10 @@ using Microsoft.Extensions.Logging;
 
 namespace api.Data.Migrations;
 
-public class RoundBackfillService
+public class RoundBackfillService(PlayerTrackerDbContext dbContext, ILogger<RoundBackfillService> logger)
 {
-    private readonly PlayerTrackerDbContext _dbContext;
-    private readonly ILogger<RoundBackfillService> _logger;
-
-    public RoundBackfillService(PlayerTrackerDbContext dbContext, ILogger<RoundBackfillService> logger)
-    {
-        _dbContext = dbContext;
-        _logger = logger;
-    }
+    private readonly PlayerTrackerDbContext _dbContext = dbContext;
+    private readonly ILogger<RoundBackfillService> _logger = logger;
 
     public async Task<int> BackfillRoundsAsync(
         DateTime? startTimeUtc = null,

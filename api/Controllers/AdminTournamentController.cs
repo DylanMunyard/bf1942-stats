@@ -12,27 +12,18 @@ namespace api.Controllers;
 
 [ApiController]
 [Route("stats/admin/tournaments")]
-public class AdminTournamentController : ControllerBase
+public class AdminTournamentController(
+    PlayerTrackerDbContext context,
+    ILogger<AdminTournamentController> logger,
+    IMarkdownSanitizationService markdownSanitizer,
+    ITournamentMatchResultService matchResultService,
+    ITeamRankingCalculator rankingCalculator) : ControllerBase
 {
-    private readonly PlayerTrackerDbContext _context;
-    private readonly ILogger<AdminTournamentController> _logger;
-    private readonly IMarkdownSanitizationService _markdownSanitizer;
-    private readonly ITournamentMatchResultService _matchResultService;
-    private readonly ITeamRankingCalculator _rankingCalculator;
-
-    public AdminTournamentController(
-        PlayerTrackerDbContext context,
-        ILogger<AdminTournamentController> logger,
-        IMarkdownSanitizationService markdownSanitizer,
-        ITournamentMatchResultService matchResultService,
-        ITeamRankingCalculator rankingCalculator)
-    {
-        _context = context;
-        _logger = logger;
-        _markdownSanitizer = markdownSanitizer;
-        _matchResultService = matchResultService;
-        _rankingCalculator = rankingCalculator;
-    }
+    private readonly PlayerTrackerDbContext _context = context;
+    private readonly ILogger<AdminTournamentController> _logger = logger;
+    private readonly IMarkdownSanitizationService _markdownSanitizer = markdownSanitizer;
+    private readonly ITournamentMatchResultService _matchResultService = matchResultService;
+    private readonly ITeamRankingCalculator _rankingCalculator = rankingCalculator;
 
     /// <summary>
     /// Get tournaments created by the current user

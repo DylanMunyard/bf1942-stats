@@ -5,27 +5,27 @@ using api.Telemetry;
 
 namespace api.ClickHouse;
 
-public class ServerStatisticsService : IServerStatisticsService
+public class ServerStatisticsService(ILogger<ServerStatisticsService> logger) : IServerStatisticsService
 {
-    private readonly ClickHouseConnection _connection;
-    private readonly ILogger<ServerStatisticsService> _logger;
+    private readonly ILogger<ServerStatisticsService> _logger = logger;
+    private readonly ClickHouseConnection _connection = InitializeConnection(logger);
     private bool _disposed;
 
-    public ServerStatisticsService(ILogger<ServerStatisticsService> logger)
+    private static ClickHouseConnection InitializeConnection(ILogger<ServerStatisticsService> logger)
     {
-        _logger = logger;
         var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
 
         try
         {
             var uri = new Uri(clickHouseUrl);
             var connectionString = $"Host={uri.Host};Port={uri.Port};Database=default;User=default;Password=;Protocol={uri.Scheme}";
-            _connection = new ClickHouseConnection(connectionString);
-            _logger.LogInformation("ClickHouse connection initialized with URL: {Url}", clickHouseUrl);
+            var connection = new ClickHouseConnection(connectionString);
+            logger.LogInformation("ClickHouse connection initialized with URL: {Url}", clickHouseUrl);
+            return connection;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to initialize ClickHouse connection with URL: {Url}", clickHouseUrl);
+            logger.LogError(ex, "Failed to initialize ClickHouse connection with URL: {Url}", clickHouseUrl);
             throw;
         }
     }

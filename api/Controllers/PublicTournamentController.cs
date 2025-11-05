@@ -8,18 +8,12 @@ namespace api.Controllers;
 
 [ApiController]
 [Route("stats/tournaments")]
-public class PublicTournamentController : ControllerBase
+public class PublicTournamentController(
+    PlayerTrackerDbContext context,
+    ILogger<PublicTournamentController> logger) : ControllerBase
 {
-    private readonly PlayerTrackerDbContext _context;
-    private readonly ILogger<PublicTournamentController> _logger;
-
-    public PublicTournamentController(
-        PlayerTrackerDbContext context,
-        ILogger<PublicTournamentController> logger)
-    {
-        _context = context;
-        _logger = logger;
-    }
+    private readonly PlayerTrackerDbContext _context = context;
+    private readonly ILogger<PublicTournamentController> _logger = logger;
 
     /// <summary>
     /// Get tournament details by ID or name (public, no auth required)

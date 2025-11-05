@@ -7,15 +7,9 @@ using api.Telemetry;
 
 namespace api.ClickHouse;
 
-public class PlayerInsightsService : BaseClickHouseService, IClickHouseReader, IPlayerInsightsService
+public class PlayerInsightsService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerInsightsService> logger) : BaseClickHouseService(httpClient, clickHouseUrl), IClickHouseReader, IPlayerInsightsService
 {
-    private readonly ILogger<PlayerInsightsService> _logger;
-
-    public PlayerInsightsService(HttpClient httpClient, string clickHouseUrl, ILogger<PlayerInsightsService> logger)
-        : base(httpClient, clickHouseUrl)
-    {
-        _logger = logger;
-    }
+    private readonly ILogger<PlayerInsightsService> _logger = logger;
 
     public async Task<string> ExecuteQueryAsync(string query)
     {

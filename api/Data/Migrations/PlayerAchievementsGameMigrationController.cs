@@ -3,18 +3,10 @@ using api.ClickHouse;
 
 namespace api.Data.Migrations;
 
-public class PlayerAchievementsGameMigrationController
+public class PlayerAchievementsGameMigrationController(PlayerAchievementsGameMigrationService migrationService, ILogger<PlayerAchievementsGameMigrationController> logger)
 {
-    private readonly PlayerAchievementsGameMigrationService _migrationService;
-    private readonly ILogger<PlayerAchievementsGameMigrationController> _logger;
-
-    public PlayerAchievementsGameMigrationController(
-        PlayerAchievementsGameMigrationService migrationService,
-        ILogger<PlayerAchievementsGameMigrationController> logger)
-    {
-        _migrationService = migrationService;
-        _logger = logger;
-    }
+    private readonly PlayerAchievementsGameMigrationService _migrationService = migrationService;
+    private readonly ILogger<PlayerAchievementsGameMigrationController> _logger = logger;
 
     public class MigrationRequest
     {

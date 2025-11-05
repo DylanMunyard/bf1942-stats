@@ -11,30 +11,20 @@ namespace api.Controllers;
 
 [ApiController]
 [Route("stats/[controller]")]
-public class AppController : ControllerBase
+public class AppController(
+    IBadgeDefinitionsService badgeDefinitionsService,
+    IGameTrendsService gameTrendsService,
+    ICacheService cacheService,
+    ILogger<AppController> logger,
+    IClickHouseReader clickHouseReader,
+    PlayerTrackerDbContext dbContext) : ControllerBase
 {
-    private readonly IBadgeDefinitionsService _badgeDefinitionsService;
-    private readonly IGameTrendsService _gameTrendsService;
-    private readonly ICacheService _cacheService;
-    private readonly ILogger<AppController> _logger;
-    private readonly IClickHouseReader _clickHouseReader;
-    private readonly PlayerTrackerDbContext _dbContext;
-
-    public AppController(
-        IBadgeDefinitionsService badgeDefinitionsService,
-        IGameTrendsService gameTrendsService,
-        ICacheService cacheService,
-        ILogger<AppController> logger,
-        IClickHouseReader clickHouseReader,
-        PlayerTrackerDbContext dbContext)
-    {
-        _badgeDefinitionsService = badgeDefinitionsService;
-        _gameTrendsService = gameTrendsService;
-        _cacheService = cacheService;
-        _logger = logger;
-        _clickHouseReader = clickHouseReader;
-        _dbContext = dbContext;
-    }
+    private readonly IBadgeDefinitionsService _badgeDefinitionsService = badgeDefinitionsService;
+    private readonly IGameTrendsService _gameTrendsService = gameTrendsService;
+    private readonly ICacheService _cacheService = cacheService;
+    private readonly ILogger<AppController> _logger = logger;
+    private readonly IClickHouseReader _clickHouseReader = clickHouseReader;
+    private readonly PlayerTrackerDbContext _dbContext = dbContext;
 
     /// <summary>
     /// Get initial data required by the UI on page load, heavily cached for performance

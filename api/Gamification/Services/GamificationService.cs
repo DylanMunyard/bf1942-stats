@@ -5,50 +5,32 @@ using Microsoft.Extensions.Configuration;
 
 namespace api.Gamification.Services;
 
-public class GamificationService : IDisposable
+public class GamificationService(ClickHouseGamificationService gamificationService, KillStreakDetector killStreakDetector, MilestoneCalculator milestoneCalculator, PerformanceBadgeCalculator performanceBadgeCalculator, BadgeDefinitionsService badgeDefinitionsService, HistoricalProcessor historicalProcessor, AchievementLabelingService achievementLabelingService, PlacementProcessor placementProcessor, TeamVictoryProcessor teamVictoryProcessor, IConfiguration configuration, ILogger<GamificationService> logger) : IDisposable
 {
-    private readonly ClickHouseGamificationService _gamificationService;
-    private readonly KillStreakDetector _killStreakDetector;
-    private readonly MilestoneCalculator _milestoneCalculator;
-    private readonly PerformanceBadgeCalculator _performanceBadgeCalculator;
-    private readonly BadgeDefinitionsService _badgeDefinitionsService;
-    private readonly HistoricalProcessor _historicalProcessor;
-    private readonly AchievementLabelingService _achievementLabelingService;
-    private readonly PlacementProcessor _placementProcessor;
-    private readonly TeamVictoryProcessor _teamVictoryProcessor;
-    private readonly ILogger<GamificationService> _logger;
-    private readonly int _maxConcurrentRounds;
-    private readonly SemaphoreSlim _concurrencyThrottle;
+    private readonly ClickHouseGamificationService _gamificationService = gamificationService;
+    private readonly KillStreakDetector _killStreakDetector = killStreakDetector;
+    private readonly MilestoneCalculator _milestoneCalculator = milestoneCalculator;
+    private readonly PerformanceBadgeCalculator _performanceBadgeCalculator = performanceBadgeCalculator;
+    private readonly BadgeDefinitionsService _badgeDefinitionsService = badgeDefinitionsService;
+    private readonly HistoricalProcessor _historicalProcessor = historicalProcessor;
+    private readonly AchievementLabelingService _achievementLabelingService = achievementLabelingService;
+    private readonly PlacementProcessor _placementProcessor = placementProcessor;
+    private readonly TeamVictoryProcessor _teamVictoryProcessor = teamVictoryProcessor;
+    private readonly ILogger<GamificationService> _logger = InitializeLogger(logger, configuration);
+    private readonly int _maxConcurrentRounds = configuration.GetValue<int>("GAMIFICATION_MAX_CONCURRENT_ROUNDS", 10);
+    private readonly SemaphoreSlim _concurrencyThrottle = InitializeConcurrencyThrottle(configuration);
 
-    public GamificationService(
-        ClickHouseGamificationService gamificationService,
-        KillStreakDetector killStreakDetector,
-        MilestoneCalculator milestoneCalculator,
-        PerformanceBadgeCalculator performanceBadgeCalculator,
-        BadgeDefinitionsService badgeDefinitionsService,
-        HistoricalProcessor historicalProcessor,
-        AchievementLabelingService achievementLabelingService,
-        PlacementProcessor placementProcessor,
-        TeamVictoryProcessor teamVictoryProcessor,
-        IConfiguration configuration,
-        ILogger<GamificationService> logger)
+    private static ILogger<GamificationService> InitializeLogger(ILogger<GamificationService> logger, IConfiguration configuration)
     {
-        _gamificationService = gamificationService;
-        _killStreakDetector = killStreakDetector;
-        _milestoneCalculator = milestoneCalculator;
-        _performanceBadgeCalculator = performanceBadgeCalculator;
-        _badgeDefinitionsService = badgeDefinitionsService;
-        _historicalProcessor = historicalProcessor;
-        _achievementLabelingService = achievementLabelingService;
-        _placementProcessor = placementProcessor;
-        _teamVictoryProcessor = teamVictoryProcessor;
-        _logger = logger;
+        var maxConcurrentRounds = configuration.GetValue<int>("GAMIFICATION_MAX_CONCURRENT_ROUNDS", 10);
+        logger.LogInformation("Gamification service initialized with max concurrent rounds: {MaxConcurrentRounds}", maxConcurrentRounds);
+        return logger;
+    }
 
-        // Configure concurrency limit from environment variable
-        _maxConcurrentRounds = configuration.GetValue<int>("GAMIFICATION_MAX_CONCURRENT_ROUNDS", 10);
-        _concurrencyThrottle = new SemaphoreSlim(_maxConcurrentRounds, _maxConcurrentRounds);
-
-        _logger.LogInformation("Gamification service initialized with max concurrent rounds: {MaxConcurrentRounds}", _maxConcurrentRounds);
+    private static SemaphoreSlim InitializeConcurrencyThrottle(IConfiguration configuration)
+    {
+        var maxConcurrentRounds = configuration.GetValue<int>("GAMIFICATION_MAX_CONCURRENT_ROUNDS", 10);
+        return new SemaphoreSlim(maxConcurrentRounds, maxConcurrentRounds);
     }
 
     /// <summary>

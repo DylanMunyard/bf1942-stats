@@ -9,24 +9,16 @@ using api.Servers;
 
 namespace api.PlayerTracking;
 
-public class PlayerTrackingService
+public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetectionService botDetectionService, IPlayerEventPublisher? eventPublisher = null, ILogger<PlayerTrackingService>? logger = null)
 {
-    private readonly PlayerTrackerDbContext _dbContext;
-    private readonly IPlayerEventPublisher? _eventPublisher;
-    private readonly ILogger<PlayerTrackingService> _logger;
-    private readonly IBotDetectionService _botDetectionService;
+    private readonly PlayerTrackerDbContext _dbContext = dbContext;
+    private readonly IPlayerEventPublisher? _eventPublisher = eventPublisher;
+    private readonly ILogger<PlayerTrackingService> _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<PlayerTrackingService>.Instance;
+    private readonly IBotDetectionService _botDetectionService = botDetectionService;
     private readonly TimeSpan _sessionTimeout = TimeSpan.FromMinutes(5);
-    private static readonly SemaphoreSlim IpInfoSemaphore = new SemaphoreSlim(10); // max 10 concurrent
+    private static readonly SemaphoreSlim IpInfoSemaphore = new(10); // max 10 concurrent
     private static DateTime _lastIpInfoRequest = DateTime.MinValue;
-    private static readonly object IpInfoLock = new object();
-
-    public PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetectionService botDetectionService, IPlayerEventPublisher? eventPublisher = null, ILogger<PlayerTrackingService>? logger = null)
-    {
-        _dbContext = dbContext;
-        _botDetectionService = botDetectionService;
-        _eventPublisher = eventPublisher;
-        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<PlayerTrackingService>.Instance;
-    }
+    private static readonly object IpInfoLock = new();
 
     public async Task TrackPlayersFromServerInfo(IGameServer server, DateTime timestamp, string game)
     {

@@ -11,30 +11,20 @@ namespace api.Auth;
 
 [ApiController]
 [Route("stats/[controller]")]
-public class AuthController : ControllerBase
+public class AuthController(
+    PlayerTrackerDbContext context,
+    IDiscordAuthService discordAuthService,
+    ILogger<AuthController> logger,
+    ITokenService tokenService,
+    IRefreshTokenService refreshTokenService,
+    IConfiguration configuration) : ControllerBase
 {
-    private readonly PlayerTrackerDbContext _context;
-    private readonly IDiscordAuthService _discordAuthService;
-    private readonly ILogger<AuthController> _logger;
-    private readonly ITokenService _tokenService;
-    private readonly IRefreshTokenService _refreshTokenService;
-    private readonly IConfiguration _configuration;
-
-    public AuthController(
-        PlayerTrackerDbContext context,
-        IDiscordAuthService discordAuthService,
-        ILogger<AuthController> logger,
-        ITokenService tokenService,
-        IRefreshTokenService refreshTokenService,
-        IConfiguration configuration)
-    {
-        _context = context;
-        _discordAuthService = discordAuthService;
-        _logger = logger;
-        _tokenService = tokenService;
-        _refreshTokenService = refreshTokenService;
-        _configuration = configuration;
-    }
+    private readonly PlayerTrackerDbContext _context = context;
+    private readonly IDiscordAuthService _discordAuthService = discordAuthService;
+    private readonly ILogger<AuthController> _logger = logger;
+    private readonly ITokenService _tokenService = tokenService;
+    private readonly IRefreshTokenService _refreshTokenService = refreshTokenService;
+    private readonly IConfiguration _configuration = configuration;
 
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)

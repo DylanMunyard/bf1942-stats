@@ -4,26 +4,21 @@ using Microsoft.Extensions.Logging;
 
 namespace api.Gamification.Services;
 
-public class GamificationBackgroundService : BackgroundService
+public class GamificationBackgroundService(IServiceProvider services, ILogger<GamificationBackgroundService> logger) : BackgroundService
 {
-    private readonly IServiceProvider _services;
-    private readonly ILogger<GamificationBackgroundService> _logger;
-    private readonly bool _enableGamificationProcessing;
+    private readonly IServiceProvider _services = services;
+    private readonly ILogger<GamificationBackgroundService> _logger = logger;
 
-    public GamificationBackgroundService(IServiceProvider services, ILogger<GamificationBackgroundService> logger)
-    {
-        _services = services;
-        _logger = logger;
+    // Check environment variable for gamification processing - default to false (disabled)
+    private readonly bool _enableGamificationProcessing = Environment.GetEnvironmentVariable("ENABLE_GAMIFICATION_PROCESSING")?.ToLowerInvariant() == "true";
 
-        // Check environment variable for gamification processing - default to false (disabled)
-        _enableGamificationProcessing = Environment.GetEnvironmentVariable("ENABLE_GAMIFICATION_PROCESSING")?.ToLowerInvariant() == "true";
-
-        _logger.LogInformation("Gamification processing: {Status}", _enableGamificationProcessing ? "ENABLED" : "DISABLED");
-        _logger.LogInformation("To enable gamification processing: Set ENABLE_GAMIFICATION_PROCESSING=true");
-    }
+    // Log configuration in static constructor-like fashion would require a different approach
+    // We'll log it in ExecuteAsync instead to avoid issues with logging in field initializers
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _logger.LogInformation("Gamification processing: {Status}", _enableGamificationProcessing ? "ENABLED" : "DISABLED");
+        _logger.LogInformation("To enable gamification processing: Set ENABLE_GAMIFICATION_PROCESSING=true");
         _logger.LogInformation("Gamification background service started");
 
         if (!_enableGamificationProcessing)

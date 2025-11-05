@@ -3,20 +3,13 @@ using Microsoft.Extensions.Logging;
 
 namespace api.Gamification.Services;
 
-public class AchievementLabelingService
+public class AchievementLabelingService(
+    BadgeDefinitionsService badgeDefinitionsService,
+    ILogger<AchievementLabelingService> logger)
 {
-    private readonly BadgeDefinitionsService _badgeDefinitionsService;
-    private readonly ILogger<AchievementLabelingService> _logger;
-    private readonly Dictionary<string, AchievementLabel> _achievementLabels;
-
-    public AchievementLabelingService(
-        BadgeDefinitionsService badgeDefinitionsService,
-        ILogger<AchievementLabelingService> logger)
-    {
-        _badgeDefinitionsService = badgeDefinitionsService;
-        _logger = logger;
-        _achievementLabels = InitializeAchievementLabels();
-    }
+    private readonly BadgeDefinitionsService _badgeDefinitionsService = badgeDefinitionsService;
+    private readonly ILogger<AchievementLabelingService> _logger = logger;
+    private readonly Dictionary<string, AchievementLabel> _achievementLabels = InitializeAchievementLabelsStatic(badgeDefinitionsService);
 
     /// <summary>
     /// Get labeled achievement information for a list of achievement IDs
@@ -49,14 +42,55 @@ public class AchievementLabelingService
     }
 
     /// <summary>
-    /// Initialize all achievement labels by deriving from badge definitions
+    /// Static method to initialize all achievement labels from badge definitions
     /// </summary>
-    private Dictionary<string, AchievementLabel> InitializeAchievementLabels()
+    private static Dictionary<string, AchievementLabel> InitializeAchievementLabelsStatic(BadgeDefinitionsService badgeDefinitionsService)
     {
         var labels = new Dictionary<string, AchievementLabel>();
 
         // Get all badge definitions and convert them to achievement labels
-        var allBadges = _badgeDefinitionsService.GetAllBadges();
+        var allBadges = badgeDefinitionsService.GetAllBadges();
+
+        foreach (var badge in allBadges)
+        {
+            labels[badge.Id] = new AchievementLabel
+            {
+                AchievementId = badge.Id,
+                AchievementType = DetermineAchievementTypeFromBadgeStatic(badge),
+                Tier = badge.Tier,
+                Category = badge.Category,
+                DisplayName = badge.Name
+            };
+        }
+
+        return labels;
+    }
+
+    /// <summary>
+    /// Determine achievement type based on badge definition
+    /// </summary>
+    private static string DetermineAchievementTypeFromBadgeStatic(BadgeDefinition badge)
+    {
+        if (badge.Id.StartsWith("kill_streak_"))
+            return AchievementTypes.KillStreak;
+        if (badge.Id.StartsWith("total_kills_") || badge.Id.StartsWith("milestone_playtime_") || badge.Id.StartsWith("total_score_"))
+            return AchievementTypes.Milestone;
+        if (badge.Id.StartsWith("round_placement_"))
+            return AchievementTypes.Placement;
+        if (badge.Id == "team_victory" || badge.Id == "team_victory_switched")
+            return AchievementTypes.TeamVictory;
+        return AchievementTypes.Badge;
+    }
+
+    /// <summary>
+    /// Initialize all achievement labels by deriving from badge definitions
+    /// </summary>
+    private Dictionary<string, AchievementLabel> InitializeAchievementLabels(BadgeDefinitionsService badgeDefinitionsService)
+    {
+        var labels = new Dictionary<string, AchievementLabel>();
+
+        // Get all badge definitions and convert them to achievement labels
+        var allBadges = badgeDefinitionsService.GetAllBadges();
 
         foreach (var badge in allBadges)
         {

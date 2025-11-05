@@ -2,16 +2,10 @@ using Microsoft.Extensions.Logging;
 
 namespace api.Data.Migrations;
 
-public class BackfillController
+public class BackfillController(RoundBackfillService backfillService, ILogger<BackfillController> logger)
 {
-    private readonly RoundBackfillService _backfillService;
-    private readonly ILogger<BackfillController> _logger;
-
-    public BackfillController(RoundBackfillService backfillService, ILogger<BackfillController> logger)
-    {
-        _backfillService = backfillService;
-        _logger = logger;
-    }
+    private readonly RoundBackfillService _backfillService = backfillService;
+    private readonly ILogger<BackfillController> _logger = logger;
 
     public class BackfillRequest
     {

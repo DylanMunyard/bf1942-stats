@@ -4,16 +4,10 @@ using Microsoft.Extensions.Logging;
 
 namespace api.ClickHouse;
 
-public class PlayersOnlineHistoryService
+public class PlayersOnlineHistoryService(IClickHouseReader clickHouseReader, ILogger<PlayersOnlineHistoryService> logger)
 {
-    private readonly IClickHouseReader _clickHouseReader;
-    private readonly ILogger<PlayersOnlineHistoryService> _logger;
-
-    public PlayersOnlineHistoryService(IClickHouseReader clickHouseReader, ILogger<PlayersOnlineHistoryService> logger)
-    {
-        _clickHouseReader = clickHouseReader;
-        _logger = logger;
-    }
+    private readonly IClickHouseReader _clickHouseReader = clickHouseReader;
+    private readonly ILogger<PlayersOnlineHistoryService> _logger = logger;
 
     public async Task<PlayersOnlineHistoryResponse> GetPlayersOnlineHistory(string game, string period, int rollingWindowDays, string? serverGuid = null)
     {

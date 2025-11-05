@@ -1,7 +1,6 @@
 using api.Gamification.Models;
 using api.ClickHouse.Models;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Configuration;
 using System.Text;
 using System.Globalization;
 using CsvHelper;
@@ -10,32 +9,28 @@ using ClickHouse.Client.ADO;
 
 namespace api.Gamification.Services;
 
-public class ClickHouseGamificationService : IDisposable
+public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService> logger, HttpClient httpClient) : IDisposable
 {
-    private readonly ILogger<ClickHouseGamificationService> _logger;
-    private readonly ClickHouseConnection _connection;
-    private readonly HttpClient _httpClient;
+    private readonly ILogger<ClickHouseGamificationService> _logger = logger;
+    private readonly ClickHouseConnection _connection = InitializeConnection(logger);
+    private readonly HttpClient _httpClient = httpClient;
     private bool _disposed;
 
-    public ClickHouseGamificationService(
-        IConfiguration configuration,
-        ILogger<ClickHouseGamificationService> logger,
-        HttpClient httpClient)
+    private static ClickHouseConnection InitializeConnection(ILogger<ClickHouseGamificationService> logger)
     {
-        _logger = logger;
-        _httpClient = httpClient;
         var clickHouseUrl = Environment.GetEnvironmentVariable("CLICKHOUSE_URL") ?? throw new InvalidOperationException("CLICKHOUSE_URL environment variable must be set");
 
         try
         {
             var uri = new Uri(clickHouseUrl);
             var connectionString = $"Host={uri.Host};Port={uri.Port};Database=default;User=default;Password=;Protocol={uri.Scheme}";
-            _connection = new ClickHouseConnection(connectionString);
-            _logger.LogInformation("ClickHouse connection initialized with URL: {Url}", clickHouseUrl);
+            var connection = new ClickHouseConnection(connectionString);
+            logger.LogInformation("ClickHouse connection initialized with URL: {Url}", clickHouseUrl);
+            return connection;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to initialize ClickHouse connection with URL: {Url}", clickHouseUrl);
+            logger.LogError(ex, "Failed to initialize ClickHouse connection with URL: {Url}", clickHouseUrl);
             throw;
         }
     }

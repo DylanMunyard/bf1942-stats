@@ -4,26 +4,19 @@ using Microsoft.Extensions.Logging;
 
 namespace api.Gamification.Services;
 
-public class MilestoneCalculator
+public class MilestoneCalculator(
+    ClickHouseGamificationService readService,
+    BadgeDefinitionsService badgeService,
+    ILogger<MilestoneCalculator> logger)
 {
-    private readonly ClickHouseGamificationService _readService;
-    private readonly BadgeDefinitionsService _badgeService;
-    private readonly ILogger<MilestoneCalculator> _logger;
+    private readonly ClickHouseGamificationService _readService = readService;
+    private readonly BadgeDefinitionsService _badgeService = badgeService;
+    private readonly ILogger<MilestoneCalculator> _logger = logger;
 
     // Milestone thresholds
-    private readonly int[] _killMilestones = { 100, 500, 1000, 2500, 5000, 10000, 25000, 50000 };
-    private readonly int[] _playtimeHourMilestones = { 10, 50, 100, 500, 1000 };
-    private readonly int[] _scoreMilestones = { 10000, 50000, 100000, 500000, 1000000 };
-
-    public MilestoneCalculator(
-        ClickHouseGamificationService readService,
-        BadgeDefinitionsService badgeService,
-        ILogger<MilestoneCalculator> logger)
-    {
-        _readService = readService;
-        _badgeService = badgeService;
-        _logger = logger;
-    }
+    private readonly int[] _killMilestones = [100, 500, 1000, 2500, 5000, 10000, 25000, 50000];
+    private readonly int[] _playtimeHourMilestones = [10, 50, 100, 500, 1000];
+    private readonly int[] _scoreMilestones = [10000, 50000, 100000, 500000, 1000000];
 
     public async Task<List<Achievement>> CheckMilestoneCrossedAsync(PlayerRound round)
     {

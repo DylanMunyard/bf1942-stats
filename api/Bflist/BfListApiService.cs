@@ -21,25 +21,21 @@ public interface IBfListApiService
     Task<Models.ServerSummary?> FetchSingleServerSummaryAsync(string game, string serverIdentifier);
 }
 
-public class BfListApiService : IBfListApiService
+public class BfListApiService(
+    IHttpClientFactory httpClientFactory,
+    ICacheService cacheService,
+    ILogger<BfListApiService> logger,
+    PlayerTrackerDbContext dbContext,
+    IConfiguration configuration) : IBfListApiService
 {
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ICacheService _cacheService;
-    private readonly ILogger<BfListApiService> _logger;
-    private readonly PlayerTrackerDbContext _dbContext;
-    private readonly Models.ServerFilteringConfig _serverFilteringConfig;
+    private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
+    private readonly ICacheService _cacheService = cacheService;
+    private readonly ILogger<BfListApiService> _logger = logger;
+    private readonly PlayerTrackerDbContext _dbContext = dbContext;
+    private readonly Models.ServerFilteringConfig _serverFilteringConfig = configuration.GetSection("ServerFiltering").Get<Models.ServerFilteringConfig>() ?? new Models.ServerFilteringConfig();
 
     private const int ServerListCacheSeconds = 30;
     private const int SingleServerCacheSeconds = 8; // 8 seconds for individual server updates
-
-    public BfListApiService(IHttpClientFactory httpClientFactory, ICacheService cacheService, ILogger<BfListApiService> logger, PlayerTrackerDbContext dbContext, IConfiguration configuration)
-    {
-        _httpClientFactory = httpClientFactory;
-        _cacheService = cacheService;
-        _logger = logger;
-        _dbContext = dbContext;
-        _serverFilteringConfig = configuration.GetSection("ServerFiltering").Get<Models.ServerFilteringConfig>() ?? new Models.ServerFilteringConfig();
-    }
 
     public async Task<object[]> FetchServersAsync(string game, int perPage = 100, string? cursor = null, string? after = null)
     {

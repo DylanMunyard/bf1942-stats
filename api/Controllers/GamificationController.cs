@@ -7,18 +7,12 @@ namespace api.Controllers;
 
 [ApiController]
 [Route("stats/[controller]")]
-public class GamificationController : ControllerBase
+public class GamificationController(
+    GamificationService gamificationService,
+    ILogger<GamificationController> logger) : ControllerBase
 {
-    private readonly GamificationService _gamificationService;
-    private readonly ILogger<GamificationController> _logger;
-
-    public GamificationController(
-        GamificationService gamificationService,
-        ILogger<GamificationController> logger)
-    {
-        _gamificationService = gamificationService;
-        _logger = logger;
-    }
+    private readonly GamificationService _gamificationService = gamificationService;
+    private readonly ILogger<GamificationController> _logger = logger;
 
     /// <summary>
     /// Get comprehensive achievement summary for a player

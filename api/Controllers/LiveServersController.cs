@@ -10,26 +10,18 @@ namespace api.Controllers;
 
 [ApiController]
 [Route("stats/[controller]")]
-public class LiveServersController : ControllerBase
+public class LiveServersController(
+    IBfListApiService bfListApiService,
+    ILogger<LiveServersController> logger,
+    PlayerTrackerDbContext dbContext,
+    PlayersOnlineHistoryService playersOnlineHistoryService) : ControllerBase
 {
-    private readonly IBfListApiService _bfListApiService;
-    private readonly ILogger<LiveServersController> _logger;
-    private readonly PlayerTrackerDbContext _dbContext;
-    private readonly PlayersOnlineHistoryService _playersOnlineHistoryService;
+    private readonly IBfListApiService _bfListApiService = bfListApiService;
+    private readonly ILogger<LiveServersController> _logger = logger;
+    private readonly PlayerTrackerDbContext _dbContext = dbContext;
+    private readonly PlayersOnlineHistoryService _playersOnlineHistoryService = playersOnlineHistoryService;
 
     private static readonly string[] ValidGames = ["bf1942", "fh2", "bfvietnam"];
-
-    public LiveServersController(
-        IBfListApiService bfListApiService,
-        ILogger<LiveServersController> logger,
-        PlayerTrackerDbContext dbContext,
-        PlayersOnlineHistoryService playersOnlineHistoryService)
-    {
-        _bfListApiService = bfListApiService;
-        _logger = logger;
-        _dbContext = dbContext;
-        _playersOnlineHistoryService = playersOnlineHistoryService;
-    }
 
     /// <summary>
     /// Get all servers for a specific game
