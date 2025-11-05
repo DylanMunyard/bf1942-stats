@@ -8,6 +8,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "deploy", "deploy", "{D2AAAE
 	ProjectSection(SolutionItems) = preProject
 		deploy\Dockerfile = deploy\Dockerfile
 		deploy\pod.yaml = deploy\pod.yaml
+		Jenkinsfile = Jenkinsfile
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "app", "app", "{E9373366-3A5C-4916-A225-08477EE23649}"
