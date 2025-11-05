@@ -1,19 +1,8 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
+using api.ServerStats.Models;
 
 namespace api.ServerStats;
-
-public class BotDetectionConfig
-{
-    public List<string> DefaultPlayerNames { get; set; } = new()
-    {
-        "BFPlayer",
-        "Player",
-        "BFSoldier"
-    };
-
-    public List<string> ExclusionList { get; set; } = new();
-}
 
 public interface IBotDetectionService
 {
@@ -22,12 +11,12 @@ public interface IBotDetectionService
 
 public class BotDetectionService : IBotDetectionService
 {
-    private readonly BotDetectionConfig _config;
+    private readonly Models.BotDetectionConfig _config;
     private readonly Regex _duplicateNamePattern;
 
     public BotDetectionService(IConfiguration configuration)
     {
-        _config = configuration.GetSection("BotDetection").Get<BotDetectionConfig>() ?? new BotDetectionConfig();
+        _config = configuration.GetSection("BotDetection").Get<Models.BotDetectionConfig>() ?? new Models.BotDetectionConfig();
 
         // Create regex pattern for duplicate detection: name followed by underscore and number
         var escapedNames = _config.DefaultPlayerNames.Select(Regex.Escape);

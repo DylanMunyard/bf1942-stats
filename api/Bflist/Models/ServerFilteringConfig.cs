@@ -1,4 +1,4 @@
-namespace api.Bflist;
+namespace api.Bflist.Models;
 
 public class ServerFilteringConfig
 {

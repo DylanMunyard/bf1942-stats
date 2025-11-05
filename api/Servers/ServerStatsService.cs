@@ -9,13 +9,6 @@ using Microsoft.Extensions.Logging;
 
 namespace api.ServerStats;
 
-// Helper class for raw SQL query results
-public class PingTimestampData
-{
-    public DateTime Timestamp { get; set; }
-    public int Ping { get; set; }
-}
-
 public class ServerStatsService(
     PlayerTrackerDbContext dbContext,
     ILogger<ServerStatsService> logger,
@@ -1054,13 +1047,4 @@ FORMAT TabSeparated";
         return busyIndicator;
     }
 
-}
-
-public enum TimeGranularity
-{
-    Hourly,
-    FourHourly,
-    Daily,
-    Weekly,
-    Monthly
 }

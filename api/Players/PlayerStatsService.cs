@@ -447,7 +447,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         return insights;
     }
 
-    private async Task<PlayerClickHouseStats?> GetPlayerStatsFromClickHouse(string playerName)
+    private async Task<Models.PlayerClickHouseStats?> GetPlayerStatsFromClickHouse(string playerName)
     {
         try
         {
@@ -466,7 +466,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             var parts = dataLines[0].Split('\t');
             if (parts.Length >= 5)
             {
-                return new PlayerClickHouseStats
+                return new Models.PlayerClickHouseStats
                 {
                     PlayerName = parts[0],
                     TotalRounds = int.Parse(parts[1]),
@@ -563,9 +563,9 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         return 0;
     }
 
-    private List<TimeSeriesPoint> ParseTimeSeriesData(string result)
+    private List<Models.TimeSeriesPoint> ParseTimeSeriesData(string result)
     {
-        var points = new List<TimeSeriesPoint>();
+        var points = new List<Models.TimeSeriesPoint>();
 
         if (string.IsNullOrWhiteSpace(result))
         {
@@ -586,7 +586,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                 var parts = line.Split('\t');
                 if (parts.Length >= 3)
                 {
-                    points.Add(new TimeSeriesPoint
+                    points.Add(new Models.TimeSeriesPoint
                     {
                         Timestamp = DateTime.Parse(parts[0]),
                         KdRatio = double.Parse(parts[1]),
@@ -887,21 +887,4 @@ FORMAT TabSeparated";
     }
 
 
-}
-
-
-public class PlayerClickHouseStats
-{
-    public string PlayerName { get; set; } = "";
-    public int TotalRounds { get; set; }
-    public int TotalKills { get; set; }
-    public int TotalDeaths { get; set; }
-    public int TotalPlayTimeMinutes { get; set; }
-}
-
-public class TimeSeriesPoint
-{
-    public DateTime Timestamp { get; set; }
-    public double KdRatio { get; set; }
-    public double KillRate { get; set; }
 }

@@ -1,4 +1,5 @@
 using api.Bflist;
+using api.Bflist.Models;
 using api.ClickHouse.Interfaces;
 using Microsoft.Extensions.Logging;
 

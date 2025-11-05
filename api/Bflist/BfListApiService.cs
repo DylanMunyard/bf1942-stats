@@ -15,10 +15,10 @@ public interface IBfListApiService
     Task<object?> FetchSingleServerAsync(string game, string serverIdentifier);
 
     // Helper methods for UI that need ServerSummary
-    Task<ServerSummary[]> FetchServerSummariesAsync(string game, int perPage = 100, string? cursor = null, string? after = null);
-    Task<ServerSummary[]> FetchAllServerSummariesWithCacheStatusAsync(string game);
-    Task<ServerSummary[]> FetchAllServerSummariesAsync(string game);
-    Task<ServerSummary?> FetchSingleServerSummaryAsync(string game, string serverIdentifier);
+    Task<Models.ServerSummary[]> FetchServerSummariesAsync(string game, int perPage = 100, string? cursor = null, string? after = null);
+    Task<Models.ServerSummary[]> FetchAllServerSummariesWithCacheStatusAsync(string game);
+    Task<Models.ServerSummary[]> FetchAllServerSummariesAsync(string game);
+    Task<Models.ServerSummary?> FetchSingleServerSummaryAsync(string game, string serverIdentifier);
 }
 
 public class BfListApiService : IBfListApiService
@@ -27,7 +27,7 @@ public class BfListApiService : IBfListApiService
     private readonly ICacheService _cacheService;
     private readonly ILogger<BfListApiService> _logger;
     private readonly PlayerTrackerDbContext _dbContext;
-    private readonly ServerFilteringConfig _serverFilteringConfig;
+    private readonly Models.ServerFilteringConfig _serverFilteringConfig;
 
     private const int ServerListCacheSeconds = 30;
     private const int SingleServerCacheSeconds = 8; // 8 seconds for individual server updates
@@ -38,7 +38,7 @@ public class BfListApiService : IBfListApiService
         _cacheService = cacheService;
         _logger = logger;
         _dbContext = dbContext;
-        _serverFilteringConfig = configuration.GetSection("ServerFiltering").Get<ServerFilteringConfig>() ?? new ServerFilteringConfig();
+        _serverFilteringConfig = configuration.GetSection("ServerFiltering").Get<Models.ServerFilteringConfig>() ?? new Models.ServerFilteringConfig();
     }
 
     public async Task<object[]> FetchServersAsync(string game, int perPage = 100, string? cursor = null, string? after = null)
@@ -80,7 +80,7 @@ public class BfListApiService : IBfListApiService
         }
         else if (game.ToLower() == "bfvietnam")
         {
-            var bfvResponse = JsonSerializer.Deserialize<BfvietnamServersResponse>(content, new JsonSerializerOptions
+            var bfvResponse = JsonSerializer.Deserialize<Models.BfvietnamServersResponse>(content, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
@@ -89,7 +89,7 @@ public class BfListApiService : IBfListApiService
         }
         else // fh2
         {
-            var fh2Response = JsonSerializer.Deserialize<Fh2ServersResponse>(content, new JsonSerializerOptions
+            var fh2Response = JsonSerializer.Deserialize<Models.Fh2ServersResponse>(content, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
@@ -213,7 +213,7 @@ public class BfListApiService : IBfListApiService
             }
             else if (game.ToLower() == "bfvietnam")
             {
-                var bfvResponse = JsonSerializer.Deserialize<BfvietnamServersResponse>(content, new JsonSerializerOptions
+                var bfvResponse = JsonSerializer.Deserialize<Models.BfvietnamServersResponse>(content, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
                 });
@@ -234,7 +234,7 @@ public class BfListApiService : IBfListApiService
             }
             else // fh2
             {
-                var fh2Response = JsonSerializer.Deserialize<Fh2ServersResponse>(content, new JsonSerializerOptions
+                var fh2Response = JsonSerializer.Deserialize<Models.Fh2ServersResponse>(content, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
                 });
@@ -314,27 +314,27 @@ public class BfListApiService : IBfListApiService
     }
 
     // Helper methods for UI that need ServerSummary
-    public async Task<ServerSummary[]> FetchServerSummariesAsync(string game, int perPage = 100, string? cursor = null, string? after = null)
+    public async Task<Models.ServerSummary[]> FetchServerSummariesAsync(string game, int perPage = 100, string? cursor = null, string? after = null)
     {
         var servers = await FetchServersAsync(game, perPage, cursor, after);
         return ConvertToServerSummaries(servers, game);
     }
 
-    public async Task<ServerSummary[]> FetchAllServerSummariesWithCacheStatusAsync(string game)
+    public async Task<Models.ServerSummary[]> FetchAllServerSummariesWithCacheStatusAsync(string game)
     {
         var servers = await FetchAllServersAsync(game);
         return ConvertToServerSummaries(servers, game);
     }
 
-    public async Task<ServerSummary[]> FetchAllServerSummariesAsync(string game)
+    public async Task<Models.ServerSummary[]> FetchAllServerSummariesAsync(string game)
     {
         return await FetchAllServerSummariesWithCacheStatusAsync(game);
     }
 
-    public async Task<ServerSummary?> FetchSingleServerSummaryAsync(string game, string serverIdentifier)
+    public async Task<Models.ServerSummary?> FetchSingleServerSummaryAsync(string game, string serverIdentifier)
     {
         var cacheKey = $"server:{game}:{serverIdentifier}";
-        var cachedResult = await _cacheService.GetAsync<ServerSummary>(cacheKey);
+        var cachedResult = await _cacheService.GetAsync<Models.ServerSummary>(cacheKey);
 
         if (cachedResult != null)
         {
@@ -369,7 +369,7 @@ public class BfListApiService : IBfListApiService
         return null;
     }
 
-    private ServerSummary[] ConvertToServerSummaries(object[] servers, string game)
+    private Models.ServerSummary[] ConvertToServerSummaries(object[] servers, string game)
     {
         if (game.ToLower() == "bf1942")
         {
@@ -428,11 +428,11 @@ public class BfListApiService : IBfListApiService
         return filteredPlayers;
     }
 
-    private ServerSummary MapBf1942ToSummary(Bf1942ServerInfo server)
+    private Models.ServerSummary MapBf1942ToSummary(Bf1942ServerInfo server)
     {
         var filteredPlayers = FilterDuplicatePlayers(server.Players ?? [], server.Name);
 
-        return new ServerSummary
+        return new Models.ServerSummary
         {
             Guid = server.Guid,
             Name = server.Name,
@@ -452,11 +452,11 @@ public class BfListApiService : IBfListApiService
         };
     }
 
-    private ServerSummary MapBfvToSummary(BfvietnamServerInfo server)
+    private Models.ServerSummary MapBfvToSummary(BfvietnamServerInfo server)
     {
         var filteredPlayers = FilterDuplicatePlayers(server.Players ?? [], server.Name);
 
-        return new ServerSummary
+        return new Models.ServerSummary
         {
             Guid = server.Guid,
             Name = server.Name,
@@ -476,11 +476,11 @@ public class BfListApiService : IBfListApiService
         };
     }
 
-    private ServerSummary MapFh2ToSummary(Fh2ServerInfo server)
+    private Models.ServerSummary MapFh2ToSummary(Fh2ServerInfo server)
     {
         var filteredPlayers = FilterDuplicatePlayers(server.Players?.ToArray() ?? [], server.Name);
 
-        return new ServerSummary
+        return new Models.ServerSummary
         {
             Guid = server.Guid,
             Name = server.Name,
@@ -499,278 +499,4 @@ public class BfListApiService : IBfListApiService
             GameId = server.GameVariant
         };
     }
-}
-
-/// <summary>
-/// Response DTO for server list endpoint
-/// </summary>
-public class ServerListResponse
-{
-    /// <summary>
-    /// Array of server summaries
-    /// </summary>
-    public ServerSummary[] Servers { get; set; } = [];
-
-    /// <summary>
-    /// ISO timestamp of when the data was last updated
-    /// </summary>
-    public string LastUpdated { get; set; } = "";
-
-}
-
-public class BfvietnamServersResponse : ServerListResponse
-{
-    public new BfvietnamServerInfo[] Servers { get; set; } = [];
-    public string? Cursor { get; set; }
-    public bool HasMore { get; set; }
-}
-
-public class Fh2ServersResponse : ServerListResponse
-{
-    public new Fh2ServerInfo[] Servers { get; set; } = [];
-    public string? Cursor { get; set; }
-    public bool HasMore { get; set; }
-}
-
-/// <summary>
-/// Minimal server summary containing only fields needed for the servers table
-/// </summary>
-public class ServerSummary
-{
-    /// <summary>
-    /// Unique server identifier
-    /// </summary>
-    public string Guid { get; set; } = "";
-
-    /// <summary>
-    /// Server name
-    /// </summary>
-    public string Name { get; set; } = "";
-
-    /// <summary>
-    /// Server IP address
-    /// </summary>
-    public string Ip { get; set; } = "";
-
-    /// <summary>
-    /// Server port
-    /// </summary>
-    public int Port { get; set; }
-
-    /// <summary>
-    /// Current number of players
-    /// </summary>
-    public int NumPlayers { get; set; }
-
-    /// <summary>
-    /// Maximum number of players
-    /// </summary>
-    public int MaxPlayers { get; set; }
-
-    /// <summary>
-    /// Current map name
-    /// </summary>
-    public string MapName { get; set; } = "";
-
-    /// <summary>
-    /// Game type/mode
-    /// </summary>
-    public string GameType { get; set; } = "";
-
-    /// <summary>
-    /// Direct join link
-    /// </summary>
-    public string JoinLink { get; set; } = "";
-
-    /// <summary>
-    /// Remaining round time in seconds
-    /// </summary>
-    public int RoundTimeRemain { get; set; }
-
-    /// <summary>
-    /// Team 1 tickets
-    /// </summary>
-    public int Tickets1 { get; set; }
-
-    /// <summary>
-    /// Team 2 tickets
-    /// </summary>
-    public int Tickets2 { get; set; }
-
-    /// <summary>
-    /// Current players on the server
-    /// </summary>
-    public PlayerInfo[] Players { get; set; } = [];
-
-    /// <summary>
-    /// Team information
-    /// </summary>
-    public TeamInfo[] Teams { get; set; } = [];
-
-    /// <summary>
-    /// Server country from geo location data
-    /// </summary>
-    public string? Country { get; set; }
-
-    /// <summary>
-    /// Server region from geo location data
-    /// </summary>
-    public string? Region { get; set; }
-
-    /// <summary>
-    /// Server city from geo location data
-    /// </summary>
-    public string? City { get; set; }
-
-    /// <summary>
-    /// Server location coordinates (latitude,longitude) from geo location data
-    /// </summary>
-    public string? Loc { get; set; }
-
-    /// <summary>
-    /// Server timezone from geo location data
-    /// </summary>
-    public string? Timezone { get; set; }
-
-    /// <summary>
-    /// Server organization/ASN from geo location data
-    /// </summary>
-    public string? Org { get; set; }
-
-    /// <summary>
-    /// Server postal code from geo location data
-    /// </summary>
-    public string? Postal { get; set; }
-
-    /// <summary>
-    /// Date when geo location was last looked up
-    /// </summary>
-    public DateTime? GeoLookupDate { get; set; }
-
-    /// <summary>
-    /// Whether the server is currently online
-    /// </summary>
-    public bool IsOnline { get; set; } = true;
-
-    /// <summary>
-    /// When the server was last seen online
-    /// </summary>
-    public DateTime LastSeenTime { get; set; } = DateTime.UtcNow;
-
-    /// <summary>
-    /// Server Discord invite URL
-    /// </summary>
-    public string? DiscordUrl { get; set; }
-
-    /// <summary>
-    /// Server forum URL
-    /// </summary>
-    public string? ForumUrl { get; set; }
-
-    /// <summary>
-    /// Game identifier (bf1942, fh2, bfvietnam)
-    /// </summary>
-    public string GameId { get; set; } = "";
-}
-
-public class PlayersOnlineHistoryResponse
-{
-    /// <summary>
-    /// Array of player count data points over time
-    /// </summary>
-    public PlayersOnlineDataPoint[] DataPoints { get; set; } = [];
-
-    /// <summary>
-    /// Trend analysis and insights for the requested period
-    /// </summary>
-    public PlayerTrendsInsights? Insights { get; set; }
-
-    /// <summary>
-    /// The period for which the data was requested (e.g., "7d", "3d", "1d", "1month", "3months", "thisyear", "alltime")
-    /// </summary>
-    public string Period { get; set; } = "";
-
-    /// <summary>
-    /// The game for which the data was requested
-    /// </summary>
-    public string Game { get; set; } = "";
-
-    /// <summary>
-    /// When the data was last updated
-    /// </summary>
-    public string LastUpdated { get; set; } = "";
-}
-
-public class PlayersOnlineDataPoint
-{
-    /// <summary>
-    /// Timestamp of the data point
-    /// </summary>
-    public DateTime Timestamp { get; set; }
-
-    /// <summary>
-    /// Total number of players online at this timestamp
-    /// </summary>
-    public int TotalPlayers { get; set; }
-}
-
-public class PlayerTrendsInsights
-{
-    /// <summary>
-    /// Overall average players for the entire period
-    /// </summary>
-    public double OverallAverage { get; set; }
-
-    /// <summary>
-    /// 7-day rolling average data points (for periods longer than 7 days)
-    /// </summary>
-    public RollingAverageDataPoint[] RollingAverage { get; set; } = [];
-
-    /// <summary>
-    /// Trend direction: "increasing", "decreasing", "stable"
-    /// </summary>
-    public string TrendDirection { get; set; } = "";
-
-    /// <summary>
-    /// Percentage change from start to end of period
-    /// </summary>
-    public double PercentageChange { get; set; }
-
-    /// <summary>
-    /// Peak player count in the period
-    /// </summary>
-    public int PeakPlayers { get; set; }
-
-    /// <summary>
-    /// Timestamp when peak was reached
-    /// </summary>
-    public DateTime PeakTimestamp { get; set; }
-
-    /// <summary>
-    /// Lowest player count in the period
-    /// </summary>
-    public int LowestPlayers { get; set; }
-
-    /// <summary>
-    /// Timestamp when lowest count was reached
-    /// </summary>
-    public DateTime LowestTimestamp { get; set; }
-
-    /// <summary>
-    /// Explanation of how player counts are calculated for this time period
-    /// </summary>
-    public string CalculationMethod { get; set; } = "";
-}
-
-public class RollingAverageDataPoint
-{
-    /// <summary>
-    /// Timestamp of the rolling average data point
-    /// </summary>
-    public DateTime Timestamp { get; set; }
-
-    /// <summary>
-    /// 7-day rolling average of players online
-    /// </summary>
-    public double Average { get; set; }
 }
