@@ -1,0 +1,238 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: BF1942 Stats API Alerts
+    folder: API Monitoring
+    interval: 1m
+    rules:
+      # Alert when error rate is high
+      - uid: high_error_rate
+        title: High Error Rate
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(rate({job="bf1942-stats"} |~ "(?i)(error|exception|fail)" [5m]))'
+              queryType: range
+              refId: A
+
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: []
+                  reducer:
+                    params: []
+                    type: avg
+                  type: query
+              datasource:
+                name: Expression
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              type: reduce
+
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 10
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: []
+                  reducer:
+                    params: []
+                    type: avg
+                  type: query
+              datasource:
+                name: Expression
+                type: __expr__
+                uid: __expr__
+              expression: B
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: Error
+        for: 2m
+        annotations:
+          description: 'Error rate is {{ $value }} errors per second (threshold: 10)'
+          summary: High error rate detected in BF1942 Stats API
+        labels:
+          severity: warning
+
+      # Alert when response time is slow (500+ status codes or slow responses)
+      - uid: slow_response_time
+        title: Slow API Response Time
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(rate({job="bf1942-stats"} |~ "(?i)(timeout|slow|5[0-9]{2})" [5m]))'
+              queryType: range
+              refId: A
+
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: A
+              reducer: last
+              refId: B
+              type: reduce
+
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: threshold
+              conditions:
+                - evaluator:
+                    params:
+                      - 5
+                    type: gt
+        noDataState: NoData
+        execErrState: Error
+        for: 3m
+        annotations:
+          description: 'Slow response rate is {{ $value }} per second (threshold: 5)'
+          summary: API experiencing slow responses or timeouts
+        labels:
+          severity: warning
+
+      # Alert when critical errors occur
+      - uid: critical_errors
+        title: Critical Errors Detected
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({job="bf1942-stats"} |~ "(?i)(critical|fatal)" [1m]))'
+              queryType: range
+              refId: A
+
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: A
+              reducer: last
+              refId: B
+              type: reduce
+
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: threshold
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: gt
+        noDataState: NoData
+        execErrState: Error
+        for: 1m
+        annotations:
+          description: 'Critical error detected: {{ $value }} critical/fatal errors in the last minute'
+          summary: Critical errors in BF1942 Stats API
+        labels:
+          severity: critical
+
+      # Alert when no logs are received (service might be down)
+      - uid: no_logs_received
+        title: No Logs Received
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({job="bf1942-stats"} [5m]))'
+              queryType: range
+              refId: A
+
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: A
+              reducer: last
+              refId: B
+              type: reduce
+
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: B
+              refId: C
+              type: threshold
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          description: 'No logs received from BF1942 Stats API in the last 5 minutes'
+          summary: Service may be down or not logging
+        labels:
+          severity: critical

@@ -1,0 +1,19 @@
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: discord-alerts
+    receivers:
+      - uid: discord-webhook
+        type: discord
+        settings:
+          # Set your Discord webhook URL here
+          # To get this: Discord Channel Settings -> Integrations -> Webhooks -> New Webhook
+          url: ${DISCORD_WEBHOOK_URL}
+          # Optional: customize the message title
+          title: 'BF1942 Stats Alert'
+          # Optional: customize the avatar
+          avatar_url: ''
+          # Show resolved alerts too
+          use_discord_username: false
+        disableResolveMessage: false

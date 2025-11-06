@@ -1,0 +1,25 @@
+apiVersion: 1
+
+policies:
+  - orgId: 1
+    receiver: discord-alerts
+    group_by: ['alertname', 'grafana_folder']
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h
+    routes:
+      # Critical alerts - send immediately
+      - receiver: discord-alerts
+        matchers:
+          - severity = critical
+        group_wait: 10s
+        repeat_interval: 1h
+        continue: false
+
+      # Warning alerts - can wait a bit
+      - receiver: discord-alerts
+        matchers:
+          - severity = warning
+        group_wait: 30s
+        repeat_interval: 4h
+        continue: false
