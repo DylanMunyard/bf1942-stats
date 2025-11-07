@@ -567,6 +567,27 @@ public class PlayerTrackerDbContext : DbContext
             .WithMany()
             .HasForeignKey(ttr => ttr.TeamId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // Configure NodaTime Instant conversion for TournamentFile
+        modelBuilder.Entity<TournamentFile>()
+            .Property(tf => tf.UploadedAt)
+            .HasConversion(
+                instant => instant.ToString(),
+                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+
+        // Configure relationship: TournamentFile -> Tournament
+        modelBuilder.Entity<TournamentFile>()
+            .HasOne(tf => tf.Tournament)
+            .WithMany(t => t.Files)
+            .HasForeignKey(tf => tf.TournamentId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Configure relationship: TournamentWeekDate -> Tournament
+        modelBuilder.Entity<TournamentWeekDate>()
+            .HasOne(twd => twd.Tournament)
+            .WithMany(t => t.WeekDates)
+            .HasForeignKey(twd => twd.TournamentId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }
 
