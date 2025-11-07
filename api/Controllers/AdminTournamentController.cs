@@ -424,6 +424,29 @@ public class AdminTournamentController(
                 sanitizedRules = request.Rules;
             }
 
+            // Validate week dates if provided
+            if (request.WeekDates != null)
+            {
+                foreach (var weekDate in request.WeekDates)
+                {
+                    if (weekDate.StartDate >= weekDate.EndDate)
+                        return BadRequest(new { message = $"Week '{weekDate.Week}': Start date must be before end date" });
+                }
+            }
+
+            // Validate files if provided
+            if (request.Files != null)
+            {
+                foreach (var file in request.Files)
+                {
+                    if (string.IsNullOrWhiteSpace(file.Name))
+                        return BadRequest(new { message = "File name is required" });
+
+                    if (string.IsNullOrWhiteSpace(file.Url))
+                        return BadRequest(new { message = "File URL is required" });
+                }
+            }
+
             var tournament = new Tournament
             {
                 Name = request.Name,
@@ -456,6 +479,37 @@ public class AdminTournamentController(
                     Tournament = tournament
                 };
                 context.Add(theme);
+            }
+
+            // Create week dates if provided
+            if (request.WeekDates != null)
+            {
+                foreach (var weekDate in request.WeekDates)
+                {
+                    context.TournamentWeekDates.Add(new TournamentWeekDate
+                    {
+                        Tournament = tournament,
+                        Week = weekDate.Week,
+                        StartDate = weekDate.StartDate,
+                        EndDate = weekDate.EndDate
+                    });
+                }
+            }
+
+            // Create files if provided
+            if (request.Files != null)
+            {
+                foreach (var file in request.Files)
+                {
+                    context.TournamentFiles.Add(new TournamentFile
+                    {
+                        Tournament = tournament,
+                        Name = file.Name,
+                        Url = file.Url,
+                        Category = file.Category,
+                        UploadedAt = SystemClock.Instance.GetCurrentInstant()
+                    });
+                }
             }
 
             await context.SaveChangesAsync();
@@ -834,6 +888,151 @@ public class AdminTournamentController(
         {
             logger.LogError(ex, "Error deleting tournament file {FileId} for tournament {TournamentId}", fileId, id);
             return StatusCode(500, new { message = "Error deleting tournament file" });
+        }
+    }
+
+    /// <summary>
+    /// Create a tournament week date
+    /// </summary>
+    [HttpPost("{id}/weeks")]
+    [Authorize]
+    public async Task<ActionResult<TournamentWeekDateResponse>> CreateTournamentWeekDate(int id, [FromBody] WeekDateRequest request)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            if (request.StartDate >= request.EndDate)
+                return BadRequest(new { message = $"Week '{request.Week}': Start date must be before end date" });
+
+            var weekDate = new TournamentWeekDate
+            {
+                TournamentId = id,
+                Week = request.Week,
+                StartDate = request.StartDate,
+                EndDate = request.EndDate
+            };
+
+            context.TournamentWeekDates.Add(weekDate);
+            await context.SaveChangesAsync();
+
+            var response = new TournamentWeekDateResponse(
+                weekDate.Id,
+                weekDate.Week,
+                weekDate.StartDate,
+                weekDate.EndDate);
+
+            return CreatedAtAction(
+                nameof(GetTournament),
+                new { id = tournament.Id },
+                response);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error creating tournament week date for tournament {TournamentId}", id);
+            return StatusCode(500, new { message = "Error creating tournament week date" });
+        }
+    }
+
+    /// <summary>
+    /// Update a tournament week date
+    /// </summary>
+    [HttpPut("{id}/weeks/{weekId}")]
+    [Authorize]
+    public async Task<ActionResult<TournamentWeekDateResponse>> UpdateTournamentWeekDate(
+        int id,
+        int weekId,
+        [FromBody] WeekDateRequest request)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            var weekDate = await context.TournamentWeekDates
+                .Where(w => w.TournamentId == id && w.Id == weekId)
+                .FirstOrDefaultAsync();
+
+            if (weekDate == null)
+                return NotFound(new { message = "Week date not found" });
+
+            if (request.StartDate >= request.EndDate)
+                return BadRequest(new { message = $"Week '{request.Week}': Start date must be before end date" });
+
+            weekDate.Week = request.Week;
+            weekDate.StartDate = request.StartDate;
+            weekDate.EndDate = request.EndDate;
+
+            await context.SaveChangesAsync();
+
+            var response = new TournamentWeekDateResponse(
+                weekDate.Id,
+                weekDate.Week,
+                weekDate.StartDate,
+                weekDate.EndDate);
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error updating tournament week date {WeekId} for tournament {TournamentId}", weekId, id);
+            return StatusCode(500, new { message = "Error updating tournament week date" });
+        }
+    }
+
+    /// <summary>
+    /// Delete a tournament week date
+    /// </summary>
+    [HttpDelete("{id}/weeks/{weekId}")]
+    [Authorize]
+    public async Task<IActionResult> DeleteTournamentWeekDate(int id, int weekId)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            var weekDate = await context.TournamentWeekDates
+                .Where(w => w.TournamentId == id && w.Id == weekId)
+                .FirstOrDefaultAsync();
+
+            if (weekDate == null)
+                return NotFound(new { message = "Week date not found" });
+
+            context.TournamentWeekDates.Remove(weekDate);
+            await context.SaveChangesAsync();
+
+            return Ok(new { success = true, message = "Week date deleted successfully" });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error deleting tournament week date {WeekId} for tournament {TournamentId}", weekId, id);
+            return StatusCode(500, new { message = "Error deleting tournament week date" });
         }
     }
 
@@ -2713,6 +2912,8 @@ public class CreateTournamentRequest
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
     public TournamentThemeRequest? Theme { get; set; }
+    public List<WeekDateRequest>? WeekDates { get; set; }
+    public List<CreateTournamentFileRequest>? Files { get; set; }
 }
 
 public class UpdateTournamentRequest
