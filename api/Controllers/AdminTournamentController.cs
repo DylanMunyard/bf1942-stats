@@ -3057,8 +3057,8 @@ public class RecalculateRankingsAdvancedResponse
 public record TournamentWeekDateResponse(
     int Id,
     string? Week,
-    Instant StartDate,
-    Instant EndDate);
+    LocalDate StartDate,
+    LocalDate EndDate);
 
 public record TournamentFileResponse(
     int Id,
@@ -3069,8 +3069,8 @@ public record TournamentFileResponse(
 
 public record WeekDateRequest(
     string? Week,
-    Instant StartDate,
-    Instant EndDate);
+    LocalDate StartDate,
+    LocalDate EndDate);
 
 public record CreateTournamentFileRequest(
     string Name,

@@ -582,18 +582,18 @@ public class PlayerTrackerDbContext : DbContext
             .HasForeignKey(tf => tf.TournamentId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Configure NodaTime Instant conversions for TournamentWeekDate
+        // Configure NodaTime LocalDate conversions for TournamentWeekDate
         modelBuilder.Entity<TournamentWeekDate>()
             .Property(twd => twd.StartDate)
             .HasConversion(
-                instant => instant.ToString(),
-                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+                date => date.ToString(),
+                str => NodaTime.Text.LocalDatePattern.Iso.Parse(str).Value);
 
         modelBuilder.Entity<TournamentWeekDate>()
             .Property(twd => twd.EndDate)
             .HasConversion(
-                instant => instant.ToString(),
-                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+                date => date.ToString(),
+                str => NodaTime.Text.LocalDatePattern.Iso.Parse(str).Value);
 
         // Configure relationship: TournamentWeekDate -> Tournament
         modelBuilder.Entity<TournamentWeekDate>()
@@ -1015,8 +1015,8 @@ public class TournamentWeekDate
     public int Id { get; set; }
     public int TournamentId { get; set; }
     public string? Week { get; set; } // "Week 1", "Week 2", or null for unweekly
-    public Instant StartDate { get; set; }
-    public Instant EndDate { get; set; }
+    public LocalDate StartDate { get; set; }
+    public LocalDate EndDate { get; set; }
 
     // Navigation properties
     public Tournament Tournament { get; set; } = null!;
