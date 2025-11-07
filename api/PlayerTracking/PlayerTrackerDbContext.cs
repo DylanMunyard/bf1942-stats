@@ -312,7 +312,7 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<Tournament>()
             .Property(t => t.CreatedAt)
             .HasConversion(
-                instant => instant.ToString(),
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
                 str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
 
         // Configure relationship: Tournament -> TournamentTeam
@@ -344,7 +344,7 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<TournamentTeam>()
             .Property(tt => tt.CreatedAt)
             .HasConversion(
-                instant => instant.ToString(),
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
                 str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
 
 
@@ -401,13 +401,13 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<TournamentMatch>()
             .Property(tm => tm.ScheduledDate)
             .HasConversion(
-                instant => instant.ToString(),
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
                 str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
 
         modelBuilder.Entity<TournamentMatch>()
             .Property(tm => tm.CreatedAt)
             .HasConversion(
-                instant => instant.ToString(),
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
                 str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
 
 
@@ -472,13 +472,13 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<TournamentMatchResult>()
             .Property(tmr => tmr.CreatedAt)
             .HasConversion(
-                instant => instant.ToString(),
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
                 str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
 
         modelBuilder.Entity<TournamentMatchResult>()
             .Property(tmr => tmr.UpdatedAt)
             .HasConversion(
-                instant => instant.ToString(),
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
                 str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
 
         // Configure relationship: TournamentMatchResult -> Tournament
@@ -551,7 +551,7 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<TournamentTeamRanking>()
             .Property(ttr => ttr.UpdatedAt)
             .HasConversion(
-                instant => instant.ToString(),
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
                 str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
 
         // Configure relationship: TournamentTeamRanking -> Tournament
@@ -572,7 +572,7 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<TournamentFile>()
             .Property(tf => tf.UploadedAt)
             .HasConversion(
-                instant => instant.ToString(),
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
                 str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
 
         // Configure relationship: TournamentFile -> Tournament
@@ -586,13 +586,13 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<TournamentWeekDate>()
             .Property(twd => twd.StartDate)
             .HasConversion(
-                date => date.ToString(),
+                date => NodaTime.Text.LocalDatePattern.Iso.Format(date),
                 str => NodaTime.Text.LocalDatePattern.Iso.Parse(str).Value);
 
         modelBuilder.Entity<TournamentWeekDate>()
             .Property(twd => twd.EndDate)
             .HasConversion(
-                date => date.ToString(),
+                date => NodaTime.Text.LocalDatePattern.Iso.Format(date),
                 str => NodaTime.Text.LocalDatePattern.Iso.Parse(str).Value);
 
         // Configure relationship: TournamentWeekDate -> Tournament
