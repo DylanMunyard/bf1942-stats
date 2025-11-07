@@ -25,6 +25,8 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<TournamentMatchMap> TournamentMatchMaps { get; set; }
     public DbSet<TournamentMatchResult> TournamentMatchResults { get; set; }
     public DbSet<TournamentTeamRanking> TournamentTeamRankings { get; set; }
+    public DbSet<TournamentWeekDate> TournamentWeekDates { get; set; }
+    public DbSet<TournamentFile> TournamentFiles { get; set; }
 
     public PlayerTrackerDbContext(DbContextOptions<PlayerTrackerDbContext> options)
         : base(options)
@@ -817,6 +819,10 @@ public class Tournament
     public string? Rules { get; set; } // Markdown content for tournament rules
     public string? ServerGuid { get; set; }
 
+    // Tournament status and configuration
+    public string Status { get; set; } = "draft"; // draft, registration, open, closed
+    public string? GameMode { get; set; } // Conquest, CTF, TDM, Coop, etc.
+
     // Theme customisation
     public int? ThemeId { get; set; }
 
@@ -831,6 +837,8 @@ public class Tournament
     public TournamentTheme? Theme { get; set; }
     public List<TournamentTeam> TournamentTeams { get; set; } = [];
     public List<TournamentMatch> TournamentMatches { get; set; } = [];
+    public List<TournamentWeekDate> WeekDates { get; set; } = [];
+    public List<TournamentFile> Files { get; set; } = [];
 }
 
 
@@ -966,4 +974,29 @@ public class TournamentTeamRanking
     // Navigation properties
     public Tournament Tournament { get; set; } = null!;
     public TournamentTeam Team { get; set; } = null!;
+}
+
+public class TournamentWeekDate
+{
+    public int Id { get; set; }
+    public int TournamentId { get; set; }
+    public string? Week { get; set; } // "Week 1", "Week 2", or null for unweekly
+    public Instant StartDate { get; set; }
+    public Instant EndDate { get; set; }
+
+    // Navigation properties
+    public Tournament Tournament { get; set; } = null!;
+}
+
+public class TournamentFile
+{
+    public int Id { get; set; }
+    public int TournamentId { get; set; }
+    public string Name { get; set; } = ""; // Display name (e.g., "Map Pack v1.0")
+    public string Url { get; set; } = ""; // External URL to file
+    public string? Category { get; set; } // Optional: 'map', 'mod', 'program', etc.
+    public Instant UploadedAt { get; set; }
+
+    // Navigation properties
+    public Tournament Tournament { get; set; } = null!;
 }
