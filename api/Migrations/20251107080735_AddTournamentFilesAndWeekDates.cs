@@ -69,11 +69,6 @@ namespace api.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_PlayerSessions_PlayerName_IsActive",
-                table: "PlayerSessions",
-                columns: new[] { "PlayerName", "IsActive" });
-
-            migrationBuilder.CreateIndex(
                 name: "IX_TournamentFiles_TournamentId",
                 table: "TournamentFiles",
                 column: "TournamentId");
@@ -92,10 +87,6 @@ namespace api.Migrations
 
             migrationBuilder.DropTable(
                 name: "TournamentWeekDates");
-
-            migrationBuilder.DropIndex(
-                name: "IX_PlayerSessions_PlayerName_IsActive",
-                table: "PlayerSessions");
 
             migrationBuilder.DropColumn(
                 name: "GameMode",
