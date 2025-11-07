@@ -1353,10 +1353,12 @@ components:
           example: 'Week 1'
         startDate:
           type: string
-          format: date-time
+          format: date
+          example: '2025-11-01'
         endDate:
           type: string
-          format: date-time
+          format: date
+          example: '2025-11-08'
 
     TournamentWeekDateRequest:
       type: object
@@ -1370,10 +1372,12 @@ components:
           example: 'Week 1'
         startDate:
           type: string
-          format: date-time
+          format: date
+          example: '2025-11-01'
         endDate:
           type: string
-          format: date-time
+          format: date
+          example: '2025-11-08'
 
     # ==================== TEAM SCHEMAS ====================
 
