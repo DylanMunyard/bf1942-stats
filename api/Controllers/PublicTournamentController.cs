@@ -306,6 +306,17 @@ public class PublicTournamentController(
             // Get latest matches (2 most recent completed)
             var latestMatches = await GetLatestMatchesAsync(tournamentId);
 
+            // Load tournament files
+            var files = await context.TournamentFiles
+                .Where(f => f.TournamentId == tournamentId)
+                .Select(f => new PublicTournamentFileResponse(
+                    f.Id,
+                    f.Name,
+                    f.Url,
+                    f.Category,
+                    f.UploadedAt))
+                .ToListAsync();
+
             var response = new PublicTournamentDetailResponse
             {
                 Id = tournament.Id,
@@ -319,6 +330,7 @@ public class PublicTournamentController(
                 Teams = teamResponses,
                 MatchesByWeek = matchesByWeek,
                 LatestMatches = latestMatches,
+                Files = files,
                 HasHeroImage = tournament.HeroImage != null,
                 HasCommunityLogo = tournament.CommunityLogo != null,
                 Rules = tournament.Rules,
@@ -476,6 +488,14 @@ public class PublicTournamentThemeResponse
     public string? AccentColour { get; set; }
 }
 
+// File DTOs for public API
+public record PublicTournamentFileResponse(
+    int Id,
+    string Name,
+    string Url,
+    string? Category,
+    Instant UploadedAt);
+
 public class PublicTournamentDetailResponse
 {
     public int Id { get; set; }
@@ -489,6 +509,7 @@ public class PublicTournamentDetailResponse
     public List<PublicTournamentTeamResponse> Teams { get; set; } = [];
     public List<PublicMatchWeekGroup> MatchesByWeek { get; set; } = [];
     public List<PublicTournamentMatchResponse> LatestMatches { get; set; } = []; // 2 most recent completed matches
+    public List<PublicTournamentFileResponse> Files { get; set; } = [];
     public bool HasHeroImage { get; set; }
     public bool HasCommunityLogo { get; set; }
     public string? Rules { get; set; }
