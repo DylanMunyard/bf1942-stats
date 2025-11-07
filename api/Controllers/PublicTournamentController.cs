@@ -12,6 +12,132 @@ public class PublicTournamentController(
     PlayerTrackerDbContext context,
     ILogger<PublicTournamentController> logger) : ControllerBase
 {
+    /// <summary>
+    /// Get the 2 most recent completed matches for a tournament
+    /// A match is "completed" when all its maps have at least one match result
+    /// </summary>
+    private async Task<List<PublicTournamentMatchResponse>> GetLatestMatchesAsync(int tournamentId)
+    {
+        // Get all matches ordered by scheduled date descending
+        var matches = await context.TournamentMatches
+            .Where(tm => tm.TournamentId == tournamentId)
+            .OrderByDescending(tm => tm.ScheduledDate)
+            .Select(tm => new
+            {
+                tm.Id,
+                tm.ScheduledDate,
+                Team1Name = tm.Team1 != null ? tm.Team1.Name : null,
+                Team2Name = tm.Team2 != null ? tm.Team2.Name : null,
+                tm.ServerGuid,
+                tm.ServerName,
+                tm.Week,
+                tm.CreatedAt,
+                Maps = tm.Maps.Select(m => new
+                {
+                    m.Id,
+                    m.MapName,
+                    m.MapOrder,
+                    m.TeamId,
+                    TeamName = m.Team != null ? m.Team.Name : null,
+                    MatchResultsCount = m.MatchResults.Count()
+                }).ToList()
+            })
+            .ToListAsync();
+
+        // Filter to completed matches (all maps have at least 1 result) and take 2
+        var completedMatches = matches
+            .Where(m => m.Maps.Count > 0 && m.Maps.All(map => map.MatchResultsCount > 0))
+            .Take(2)
+            .ToList();
+
+        if (completedMatches.Count == 0)
+            return [];
+
+        var matchIds = completedMatches.Select(m => m.Id).ToList();
+
+        // Batch load all match maps with their match results
+        var matchMaps = await context.TournamentMatchMaps
+            .Where(tmm => matchIds.Contains(tmm.MatchId))
+            .Select(tmm => new
+            {
+                tmm.Id,
+                tmm.MatchId,
+                tmm.MapName,
+                tmm.MapOrder,
+                tmm.TeamId,
+                TeamName = tmm.Team != null ? tmm.Team.Name : null,
+                MatchResults = tmm.MatchResults.Select(mr => new
+                {
+                    mr.Id,
+                    mr.Team1Id,
+                    Team1Name = mr.Team1 != null ? mr.Team1.Name : null,
+                    mr.Team2Id,
+                    Team2Name = mr.Team2 != null ? mr.Team2.Name : null,
+                    mr.WinningTeamId,
+                    WinningTeamName = mr.WinningTeam != null ? mr.WinningTeam.Name : null,
+                    mr.Team1Tickets,
+                    mr.Team2Tickets
+                }).ToList()
+            })
+            .ToListAsync();
+
+        var matchMapsLookup = matchMaps
+            .GroupBy(mm => mm.MatchId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.MapOrder).ToList());
+
+        // Build response objects
+        var matchResponses = new List<PublicTournamentMatchResponse>();
+
+        foreach (var match in completedMatches)
+        {
+            var matchMapsForThisMatch = new List<PublicTournamentMatchMapResponse>();
+
+            if (matchMapsLookup.TryGetValue(match.Id, out var mapsForMatch))
+            {
+                foreach (var map in mapsForMatch)
+                {
+                    var matchResultResponses = map.MatchResults.Select(mr =>
+                        new PublicTournamentMatchResultResponse
+                        {
+                            Id = mr.Id,
+                            Team1Id = mr.Team1Id,
+                            Team1Name = mr.Team1Name,
+                            Team2Id = mr.Team2Id,
+                            Team2Name = mr.Team2Name,
+                            WinningTeamId = mr.WinningTeamId,
+                            WinningTeamName = mr.WinningTeamName,
+                            Team1Tickets = mr.Team1Tickets,
+                            Team2Tickets = mr.Team2Tickets
+                        }).ToList();
+
+                    matchMapsForThisMatch.Add(new PublicTournamentMatchMapResponse
+                    {
+                        Id = map.Id,
+                        MapName = map.MapName,
+                        MapOrder = map.MapOrder,
+                        TeamId = map.TeamId,
+                        TeamName = map.TeamName,
+                        MatchResults = matchResultResponses
+                    });
+                }
+            }
+
+            matchResponses.Add(new PublicTournamentMatchResponse
+            {
+                Id = match.Id,
+                ScheduledDate = match.ScheduledDate,
+                Team1Name = match.Team1Name,
+                Team2Name = match.Team2Name,
+                ServerGuid = match.ServerGuid,
+                ServerName = match.ServerName,
+                Week = match.Week,
+                CreatedAt = match.CreatedAt,
+                Maps = matchMapsForThisMatch
+            });
+        }
+
+        return matchResponses;
+    }
 
     /// <summary>
     /// Get tournament details by ID or name (public, no auth required)
@@ -27,7 +153,6 @@ public class PublicTournamentController(
             if (int.TryParse(idOrName, out int id))
             {
                 tournament = await context.Tournaments
-                    .Include(t => t.OrganizerPlayer)
                     .Include(t => t.Server)
                     .Include(t => t.Theme)
                     .FirstOrDefaultAsync(t => t.Id == id);
@@ -36,13 +161,16 @@ public class PublicTournamentController(
             {
                 // If not a number, search by name
                 tournament = await context.Tournaments
-                    .Include(t => t.OrganizerPlayer)
                     .Include(t => t.Server)
                     .Include(t => t.Theme)
                     .FirstOrDefaultAsync(t => t.Name == idOrName);
             }
 
             if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            // Filter out draft tournaments from public view
+            if (tournament.Status == "draft")
                 return NotFound(new { message = "Tournament not found" });
 
             // Rest of the existing logic stays the same...
@@ -58,10 +186,12 @@ public class PublicTournamentController(
             var teamIds = teams.Select(t => t.Id).ToList();
 
             // Batch load all team players
-            var teamPlayers = await context.TournamentTeamPlayers
-                .Where(ttp => teamIds.Contains(ttp.TournamentTeamId))
-                .Select(ttp => new { ttp.TournamentTeamId, ttp.PlayerName })
-                .ToListAsync();
+            var teamPlayers = teamIds.Count > 0
+                ? await context.TournamentTeamPlayers
+                    .Where(ttp => teamIds.Contains(ttp.TournamentTeamId))
+                    .Select(ttp => new { ttp.TournamentTeamId, ttp.PlayerName })
+                    .ToListAsync()
+                : [];
 
             var teamPlayersLookup = teamPlayers
                 .GroupBy(tp => tp.TournamentTeamId)
@@ -87,8 +217,8 @@ public class PublicTournamentController(
                     tm.ScheduledDate,
                     tm.Team1Id,
                     tm.Team2Id,
-                    Team1Name = tm.Team1.Name,
-                    Team2Name = tm.Team2.Name,
+                    Team1Name = tm.Team1 != null ? tm.Team1.Name : null,
+                    Team2Name = tm.Team2 != null ? tm.Team2.Name : null,
                     tm.ServerGuid,
                     tm.ServerName,
                     tm.Week,
@@ -99,30 +229,32 @@ public class PublicTournamentController(
             var matchIds = matches.Select(m => m.Id).ToList();
 
             // Batch load all match maps with their match results
-            var matchMaps = await context.TournamentMatchMaps
-                .Where(tmm => matchIds.Contains(tmm.MatchId))
-                .Select(tmm => new
-                {
-                    tmm.Id,
-                    tmm.MatchId,
-                    tmm.MapName,
-                    tmm.MapOrder,
-                    tmm.TeamId,
-                    TeamName = tmm.Team != null ? tmm.Team.Name : null,
-                    MatchResults = tmm.MatchResults.Select(mr => new
+            var matchMaps = matchIds.Count > 0
+                ? await context.TournamentMatchMaps
+                    .Where(tmm => matchIds.Contains(tmm.MatchId))
+                    .Select(tmm => new
                     {
-                        mr.Id,
-                        mr.Team1Id,
-                        Team1Name = mr.Team1 != null ? mr.Team1.Name : null,
-                        mr.Team2Id,
-                        Team2Name = mr.Team2 != null ? mr.Team2.Name : null,
-                        mr.WinningTeamId,
-                        WinningTeamName = mr.WinningTeam != null ? mr.WinningTeam.Name : null,
-                        mr.Team1Tickets,
-                        mr.Team2Tickets
-                    }).ToList()
-                })
-                .ToListAsync();
+                        tmm.Id,
+                        tmm.MatchId,
+                        tmm.MapName,
+                        tmm.MapOrder,
+                        tmm.TeamId,
+                        TeamName = tmm.Team != null ? tmm.Team.Name : null,
+                        MatchResults = tmm.MatchResults.Select(mr => new
+                        {
+                            mr.Id,
+                            mr.Team1Id,
+                            Team1Name = mr.Team1 != null ? mr.Team1.Name : null,
+                            mr.Team2Id,
+                            Team2Name = mr.Team2 != null ? mr.Team2.Name : null,
+                            mr.WinningTeamId,
+                            WinningTeamName = mr.WinningTeam != null ? mr.WinningTeam.Name : null,
+                            mr.Team1Tickets,
+                            mr.Team2Tickets
+                        }).ToList()
+                    })
+                    .ToListAsync()
+                : [];
 
             var matchMapsLookup = matchMaps
                 .GroupBy(mm => mm.MatchId)
@@ -197,6 +329,20 @@ public class PublicTournamentController(
                 AccentColour = tournament.Theme.AccentColour
             } : null;
 
+            // Get latest matches (2 most recent completed)
+            var latestMatches = await GetLatestMatchesAsync(tournamentId);
+
+            // Load tournament files
+            var files = await context.TournamentFiles
+                .Where(f => f.TournamentId == tournamentId)
+                .Select(f => new PublicTournamentFileResponse(
+                    f.Id,
+                    f.Name,
+                    f.Url,
+                    f.Category,
+                    f.UploadedAt))
+                .ToListAsync();
+
             var response = new PublicTournamentDetailResponse
             {
                 Id = tournament.Id,
@@ -205,8 +351,12 @@ public class PublicTournamentController(
                 Game = tournament.Game,
                 CreatedAt = tournament.CreatedAt,
                 AnticipatedRoundCount = tournament.AnticipatedRoundCount,
+                Status = tournament.Status,
+                GameMode = tournament.GameMode,
                 Teams = teamResponses,
                 MatchesByWeek = matchesByWeek,
+                LatestMatches = latestMatches,
+                Files = files,
                 HasHeroImage = tournament.HeroImage != null,
                 HasCommunityLogo = tournament.CommunityLogo != null,
                 Rules = tournament.Rules,
@@ -364,6 +514,14 @@ public class PublicTournamentThemeResponse
     public string? AccentColour { get; set; }
 }
 
+// File DTOs for public API
+public record PublicTournamentFileResponse(
+    int Id,
+    string Name,
+    string Url,
+    string? Category,
+    Instant UploadedAt);
+
 public class PublicTournamentDetailResponse
 {
     public int Id { get; set; }
@@ -372,8 +530,12 @@ public class PublicTournamentDetailResponse
     public string Game { get; set; } = "";
     public Instant CreatedAt { get; set; }
     public int? AnticipatedRoundCount { get; set; }
+    public string Status { get; set; } = ""; // draft, registration, open, closed
+    public string? GameMode { get; set; } // Conquest, CTF, etc.
     public List<PublicTournamentTeamResponse> Teams { get; set; } = [];
     public List<PublicMatchWeekGroup> MatchesByWeek { get; set; } = [];
+    public List<PublicTournamentMatchResponse> LatestMatches { get; set; } = []; // 2 most recent completed matches
+    public List<PublicTournamentFileResponse> Files { get; set; } = [];
     public bool HasHeroImage { get; set; }
     public bool HasCommunityLogo { get; set; }
     public string? Rules { get; set; }

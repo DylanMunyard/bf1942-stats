@@ -19,6 +19,110 @@ public class AdminTournamentController(
     ITournamentMatchResultService matchResultService,
     ITeamRankingCalculator rankingCalculator) : ControllerBase
 {
+    /// <summary>
+    /// Get the 2 most recent completed matches for a tournament
+    /// A match is "completed" when all its maps have at least one match result
+    /// </summary>
+    private async Task<List<TournamentMatchResponse>> GetLatestMatchesAsync(int tournamentId)
+    {
+        // Get all matches ordered by scheduled date descending
+        var matches = await context.TournamentMatches
+            .Where(tm => tm.TournamentId == tournamentId)
+            .OrderByDescending(tm => tm.ScheduledDate)
+            .Select(tm => new
+            {
+                tm.Id,
+                tm.ScheduledDate,
+                tm.Team1Id,
+                Team1Name = tm.Team1.Name,
+                tm.Team2Id,
+                Team2Name = tm.Team2.Name,
+                tm.ServerGuid,
+                tm.ServerName,
+                tm.Week,
+                tm.CreatedAt,
+                Maps = tm.Maps.Select(m => new
+                {
+                    m.Id,
+                    m.MapName,
+                    m.MapOrder,
+                    m.TeamId,
+                    TeamName = m.Team != null ? m.Team.Name : null,
+                    MatchResultsCount = m.MatchResults.Count(),
+                    MatchResults = m.MatchResults.Select(mr => new
+                    {
+                        mr.Id,
+                        mr.Team1Id,
+                        Team1Name = mr.Team1 != null ? mr.Team1.Name : null,
+                        mr.Team2Id,
+                        Team2Name = mr.Team2 != null ? mr.Team2.Name : null,
+                        mr.WinningTeamId,
+                        WinningTeamName = mr.WinningTeam != null ? mr.WinningTeam.Name : null,
+                        mr.Team1Tickets,
+                        mr.Team2Tickets
+                    }).ToList()
+                }).ToList()
+            })
+            .ToListAsync();
+
+        // Filter to completed matches (all maps have at least 1 result) and take 2
+        var completedMatches = matches
+            .Where(m => m.Maps.Count > 0 && m.Maps.All(map => map.MatchResultsCount > 0))
+            .Take(2)
+            .ToList();
+
+        // Build response objects
+        var matchResponses = new List<TournamentMatchResponse>();
+
+        foreach (var match in completedMatches)
+        {
+            var matchMapsForThisMatch = new List<TournamentMatchMapResponse>();
+
+            foreach (var map in match.Maps.OrderBy(m => m.MapOrder))
+            {
+                var matchResultResponses = map.MatchResults.Select(mr =>
+                    new TournamentMatchResultResponse
+                    {
+                        Id = mr.Id,
+                        Team1Id = mr.Team1Id,
+                        Team1Name = mr.Team1Name,
+                        Team2Id = mr.Team2Id,
+                        Team2Name = mr.Team2Name,
+                        WinningTeamId = mr.WinningTeamId,
+                        WinningTeamName = mr.WinningTeamName,
+                        Team1Tickets = mr.Team1Tickets,
+                        Team2Tickets = mr.Team2Tickets
+                    }).ToList();
+
+                matchMapsForThisMatch.Add(new TournamentMatchMapResponse
+                {
+                    Id = map.Id,
+                    MapName = map.MapName,
+                    MapOrder = map.MapOrder,
+                    TeamId = map.TeamId,
+                    TeamName = map.TeamName,
+                    MatchResults = matchResultResponses
+                });
+            }
+
+            matchResponses.Add(new TournamentMatchResponse
+            {
+                Id = match.Id,
+                ScheduledDate = match.ScheduledDate,
+                Team1Id = match.Team1Id,
+                Team1Name = match.Team1Name,
+                Team2Id = match.Team2Id,
+                Team2Name = match.Team2Name,
+                ServerGuid = match.ServerGuid,
+                ServerName = match.ServerName,
+                Week = match.Week,
+                CreatedAt = match.CreatedAt,
+                Maps = matchMapsForThisMatch
+            });
+        }
+
+        return matchResponses;
+    }
 
     /// <summary>
     /// Get tournaments created by the current user
@@ -189,6 +293,32 @@ public class AdminTournamentController(
                 AccentColour = tournament.Theme.AccentColour
             } : null;
 
+            // Load week dates
+            var weekDates = await context.TournamentWeekDates
+                .Where(wd => wd.TournamentId == id)
+                .OrderBy(wd => wd.StartDate)
+                .Select(wd => new TournamentWeekDateResponse(
+                    wd.Id,
+                    wd.Week,
+                    wd.StartDate,
+                    wd.EndDate))
+                .ToListAsync();
+
+            // Load files
+            var files = await context.TournamentFiles
+                .Where(f => f.TournamentId == id)
+                .OrderByDescending(f => f.UploadedAt)
+                .Select(f => new TournamentFileResponse(
+                    f.Id,
+                    f.Name,
+                    f.Url,
+                    f.Category,
+                    f.UploadedAt))
+                .ToListAsync();
+
+            // Get latest matches (2 most recent completed)
+            var latestMatches = await GetLatestMatchesAsync(id);
+
             var response = new TournamentDetailResponse
             {
                 Id = tournament.Id,
@@ -197,8 +327,13 @@ public class AdminTournamentController(
                 Game = tournament.Game,
                 CreatedAt = tournament.CreatedAt,
                 AnticipatedRoundCount = tournament.AnticipatedRoundCount,
+                Status = tournament.Status,
+                GameMode = tournament.GameMode,
                 Teams = teams,
                 MatchesByWeek = matchesByWeek,
+                LatestMatches = latestMatches,
+                WeekDates = weekDates,
+                Files = files,
                 HasHeroImage = tournament.HeroImage != null,
                 HasCommunityLogo = tournament.CommunityLogo != null,
                 Rules = tournament.Rules,
@@ -289,6 +424,29 @@ public class AdminTournamentController(
                 sanitizedRules = request.Rules;
             }
 
+            // Validate week dates if provided
+            if (request.WeekDates != null)
+            {
+                foreach (var weekDate in request.WeekDates)
+                {
+                    if (weekDate.StartDate >= weekDate.EndDate)
+                        return BadRequest(new { message = $"Week '{weekDate.Week}': Start date must be before end date" });
+                }
+            }
+
+            // Validate files if provided
+            if (request.Files != null)
+            {
+                foreach (var file in request.Files)
+                {
+                    if (string.IsNullOrWhiteSpace(file.Name))
+                        return BadRequest(new { message = "File name is required" });
+
+                    if (string.IsNullOrWhiteSpace(file.Url))
+                        return BadRequest(new { message = "File URL is required" });
+                }
+            }
+
             var tournament = new Tournament
             {
                 Name = request.Name,
@@ -321,6 +479,37 @@ public class AdminTournamentController(
                     Tournament = tournament
                 };
                 context.Add(theme);
+            }
+
+            // Create week dates if provided
+            if (request.WeekDates != null)
+            {
+                foreach (var weekDate in request.WeekDates)
+                {
+                    context.TournamentWeekDates.Add(new TournamentWeekDate
+                    {
+                        Tournament = tournament,
+                        Week = weekDate.Week,
+                        StartDate = weekDate.StartDate,
+                        EndDate = weekDate.EndDate
+                    });
+                }
+            }
+
+            // Create files if provided
+            if (request.Files != null)
+            {
+                foreach (var file in request.Files)
+                {
+                    context.TournamentFiles.Add(new TournamentFile
+                    {
+                        Tournament = tournament,
+                        Name = file.Name,
+                        Url = file.Url,
+                        Category = file.Category,
+                        UploadedAt = SystemClock.Instance.GetCurrentInstant()
+                    });
+                }
             }
 
             await context.SaveChangesAsync();
@@ -485,6 +674,59 @@ public class AdminTournamentController(
                 }
             }
 
+            // Handle status updates
+            if (!string.IsNullOrWhiteSpace(request.Status))
+            {
+                var allowedStatuses = new[] { "draft", "registration", "open", "closed" };
+                if (!allowedStatuses.Contains(request.Status.ToLower()))
+                    return BadRequest(new { message = $"Invalid status. Allowed values: {string.Join(", ", allowedStatuses)}" });
+
+                tournament.Status = request.Status.ToLower();
+            }
+
+            // Handle game mode updates
+            if (request.GameMode != null)
+            {
+                // Soft validation - recommend predefined modes but allow any string
+                var recommendedModes = new[] { "Conquest", "CTF", "TDM", "Coop" };
+                if (!string.IsNullOrWhiteSpace(request.GameMode) && !recommendedModes.Contains(request.GameMode, StringComparer.OrdinalIgnoreCase))
+                {
+                    logger.LogWarning("Non-standard game mode set for tournament {TournamentId}: {GameMode}", id, request.GameMode);
+                }
+
+                tournament.GameMode = string.IsNullOrWhiteSpace(request.GameMode) ? null : request.GameMode;
+            }
+
+            // Handle week dates updates (replace all strategy)
+            if (request.WeekDates != null)
+            {
+                // Validate week dates
+                foreach (var weekDate in request.WeekDates)
+                {
+                    if (weekDate.StartDate >= weekDate.EndDate)
+                        return BadRequest(new { message = $"Week '{weekDate.Week}': Start date must be before end date" });
+                }
+
+                // Remove existing week dates
+                var existingWeekDates = await context.TournamentWeekDates
+                    .Where(wd => wd.TournamentId == id)
+                    .ToListAsync();
+
+                context.TournamentWeekDates.RemoveRange(existingWeekDates);
+
+                // Add new week dates
+                foreach (var weekDate in request.WeekDates)
+                {
+                    context.TournamentWeekDates.Add(new TournamentWeekDate
+                    {
+                        TournamentId = id,
+                        Week = weekDate.Week,
+                        StartDate = weekDate.StartDate,
+                        EndDate = weekDate.EndDate
+                    });
+                }
+            }
+
             await context.SaveChangesAsync();
 
             return Ok(await GetTournamentDetailOptimizedAsync(tournament.Id));
@@ -493,6 +735,304 @@ public class AdminTournamentController(
         {
             logger.LogError(ex, "Error updating tournament {TournamentId}", id);
             return StatusCode(500, new { message = "Error updating tournament" });
+        }
+    }
+
+    /// <summary>
+    /// Add a file link to a tournament
+    /// </summary>
+    [HttpPost("{id}/files")]
+    [Authorize]
+    public async Task<ActionResult<TournamentFileResponse>> CreateTournamentFile(int id, [FromBody] CreateTournamentFileRequest request)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            if (string.IsNullOrWhiteSpace(request.Name))
+                return BadRequest(new { message = "File name is required" });
+
+            if (string.IsNullOrWhiteSpace(request.Url))
+                return BadRequest(new { message = "File URL is required" });
+
+            var file = new TournamentFile
+            {
+                TournamentId = id,
+                Name = request.Name,
+                Url = request.Url,
+                Category = request.Category,
+                UploadedAt = SystemClock.Instance.GetCurrentInstant()
+            };
+
+            context.TournamentFiles.Add(file);
+            await context.SaveChangesAsync();
+
+            var response = new TournamentFileResponse(
+                file.Id,
+                file.Name,
+                file.Url,
+                file.Category,
+                file.UploadedAt);
+
+            return CreatedAtAction(
+                nameof(GetTournament),
+                new { id = tournament.Id },
+                response);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error creating tournament file for tournament {TournamentId}", id);
+            return StatusCode(500, new { message = "Error creating tournament file" });
+        }
+    }
+
+    /// <summary>
+    /// Update a tournament file link
+    /// </summary>
+    [HttpPut("{id}/files/{fileId}")]
+    [Authorize]
+    public async Task<ActionResult<TournamentFileResponse>> UpdateTournamentFile(
+        int id,
+        int fileId,
+        [FromBody] UpdateTournamentFileRequest request)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            var file = await context.TournamentFiles
+                .Where(f => f.TournamentId == id && f.Id == fileId)
+                .FirstOrDefaultAsync();
+
+            if (file == null)
+                return NotFound(new { message = "File not found" });
+
+            if (!string.IsNullOrWhiteSpace(request.Name))
+                file.Name = request.Name;
+
+            if (!string.IsNullOrWhiteSpace(request.Url))
+                file.Url = request.Url;
+
+            if (request.Category != null)
+                file.Category = request.Category;
+
+            await context.SaveChangesAsync();
+
+            var response = new TournamentFileResponse(
+                file.Id,
+                file.Name,
+                file.Url,
+                file.Category,
+                file.UploadedAt);
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error updating tournament file {FileId} for tournament {TournamentId}", fileId, id);
+            return StatusCode(500, new { message = "Error updating tournament file" });
+        }
+    }
+
+    /// <summary>
+    /// Delete a tournament file link
+    /// </summary>
+    [HttpDelete("{id}/files/{fileId}")]
+    [Authorize]
+    public async Task<IActionResult> DeleteTournamentFile(int id, int fileId)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            var file = await context.TournamentFiles
+                .Where(f => f.TournamentId == id && f.Id == fileId)
+                .FirstOrDefaultAsync();
+
+            if (file == null)
+                return NotFound(new { message = "File not found" });
+
+            context.TournamentFiles.Remove(file);
+            await context.SaveChangesAsync();
+
+            return Ok(new { success = true, message = "File deleted successfully" });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error deleting tournament file {FileId} for tournament {TournamentId}", fileId, id);
+            return StatusCode(500, new { message = "Error deleting tournament file" });
+        }
+    }
+
+    /// <summary>
+    /// Create a tournament week date
+    /// </summary>
+    [HttpPost("{id}/weeks")]
+    [Authorize]
+    public async Task<ActionResult<TournamentWeekDateResponse>> CreateTournamentWeekDate(int id, [FromBody] WeekDateRequest request)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            if (request.StartDate >= request.EndDate)
+                return BadRequest(new { message = $"Week '{request.Week}': Start date must be before end date" });
+
+            var weekDate = new TournamentWeekDate
+            {
+                TournamentId = id,
+                Week = request.Week,
+                StartDate = request.StartDate,
+                EndDate = request.EndDate
+            };
+
+            context.TournamentWeekDates.Add(weekDate);
+            await context.SaveChangesAsync();
+
+            var response = new TournamentWeekDateResponse(
+                weekDate.Id,
+                weekDate.Week,
+                weekDate.StartDate,
+                weekDate.EndDate);
+
+            return CreatedAtAction(
+                nameof(GetTournament),
+                new { id = tournament.Id },
+                response);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error creating tournament week date for tournament {TournamentId}", id);
+            return StatusCode(500, new { message = "Error creating tournament week date" });
+        }
+    }
+
+    /// <summary>
+    /// Update a tournament week date
+    /// </summary>
+    [HttpPut("{id}/weeks/{weekId}")]
+    [Authorize]
+    public async Task<ActionResult<TournamentWeekDateResponse>> UpdateTournamentWeekDate(
+        int id,
+        int weekId,
+        [FromBody] WeekDateRequest request)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            var weekDate = await context.TournamentWeekDates
+                .Where(w => w.TournamentId == id && w.Id == weekId)
+                .FirstOrDefaultAsync();
+
+            if (weekDate == null)
+                return NotFound(new { message = "Week date not found" });
+
+            if (request.StartDate >= request.EndDate)
+                return BadRequest(new { message = $"Week '{request.Week}': Start date must be before end date" });
+
+            weekDate.Week = request.Week;
+            weekDate.StartDate = request.StartDate;
+            weekDate.EndDate = request.EndDate;
+
+            await context.SaveChangesAsync();
+
+            var response = new TournamentWeekDateResponse(
+                weekDate.Id,
+                weekDate.Week,
+                weekDate.StartDate,
+                weekDate.EndDate);
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error updating tournament week date {WeekId} for tournament {TournamentId}", weekId, id);
+            return StatusCode(500, new { message = "Error updating tournament week date" });
+        }
+    }
+
+    /// <summary>
+    /// Delete a tournament week date
+    /// </summary>
+    [HttpDelete("{id}/weeks/{weekId}")]
+    [Authorize]
+    public async Task<IActionResult> DeleteTournamentWeekDate(int id, int weekId)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            var weekDate = await context.TournamentWeekDates
+                .Where(w => w.TournamentId == id && w.Id == weekId)
+                .FirstOrDefaultAsync();
+
+            if (weekDate == null)
+                return NotFound(new { message = "Week date not found" });
+
+            context.TournamentWeekDates.Remove(weekDate);
+            await context.SaveChangesAsync();
+
+            return Ok(new { success = true, message = "Week date deleted successfully" });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error deleting tournament week date {WeekId} for tournament {TournamentId}", weekId, id);
+            return StatusCode(500, new { message = "Error deleting tournament week date" });
         }
     }
 
@@ -2372,6 +2912,8 @@ public class CreateTournamentRequest
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
     public TournamentThemeRequest? Theme { get; set; }
+    public List<WeekDateRequest>? WeekDates { get; set; }
+    public List<CreateTournamentFileRequest>? Files { get; set; }
 }
 
 public class UpdateTournamentRequest
@@ -2380,6 +2922,8 @@ public class UpdateTournamentRequest
     public string? Organizer { get; set; }
     public string? Game { get; set; }
     public int? AnticipatedRoundCount { get; set; }
+    public string? Status { get; set; } // draft, registration, open, closed
+    public string? GameMode { get; set; } // Conquest, CTF, etc.
     public string? HeroImageBase64 { get; set; }
     public string? HeroImageContentType { get; set; }
     public bool RemoveHeroImage { get; set; } = false;
@@ -2391,6 +2935,7 @@ public class UpdateTournamentRequest
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
     public TournamentThemeRequest? Theme { get; set; }
+    public List<WeekDateRequest>? WeekDates { get; set; } // Replace all week dates
 }
 
 // Team Management DTOs
@@ -2467,8 +3012,13 @@ public class TournamentDetailResponse
     public string Game { get; set; } = "";
     public Instant CreatedAt { get; set; }
     public int? AnticipatedRoundCount { get; set; }
+    public string Status { get; set; } = ""; // draft, registration, open, closed
+    public string? GameMode { get; set; } // Conquest, CTF, etc.
     public List<TournamentTeamResponse> Teams { get; set; } = [];
     public List<MatchWeekGroup> MatchesByWeek { get; set; } = [];
+    public List<TournamentMatchResponse> LatestMatches { get; set; } = []; // 2 most recent completed matches
+    public List<TournamentWeekDateResponse> WeekDates { get; set; } = [];
+    public List<TournamentFileResponse> Files { get; set; } = [];
     public bool HasHeroImage { get; set; }
     public bool HasCommunityLogo { get; set; }
     public string? Rules { get; set; }
@@ -2704,3 +3254,31 @@ public class RecalculateRankingsAdvancedResponse
     /// </summary>
     public Instant UpdatedAt { get; set; }
 }
+
+public record TournamentWeekDateResponse(
+    int Id,
+    string? Week,
+    LocalDate StartDate,
+    LocalDate EndDate);
+
+public record TournamentFileResponse(
+    int Id,
+    string Name,
+    string Url,
+    string? Category,
+    Instant UploadedAt);
+
+public record WeekDateRequest(
+    string? Week,
+    LocalDate StartDate,
+    LocalDate EndDate);
+
+public record CreateTournamentFileRequest(
+    string Name,
+    string Url,
+    string? Category);
+
+public record UpdateTournamentFileRequest(
+    string? Name,
+    string? Url,
+    string? Category);

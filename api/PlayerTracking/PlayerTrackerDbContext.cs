@@ -25,6 +25,8 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<TournamentMatchMap> TournamentMatchMaps { get; set; }
     public DbSet<TournamentMatchResult> TournamentMatchResults { get; set; }
     public DbSet<TournamentTeamRanking> TournamentTeamRankings { get; set; }
+    public DbSet<TournamentWeekDate> TournamentWeekDates { get; set; }
+    public DbSet<TournamentFile> TournamentFiles { get; set; }
 
     public PlayerTrackerDbContext(DbContextOptions<PlayerTrackerDbContext> options)
         : base(options)
@@ -310,7 +312,7 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<Tournament>()
             .Property(t => t.CreatedAt)
             .HasConversion(
-                instant => instant.ToString(),
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
                 str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
 
         // Configure relationship: Tournament -> TournamentTeam
@@ -342,7 +344,7 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<TournamentTeam>()
             .Property(tt => tt.CreatedAt)
             .HasConversion(
-                instant => instant.ToString(),
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
                 str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
 
 
@@ -399,13 +401,13 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<TournamentMatch>()
             .Property(tm => tm.ScheduledDate)
             .HasConversion(
-                instant => instant.ToString(),
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
                 str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
 
         modelBuilder.Entity<TournamentMatch>()
             .Property(tm => tm.CreatedAt)
             .HasConversion(
-                instant => instant.ToString(),
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
                 str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
 
 
@@ -470,13 +472,13 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<TournamentMatchResult>()
             .Property(tmr => tmr.CreatedAt)
             .HasConversion(
-                instant => instant.ToString(),
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
                 str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
 
         modelBuilder.Entity<TournamentMatchResult>()
             .Property(tmr => tmr.UpdatedAt)
             .HasConversion(
-                instant => instant.ToString(),
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
                 str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
 
         // Configure relationship: TournamentMatchResult -> Tournament
@@ -549,7 +551,7 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<TournamentTeamRanking>()
             .Property(ttr => ttr.UpdatedAt)
             .HasConversion(
-                instant => instant.ToString(),
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
                 str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
 
         // Configure relationship: TournamentTeamRanking -> Tournament
@@ -564,6 +566,40 @@ public class PlayerTrackerDbContext : DbContext
             .HasOne(ttr => ttr.Team)
             .WithMany()
             .HasForeignKey(ttr => ttr.TeamId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Configure NodaTime Instant conversions for TournamentFile
+        modelBuilder.Entity<TournamentFile>()
+            .Property(tf => tf.UploadedAt)
+            .HasConversion(
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
+                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+
+        // Configure relationship: TournamentFile -> Tournament
+        modelBuilder.Entity<TournamentFile>()
+            .HasOne(tf => tf.Tournament)
+            .WithMany(t => t.Files)
+            .HasForeignKey(tf => tf.TournamentId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Configure NodaTime LocalDate conversions for TournamentWeekDate
+        modelBuilder.Entity<TournamentWeekDate>()
+            .Property(twd => twd.StartDate)
+            .HasConversion(
+                date => NodaTime.Text.LocalDatePattern.Iso.Format(date),
+                str => NodaTime.Text.LocalDatePattern.Iso.Parse(str).Value);
+
+        modelBuilder.Entity<TournamentWeekDate>()
+            .Property(twd => twd.EndDate)
+            .HasConversion(
+                date => NodaTime.Text.LocalDatePattern.Iso.Format(date),
+                str => NodaTime.Text.LocalDatePattern.Iso.Parse(str).Value);
+
+        // Configure relationship: TournamentWeekDate -> Tournament
+        modelBuilder.Entity<TournamentWeekDate>()
+            .HasOne(twd => twd.Tournament)
+            .WithMany(t => t.WeekDates)
+            .HasForeignKey(twd => twd.TournamentId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }
@@ -817,6 +853,10 @@ public class Tournament
     public string? Rules { get; set; } // Markdown content for tournament rules
     public string? ServerGuid { get; set; }
 
+    // Tournament status and configuration
+    public string Status { get; set; } = "draft"; // draft, registration, open, closed
+    public string? GameMode { get; set; } // Conquest, CTF, TDM, Coop, etc.
+
     // Theme customisation
     public int? ThemeId { get; set; }
 
@@ -831,6 +871,8 @@ public class Tournament
     public TournamentTheme? Theme { get; set; }
     public List<TournamentTeam> TournamentTeams { get; set; } = [];
     public List<TournamentMatch> TournamentMatches { get; set; } = [];
+    public List<TournamentWeekDate> WeekDates { get; set; } = [];
+    public List<TournamentFile> Files { get; set; } = [];
 }
 
 
@@ -966,4 +1008,29 @@ public class TournamentTeamRanking
     // Navigation properties
     public Tournament Tournament { get; set; } = null!;
     public TournamentTeam Team { get; set; } = null!;
+}
+
+public class TournamentWeekDate
+{
+    public int Id { get; set; }
+    public int TournamentId { get; set; }
+    public string? Week { get; set; } // "Week 1", "Week 2", or null for unweekly
+    public LocalDate StartDate { get; set; }
+    public LocalDate EndDate { get; set; }
+
+    // Navigation properties
+    public Tournament Tournament { get; set; } = null!;
+}
+
+public class TournamentFile
+{
+    public int Id { get; set; }
+    public int TournamentId { get; set; }
+    public string Name { get; set; } = ""; // Display name (e.g., "Map Pack v1.0")
+    public string Url { get; set; } = ""; // External URL to file
+    public string? Category { get; set; } // Optional: 'map', 'mod', 'program', etc.
+    public Instant UploadedAt { get; set; }
+
+    // Navigation properties
+    public Tournament Tournament { get; set; } = null!;
 }
