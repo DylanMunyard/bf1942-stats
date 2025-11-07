@@ -1711,11 +1711,11 @@ public class AdminTournamentController(
             if (request.Team1Id == request.Team2Id)
                 return BadRequest(new { message = "Team 1 and Team 2 cannot be the same" });
 
-            if (request.MapNames == null || request.MapNames.Count == 0)
-                return BadRequest(new { message = "At least one map name is required" });
+            if (request.Maps == null || request.Maps.Count == 0)
+                return BadRequest(new { message = "At least one map is required" });
 
             // Validate all map names are non-empty
-            if (request.MapNames.Any(string.IsNullOrWhiteSpace))
+            if (request.Maps.Any(m => string.IsNullOrWhiteSpace(m.MapName)))
                 return BadRequest(new { message = "All map names must be non-empty" });
 
             var teamIds = new[] { request.Team1Id, request.Team2Id };
@@ -1729,6 +1729,16 @@ public class AdminTournamentController(
                 var foundTeamIds = teams.Select(t => t.Id).ToList();
                 var missingTeamIds = teamIds.Except(foundTeamIds).ToList();
                 return BadRequest(new { message = $"Teams with IDs {string.Join(", ", missingTeamIds)} not found in this tournament" });
+            }
+
+            // Validate TeamIds in maps if provided
+            var mapTeamIds = request.Maps.Where(m => m.TeamId.HasValue).Select(m => m.TeamId.Value).Distinct().ToList();
+            if (mapTeamIds.Any())
+            {
+                var validTeamIds = new[] { request.Team1Id, request.Team2Id };
+                var invalidMapTeamIds = mapTeamIds.Where(id => !validTeamIds.Contains(id)).ToList();
+                if (invalidMapTeamIds.Any())
+                    return BadRequest(new { message = $"Map TeamId(s) {string.Join(", ", invalidMapTeamIds)} are not part of this match's teams" });
             }
 
             // Validate server if provided
@@ -1755,11 +1765,12 @@ public class AdminTournamentController(
             await context.SaveChangesAsync();
 
             // Create map entries
-            var maps = request.MapNames.Select((mapName, index) => new TournamentMatchMap
+            var maps = request.Maps.Select((mapRequest, index) => new TournamentMatchMap
             {
                 MatchId = match.Id,
-                MapName = mapName,
-                MapOrder = index
+                MapName = mapRequest.MapName,
+                MapOrder = index,
+                TeamId = mapRequest.TeamId
             }).ToList();
 
             context.TournamentMatchMaps.AddRange(maps);
@@ -1941,14 +1952,24 @@ public class AdminTournamentController(
                 match.Week = request.Week;
 
             // Handle map updates
-            if (request.MapNames != null)
+            if (request.Maps != null)
             {
-                if (request.MapNames.Count == 0)
-                    return BadRequest(new { message = "At least one map name is required" });
+                if (request.Maps.Count == 0)
+                    return BadRequest(new { message = "At least one map is required" });
 
                 // Validate all map names are non-empty
-                if (request.MapNames.Any(string.IsNullOrWhiteSpace))
+                if (request.Maps.Any(m => string.IsNullOrWhiteSpace(m.MapName)))
                     return BadRequest(new { message = "All map names must be non-empty" });
+
+                // Validate TeamIds in maps if provided
+                var mapTeamIds = request.Maps.Where(m => m.TeamId.HasValue).Select(m => m.TeamId.Value).Distinct().ToList();
+                if (mapTeamIds.Any())
+                {
+                    var validTeamIds = new[] { match.Team1Id, match.Team2Id };
+                    var invalidMapTeamIds = mapTeamIds.Where(id => !validTeamIds.Contains(id)).ToList();
+                    if (invalidMapTeamIds.Any())
+                        return BadRequest(new { message = $"Map TeamId(s) {string.Join(", ", invalidMapTeamIds)} are not part of this match's teams" });
+                }
 
                 // Load existing maps WITH their MatchResults to ensure cascade delete works
                 var existingMaps = await context.TournamentMatchMaps
@@ -1956,17 +1977,16 @@ public class AdminTournamentController(
                     .Where(tmm => tmm.MatchId == matchId)
                     .ToListAsync();
 
-                // Build a dictionary of MapName -> MapId from existing maps
-                var mapNameToData = existingMaps
-                    .ToDictionary(m => m.MapName, m => m.Id);
+                // Get the list of map names being provided
+                var newMapNames = request.Maps.Select(m => m.MapName).ToList();
 
                 // Identify which maps are being removed vs kept
                 var mapsToRemove = existingMaps
-                    .Where(m => !request.MapNames.Contains(m.MapName))
+                    .Where(m => !newMapNames.Contains(m.MapName))
                     .ToList();
 
                 var mapsToKeep = existingMaps
-                    .Where(m => request.MapNames.Contains(m.MapName))
+                    .Where(m => newMapNames.Contains(m.MapName))
                     .ToList();
 
                 // Explicitly delete MatchResults for removed maps (ensures proper cleanup)
@@ -1984,18 +2004,26 @@ public class AdminTournamentController(
 
                 // Update existing maps that are being kept (preserve MatchResults)
                 var newMapOrder = 0;
-                foreach (var mapName in request.MapNames)
+                foreach (var mapRequest in request.Maps)
                 {
-                    var existingMap = mapsToKeep.FirstOrDefault(m => m.MapName == mapName);
+                    var existingMap = mapsToKeep.FirstOrDefault(m => m.MapName == mapRequest.MapName);
                     if (existingMap != null)
                     {
-                        // Update map order only if it changed
+                        // Update map order and TeamId
                         if (existingMap.MapOrder != newMapOrder)
                         {
                             logger.LogInformation(
                                 "Updating map order for map {MapId} from {OldOrder} to {NewOrder}",
                                 existingMap.Id, existingMap.MapOrder, newMapOrder);
                             existingMap.MapOrder = newMapOrder;
+                        }
+
+                        if (existingMap.TeamId != mapRequest.TeamId)
+                        {
+                            logger.LogInformation(
+                                "Updating map {MapId} TeamId from {OldTeamId} to {NewTeamId}",
+                                existingMap.Id, existingMap.TeamId, mapRequest.TeamId);
+                            existingMap.TeamId = mapRequest.TeamId;
                         }
                     }
                     else
@@ -2004,12 +2032,13 @@ public class AdminTournamentController(
                         var newMap = new TournamentMatchMap
                         {
                             MatchId = matchId,
-                            MapName = mapName,
-                            MapOrder = newMapOrder
+                            MapName = mapRequest.MapName,
+                            MapOrder = newMapOrder,
+                            TeamId = mapRequest.TeamId
                         };
                         logger.LogInformation(
-                            "Adding new map '{MapName}' at order {MapOrder} to match {MatchId}",
-                            mapName, newMapOrder, matchId);
+                            "Adding new map '{MapName}' at order {MapOrder} with TeamId {TeamId} to match {MatchId}",
+                            mapRequest.MapName, newMapOrder, mapRequest.TeamId, matchId);
                         context.TournamentMatchMaps.Add(newMap);
                     }
                     newMapOrder++;
@@ -2097,9 +2126,22 @@ public class AdminTournamentController(
             if (map == null)
                 return NotFound(new { message = "Map not found" });
 
+            // Validate TeamId if provided
+            if (request.TeamId.HasValue)
+            {
+                var validTeamIds = new[] { match.Team1Id, match.Team2Id };
+                if (!validTeamIds.Contains(request.TeamId.Value))
+                    return BadRequest(new { message = $"TeamId {request.TeamId} is not part of this match's teams" });
+            }
+
             // Update map metadata
             if (!string.IsNullOrWhiteSpace(request.MapName))
                 map.MapName = request.MapName;
+
+            if (request.TeamId.HasValue)
+                map.TeamId = request.TeamId.Value;
+            else if (request.TeamId == null && request.MapName == null)
+                return BadRequest(new { message = "At least one field (MapName or TeamId) must be updated" });
 
             await context.SaveChangesAsync();
 
@@ -2955,12 +2997,18 @@ public class AddPlayerToTeamRequest
 }
 
 // Match Management DTOs
+public class CreateTournamentMapRequest
+{
+    public string MapName { get; set; } = "";
+    public int? TeamId { get; set; }
+}
+
 public class CreateTournamentMatchRequest
 {
     public Instant ScheduledDate { get; set; }
     public int Team1Id { get; set; }
     public int Team2Id { get; set; }
-    public List<string> MapNames { get; set; } = [];
+    public List<CreateTournamentMapRequest> Maps { get; set; } = [];
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
     public string? Week { get; set; }
@@ -2974,13 +3022,14 @@ public class UpdateTournamentMatchRequest
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
     public string? Week { get; set; }
-    public List<string>? MapNames { get; set; }
+    public List<CreateTournamentMapRequest>? Maps { get; set; }
 }
 
 public class UpdateTournamentMatchMapRequest
 {
     public int MapId { get; set; }
     public string? MapName { get; set; }
+    public int? TeamId { get; set; }
 }
 
 // Response DTOs
