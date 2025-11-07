@@ -39,19 +39,7 @@ public class PublicTournamentController(
                     m.MapOrder,
                     m.TeamId,
                     TeamName = m.Team != null ? m.Team.Name : null,
-                    MatchResultsCount = m.MatchResults.Count(),
-                    MatchResults = m.MatchResults.Select(mr => new
-                    {
-                        mr.Id,
-                        mr.Team1Id,
-                        Team1Name = mr.Team1 != null ? mr.Team1.Name : null,
-                        mr.Team2Id,
-                        Team2Name = mr.Team2 != null ? mr.Team2.Name : null,
-                        mr.WinningTeamId,
-                        WinningTeamName = mr.WinningTeam != null ? mr.WinningTeam.Name : null,
-                        mr.Team1Tickets,
-                        mr.Team2Tickets
-                    }).ToList()
+                    MatchResultsCount = m.MatchResults.Count()
                 }).ToList()
             })
             .ToListAsync();
@@ -62,6 +50,41 @@ public class PublicTournamentController(
             .Take(2)
             .ToList();
 
+        if (completedMatches.Count == 0)
+            return [];
+
+        var matchIds = completedMatches.Select(m => m.Id).ToList();
+
+        // Batch load all match maps with their match results
+        var matchMaps = await context.TournamentMatchMaps
+            .Where(tmm => matchIds.Contains(tmm.MatchId))
+            .Select(tmm => new
+            {
+                tmm.Id,
+                tmm.MatchId,
+                tmm.MapName,
+                tmm.MapOrder,
+                tmm.TeamId,
+                TeamName = tmm.Team != null ? tmm.Team.Name : null,
+                MatchResults = tmm.MatchResults.Select(mr => new
+                {
+                    mr.Id,
+                    mr.Team1Id,
+                    Team1Name = mr.Team1 != null ? mr.Team1.Name : null,
+                    mr.Team2Id,
+                    Team2Name = mr.Team2 != null ? mr.Team2.Name : null,
+                    mr.WinningTeamId,
+                    WinningTeamName = mr.WinningTeam != null ? mr.WinningTeam.Name : null,
+                    mr.Team1Tickets,
+                    mr.Team2Tickets
+                }).ToList()
+            })
+            .ToListAsync();
+
+        var matchMapsLookup = matchMaps
+            .GroupBy(mm => mm.MatchId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.MapOrder).ToList());
+
         // Build response objects
         var matchResponses = new List<PublicTournamentMatchResponse>();
 
@@ -69,31 +92,34 @@ public class PublicTournamentController(
         {
             var matchMapsForThisMatch = new List<PublicTournamentMatchMapResponse>();
 
-            foreach (var map in match.Maps.OrderBy(m => m.MapOrder))
+            if (matchMapsLookup.TryGetValue(match.Id, out var mapsForMatch))
             {
-                var matchResultResponses = map.MatchResults.Select(mr =>
-                    new PublicTournamentMatchResultResponse
-                    {
-                        Id = mr.Id,
-                        Team1Id = mr.Team1Id,
-                        Team1Name = mr.Team1Name,
-                        Team2Id = mr.Team2Id,
-                        Team2Name = mr.Team2Name,
-                        WinningTeamId = mr.WinningTeamId,
-                        WinningTeamName = mr.WinningTeamName,
-                        Team1Tickets = mr.Team1Tickets,
-                        Team2Tickets = mr.Team2Tickets
-                    }).ToList();
-
-                matchMapsForThisMatch.Add(new PublicTournamentMatchMapResponse
+                foreach (var map in mapsForMatch)
                 {
-                    Id = map.Id,
-                    MapName = map.MapName,
-                    MapOrder = map.MapOrder,
-                    TeamId = map.TeamId,
-                    TeamName = map.TeamName,
-                    MatchResults = matchResultResponses
-                });
+                    var matchResultResponses = map.MatchResults.Select(mr =>
+                        new PublicTournamentMatchResultResponse
+                        {
+                            Id = mr.Id,
+                            Team1Id = mr.Team1Id,
+                            Team1Name = mr.Team1Name,
+                            Team2Id = mr.Team2Id,
+                            Team2Name = mr.Team2Name,
+                            WinningTeamId = mr.WinningTeamId,
+                            WinningTeamName = mr.WinningTeamName,
+                            Team1Tickets = mr.Team1Tickets,
+                            Team2Tickets = mr.Team2Tickets
+                        }).ToList();
+
+                    matchMapsForThisMatch.Add(new PublicTournamentMatchMapResponse
+                    {
+                        Id = map.Id,
+                        MapName = map.MapName,
+                        MapOrder = map.MapOrder,
+                        TeamId = map.TeamId,
+                        TeamName = map.TeamName,
+                        MatchResults = matchResultResponses
+                    });
+                }
             }
 
             matchResponses.Add(new PublicTournamentMatchResponse
