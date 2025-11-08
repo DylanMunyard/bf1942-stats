@@ -70,8 +70,8 @@ public class ImageStorageController(IImageIndexingService imageIndexingService, 
     {
         try
         {
-            // Basic validation to prevent directory traversal
-            if (folderPath.Contains("..") || folderPath.Contains("/") || folderPath.Contains("\\"))
+            // SECURITY: Strict validation to prevent directory traversal and unauthorized access
+            if (!System.Text.RegularExpressions.Regex.IsMatch(folderPath, @"^[a-zA-Z0-9_\-]+$"))
             {
                 return BadRequest(new { error = "Invalid folder path" });
             }

@@ -41,6 +41,11 @@ spec:
           args:
             - -c
             - |
+              # Ensure assets directory exists with proper permissions
+              mkdir -p /mnt/data/assets
+              chown 1000:1000 /mnt/data/assets
+              chmod 755 /mnt/data/assets
+
               # Check if database already exists
               if [ -f "/mnt/data/playertracker.db" ]; then
                 echo "Database already exists, skipping restore"
@@ -79,7 +84,7 @@ spec:
             - name: DB_PATH
               value: "/mnt/data/playertracker.db"
             - name: ASSETS_STORAGE_PATH
-              value: "/mnt/data"
+              value: "/mnt/data/assets"
             - name: ASPNETCORE_URLS
               value: "http://+:8080"
             - name: ASPNETCORE_ENVIRONMENT
@@ -316,11 +321,14 @@ spec:
               # Install Python and sqlite-web
               apk add --no-cache python3 py3-pip sqlite
               pip3 install sqlite-web --break-system-packages
-              # Start the web interface
-              sqlite_web /mnt/data/playertracker.db --host 0.0.0.0 --port 8080
+              # Start the web interface - database is mounted as a single file
+              sqlite_web /data/playertracker.db --host 0.0.0.0 --port 8080
           volumeMounts:
+            # SECURITY: Mount ONLY the database file, not the entire /mnt/data directory
+            # This prevents access to other sensitive files or tournament assets
             - name: stats-data
-              mountPath: /mnt/data
+              mountPath: /data/playertracker.db
+              subPath: playertracker.db
           resources:
             requests:
               memory: "64Mi"

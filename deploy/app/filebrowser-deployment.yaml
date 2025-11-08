@@ -31,16 +31,19 @@ spec:
             - "-p"
             - "8080"
             - "-d"
-            - "/data/tournament-images/.filebrowser.db"
+            - "/mnt/assets/.filebrowser.db"
             - "-r"
-            - "/data/tournament-images"
+            - "/mnt/assets"
           env:
-            # Mount directory for images
+            # Mount directory for tournament images (restricted to assets only)
             - name: FB_ROOT
-              value: "/data/tournament-images"
+              value: "/mnt/assets"
           volumeMounts:
-            - name: image-data
-              mountPath: /data/tournament-images
+            # SECURITY: Mount ONLY the assets directory, not the entire /mnt/data
+            # This prevents access to the database or other sensitive files
+            - name: assets-data
+              mountPath: /mnt/assets
+              subPath: assets
           resources:
             requests:
               memory: "128Mi"
@@ -49,9 +52,10 @@ spec:
               memory: "256Mi"
               cpu: "200m"
       volumes:
-        - name: image-data
+        - name: assets-data
           persistentVolumeClaim:
             claimName: bf42-stats-pvc
+
 
 ---
 apiVersion: v1

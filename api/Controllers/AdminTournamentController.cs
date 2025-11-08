@@ -1773,7 +1773,8 @@ public class AdminTournamentController(
                 MatchId = match.Id,
                 MapName = mapRequest.MapName,
                 MapOrder = index,
-                TeamId = mapRequest.TeamId
+                TeamId = mapRequest.TeamId,
+                ImagePath = mapRequest.ImagePath
             }).ToList();
 
             context.TournamentMatchMaps.AddRange(maps);
@@ -2030,6 +2031,14 @@ public class AdminTournamentController(
                                 existingMap.Id, existingMap.TeamId, mapRequest.TeamId);
                             existingMap.TeamId = mapRequest.TeamId;
                         }
+
+                        if (existingMap.ImagePath != mapRequest.ImagePath)
+                        {
+                            logger.LogInformation(
+                                "Updating map {MapId} ImagePath from {OldImagePath} to {NewImagePath}",
+                                existingMap.Id, existingMap.ImagePath, mapRequest.ImagePath);
+                            existingMap.ImagePath = mapRequest.ImagePath;
+                        }
                     }
                     else
                     {
@@ -2039,11 +2048,12 @@ public class AdminTournamentController(
                             MatchId = matchId,
                             MapName = mapRequest.MapName,
                             MapOrder = newMapOrder,
-                            TeamId = mapRequest.TeamId
+                            TeamId = mapRequest.TeamId,
+                            ImagePath = mapRequest.ImagePath
                         };
                         logger.LogInformation(
-                            "Adding new map '{MapName}' at order {MapOrder} with TeamId {TeamId} to match {MatchId}",
-                            mapRequest.MapName, newMapOrder, mapRequest.TeamId, matchId);
+                            "Adding new map '{MapName}' at order {MapOrder} with TeamId {TeamId} and ImagePath {ImagePath} to match {MatchId}",
+                            mapRequest.MapName, newMapOrder, mapRequest.TeamId, mapRequest.ImagePath, matchId);
                         context.TournamentMatchMaps.Add(newMap);
                     }
                     newMapOrder++;
@@ -2073,7 +2083,7 @@ public class AdminTournamentController(
                         MapOrder = m.MapOrder,
                         TeamId = m.TeamId,
                         TeamName = m.Team != null ? m.Team.Name : null,
-                    ImagePath = m.ImagePath,
+                        ImagePath = m.ImagePath,
                         MatchResults = m.MatchResults.Select(mr => new TournamentMatchResultResponse
                         {
                             Id = mr.Id,
@@ -3012,6 +3022,7 @@ public class CreateTournamentMapRequest
 {
     public string MapName { get; set; } = "";
     public int? TeamId { get; set; }
+    public string? ImagePath { get; set; }
 }
 
 public class CreateTournamentMatchRequest
