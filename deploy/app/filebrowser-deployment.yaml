@@ -23,6 +23,17 @@ spec:
           image: filebrowser/filebrowser:latest
           ports:
             - containerPort: 8080
+          command:
+            - filebrowser
+          args:
+            - "-a"
+            - "0.0.0.0"
+            - "-p"
+            - "8080"
+            - "-d"
+            - "/data/tournament-images/.filebrowser.db"
+            - "-r"
+            - "/data/tournament-images"
           env:
             # Mount directory for images
             - name: FB_ROOT
