@@ -15,14 +15,14 @@ spec:
         app: filebrowser
     spec:
       nodeSelector:
-        workload: secondary
+        workload: core
       securityContext:
         fsGroup: 1000
       containers:
         - name: filebrowser
           image: filebrowser/filebrowser:latest
           ports:
-            - containerPort: 80
+            - containerPort: 8080
           env:
             # Mount directory for images
             - name: FB_ROOT
@@ -59,5 +59,5 @@ spec:
   type: ClusterIP
   ports:
     - port: 80
-      targetPort: 80
+      targetPort: 8080
       name: web
