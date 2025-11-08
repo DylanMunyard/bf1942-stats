@@ -7,13 +7,18 @@ namespace api.ImageStorage;
 public static class TournamentImagesConfig
 {
     /// <summary>
-    /// Resolves the base assets storage path from environment variable or defaults
-    /// Handles both absolute and relative paths
+    /// Resolves the base assets storage path from environment variable
+    /// Must be configured via ASSETS_STORAGE_PATH environment variable in production
     /// </summary>
     public static string ResolveBasePath()
     {
-        var assetPath = Environment.GetEnvironmentVariable("ASSETS_STORAGE_PATH")
-            ?? Path.Combine("/data", "tournament-images");
+        var assetPath = Environment.GetEnvironmentVariable("ASSETS_STORAGE_PATH");
+
+        if (string.IsNullOrWhiteSpace(assetPath))
+        {
+            // Fallback for local development
+            assetPath = Path.Combine(Directory.GetCurrentDirectory(), "assets");
+        }
 
         // Convert to absolute path if relative
         return Path.GetFullPath(assetPath);

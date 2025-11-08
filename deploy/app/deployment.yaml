@@ -78,6 +78,8 @@ spec:
           env:
             - name: DB_PATH
               value: "/mnt/data/playertracker.db"
+            - name: ASSETS_STORAGE_PATH
+              value: "/mnt/data"
             - name: ASPNETCORE_URLS
               value: "http://+:8080"
             - name: ASPNETCORE_ENVIRONMENT
