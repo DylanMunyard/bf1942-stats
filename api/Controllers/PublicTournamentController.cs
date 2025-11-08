@@ -66,6 +66,7 @@ public class PublicTournamentController(
                 tmm.MapOrder,
                 tmm.TeamId,
                 TeamName = tmm.Team != null ? tmm.Team.Name : null,
+                tmm.ImagePath,
                 MatchResults = tmm.MatchResults.Select(mr => new
                 {
                     mr.Id,
@@ -117,6 +118,7 @@ public class PublicTournamentController(
                         MapOrder = map.MapOrder,
                         TeamId = map.TeamId,
                         TeamName = map.TeamName,
+                        ImagePath = map.ImagePath,
                         MatchResults = matchResultResponses
                     });
                 }
@@ -240,6 +242,7 @@ public class PublicTournamentController(
                         tmm.MapOrder,
                         tmm.TeamId,
                         TeamName = tmm.Team != null ? tmm.Team.Name : null,
+                        tmm.ImagePath,
                         MatchResults = tmm.MatchResults.Select(mr => new
                         {
                             mr.Id,
@@ -292,6 +295,7 @@ public class PublicTournamentController(
                             MapOrder = map.MapOrder,
                             TeamId = map.TeamId,
                             TeamName = map.TeamName,
+                            ImagePath = map.ImagePath,
                             MatchResults = matchResultResponses
                         });
                     }
