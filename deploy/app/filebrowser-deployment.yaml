@@ -1,0 +1,63 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: filebrowser
+  namespace: bf42-stats
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: filebrowser
+  template:
+    metadata:
+      labels:
+        app: filebrowser
+    spec:
+      nodeSelector:
+        workload: secondary
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: filebrowser
+          image: filebrowser/filebrowser:latest
+          ports:
+            - containerPort: 80
+          env:
+            # Mount directory for images
+            - name: FB_ROOT
+              value: "/data/tournament-images"
+          volumeMounts:
+            - name: image-data
+              mountPath: /data/tournament-images
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+      volumes:
+        - name: image-data
+          persistentVolumeClaim:
+            claimName: bf42-stats-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: filebrowser-service
+  namespace: bf42-stats
+  labels:
+    app: filebrowser
+  annotations:
+    tailscale.com/expose: "true"
+    tailscale.com/hostname: filebrowser-aks
+spec:
+  selector:
+    app: filebrowser
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      name: web

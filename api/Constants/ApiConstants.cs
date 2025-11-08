@@ -15,6 +15,8 @@ public static class ApiConstants
         public const int MaxPageSize = 500;
         public const int SearchDefaultPageSize = 20;
         public const int SearchMaxPageSize = 100;
+        public const int ImageStorageDefaultPageSize = 10;
+        public const int ImageStorageMaxPageSize = 10;
     }
 
     /// <summary>
