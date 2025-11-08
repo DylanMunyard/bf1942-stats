@@ -17,6 +17,54 @@ namespace api.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.5");
 
+            modelBuilder.Entity("api.ImageStorage.Models.TournamentImageIndex", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("FileLastModified")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("FileSize")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("FolderPath")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ImageHeight")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ImageWidth")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("IndexedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RelativeImagePath")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("ThumbnailData")
+                        .HasColumnType("BLOB");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FolderPath");
+
+                    b.HasIndex("FolderPath", "FileName")
+                        .IsUnique();
+
+                    b.ToTable("TournamentImageIndices");
+                });
+
             modelBuilder.Entity("api.PlayerTracking.GameServer", b =>
                 {
                     b.Property<string>("Guid")
@@ -607,6 +655,9 @@ namespace api.Migrations
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("ImagePath")
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("MapName")
                         .IsRequired()

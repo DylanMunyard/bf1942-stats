@@ -21,6 +21,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "app", "app", "{E9373366-3A5
 		deploy\app\priority-class.yml = deploy\app\priority-class.yml
 		deploy\app\seq-deployment.yaml = deploy\app\seq-deployment.yaml
 		deploy\app\seq-external-service.yaml = deploy\app\seq-external-service.yaml
+		deploy\app\filebrowser-deployment.yaml = deploy\app\filebrowser-deployment.yaml
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "k3s", "k3s", "{67D0EE3E-1825-4084-8A52-33C1888346B8}"
@@ -73,6 +74,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "features", "features", "{F3
 		features\tournament-ui-spec\TOURNAMENT_UI_SPEC.md = features\tournament-ui-spec\TOURNAMENT_UI_SPEC.md
 		features\discord-oauth-quick-start\DISCORD_OAUTH_QUICK_START.md = features\discord-oauth-quick-start\DISCORD_OAUTH_QUICK_START.md
 		features\game-trends-api\GAME_TRENDS_API.md = features\game-trends-api\GAME_TRENDS_API.md
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "local.dev", "local.dev", "{674057F4-2C8B-47AA-BBCC-9C302B2DCA2D}"
+	ProjectSection(SolutionItems) = preProject
+		docker-compose.dev.yml = docker-compose.dev.yml
 	EndProjectSection
 EndProject
 Global

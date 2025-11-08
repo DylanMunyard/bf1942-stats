@@ -7,6 +7,7 @@
       "applicationUrl": "http://localhost:9222",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASSETS_STORAGE_PATH": "../tournament-images",
         "REDIS_CONNECTION_STRING": "localhost:6379",
         "LOKI_URL": "http://localhost:3100",
         "SEQ_URL": "http://localhost:5341",

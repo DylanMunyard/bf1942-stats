@@ -1,3 +1,4 @@
+using api.ImageStorage.Models;
 using api.Players.Models;
 using Microsoft.EntityFrameworkCore;
 using NodaTime;
@@ -27,6 +28,7 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<TournamentTeamRanking> TournamentTeamRankings { get; set; }
     public DbSet<TournamentWeekDate> TournamentWeekDates { get; set; }
     public DbSet<TournamentFile> TournamentFiles { get; set; }
+    public DbSet<TournamentImageIndex> TournamentImageIndices { get; set; }
 
     public PlayerTrackerDbContext(DbContextOptions<PlayerTrackerDbContext> options)
         : base(options)
@@ -601,6 +603,30 @@ public class PlayerTrackerDbContext : DbContext
             .WithMany(t => t.WeekDates)
             .HasForeignKey(twd => twd.TournamentId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // Configure TournamentImageIndex entity
+        modelBuilder.Entity<TournamentImageIndex>()
+            .HasKey(tii => tii.Id);
+
+        modelBuilder.Entity<TournamentImageIndex>()
+            .HasIndex(tii => tii.FolderPath);
+
+        modelBuilder.Entity<TournamentImageIndex>()
+            .HasIndex(tii => new { tii.FolderPath, tii.FileName })
+            .IsUnique();
+
+        // Configure NodaTime Instant conversions for TournamentImageIndex
+        modelBuilder.Entity<TournamentImageIndex>()
+            .Property(tii => tii.IndexedAt)
+            .HasConversion(
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
+                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+
+        modelBuilder.Entity<TournamentImageIndex>()
+            .Property(tii => tii.FileLastModified)
+            .HasConversion(
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
+                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
     }
 }
 
@@ -923,6 +949,9 @@ public class TournamentMatchMap
 
     // Optional: Team that chose/assigned this map
     public int? TeamId { get; set; }
+
+    // Optional: Reference to a tournament image for this map, e.g., "golden-gun/map1.png"
+    public string? ImagePath { get; set; }
 
     // Navigation properties
     public TournamentMatch Match { get; set; } = null!;

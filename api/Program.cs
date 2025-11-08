@@ -743,6 +743,9 @@ try
     // Register Gamification Background Service
     builder.Services.AddHostedService<api.Gamification.Services.GamificationBackgroundService>();
 
+    // Register ImageStorage Services
+    builder.Services.AddScoped<api.ImageStorage.IImageIndexingService, api.ImageStorage.ImageIndexingService>();
+
     // Register PlayerComparisonService (read-only)
     builder.Services.AddScoped<PlayerComparisonService>(sp =>
     {
@@ -810,6 +813,32 @@ try
     host.UseCors("default");
     host.UseAuthentication();
     host.UseAuthorization();
+
+    // Serve tournament map images - configurable path via environment variable
+    try
+    {
+        var imagePath = api.ImageStorage.TournamentImagesConfig.ResolveTournamentsPath();
+
+        if (Directory.Exists(imagePath))
+        {
+            var fileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(imagePath);
+            var options = new StaticFileOptions
+            {
+                FileProvider = fileProvider,
+                RequestPath = "/images/tournament-maps"
+            };
+            host.UseStaticFiles(options);
+            host.Logger.LogInformation("Tournament images serving enabled at {ImagePath}", imagePath);
+        }
+        else
+        {
+            host.Logger.LogWarning("Tournament images directory not found at {ImagePath}. Static file serving disabled.", imagePath);
+        }
+    }
+    catch (Exception ex)
+    {
+        host.Logger.LogWarning(ex, "Failed to initialize tournament image serving. This feature will be disabled.");
+    }
 
     static SecurityKey CreateRsaKey(string pem)
     {

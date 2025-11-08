@@ -93,6 +93,28 @@ services:
       timeout: 10s
       retries: 3
 
+  filebrowser:
+    image: filebrowser/filebrowser:latest
+    container_name: bf1942-filebrowser
+    ports:
+      - "8081:8080"
+    networks:
+      - bf1942-dev
+    environment:
+      # Mount directory for tournament images
+      - FB_ROOT=/data/tournament-images
+    volumes:
+      # Bind mount to host filesystem for easy access
+      - ./tournament-images:/data/tournament-images
+    user: "${UID:-1000}:${GID:-1000}"
+    # Start filebrowser listening on all interfaces
+    entrypoint: filebrowser -a 0.0.0.0 -p 8080 -d /data/tournament-images/.filebrowser.db -r /data/tournament-images
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 networks:
   bf1942-dev:
     driver: bridge

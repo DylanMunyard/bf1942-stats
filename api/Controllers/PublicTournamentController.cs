@@ -579,6 +579,7 @@ public class PublicTournamentMatchMapResponse
     public int MapOrder { get; set; }
     public int? TeamId { get; set; }
     public string? TeamName { get; set; }
+    public string? ImagePath { get; set; } // e.g., "golden-gun/map1.png"
     public List<PublicTournamentMatchResultResponse> MatchResults { get; set; } = [];
 }
 

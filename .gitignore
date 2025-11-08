@@ -291,3 +291,6 @@ __pycache__/
 playertracker.db
 playertracker.db-shm
 playertracker.db-wal
+
+# Tournament images uploaded via FileBrowser in local development
+tournament-images/

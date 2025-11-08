@@ -48,6 +48,7 @@ public class AdminTournamentController(
                     m.MapOrder,
                     m.TeamId,
                     TeamName = m.Team != null ? m.Team.Name : null,
+                    ImagePath = m.ImagePath,
                     MatchResultsCount = m.MatchResults.Count(),
                     MatchResults = m.MatchResults.Select(mr => new
                     {
@@ -257,6 +258,7 @@ public class AdminTournamentController(
                         MapOrder = m.MapOrder,
                         TeamId = m.TeamId,
                         TeamName = m.Team != null ? m.Team.Name : null,
+                    ImagePath = m.ImagePath,
                         MatchResults = m.MatchResults.Select(mr => new TournamentMatchResultResponse
                         {
                             Id = mr.Id,
@@ -1300,6 +1302,7 @@ public class AdminTournamentController(
                     MapOrder = m.MapOrder,
                     TeamId = m.TeamId,
                     TeamName = m.Team != null ? m.Team.Name : null,
+                    ImagePath = m.ImagePath,
                     MatchResults = m.MatchResults.Select(mr => new TournamentMatchResultResponse
                     {
                         Id = mr.Id,
@@ -1799,6 +1802,7 @@ public class AdminTournamentController(
                     MapOrder = m.MapOrder,
                     TeamId = m.TeamId,
                     TeamName = m.Team != null ? m.Team.Name : null,
+                    ImagePath = m.ImagePath,
                     MatchResults = new List<TournamentMatchResultResponse>()
                 }).ToList()
             };
@@ -1849,6 +1853,7 @@ public class AdminTournamentController(
                         MapOrder = m.MapOrder,
                         TeamId = m.TeamId,
                         TeamName = m.Team != null ? m.Team.Name : null,
+                    ImagePath = m.ImagePath,
                         MatchResults = m.MatchResults.Select(mr => new TournamentMatchResultResponse
                         {
                             Id = mr.Id,
@@ -2068,6 +2073,7 @@ public class AdminTournamentController(
                         MapOrder = m.MapOrder,
                         TeamId = m.TeamId,
                         TeamName = m.Team != null ? m.Team.Name : null,
+                    ImagePath = m.ImagePath,
                         MatchResults = m.MatchResults.Select(mr => new TournamentMatchResultResponse
                         {
                             Id = mr.Id,
@@ -2140,8 +2146,12 @@ public class AdminTournamentController(
 
             if (request.TeamId.HasValue)
                 map.TeamId = request.TeamId.Value;
-            else if (request.TeamId == null && request.MapName == null)
-                return BadRequest(new { message = "At least one field (MapName or TeamId) must be updated" });
+
+            if (request.ImagePath != null)
+                map.ImagePath = request.ImagePath;
+
+            if (request.TeamId == null && request.MapName == null && request.ImagePath == null)
+                return BadRequest(new { message = "At least one field (MapName, TeamId, or ImagePath) must be updated" });
 
             await context.SaveChangesAsync();
 
@@ -2154,6 +2164,7 @@ public class AdminTournamentController(
                     MapOrder = m.MapOrder,
                     TeamId = m.TeamId,
                     TeamName = m.Team != null ? m.Team.Name : null,
+                    ImagePath = m.ImagePath,
                     MatchResults = m.MatchResults.Select(mr => new TournamentMatchResultResponse
                     {
                         Id = mr.Id,
@@ -3030,6 +3041,7 @@ public class UpdateTournamentMatchMapRequest
     public int MapId { get; set; }
     public string? MapName { get; set; }
     public int? TeamId { get; set; }
+    public string? ImagePath { get; set; } // e.g., "golden-gun/map1.png"
 }
 
 // Response DTOs
@@ -3113,6 +3125,7 @@ public class TournamentMatchMapResponse
     public int MapOrder { get; set; }
     public int? TeamId { get; set; }
     public string? TeamName { get; set; }
+    public string? ImagePath { get; set; } // e.g., "golden-gun/map1.png"
     public List<TournamentMatchResultResponse> MatchResults { get; set; } = [];
 }
 
