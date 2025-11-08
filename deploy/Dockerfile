@@ -7,9 +7,10 @@ ARG BUILD_CONFIGURATION=Release
 ARG PROJECT_PATH
 ARG PROJECT_NAME
 WORKDIR /src
-COPY ["${PROJECT_PATH}/${PROJECT_NAME}.csproj", "${PROJECT_PATH}/"]
-RUN dotnet restore "${PROJECT_PATH}/${PROJECT_NAME}.csproj"
+# Copy entire source tree first to ensure all dependencies can be resolved
 COPY . .
+# Restore dependencies with the full context
+RUN dotnet restore "${PROJECT_PATH}/${PROJECT_NAME}.csproj"
 WORKDIR "/src/${PROJECT_PATH}"
 RUN dotnet build "${PROJECT_NAME}.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
