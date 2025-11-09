@@ -99,40 +99,6 @@ spec:
       priorityClassName: 1942-services
       nodeSelector:
         workload: core
-      initContainers:
-        - name: restore-clickhouse
-          image: mcr.microsoft.com/azure-cli:latest
-          command: ["/bin/sh"]
-          args:
-            - -c
-            - |
-              # Check if database already has data (skip restore if it does)
-              if [ -d "/var/lib/clickhouse/data/default" ] && [ "$(ls -A /var/lib/clickhouse/data/default 2>/dev/null)" ]; then
-                echo "ClickHouse database already exists, skipping restore"
-                exit 0
-              fi
-
-              # Download ClickHouse backup from Azure Storage
-              echo "Downloading ClickHouse backup..."
-              az storage blob download \
-                --container-name clickhouse \
-                --name bfstats-native.zip \
-                --file /backups/bfstats-native.zip \
-                --connection-string "$AZURE_STORAGE_CONNECTION_STRING"
-
-              echo "ClickHouse backup download completed"
-              echo "Restore will be performed by ClickHouse on startup"
-          env:
-            - name: AZURE_STORAGE_CONNECTION_STRING
-              valueFrom:
-                secretKeyRef:
-                  name: storage-secret
-                  key: connection-string
-          volumeMounts:
-            - name: stats-data
-              mountPath: /var/lib/clickhouse
-            - name: backups
-              mountPath: /backups
       containers:
         - name: clickhouse
           image: clickhouse/clickhouse-server:24.12-alpine
@@ -198,6 +164,56 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 1
+
+        - name: azure-uploader
+          image: mcr.microsoft.com/azure-cli:latest
+          command: ["/bin/sh"]
+          args:
+            - -c
+            - |
+              while true; do
+                # Check if there are any .zip files in /backups (exclude already uploaded and tmp files)
+                if [ "$(ls /backups/*.zip 2>/dev/null | grep -v '\.uploaded$' | grep -v '\.tmp$' | wc -l)" -gt 0 ]; then
+                  for file in /backups/*.zip; do
+                    # Skip files already marked as uploaded and tmp files
+                    if [[ "$file" == *.uploaded ]] || [[ "$file" == *.tmp ]]; then
+                      continue
+                    fi
+                    echo "Uploading $file to Azure..."
+                    az storage blob upload \
+                      --container-name clickhouse \
+                      --name "$(basename $file)" \
+                      --file "$file" \
+                      --overwrite \
+                      --connection-string "$AZURE_STORAGE_CONNECTION_STRING"
+                    if [ $? -eq 0 ]; then
+                      echo "Upload successful, deleting: $(basename $file)"
+                      rm -f "$file"
+                    else
+                      echo "Upload failed for $(basename $file), will retry"
+                    fi
+                  done
+                fi
+                sleep 60
+              done
+          env:
+            - name: AZURE_CONFIG_DIR
+              value: "/tmp/.azure"
+            - name: AZURE_STORAGE_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: storage-secret
+                  key: connection-string
+          volumeMounts:
+            - name: backups
+              mountPath: /backups
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
       volumes:
         - name: stats-data
           persistentVolumeClaim:

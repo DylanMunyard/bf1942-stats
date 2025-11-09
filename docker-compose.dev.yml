@@ -93,6 +93,32 @@ services:
       timeout: 10s
       retries: 3
 
+  clickhouse:
+      image: clickhouse/clickhouse-server:latest
+      container_name: bf1942-clickhouse
+      ports:
+          - "8123:8123"   # HTTP interface
+          - "9000:9000"   # Native protocol
+          - "9009:9009"   # Replication interface
+      networks:
+          - bf1942-dev
+      user: "${UID:-1000}:${GID:-1000}"
+      volumes:
+          - ./clickhouse-data:/var/lib/clickhouse
+          - ./clickhouse-backups:/backups
+      environment:
+          - CLICKHOUSE_DB=default
+          - CLICKHOUSE_USER=default
+          - CLICKHOUSE_PASSWORD=password
+      configs:
+          -   source: clickhouse_backup_config
+              target: /etc/clickhouse-server/config.d/backups.xml
+      healthcheck:
+          test: [ "CMD-SHELL", "curl --no-progress-meter --fail http://localhost:8123/ping || exit 1" ]
+          interval: 30s
+          timeout: 10s
+          retries: 3
+
   filebrowser:
     image: filebrowser/filebrowser:latest
     container_name: bf1942-filebrowser
@@ -114,6 +140,23 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+configs:
+  clickhouse_backup_config:
+      content: |
+          <clickhouse>
+              <storage_configuration>
+                  <disks>
+                      <backups>
+                          <type>local</type>
+                          <path>/backups/</path>
+                      </backups>
+                  </disks>
+              </storage_configuration>
+              <backups>
+                  <allowed_disk>backups</allowed_disk>
+              </backups>
+          </clickhouse>
 
 networks:
   bf1942-dev:

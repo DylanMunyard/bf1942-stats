@@ -104,6 +104,25 @@ env:
 | `RefreshToken:CookieDomain` | string | No | Cookie domain (optional) |
 | `RefreshToken:Days` | int | No | Refresh token lifetime in days (default: 60) |
 
+## Azure Storage Secret for Backups
+
+Both SQLite and ClickHouse backup sidecars upload backups to Azure Storage. Create the storage secret:
+
+```bash
+kubectl create secret generic storage-secret \
+  --from-literal=connection-string="$AZURE_STORAGE_CONNECTION_STRING" \
+  -n bf42-stats
+```
+
+The connection string format is:
+```
+DefaultEndpointsProtocol=https;AccountName=<account-name>;AccountKey=<account-key>;EndpointSuffix=core.windows.net
+```
+
+This secret is used by:
+- SQLite backup uploader (uploads to `sqlite` container)
+- ClickHouse backup uploader (uploads to `clickhouse` container)
+
 ## Notes
 
 - **Separate Keys:** JWT signing uses the RSA private key, while refresh tokens use a separate HMAC secret. Do not reuse keys.

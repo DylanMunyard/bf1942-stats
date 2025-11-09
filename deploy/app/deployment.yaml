@@ -34,46 +34,6 @@ spec:
         fsGroup: 1000
         runAsUser: 1000
         runAsGroup: 1000
-      initContainers:
-        - name: restore-sqlite
-          image: mcr.microsoft.com/azure-cli:latest
-          command: ["/bin/sh"]
-          args:
-            - -c
-            - |
-              # Ensure assets directory exists with proper permissions
-              mkdir -p /mnt/data/assets
-              chown 1000:1000 /mnt/data/assets
-              chmod 755 /mnt/data/assets
-
-              # Check if database already exists
-              if [ -f "/mnt/data/playertracker.db" ]; then
-                echo "Database already exists, skipping restore"
-                exit 0
-              fi
-
-              # Download SQLite backup from Azure Storage
-              echo "Downloading SQLite backup..."
-              az storage blob download \
-                --container-name sqlite \
-                --name playertracker_backup.db \
-                --file /mnt/data/playertracker.db \
-                --connection-string "$AZURE_STORAGE_CONNECTION_STRING"
-
-              # Set correct ownership
-              chown 1000:1000 /mnt/data/playertracker.db
-              echo "SQLite restore completed"
-          env:
-            - name: AZURE_STORAGE_CONNECTION_STRING
-              valueFrom:
-                secretKeyRef:
-                  name: storage-secret
-                  key: connection-string
-          volumeMounts:
-            - name: stats-data
-              mountPath: /mnt/data
-          securityContext:
-            runAsUser: 0  # Run as root for chown
       containers:
         - name: nginx
           image: dylanmunyard/bf42-stats:latest
@@ -166,10 +126,65 @@ spec:
           volumeMounts:
             - name: stats-data
               mountPath: /mnt/data
+            - name: backups
+              mountPath: /backups
+
+        - name: azure-uploader
+          image: mcr.microsoft.com/azure-cli:latest
+          command: ["/bin/sh"]
+          args:
+            - -c
+            - |
+              while true; do
+                # Check if there are any .db files in /backups (excluding .tmp files)
+                if [ "$(ls /backups/*.db 2>/dev/null | grep -v '\.tmp$' | wc -l)" -gt 0 ]; then
+                  for file in /backups/*.db; do
+                    # Skip tmp files that are still being written
+                    if [[ "$file" == *.tmp ]]; then
+                      continue
+                    fi
+                    echo "Uploading $file to Azure..."
+                    az storage blob upload \
+                      --container-name sqlite \
+                      --name "$(basename $file)" \
+                      --file "$file" \
+                      --overwrite \
+                      --connection-string "$AZURE_STORAGE_CONNECTION_STRING"
+                    if [ $? -eq 0 ]; then
+                      echo "Upload successful, deleting: $(basename $file)"
+                      rm -f "$file"
+                    else
+                      echo "Upload failed for $(basename $file), will retry"
+                    fi
+                  done
+                fi
+                sleep 60
+              done
+          env:
+            - name: AZURE_CONFIG_DIR
+              value: "/tmp/.azure"
+            - name: AZURE_STORAGE_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: storage-secret
+                  key: connection-string
+          volumeMounts:
+            - name: backups
+              mountPath: /backups
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
       volumes:
         - name: stats-data
           persistentVolumeClaim:
             claimName: bf42-stats-pvc
+        - name: backups
+          emptyDir: {}
 
 ---
 apiVersion: v1

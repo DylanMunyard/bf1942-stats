@@ -30,6 +30,39 @@ API backend for [bfstats.io](https://bfstats.io) – Battlefield 1942 player and
 
 The API will be available at `http://localhost:9222`.
 
+### Backing Up the Database
+
+To create a ClickHouse backup:
+
+```sql
+BACKUP DATABASE default TO Disk('backups', 'back-it-up')
+```
+
+This creates a backup in the `./clickhouse-backups/` folder. The ClickHouse deployment will automatically back up these ZIP files to the Azure storage container.
+
+### Restoring Database from Backup
+
+1. **Create the ClickHouse data folders:**
+   ```bash
+   mkdir -p ./clickhouse-data
+   mkdir -p ./clickhouse-backups
+   ```
+
+2. **Extract the backup ZIP:**
+   ```bash
+   unzip -o back-it-up.zip -d ./clickhouse-backups/
+   ```
+
+3. **Restart ClickHouse to pick up the backup:**
+   ```bash
+   docker-compose -f docker-compose.dev.yml restart clickhouse
+   ```
+
+4. **Restore the database:**
+   ```sql
+   RESTORE DATABASE default FROM Disk('backups', 'back-it-up.zip')
+   ```
+
 ## Configuration
 
 Local development requires these environment variables or user secrets:

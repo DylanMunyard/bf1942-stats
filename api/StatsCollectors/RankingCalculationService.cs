@@ -2,6 +2,7 @@ using api.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using System.Text;
 
 namespace api.StatsCollectors;
 
@@ -33,7 +34,6 @@ public class RankingCalculationService(IServiceProvider services) : BackgroundSe
         var currentYear = now.Year;
         var currentMonth = now.Month;
         var currentYearString = currentYear.ToString();
-        // SQLite strftime('%m') returns month as '01', '02', ..., '12'
         var currentMonthString = currentMonth.ToString("00");
 
         // Get all active servers
@@ -45,7 +45,7 @@ public class RankingCalculationService(IServiceProvider services) : BackgroundSe
             var existingRankingsForMonth = dbContext.ServerPlayerRankings
                 .Where(r => r.ServerGuid == server.Guid && r.Year == currentYear && r.Month == currentMonth);
             dbContext.ServerPlayerRankings.RemoveRange(existingRankingsForMonth);
-            await dbContext.SaveChangesAsync(); // Save changes before adding new ones
+            await dbContext.SaveChangesAsync();
 
             // Use a raw SQL query to get the data for the current month, excluding bots
             var playerData = await dbContext.Database.SqlQueryRaw<PlayerRankingData>(@"
@@ -65,30 +65,64 @@ public class RankingCalculationService(IServiceProvider services) : BackgroundSe
             ORDER BY SUM(ps.TotalScore) DESC",
                 server.Guid, currentYearString, currentMonthString).ToListAsync();
 
-            // Update rankings table
-            int rank = 1;
-            foreach (var playerScore in playerData)
-            {
-                dbContext.ServerPlayerRankings.Add(new ServerPlayerRanking
+            if (playerData.Count == 0)
+                continue;
+
+            // Prepare ranking data
+            var rankings = playerData
+                .Select((p, index) => new ServerPlayerRanking
                 {
                     ServerGuid = server.Guid,
-                    PlayerName = playerScore.PlayerName,
-                    Rank = rank,
+                    PlayerName = p.PlayerName,
+                    Rank = index + 1,
                     Year = currentYear,
                     Month = currentMonth,
-                    TotalScore = playerScore.TotalScore,
-                    TotalKills = playerScore.TotalKills,
-                    TotalDeaths = playerScore.TotalDeaths,
-                    KDRatio = playerScore.TotalDeaths > 0
-                        ? Math.Round((double)playerScore.TotalKills / playerScore.TotalDeaths, 2)
-                        : playerScore.TotalKills,
-                    TotalPlayTimeMinutes = playerScore.TotalPlayTimeMinutes
-                });
+                    TotalScore = p.TotalScore,
+                    TotalKills = p.TotalKills,
+                    TotalDeaths = p.TotalDeaths,
+                    KDRatio = p.TotalDeaths > 0
+                        ? Math.Round((double)p.TotalKills / p.TotalDeaths, 2)
+                        : p.TotalKills,
+                    TotalPlayTimeMinutes = p.TotalPlayTimeMinutes
+                })
+                .ToList();
 
-                rank++;
+            // Bulk insert in a single query instead of N individual INSERTs
+            await BulkInsertRankings(dbContext, rankings);
+        }
+    }
+
+    private async Task BulkInsertRankings(PlayerTrackerDbContext dbContext, List<ServerPlayerRanking> rankings)
+    {
+        if (rankings.Count == 0)
+            return;
+
+        const int batchSize = 500; // 500 rows × 10 params = 5,000 params (safe under SQL Server's 2,100 limit with good margin)
+        
+        for (int batch = 0; batch < rankings.Count; batch += batchSize)
+        {
+            var batchRankings = rankings.Skip(batch).Take(batchSize).ToList();
+            
+            var sql = new StringBuilder(@"
+            INSERT INTO ""ServerPlayerRankings"" 
+            (""KDRatio"", ""Month"", ""PlayerName"", ""Rank"", ""ServerGuid"", ""TotalDeaths"", ""TotalKills"", ""TotalPlayTimeMinutes"", ""TotalScore"", ""Year"")
+            VALUES ");
+
+            var parameters = new List<object>();
+            
+            for (int i = 0; i < batchRankings.Count; i++)
+            {
+                var r = batchRankings[i];
+                if (i > 0) sql.Append(", ");
+                
+                var paramIndex = i * 10;
+                sql.Append($"(@p{paramIndex}, @p{paramIndex + 1}, @p{paramIndex + 2}, @p{paramIndex + 3}, @p{paramIndex + 4}, @p{paramIndex + 5}, @p{paramIndex + 6}, @p{paramIndex + 7}, @p{paramIndex + 8}, @p{paramIndex + 9})");
+                
+                parameters.AddRange([r.KDRatio, r.Month, r.PlayerName, r.Rank, r.ServerGuid, r.TotalDeaths, r.TotalKills, r.TotalPlayTimeMinutes, r.TotalScore, r.Year]);
             }
 
-            await dbContext.SaveChangesAsync();
+            sql.Append(";");
+            await dbContext.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
     }
 }
