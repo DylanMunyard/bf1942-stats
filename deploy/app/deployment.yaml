@@ -129,6 +129,60 @@ spec:
             - name: backups
               mountPath: /backups
 
+        - name: sqlite-backup
+          image: alpine:latest
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          command: ["/bin/sh"]
+          args:
+            - -c
+            - |
+              # Install sqlite3
+              apk add --no-cache sqlite
+
+              while true; do
+                # Create timestamped backup
+                TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+                BACKUP_FILE="/backups/playertracker_${TIMESTAMP}.db"
+                TEMP_FILE="/backups/playertracker_${TIMESTAMP}.db.tmp"
+
+                echo "Starting SQLite backup at $(date)..."
+
+                # Use sqlite3 to create a backup via CLI
+                sqlite3 /mnt/data/playertracker.db ".backup $TEMP_FILE" 2>/dev/null
+
+                if [ $? -eq 0 ]; then
+                  mv "$TEMP_FILE" "$BACKUP_FILE"
+                  echo "Backup successful: $BACKUP_FILE"
+
+                  # Keep only the last 5 backups
+                  BACKUP_COUNT=$(ls /backups/playertracker_*.db 2>/dev/null | wc -l)
+                  if [ "$BACKUP_COUNT" -gt 5 ]; then
+                    echo "Cleaning up old backups (keeping last 5)..."
+                    ls -t /backups/playertracker_*.db 2>/dev/null | tail -n +6 | xargs rm -f
+                  fi
+                else
+                  echo "Backup failed, removing temp file"
+                  rm -f "$TEMP_FILE"
+                fi
+
+                # Run backup every 6 hours
+                sleep 21600
+              done
+          volumeMounts:
+            - name: stats-data
+              mountPath: /mnt/data
+            - name: backups
+              mountPath: /backups
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+
         - name: azure-uploader
           image: mcr.microsoft.com/azure-cli:latest
           command: ["/bin/sh"]

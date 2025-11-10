@@ -106,10 +106,10 @@ services:
       volumes:
           - ./clickhouse-data:/var/lib/clickhouse
           - ./clickhouse-backups:/backups
+          - ./clickhouse-users.xml:/etc/clickhouse-server/users.d/users.xml
       environment:
           - CLICKHOUSE_DB=default
           - CLICKHOUSE_USER=default
-          - CLICKHOUSE_PASSWORD=password
       configs:
           -   source: clickhouse_backup_config
               target: /etc/clickhouse-server/config.d/backups.xml
