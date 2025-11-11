@@ -160,13 +160,6 @@ spec:
                     # Move staging directory to final location atomically
                     mv "$TEMP_DIR" "$BACKUP_DIR"
                     echo "Backup successful: $BACKUP_DIR"
-
-                    # Keep only the last 5 backup sets
-                    BACKUP_COUNT=$(find /backups -maxdepth 1 -type d -name 'playertracker_*' ! -name '*.tmp' 2>/dev/null | wc -l)
-                    if [ "$BACKUP_COUNT" -gt 5 ]; then
-                      echo "Cleaning up old backups (keeping last 5)..."
-                      find /backups -maxdepth 1 -type d -name 'playertracker_*' ! -name '*.tmp' -printf '%T@ %p\n' 2>/dev/null | sort -n | head -n -5 | cut -d' ' -f2- | xargs -r rm -rf
-                    fi
                   else
                     echo "Backup file is empty or missing, removing temp directory"
                     rm -rf "$TEMP_DIR"
