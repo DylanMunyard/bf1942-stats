@@ -130,14 +130,11 @@ spec:
               mountPath: /backups
 
         - name: sqlite-backup
-          image: alpine:latest
+          image: busybox:latest
           command: ["/bin/sh"]
           args:
             - -c
             - |
-              # Install sqlite3
-              apk add --no-cache sqlite
-
               while true; do
                 # Create timestamped backup directory
                 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
