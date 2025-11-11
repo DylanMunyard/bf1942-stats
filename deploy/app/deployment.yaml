@@ -142,29 +142,41 @@ spec:
               apk add --no-cache sqlite
 
               while true; do
-                # Create timestamped backup
+                # Create timestamped backup directory
                 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-                BACKUP_FILE="/backups/playertracker_${TIMESTAMP}.db"
-                TEMP_FILE="/backups/playertracker_${TIMESTAMP}.db.tmp"
+                BACKUP_DIR="/backups/playertracker_${TIMESTAMP}"
+                TEMP_DIR="${BACKUP_DIR}.tmp"
+
+                mkdir -p "$TEMP_DIR"
 
                 echo "Starting SQLite backup at $(date)..."
 
-                # Use sqlite3 to create a backup via CLI
-                sqlite3 /mnt/data/playertracker.db ".backup $TEMP_FILE" 2>/dev/null
+                # Copy main database file only
+                # .shm and .wal files are ephemeral and not needed for recovery
+                cp /mnt/data/playertracker.db "$TEMP_DIR/playertracker.db" 2>&1
+                DB_RESULT=$?
 
-                if [ $? -eq 0 ]; then
-                  mv "$TEMP_FILE" "$BACKUP_FILE"
-                  echo "Backup successful: $BACKUP_FILE"
+                # Check if main database copy succeeded
+                if [ $DB_RESULT -eq 0 ]; then
+                  # Verify the backup file exists and is not empty
+                  if [ -f "$TEMP_DIR/playertracker.db" ] && [ -s "$TEMP_DIR/playertracker.db" ]; then
+                    # Move staging directory to final location atomically
+                    mv "$TEMP_DIR" "$BACKUP_DIR"
+                    echo "Backup successful: $BACKUP_DIR"
 
-                  # Keep only the last 5 backups
-                  BACKUP_COUNT=$(ls /backups/playertracker_*.db 2>/dev/null | wc -l)
-                  if [ "$BACKUP_COUNT" -gt 5 ]; then
-                    echo "Cleaning up old backups (keeping last 5)..."
-                    ls -t /backups/playertracker_*.db 2>/dev/null | tail -n +6 | xargs rm -f
+                    # Keep only the last 5 backup sets
+                    BACKUP_COUNT=$(find /backups -maxdepth 1 -type d -name 'playertracker_*' ! -name '*.tmp' 2>/dev/null | wc -l)
+                    if [ "$BACKUP_COUNT" -gt 5 ]; then
+                      echo "Cleaning up old backups (keeping last 5)..."
+                      find /backups -maxdepth 1 -type d -name 'playertracker_*' ! -name '*.tmp' -printf '%T@ %p\n' 2>/dev/null | sort -n | head -n -5 | cut -d' ' -f2- | xargs -r rm -rf
+                    fi
+                  else
+                    echo "Backup file is empty or missing, removing temp directory"
+                    rm -rf "$TEMP_DIR"
                   fi
                 else
-                  echo "Backup failed, removing temp file"
-                  rm -f "$TEMP_FILE"
+                  echo "Backup failed: cp returned $DB_RESULT, removing temp directory"
+                  rm -rf "$TEMP_DIR"
                 fi
 
                 # Run backup every 6 hours
@@ -179,9 +191,9 @@ spec:
             requests:
               memory: "64Mi"
               cpu: "50m"
-            limits:
-              memory: "256Mi"
-              cpu: "200m"
+            #limits:
+            #  memory: "256Mi"
+            #  cpu: "200m"
 
         - name: azure-uploader
           image: mcr.microsoft.com/azure-cli:latest
@@ -190,28 +202,50 @@ spec:
             - -c
             - |
               while true; do
-                # Check if there are any .db files in /backups (excluding .tmp files)
-                if [ "$(ls /backups/*.db 2>/dev/null | grep -v '\.tmp$' | wc -l)" -gt 0 ]; then
-                  for file in /backups/*.db; do
-                    # Skip tmp files that are still being written
-                    if [[ "$file" == *.tmp ]]; then
-                      continue
-                    fi
-                    echo "Uploading $file to Azure..."
+                # Check if there are any backup directories (excluding .tmp directories)
+                find /backups -maxdepth 1 -type d -name 'playertracker_*' ! -name '*.tmp' 2>/dev/null | while read backup_dir; do
+                  [ -z "$backup_dir" ] && continue
+
+                  BACKUP_NAME=$(basename "$backup_dir")
+                  FILE_COUNT=$(find "$backup_dir" -type f 2>/dev/null | wc -l)
+
+                  if [ "$FILE_COUNT" -eq 0 ]; then
+                    echo "Backup directory is empty, deleting: $BACKUP_NAME"
+                    rm -rf "$backup_dir"
+                    continue
+                  fi
+
+                  echo "Uploading backup: $BACKUP_NAME ($FILE_COUNT files)"
+
+                  # Upload each file in the backup directory
+                  UPLOAD_SUCCESS=true
+                  find "$backup_dir" -type f 2>/dev/null | while read file; do
+                    FILE_NAME=$(basename "$file")
+                    BLOB_NAME="${BACKUP_NAME}/${FILE_NAME}"
+
+                    echo "  Uploading $FILE_NAME..."
                     az storage blob upload \
                       --container-name sqlite \
-                      --name "$(basename $file)" \
+                      --name "$BLOB_NAME" \
                       --file "$file" \
                       --overwrite \
-                      --connection-string "$AZURE_STORAGE_CONNECTION_STRING"
-                    if [ $? -eq 0 ]; then
-                      echo "Upload successful, deleting: $(basename $file)"
-                      rm -f "$file"
-                    else
-                      echo "Upload failed for $(basename $file), will retry"
+                      --connection-string "$AZURE_STORAGE_CONNECTION_STRING" 2>&1
+
+                    if [ $? -ne 0 ]; then
+                      echo "  Upload failed for $FILE_NAME, will retry entire backup"
+                      exit 1
                     fi
                   done
-                fi
+
+                  PIPE_STATUS=$?
+                  # Only delete if all uploads succeeded (exit code 0)
+                  if [ $PIPE_STATUS -eq 0 ]; then
+                    echo "Backup upload successful, deleting: $BACKUP_NAME"
+                    rm -rf "$backup_dir"
+                  else
+                    echo "Backup upload incomplete, keeping: $BACKUP_NAME"
+                  fi
+                done
                 sleep 60
               done
           env:
