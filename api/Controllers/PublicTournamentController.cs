@@ -420,6 +420,78 @@ public class PublicTournamentController(
             return StatusCode(500, new { message = "Error retrieving leaderboard" });
         }
     }
+
+    /// <summary>
+    /// Get files and comments for a specific match (public, no auth required)
+    /// Allows fetching match recordings, map packs, and organizer notes on demand
+    /// </summary>
+    [HttpGet("{tournamentId}/matches/{matchId}/files-and-comments")]
+    public async Task<ActionResult<PublicMatchFilesAndCommentsResponse>> GetMatchFilesAndComments(
+        int tournamentId,
+        int matchId)
+    {
+        try
+        {
+            // Verify tournament exists and is not draft
+            var tournament = await context.Tournaments
+                .Where(t => t.Id == tournamentId && t.Status != "draft")
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            // Verify match belongs to tournament
+            var match = await context.TournamentMatches
+                .FirstOrDefaultAsync(m => m.Id == matchId && m.TournamentId == tournamentId);
+
+            if (match == null)
+                return NotFound(new { message = "Match not found" });
+
+            // Load files and comments in parallel
+            var filesTask = context.TournamentMatchFiles
+                .Where(f => f.MatchId == matchId)
+                .OrderByDescending(f => f.UploadedAt)
+                .Select(f => new PublicMatchFileResponse(
+                    f.Id,
+                    f.Name,
+                    f.Url,
+                    f.Tags,
+                    f.UploadedAt))
+                .ToListAsync();
+
+            var commentsTask = context.TournamentMatchComments
+                .Where(c => c.MatchId == matchId)
+                .Include(c => c.CreatedByUser)
+                .OrderBy(c => c.CreatedAt)
+                .Select(c => new PublicMatchCommentResponse(
+                    c.Id,
+                    c.Content,
+                    c.CreatedByUser != null ? c.CreatedByUser.Email : "Unknown",
+                    c.CreatedAt,
+                    c.UpdatedAt))
+                .ToListAsync();
+
+            await Task.WhenAll(filesTask, commentsTask);
+
+            var files = await filesTask;
+            var comments = await commentsTask;
+
+            var response = new PublicMatchFilesAndCommentsResponse
+            {
+                TournamentId = tournamentId,
+                MatchId = matchId,
+                Files = files,
+                Comments = comments
+            };
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error getting files and comments for match {MatchId} in tournament {TournamentId}", matchId, tournamentId);
+            return StatusCode(500, new { message = "Error retrieving match files and comments" });
+        }
+    }
 }
 
 // Response DTOs for public endpoints
@@ -581,3 +653,26 @@ public class PublicTeamRankingResponse
     // Calculated field for compatibility
     public int TotalRounds { get; set; }
 }
+
+// Match Files and Comments DTOs for public endpoint
+public class PublicMatchFilesAndCommentsResponse
+{
+    public int TournamentId { get; set; }
+    public int MatchId { get; set; }
+    public List<PublicMatchFileResponse> Files { get; set; } = [];
+    public List<PublicMatchCommentResponse> Comments { get; set; } = [];
+}
+
+public record PublicMatchFileResponse(
+    int Id,
+    string Name,
+    string Url,
+    string? Tags,
+    Instant UploadedAt);
+
+public record PublicMatchCommentResponse(
+    int Id,
+    string Content,
+    string CreatedByUserEmail,
+    Instant CreatedAt,
+    Instant UpdatedAt);

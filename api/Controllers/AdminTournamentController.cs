@@ -118,7 +118,9 @@ public class AdminTournamentController(
                 ServerName = match.ServerName,
                 Week = match.Week,
                 CreatedAt = match.CreatedAt,
-                Maps = matchMapsForThisMatch
+                Maps = matchMapsForThisMatch,
+                Files = [],
+                Comments = []
             });
         }
 
@@ -179,6 +181,7 @@ public class AdminTournamentController(
                 ServerName = t.Server?.Name,
                 DiscordUrl = t.DiscordUrl,
                 ForumUrl = t.ForumUrl,
+                YouTubeUrl = t.YouTubeUrl,
                 Theme = t.Theme != null ? new TournamentThemeResponse
                 {
                     Id = t.Theme.Id,
@@ -239,6 +242,9 @@ public class AdminTournamentController(
             // Load matches with team names and maps
             var matchResponses = await context.TournamentMatches
                 .Where(tm => tm.TournamentId == id)
+                .Include(tm => tm.Files)
+                .Include(tm => tm.Comments)
+                .ThenInclude(c => c.CreatedByUser)
                 .Select(tm => new TournamentMatchResponse
                 {
                     Id = tm.Id,
@@ -271,7 +277,20 @@ public class AdminTournamentController(
                             Team1Tickets = mr.Team1Tickets,
                             Team2Tickets = mr.Team2Tickets
                         }).ToList()
-                    }).ToList()
+                    }).ToList(),
+                    Files = tm.Files.Select(f => new TournamentMatchFileResponse(
+                        f.Id,
+                        f.Name,
+                        f.Url,
+                        f.Tags,
+                        f.UploadedAt)).ToList(),
+                    Comments = tm.Comments.Select(c => new TournamentMatchCommentResponse(
+                        c.Id,
+                        c.Content,
+                        c.CreatedByUserId,
+                        c.CreatedByUser != null ? c.CreatedByUser.Email : null,
+                        c.CreatedAt,
+                        c.UpdatedAt)).ToList()
                 })
                 .OrderBy(tm => tm.ScheduledDate)
                 .ToListAsync();
@@ -343,6 +362,7 @@ public class AdminTournamentController(
                 ServerName = tournament.Server?.Name,
                 DiscordUrl = tournament.DiscordUrl,
                 ForumUrl = tournament.ForumUrl,
+                YouTubeUrl = tournament.YouTubeUrl,
                 Theme = themeResponse
             };
 
@@ -465,7 +485,8 @@ public class AdminTournamentController(
                 Rules = sanitizedRules,
                 ServerGuid = !string.IsNullOrWhiteSpace(request.ServerGuid) ? request.ServerGuid : null,
                 DiscordUrl = request.DiscordUrl,
-                ForumUrl = request.ForumUrl
+                ForumUrl = request.ForumUrl,
+                YouTubeUrl = request.YouTubeUrl
             };
 
             context.Tournaments.Add(tournament);
@@ -647,6 +668,9 @@ public class AdminTournamentController(
 
             if (request.ForumUrl != null)
                 tournament.ForumUrl = request.ForumUrl;
+
+            if (request.YouTubeUrl != null)
+                tournament.YouTubeUrl = request.YouTubeUrl;
 
             // Handle theme updates
             if (request.Theme != null)
@@ -2694,6 +2718,419 @@ public class AdminTournamentController(
         }
     }
 
+    // Match Files Endpoints
+
+    /// <summary>
+    /// Create a file for a tournament match
+    /// </summary>
+    [HttpPost("{tournamentId}/matches/{matchId}/files")]
+    [Authorize]
+    public async Task<ActionResult<TournamentMatchFileResponse>> CreateMatchFile(
+        int tournamentId, int matchId, [FromBody] CreateTournamentMatchFileRequest request)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            // Verify tournament belongs to user
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            // Verify match belongs to tournament
+            var match = await context.TournamentMatches
+                .FirstOrDefaultAsync(m => m.Id == matchId && m.TournamentId == tournamentId);
+
+            if (match == null)
+                return NotFound(new { message = "Match not found" });
+
+            if (string.IsNullOrWhiteSpace(request.Name))
+                return BadRequest(new { message = "File name is required" });
+
+            if (string.IsNullOrWhiteSpace(request.Url))
+                return BadRequest(new { message = "File URL is required" });
+
+            var file = new TournamentMatchFile
+            {
+                MatchId = matchId,
+                Name = request.Name,
+                Url = request.Url,
+                Tags = request.Tags,
+                UploadedAt = SystemClock.Instance.GetCurrentInstant()
+            };
+
+            context.TournamentMatchFiles.Add(file);
+            await context.SaveChangesAsync();
+
+            return Ok(new TournamentMatchFileResponse(
+                file.Id,
+                file.Name,
+                file.Url,
+                file.Tags,
+                file.UploadedAt));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error creating match file");
+            return StatusCode(500, new { message = "Error creating match file" });
+        }
+    }
+
+    /// <summary>
+    /// Update a file for a tournament match
+    /// </summary>
+    [HttpPut("{tournamentId}/matches/{matchId}/files/{fileId}")]
+    [Authorize]
+    public async Task<ActionResult<TournamentMatchFileResponse>> UpdateMatchFile(
+        int tournamentId, int matchId, int fileId, [FromBody] UpdateTournamentMatchFileRequest request)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            // Verify tournament belongs to user
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            // Get the file and verify it belongs to the match
+            var file = await context.TournamentMatchFiles
+                .Include(f => f.Match)
+                .FirstOrDefaultAsync(f => f.Id == fileId && f.MatchId == matchId);
+
+            if (file == null)
+                return NotFound(new { message = "File not found" });
+
+            if (!string.IsNullOrWhiteSpace(request.Name))
+                file.Name = request.Name;
+
+            if (!string.IsNullOrWhiteSpace(request.Url))
+                file.Url = request.Url;
+
+            if (request.Tags != null)
+                file.Tags = request.Tags;
+
+            await context.SaveChangesAsync();
+
+            return Ok(new TournamentMatchFileResponse(
+                file.Id,
+                file.Name,
+                file.Url,
+                file.Tags,
+                file.UploadedAt));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error updating match file");
+            return StatusCode(500, new { message = "Error updating match file" });
+        }
+    }
+
+    /// <summary>
+    /// Delete a file from a tournament match
+    /// </summary>
+    [HttpDelete("{tournamentId}/matches/{matchId}/files/{fileId}")]
+    [Authorize]
+    public async Task<IActionResult> DeleteMatchFile(int tournamentId, int matchId, int fileId)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            // Verify tournament belongs to user
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            // Get the file and verify it belongs to the match
+            var file = await context.TournamentMatchFiles
+                .FirstOrDefaultAsync(f => f.Id == fileId && f.MatchId == matchId);
+
+            if (file == null)
+                return NotFound(new { message = "File not found" });
+
+            context.TournamentMatchFiles.Remove(file);
+            await context.SaveChangesAsync();
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error deleting match file");
+            return StatusCode(500, new { message = "Error deleting match file" });
+        }
+    }
+
+    // Match Comments Endpoints
+
+    /// <summary>
+    /// Create a comment for a tournament match
+    /// </summary>
+    [HttpPost("{tournamentId}/matches/{matchId}/comments")]
+    [Authorize]
+    public async Task<ActionResult<TournamentMatchCommentResponse>> CreateMatchComment(
+        int tournamentId, int matchId, [FromBody] CreateTournamentMatchCommentRequest request)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            // Get current user
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return StatusCode(500, new { message = "User not found" });
+
+            // Verify tournament belongs to user
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            // Verify match belongs to tournament
+            var match = await context.TournamentMatches
+                .FirstOrDefaultAsync(m => m.Id == matchId && m.TournamentId == tournamentId);
+
+            if (match == null)
+                return NotFound(new { message = "Match not found" });
+
+            if (string.IsNullOrWhiteSpace(request.Content))
+                return BadRequest(new { message = "Comment content is required" });
+
+            var now = SystemClock.Instance.GetCurrentInstant();
+            var comment = new TournamentMatchComment
+            {
+                MatchId = matchId,
+                Content = request.Content,
+                CreatedByUserId = user.Id,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            context.TournamentMatchComments.Add(comment);
+            await context.SaveChangesAsync();
+
+            return Ok(new TournamentMatchCommentResponse(
+                comment.Id,
+                comment.Content,
+                comment.CreatedByUserId,
+                userEmail,
+                comment.CreatedAt,
+                comment.UpdatedAt));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error creating match comment");
+            return StatusCode(500, new { message = "Error creating match comment" });
+        }
+    }
+
+    /// <summary>
+    /// Update a comment on a tournament match (organizer only)
+    /// </summary>
+    [HttpPut("{tournamentId}/matches/{matchId}/comments/{commentId}")]
+    [Authorize]
+    public async Task<ActionResult<TournamentMatchCommentResponse>> UpdateMatchComment(
+        int tournamentId, int matchId, int commentId, [FromBody] UpdateTournamentMatchCommentRequest request)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return StatusCode(500, new { message = "User not found" });
+
+            // Verify tournament belongs to user (organizer only)
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            // Get the comment and verify it belongs to the match
+            var comment = await context.TournamentMatchComments
+                .Include(c => c.CreatedByUser)
+                .FirstOrDefaultAsync(c => c.Id == commentId && c.MatchId == matchId);
+
+            if (comment == null)
+                return NotFound(new { message = "Comment not found" });
+
+            // Only organizer can edit comments
+            if (comment.CreatedByUserId != user.Id)
+                return Forbid();
+
+            if (string.IsNullOrWhiteSpace(request.Content))
+                return BadRequest(new { message = "Comment content is required" });
+
+            comment.Content = request.Content;
+            comment.UpdatedAt = SystemClock.Instance.GetCurrentInstant();
+
+            await context.SaveChangesAsync();
+
+            return Ok(new TournamentMatchCommentResponse(
+                comment.Id,
+                comment.Content,
+                comment.CreatedByUserId,
+                comment.CreatedByUser?.Email,
+                comment.CreatedAt,
+                comment.UpdatedAt));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error updating match comment");
+            return StatusCode(500, new { message = "Error updating match comment" });
+        }
+    }
+
+    /// <summary>
+    /// Delete a comment from a tournament match (organizer only)
+    /// </summary>
+    [HttpDelete("{tournamentId}/matches/{matchId}/comments/{commentId}")]
+    [Authorize]
+    public async Task<IActionResult> DeleteMatchComment(int tournamentId, int matchId, int commentId)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return StatusCode(500, new { message = "User not found" });
+
+            // Verify tournament belongs to user (organizer only)
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            // Get the comment and verify it belongs to the match
+            var comment = await context.TournamentMatchComments
+                .FirstOrDefaultAsync(c => c.Id == commentId && c.MatchId == matchId);
+
+            if (comment == null)
+                return NotFound(new { message = "Comment not found" });
+
+            // Only organizer can delete comments
+            if (comment.CreatedByUserId != user.Id)
+                return Forbid();
+
+            context.TournamentMatchComments.Remove(comment);
+            await context.SaveChangesAsync();
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error deleting match comment");
+            return StatusCode(500, new { message = "Error deleting match comment" });
+        }
+    }
+
+
+    /// <summary>
+    /// Get files and comments for a specific match (authenticated organizer only)
+    /// Returns all files and comments for a match in a single call
+    /// </summary>
+    [HttpGet("{tournamentId}/matches/{matchId}/files-and-comments")]
+    [Authorize]
+    public async Task<ActionResult<MatchFilesAndCommentsResponse>> GetMatchFilesAndComments(
+        int tournamentId,
+        int matchId)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            // Verify tournament belongs to user
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            // Verify match belongs to tournament
+            var match = await context.TournamentMatches
+                .FirstOrDefaultAsync(m => m.Id == matchId && m.TournamentId == tournamentId);
+
+            if (match == null)
+                return NotFound(new { message = "Match not found" });
+
+            // Load files and comments in parallel
+            var filesTask = context.TournamentMatchFiles
+                .Where(f => f.MatchId == matchId)
+                .OrderByDescending(f => f.UploadedAt)
+                .Select(f => new TournamentMatchFileResponse(
+                    f.Id,
+                    f.Name,
+                    f.Url,
+                    f.Tags,
+                    f.UploadedAt))
+                .ToListAsync();
+
+            var commentsTask = context.TournamentMatchComments
+                .Where(c => c.MatchId == matchId)
+                .Include(c => c.CreatedByUser)
+                .OrderBy(c => c.CreatedAt)
+                .Select(c => new TournamentMatchCommentResponse(
+                    c.Id,
+                    c.Content,
+                    c.CreatedByUserId,
+                    c.CreatedByUser != null ? c.CreatedByUser.Email : null,
+                    c.CreatedAt,
+                    c.UpdatedAt))
+                .ToListAsync();
+
+            await Task.WhenAll(filesTask, commentsTask);
+
+            var files = await filesTask;
+            var comments = await commentsTask;
+
+            var response = new MatchFilesAndCommentsResponse
+            {
+                TournamentId = tournamentId,
+                MatchId = matchId,
+                Files = files,
+                Comments = comments
+            };
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error getting files and comments for match {MatchId} in tournament {TournamentId}", matchId, tournamentId);
+            return StatusCode(500, new { message = "Error retrieving match files and comments" });
+        }
+    }
+
     /// <summary>
     /// Manually trigger ranking recalculation for a tournament with flexible week filtering
     /// Allows admins to recalculate leaderboards for:
@@ -2974,6 +3411,7 @@ public class CreateTournamentRequest
     public string? ServerGuid { get; set; }
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
+    public string? YouTubeUrl { get; set; }
     public TournamentThemeRequest? Theme { get; set; }
     public List<WeekDateRequest>? WeekDates { get; set; }
     public List<CreateTournamentFileRequest>? Files { get; set; }
@@ -2997,6 +3435,7 @@ public class UpdateTournamentRequest
     public string? ServerGuid { get; set; }
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
+    public string? YouTubeUrl { get; set; }
     public TournamentThemeRequest? Theme { get; set; }
     public List<WeekDateRequest>? WeekDates { get; set; } // Replace all week dates
 }
@@ -3073,6 +3512,7 @@ public class TournamentListResponse
     public string? ServerName { get; set; }
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
+    public string? YouTubeUrl { get; set; }
     public TournamentThemeResponse? Theme { get; set; }
 }
 
@@ -3098,6 +3538,7 @@ public class TournamentDetailResponse
     public string? ServerName { get; set; }
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
+    public string? YouTubeUrl { get; set; }
     public TournamentThemeResponse? Theme { get; set; }
 }
 
@@ -3127,6 +3568,8 @@ public class TournamentMatchResponse
     public string? Week { get; set; }
     public Instant CreatedAt { get; set; }
     public List<TournamentMatchMapResponse> Maps { get; set; } = [];
+    public List<TournamentMatchFileResponse> Files { get; set; } = [];
+    public List<TournamentMatchCommentResponse> Comments { get; set; } = [];
 }
 
 public class TournamentMatchMapResponse
@@ -3355,3 +3798,45 @@ public record UpdateTournamentFileRequest(
     string? Name,
     string? Url,
     string? Category);
+
+// Match Files DTOs
+public record CreateTournamentMatchFileRequest(
+    string Name,
+    string Url,
+    string? Tags);
+
+public record UpdateTournamentMatchFileRequest(
+    string? Name,
+    string? Url,
+    string? Tags);
+
+public record TournamentMatchFileResponse(
+    int Id,
+    string Name,
+    string Url,
+    string? Tags,
+    Instant UploadedAt);
+
+// Match Comments DTOs
+public record CreateTournamentMatchCommentRequest(
+    string Content);
+
+public record UpdateTournamentMatchCommentRequest(
+    string Content);
+
+public record TournamentMatchCommentResponse(
+    int Id,
+    string Content,
+    int CreatedByUserId,
+    string? CreatedByUserEmail,
+    Instant CreatedAt,
+    Instant UpdatedAt);
+
+// Combined response for fetching files and comments together
+public class MatchFilesAndCommentsResponse
+{
+    public int TournamentId { get; set; }
+    public int MatchId { get; set; }
+    public List<TournamentMatchFileResponse> Files { get; set; } = [];
+    public List<TournamentMatchCommentResponse> Comments { get; set; } = [];
+}

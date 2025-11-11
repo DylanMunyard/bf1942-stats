@@ -28,6 +28,8 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<TournamentTeamRanking> TournamentTeamRankings { get; set; }
     public DbSet<TournamentWeekDate> TournamentWeekDates { get; set; }
     public DbSet<TournamentFile> TournamentFiles { get; set; }
+    public DbSet<TournamentMatchFile> TournamentMatchFiles { get; set; }
+    public DbSet<TournamentMatchComment> TournamentMatchComments { get; set; }
     public DbSet<TournamentImageIndex> TournamentImageIndices { get; set; }
 
     public PlayerTrackerDbContext(DbContextOptions<PlayerTrackerDbContext> options)
@@ -627,6 +629,47 @@ public class PlayerTrackerDbContext : DbContext
             .HasConversion(
                 instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
                 str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+
+        // Configure NodaTime Instant conversion for TournamentMatchFile
+        modelBuilder.Entity<TournamentMatchFile>()
+            .Property(tmf => tmf.UploadedAt)
+            .HasConversion(
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
+                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+
+        // Configure relationship: TournamentMatchFile -> TournamentMatch
+        modelBuilder.Entity<TournamentMatchFile>()
+            .HasOne(tmf => tmf.Match)
+            .WithMany(tm => tm.Files)
+            .HasForeignKey(tmf => tmf.MatchId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Configure NodaTime Instant conversions for TournamentMatchComment
+        modelBuilder.Entity<TournamentMatchComment>()
+            .Property(tmc => tmc.CreatedAt)
+            .HasConversion(
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
+                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+
+        modelBuilder.Entity<TournamentMatchComment>()
+            .Property(tmc => tmc.UpdatedAt)
+            .HasConversion(
+                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
+                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+
+        // Configure relationship: TournamentMatchComment -> TournamentMatch
+        modelBuilder.Entity<TournamentMatchComment>()
+            .HasOne(tmc => tmc.Match)
+            .WithMany(tm => tm.Comments)
+            .HasForeignKey(tmc => tmc.MatchId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Configure relationship: TournamentMatchComment -> User
+        modelBuilder.Entity<TournamentMatchComment>()
+            .HasOne(tmc => tmc.CreatedByUser)
+            .WithMany()
+            .HasForeignKey(tmc => tmc.CreatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
 
@@ -889,6 +932,7 @@ public class Tournament
     // Community links
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
+    public string? YouTubeUrl { get; set; }
 
     // Navigation properties
     public User CreatedByUser { get; set; } = null!;
@@ -938,6 +982,8 @@ public class TournamentMatch
     public TournamentTeam Team2 { get; set; } = null!;
     public GameServer? Server { get; set; }
     public List<TournamentMatchMap> Maps { get; set; } = [];
+    public List<TournamentMatchFile> Files { get; set; } = [];
+    public List<TournamentMatchComment> Comments { get; set; } = [];
 }
 
 public class TournamentMatchMap
@@ -1062,4 +1108,31 @@ public class TournamentFile
 
     // Navigation properties
     public Tournament Tournament { get; set; } = null!;
+}
+
+public class TournamentMatchFile
+{
+    public int Id { get; set; }
+    public int MatchId { get; set; }
+    public string Name { get; set; } = ""; // Display name (e.g., "Map Pack v1.0")
+    public string Url { get; set; } = ""; // External URL to file
+    public string? Tags { get; set; } // Comma-separated tags (e.g., "recording,gameplay")
+    public Instant UploadedAt { get; set; }
+
+    // Navigation properties
+    public TournamentMatch Match { get; set; } = null!;
+}
+
+public class TournamentMatchComment
+{
+    public int Id { get; set; }
+    public int MatchId { get; set; }
+    public string Content { get; set; } = ""; // Comment text
+    public int CreatedByUserId { get; set; }
+    public Instant CreatedAt { get; set; }
+    public Instant UpdatedAt { get; set; }
+
+    // Navigation properties
+    public TournamentMatch Match { get; set; } = null!;
+    public User CreatedByUser { get; set; } = null!;
 }

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using api.PlayerTracking;
 
@@ -10,9 +11,11 @@ using api.PlayerTracking;
 namespace api.Migrations
 {
     [DbContext(typeof(PlayerTrackerDbContext))]
-    partial class PlayerTrackerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251111085327_AddTournamentMatchFilesAndComments")]
+    partial class AddTournamentMatchFilesAndComments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.5");
@@ -683,7 +686,7 @@ namespace api.Migrations
 
                     b.HasIndex("MatchId");
 
-                    b.ToTable("TournamentMatchComments");
+                    b.ToTable("TournamentMatchComment");
                 });
 
             modelBuilder.Entity("api.PlayerTracking.TournamentMatchFile", b =>
@@ -714,7 +717,7 @@ namespace api.Migrations
 
                     b.HasIndex("MatchId");
 
-                    b.ToTable("TournamentMatchFiles");
+                    b.ToTable("TournamentMatchFile");
                 });
 
             modelBuilder.Entity("api.PlayerTracking.TournamentMatchMap", b =>

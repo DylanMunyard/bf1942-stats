@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using api.PlayerTracking;
 
@@ -10,9 +11,11 @@ using api.PlayerTracking;
 namespace api.Migrations
 {
     [DbContext(typeof(PlayerTrackerDbContext))]
-    partial class PlayerTrackerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251111084538_AddYouTubeUrlToTournaments")]
+    partial class AddYouTubeUrlToTournaments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.5");
@@ -550,9 +553,6 @@ namespace api.Migrations
                     b.Property<int?>("ThemeId")
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("YouTubeUrl")
-                        .HasColumnType("TEXT");
-
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedAt");
@@ -651,70 +651,6 @@ namespace api.Migrations
                     b.HasIndex("TournamentId");
 
                     b.ToTable("TournamentMatches");
-                });
-
-            modelBuilder.Entity("api.PlayerTracking.TournamentMatchComment", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Content")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CreatedAt")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("CreatedByUserId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("MatchId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("UpdatedAt")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedByUserId");
-
-                    b.HasIndex("MatchId");
-
-                    b.ToTable("TournamentMatchComments");
-                });
-
-            modelBuilder.Entity("api.PlayerTracking.TournamentMatchFile", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("MatchId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Tags")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("UploadedAt")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Url")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MatchId");
-
-                    b.ToTable("TournamentMatchFiles");
                 });
 
             modelBuilder.Entity("api.PlayerTracking.TournamentMatchMap", b =>
@@ -1275,36 +1211,6 @@ namespace api.Migrations
                     b.Navigation("Tournament");
                 });
 
-            modelBuilder.Entity("api.PlayerTracking.TournamentMatchComment", b =>
-                {
-                    b.HasOne("api.PlayerTracking.User", "CreatedByUser")
-                        .WithMany()
-                        .HasForeignKey("CreatedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("api.PlayerTracking.TournamentMatch", "Match")
-                        .WithMany("Comments")
-                        .HasForeignKey("MatchId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("CreatedByUser");
-
-                    b.Navigation("Match");
-                });
-
-            modelBuilder.Entity("api.PlayerTracking.TournamentMatchFile", b =>
-                {
-                    b.HasOne("api.PlayerTracking.TournamentMatch", "Match")
-                        .WithMany("Files")
-                        .HasForeignKey("MatchId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Match");
-                });
-
             modelBuilder.Entity("api.PlayerTracking.TournamentMatchMap", b =>
                 {
                     b.HasOne("api.PlayerTracking.TournamentMatch", "Match")
@@ -1531,10 +1437,6 @@ namespace api.Migrations
 
             modelBuilder.Entity("api.PlayerTracking.TournamentMatch", b =>
                 {
-                    b.Navigation("Comments");
-
-                    b.Navigation("Files");
-
                     b.Navigation("Maps");
                 });
 
