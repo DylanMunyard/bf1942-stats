@@ -44,9 +44,8 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
             }
         }
 
-        // Ensure active round and record round observation regardless of player count (if enabled)
+        // Ensure active round
         var activeRound = await EnsureActiveRoundAsync(server, timestamp, serverMapChangeOldMap);
-        await RecordRoundObservationAsync(activeRound, server, timestamp);
 
         // If no players, we skip session handling but still tracked round + observation
         if (!server.Players.Any())
@@ -602,26 +601,6 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
             team2Label = t2?.Label;
         }
         return (team1Label, team2Label);
-    }
-
-    private async Task RecordRoundObservationAsync(Round? round, IGameServer server, DateTime timestamp)
-    {
-        if (round == null) return;
-
-        var (team1Label, team2Label) = GetTeamLabels(server);
-
-        var observation = new RoundObservation
-        {
-            RoundId = round.RoundId,
-            Timestamp = timestamp,
-            Tickets1 = server.Tickets1,
-            Tickets2 = server.Tickets2,
-            Team1Label = team1Label,
-            Team2Label = team2Label,
-            RoundTimeRemain = server.RoundTimeRemain
-        };
-        await dbContext.RoundObservations.AddAsync(observation);
-        await dbContext.SaveChangesAsync();
     }
 
     private int CalculatePlayTime(PlayerSession session, DateTime timestamp)

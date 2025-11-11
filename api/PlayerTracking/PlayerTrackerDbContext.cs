@@ -12,7 +12,6 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<PlayerSession> PlayerSessions { get; set; }
     public DbSet<PlayerObservation> PlayerObservations { get; set; }
     public DbSet<Round> Rounds { get; set; }
-    public DbSet<RoundObservation> RoundObservations { get; set; }
     public DbSet<ServerPlayerRanking> ServerPlayerRankings { get; set; }
     public DbSet<User> Users { get; set; }
     public DbSet<UserPlayerName> UserPlayerNames { get; set; }
@@ -135,16 +134,6 @@ public class PlayerTrackerDbContext : DbContext
             .WithMany()
             .HasForeignKey(r => r.ServerGuid)
             .HasPrincipalKey(gs => gs.Guid);
-
-        // Configure RoundObservation entity
-        modelBuilder.Entity<RoundObservation>()
-            .HasKey(ro => ro.Id);
-
-        modelBuilder.Entity<RoundObservation>()
-            .HasIndex(ro => ro.RoundId);
-
-        modelBuilder.Entity<RoundObservation>()
-            .HasIndex(ro => new { ro.RoundId, ro.Timestamp });
 
         // Configure relationships
         modelBuilder.Entity<PlayerSession>()
@@ -779,18 +768,6 @@ public class Round
     // Navigation properties
     public List<PlayerSession> Sessions { get; set; } = new();
     public GameServer? GameServer { get; set; } // Navigation property to GameServer
-}
-
-public class RoundObservation
-{
-    public int Id { get; set; }
-    public string RoundId { get; set; } = "";
-    public DateTime Timestamp { get; set; }
-    public int? Tickets1 { get; set; }
-    public int? Tickets2 { get; set; }
-    public string? Team1Label { get; set; }
-    public string? Team2Label { get; set; }
-    public int? RoundTimeRemain { get; set; }
 }
 
 public class PlayerObservation
