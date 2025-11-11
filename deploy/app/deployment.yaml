@@ -145,10 +145,13 @@ spec:
 
                 echo "Starting SQLite backup at $(date)..."
 
-                # Copy main database file only
-                # .shm and .wal files are ephemeral and not needed for recovery
+                # Copy all database files for proper restoration
                 cp /mnt/data/playertracker.db "$TEMP_DIR/playertracker.db" 2>&1
                 DB_RESULT=$?
+
+                # Copy WAL and SHM files if they exist (needed for proper DB restoration)
+                [ -f /mnt/data/playertracker.db-wal ] && cp /mnt/data/playertracker.db-wal "$TEMP_DIR/playertracker.db-wal" 2>&1
+                [ -f /mnt/data/playertracker.db-shm ] && cp /mnt/data/playertracker.db-shm "$TEMP_DIR/playertracker.db-shm" 2>&1
 
                 # Check if main database copy succeeded
                 if [ $DB_RESULT -eq 0 ]; then
@@ -240,6 +243,29 @@ spec:
                     echo "Backup upload incomplete, keeping: $BACKUP_NAME"
                   fi
                 done
+
+                # Clean up old backups in Azure blob storage, keeping only the 2 most recent
+                echo "Cleaning up old backups in Azure blob storage (keeping last 2)..."
+                BACKUP_LIST=$(az storage blob list \
+                  --container-name sqlite \
+                  --connection-string "$AZURE_STORAGE_CONNECTION_STRING" \
+                  --output tsv \
+                  --query "[].name" 2>/dev/null | grep -o '^[^/]*' | sort -u)
+
+                BACKUP_COUNT=$(echo "$BACKUP_LIST" | grep -c .)
+                if [ "$BACKUP_COUNT" -gt 2 ]; then
+                  # Get backups to delete (all except the last 2)
+                  BACKUPS_TO_DELETE=$(echo "$BACKUP_LIST" | sort -r | tail -n +3)
+
+                  for old_backup in $BACKUPS_TO_DELETE; do
+                    echo "Deleting old backup from Azure: $old_backup"
+                    az storage blob delete-batch \
+                      --source sqlite \
+                      --pattern "${old_backup}/*" \
+                      --connection-string "$AZURE_STORAGE_CONNECTION_STRING" 2>&1 || true
+                  done
+                fi
+
                 sleep 60
               done
           env:
