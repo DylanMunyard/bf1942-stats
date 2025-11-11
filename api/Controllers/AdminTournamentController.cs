@@ -1380,6 +1380,7 @@ public class AdminTournamentController(
             ServerName = tournament.Server?.Name,
             DiscordUrl = tournament.DiscordUrl,
             ForumUrl = tournament.ForumUrl,
+            YouTubeUrl = tournament.YouTubeUrl,
             Theme = themeResponse
         };
     }
