@@ -282,6 +282,7 @@ public class PublicTournamentController(
                 DiscordUrl = tournament.DiscordUrl,
                 ForumUrl = tournament.ForumUrl,
                 YouTubeUrl = tournament.YouTubeUrl,
+                TwitchUrl = tournament.TwitchUrl,
                 Theme = themeResponse
             };
 
@@ -534,6 +535,7 @@ public class PublicTournamentDetailResponse
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
     public string? YouTubeUrl { get; set; }
+    public string? TwitchUrl { get; set; }
     public PublicTournamentThemeResponse? Theme { get; set; }
 }
 

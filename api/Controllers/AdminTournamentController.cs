@@ -363,6 +363,7 @@ public class AdminTournamentController(
                 DiscordUrl = tournament.DiscordUrl,
                 ForumUrl = tournament.ForumUrl,
                 YouTubeUrl = tournament.YouTubeUrl,
+                TwitchUrl = tournament.TwitchUrl,
                 Theme = themeResponse
             };
 
@@ -486,7 +487,8 @@ public class AdminTournamentController(
                 ServerGuid = !string.IsNullOrWhiteSpace(request.ServerGuid) ? request.ServerGuid : null,
                 DiscordUrl = request.DiscordUrl,
                 ForumUrl = request.ForumUrl,
-                YouTubeUrl = request.YouTubeUrl
+                YouTubeUrl = request.YouTubeUrl,
+                TwitchUrl = request.TwitchUrl
             };
 
             context.Tournaments.Add(tournament);
@@ -671,6 +673,9 @@ public class AdminTournamentController(
 
             if (request.YouTubeUrl != null)
                 tournament.YouTubeUrl = request.YouTubeUrl;
+
+            if (request.TwitchUrl != null)
+                tournament.TwitchUrl = request.TwitchUrl;
 
             // Handle theme updates
             if (request.Theme != null)
@@ -1381,6 +1386,7 @@ public class AdminTournamentController(
             DiscordUrl = tournament.DiscordUrl,
             ForumUrl = tournament.ForumUrl,
             YouTubeUrl = tournament.YouTubeUrl,
+            TwitchUrl = tournament.TwitchUrl,
             Theme = themeResponse
         };
     }
@@ -3413,6 +3419,7 @@ public class CreateTournamentRequest
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
     public string? YouTubeUrl { get; set; }
+    public string? TwitchUrl { get; set; }
     public TournamentThemeRequest? Theme { get; set; }
     public List<WeekDateRequest>? WeekDates { get; set; }
     public List<CreateTournamentFileRequest>? Files { get; set; }
@@ -3437,6 +3444,7 @@ public class UpdateTournamentRequest
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
     public string? YouTubeUrl { get; set; }
+    public string? TwitchUrl { get; set; }
     public TournamentThemeRequest? Theme { get; set; }
     public List<WeekDateRequest>? WeekDates { get; set; } // Replace all week dates
 }
@@ -3540,6 +3548,7 @@ public class TournamentDetailResponse
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
     public string? YouTubeUrl { get; set; }
+    public string? TwitchUrl { get; set; }
     public TournamentThemeResponse? Theme { get; set; }
 }
 
