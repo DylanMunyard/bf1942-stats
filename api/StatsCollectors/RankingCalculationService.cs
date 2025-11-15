@@ -1,9 +1,12 @@
 using api.PlayerTracking;
+using api.Telemetry;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using System.Diagnostics;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using Serilog.Context;
 
 namespace api.StatsCollectors;
 
@@ -14,20 +17,37 @@ public class RankingCalculationService(IServiceProvider services, ILogger<Rankin
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            await Task.Delay(TimeSpan.FromHours(1), stoppingToken);
+            using var activity = ActivitySources.RankingCalculation.StartActivity("RankingCalculation.Cycle");
+            activity?.SetTag("bulk_operation", "true");
+            
+            var cycleStopwatch = Stopwatch.StartNew();
             try
             {
                 logger.LogInformation("Starting ranking calculation for all servers");
-                using var scope = services.CreateScope();
-                var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
+                
+                using (LogContext.PushProperty("operation_type", "ranking_calculation"))
+                using (LogContext.PushProperty("bulk_operation", true))
+                using (var scope = services.CreateScope())
+                {
+                    var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
 
-                await CalculateRankingsForAllServers(dbContext);
-                logger.LogInformation("Ranking calculation completed successfully");
+                    await CalculateRankingsForAllServers(dbContext);
+                    
+                    cycleStopwatch.Stop();
+                    activity?.SetTag("cycle_duration_ms", cycleStopwatch.ElapsedMilliseconds);
+                    logger.LogInformation("Ranking calculation completed successfully in {DurationMs}ms", cycleStopwatch.ElapsedMilliseconds);
+                }
             }
             catch (Exception ex)
             {
+                cycleStopwatch.Stop();
+                activity?.SetTag("cycle_duration_ms", cycleStopwatch.ElapsedMilliseconds);
+                activity?.SetTag("error", ex.Message);
+                activity?.SetStatus(ActivityStatusCode.Error, $"Ranking calculation failed: {ex.Message}");
                 logger.LogError(ex, "Error calculating rankings");
             }
+            
+            await Task.Delay(TimeSpan.FromHours(1), stoppingToken);
         }
     }
 
@@ -39,63 +59,81 @@ public class RankingCalculationService(IServiceProvider services, ILogger<Rankin
         var currentYearString = currentYear.ToString();
         var currentMonthString = currentMonth.ToString("00");
 
-        // Get all active servers
-        var servers = await dbContext.Servers.ToListAsync();
+        using var calculateActivity = ActivitySources.RankingCalculation.StartActivity("RankingCalculation.CalculateRankingsForAllServers");
+        calculateActivity?.SetTag("year", currentYear);
+        calculateActivity?.SetTag("month", currentMonth);
+
+        var servers = await dbContext.Servers.Select(s => s.Guid).ToListAsync();
         logger.LogInformation("Retrieved {ServerCount} active servers for ranking calculation", servers.Count);
+        calculateActivity?.SetTag("server_count", servers.Count);
 
-        foreach (var server in servers)
+        var totalRankingsInserted = 0;
+        var serversProcessed = 0;
+        var serversWithErrors = 0;
+
+        foreach (var serverGuid in servers)
         {
-            logger.LogDebug("Processing rankings for server {ServerGuid} for {Year}-{Month}",
-                server.Guid, currentYear, currentMonthString);
+            using var serverActivity = ActivitySources.RankingCalculation.StartActivity("RankingCalculation.ProcessServer");
+            serverActivity?.SetTag("server_guid", serverGuid);
+            serverActivity?.SetTag("year", currentYear);
+            serverActivity?.SetTag("month", currentMonth);
 
+            logger.LogDebug("Processing rankings for server {ServerGuid} for {Year}-{Month}",
+                serverGuid, currentYear, currentMonthString);
+
+            await using var transaction = await dbContext.Database.BeginTransactionAsync();
             try
             {
-                // Delete existing rankings for this server, year, and month
-                var existingRankingsForMonth = dbContext.ServerPlayerRankings
-                    .Where(r => r.ServerGuid == server.Guid && r.Year == currentYear && r.Month == currentMonth);
-                var existingCount = existingRankingsForMonth.Count();
+                var deleteStopwatch = Stopwatch.StartNew();
+                var deletedCount = await dbContext.Database.ExecuteSqlRawAsync(@"
+                    DELETE FROM ""ServerPlayerRankings""
+                    WHERE ""ServerGuid"" = {0} AND ""Year"" = {1} AND ""Month"" = {2}",
+                    serverGuid, currentYear, currentMonth);
+                deleteStopwatch.Stop();
+                serverActivity?.SetTag("deleted_count", deletedCount);
+                serverActivity?.SetTag("delete_duration_ms", deleteStopwatch.ElapsedMilliseconds);
 
-                if (existingCount > 0)
-                {
-                    dbContext.ServerPlayerRankings.RemoveRange(existingRankingsForMonth);
-                    await dbContext.SaveChangesAsync();
-                    logger.LogDebug("Deleted {ExistingRankingCount} existing rankings for server {ServerGuid}",
-                        existingCount, server.Guid);
-                }
+                logger.LogDebug("Deleted {DeletedCount} existing rankings for server {ServerGuid}",
+                    deletedCount, serverGuid);
 
-                // Use a raw SQL query to get the data for the current month, excluding bots
+                var queryStopwatch = Stopwatch.StartNew();
                 var playerData = await dbContext.Database.SqlQueryRaw<PlayerRankingData>(@"
-            SELECT
-                ps.PlayerName,
-                SUM(ps.TotalScore) AS TotalScore,
-                SUM(ps.TotalKills) AS TotalKills,
-                SUM(ps.TotalDeaths) AS TotalDeaths,
-                CAST(SUM((julianday(ps.LastSeenTime) - julianday(ps.StartTime)) * 1440) AS INTEGER) AS TotalPlayTimeMinutes
-            FROM PlayerSessions ps
-            INNER JOIN Players p ON ps.PlayerName = p.Name
-            WHERE ps.ServerGuid = {0}
-              AND strftime('%Y', ps.StartTime) = {1}
-              AND strftime('%m', ps.StartTime) = {2}
-              AND p.AiBot = 0
-            GROUP BY ps.PlayerName
-            ORDER BY SUM(ps.TotalScore) DESC",
-                    server.Guid, currentYearString, currentMonthString).ToListAsync();
+                    SELECT
+                        ps.PlayerName,
+                        SUM(ps.TotalScore) AS TotalScore,
+                        SUM(ps.TotalKills) AS TotalKills,
+                        SUM(ps.TotalDeaths) AS TotalDeaths,
+                        CAST(SUM((julianday(ps.LastSeenTime) - julianday(ps.StartTime)) * 1440) AS INTEGER) AS TotalPlayTimeMinutes
+                    FROM PlayerSessions ps
+                    INNER JOIN Players p ON ps.PlayerName = p.Name
+                    WHERE ps.ServerGuid = {0}
+                      AND strftime('%Y', ps.StartTime) = {1}
+                      AND strftime('%m', ps.StartTime) = {2}
+                      AND p.AiBot = 0
+                    GROUP BY ps.PlayerName
+                    ORDER BY SUM(ps.TotalScore) DESC",
+                    serverGuid, currentYearString, currentMonthString).ToListAsync();
+                queryStopwatch.Stop();
+                serverActivity?.SetTag("query_duration_ms", queryStopwatch.ElapsedMilliseconds);
 
                 if (playerData.Count == 0)
                 {
+                    await transaction.CommitAsync();
+                    serverActivity?.SetTag("rankings_inserted", 0);
                     logger.LogDebug("No player data found for server {ServerGuid} in {Year}-{Month}",
-                        server.Guid, currentYear, currentMonthString);
+                        serverGuid, currentYear, currentMonthString);
+                    serversProcessed++;
                     continue;
                 }
 
                 logger.LogDebug("Retrieved {PlayerCount} players for server {ServerGuid}",
-                    playerData.Count, server.Guid);
+                    playerData.Count, serverGuid);
+                serverActivity?.SetTag("player_count", playerData.Count);
 
-                // Prepare ranking data
                 var rankings = playerData
                     .Select((p, index) => new ServerPlayerRanking
                     {
-                        ServerGuid = server.Guid,
+                        ServerGuid = serverGuid,
                         PlayerName = p.PlayerName,
                         Rank = index + 1,
                         Year = currentYear,
@@ -110,17 +148,33 @@ public class RankingCalculationService(IServiceProvider services, ILogger<Rankin
                     })
                     .ToList();
 
-                // Bulk insert in a single query instead of N individual INSERTs
-                await BulkInsertRankings(dbContext, rankings, server.Guid);
+                var insertStopwatch = Stopwatch.StartNew();
+                await BulkInsertRankings(dbContext, rankings, serverGuid);
+                insertStopwatch.Stop();
+                serverActivity?.SetTag("insert_duration_ms", insertStopwatch.ElapsedMilliseconds);
+                serverActivity?.SetTag("rankings_inserted", rankings.Count);
+
+                await transaction.CommitAsync();
+
+                totalRankingsInserted += rankings.Count;
+                serversProcessed++;
 
                 logger.LogInformation("Successfully calculated and inserted {RankingCount} rankings for server {ServerGuid}",
-                    rankings.Count, server.Guid);
+                    rankings.Count, serverGuid);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error calculating rankings for server {ServerGuid}", server.Guid);
+                await transaction.RollbackAsync();
+                serversWithErrors++;
+                serverActivity?.SetTag("error", ex.Message);
+                serverActivity?.SetStatus(ActivityStatusCode.Error, $"Error processing server {serverGuid}: {ex.Message}");
+                logger.LogError(ex, "Error calculating rankings for server {ServerGuid}", serverGuid);
             }
         }
+
+        calculateActivity?.SetTag("total_rankings_inserted", totalRankingsInserted);
+        calculateActivity?.SetTag("servers_processed", serversProcessed);
+        calculateActivity?.SetTag("servers_with_errors", serversWithErrors);
     }
 
     private async Task BulkInsertRankings(PlayerTrackerDbContext dbContext, List<ServerPlayerRanking> rankings, string serverGuid)
@@ -131,10 +185,21 @@ public class RankingCalculationService(IServiceProvider services, ILogger<Rankin
         const int batchSize = 500; // 500 rows × 10 params = 5,000 params (safe under SQL Server's 2,100 limit with good margin)
         var batchCount = (rankings.Count + batchSize - 1) / batchSize;
 
+        using var bulkInsertActivity = ActivitySources.RankingCalculation.StartActivity("RankingCalculation.BulkInsertRankings");
+        bulkInsertActivity?.SetTag("server_guid", serverGuid);
+        bulkInsertActivity?.SetTag("total_rankings", rankings.Count);
+        bulkInsertActivity?.SetTag("batch_count", batchCount);
+        bulkInsertActivity?.SetTag("batch_size", batchSize);
+
         for (int batch = 0; batch < rankings.Count; batch += batchSize)
         {
             var batchRankings = rankings.Skip(batch).Take(batchSize).ToList();
             var currentBatch = (batch / batchSize) + 1;
+
+            using var batchActivity = ActivitySources.RankingCalculation.StartActivity("RankingCalculation.InsertBatch");
+            batchActivity?.SetTag("server_guid", serverGuid);
+            batchActivity?.SetTag("batch_number", currentBatch);
+            batchActivity?.SetTag("batch_size", batchRankings.Count);
 
             try
             {
@@ -157,13 +222,20 @@ public class RankingCalculationService(IServiceProvider services, ILogger<Rankin
                 }
 
                 sql.Append(";");
+                
+                var insertStopwatch = Stopwatch.StartNew();
                 await dbContext.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+                insertStopwatch.Stop();
+                
+                batchActivity?.SetTag("insert_duration_ms", insertStopwatch.ElapsedMilliseconds);
 
                 logger.LogDebug("Batch {CurrentBatch}/{TotalBatches} inserted ({RecordCount} rankings) for server {ServerGuid}",
                     currentBatch, batchCount, batchRankings.Count, serverGuid);
             }
             catch (Exception ex)
             {
+                batchActivity?.SetTag("error", ex.Message);
+                batchActivity?.SetStatus(ActivityStatusCode.Error, $"Error inserting batch {currentBatch}: {ex.Message}");
                 logger.LogError(ex, "Error inserting batch {CurrentBatch}/{TotalBatches} for server {ServerGuid}",
                     currentBatch, batchCount, serverGuid);
                 throw;

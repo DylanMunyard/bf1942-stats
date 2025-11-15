@@ -192,6 +192,7 @@ try
                 // Background service sources commented out to reduce telemetry overhead:
                 // tracing.AddSource(ActivitySources.StatsCollection.Name);
                 // tracing.AddSource(ActivitySources.ClickHouseSync.Name);
+                tracing.AddSource(ActivitySources.RankingCalculation.Name);
                 // tracing.AddSource(ActivitySources.Gamification.Name);
             }
         );
