@@ -5,65 +5,6 @@ groups:
       folder: bfstats.io
       interval: 5m
       rules:
-        - uid: af3awloihuoe8d
-          title: High Response Time
-          condition: C
-          data:
-            - refId: A
-              queryType: instant
-              relativeTimeRange:
-                from: 86400
-                to: 0
-              datasourceUid: loki
-              model:
-                datasource:
-                    type: loki
-                    uid: loki
-                editorMode: code
-                expr: "count_over_time({service_name=\"junie-des-1942stats\"} \n| json \n| ElapsedMilliseconds >= 5000\n| SourceContext = \"Microsoft.AspNetCore.Hosting.Diagnostics\" [5m]) > 0"
-                instant: true
-                intervalMs: 1000
-                maxDataPoints: 43200
-                queryType: instant
-                refId: A
-            - refId: C
-              datasourceUid: __expr__
-              model:
-                conditions:
-                    - evaluator:
-                        params:
-                            - 0
-                        type: gt
-                      operator:
-                        type: and
-                      query:
-                        params:
-                            - C
-                      reducer:
-                        params: []
-                        type: last
-                      type: query
-                datasource:
-                    type: __expr__
-                    uid: __expr__
-                expression: A
-                intervalMs: 1000
-                maxDataPoints: 43200
-                refId: C
-                type: threshold
-          dashboardUid: 7186fe6e-9e7a-4a82-a2d8-f8904cc44810
-          panelId: 1
-          noDataState: OK
-          execErrState: OK
-          for: 5m
-          annotations:
-            __dashboardUid__: 7186fe6e-9e7a-4a82-a2d8-f8904cc44810
-            __panelId__: "1"
-            runbook_url: http://100.103.185.79/d/7186fe6e-9e7a-4a82-a2d8-f8904cc44810/slow-responses
-            summary: Response times >= 5s
-          isPaused: false
-          notification_settings:
-            receiver: bfstats.io | Discord
         - uid: ff3awvq8gim0we
           title: High CPU Usage
           condition: C
@@ -80,7 +21,7 @@ groups:
                       node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m
                     * on(namespace,pod)
                       group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel
-                    ) by (workload, namespace) > 0.1
+                    ) by (workload, namespace) > 0.8
                 instant: true
                 intervalMs: 1000
                 legendFormat: __auto
@@ -124,6 +65,69 @@ groups:
           isPaused: false
           notification_settings:
             receiver: bfstats.io | Discord
+        - uid: af3awloihuoe8d
+          title: High Response Time
+          condition: C
+          data:
+            - refId: A
+              queryType: instant
+              relativeTimeRange:
+                from: 86400
+                to: 0
+              datasourceUid: loki
+              model:
+                datasource:
+                    type: loki
+                    uid: loki
+                editorMode: code
+                expr: "count_over_time({service_name=\"junie-des-1942stats\"} \n| json \n| ElapsedMilliseconds >= 200\n| SourceContext = \"Microsoft.AspNetCore.Hosting.Diagnostics\" [1m]) > 0"
+                instant: true
+                intervalMs: 1000
+                maxDataPoints: 43200
+                queryType: instant
+                refId: A
+            - refId: C
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          dashboardUid: 7186fe6e-9e7a-4a82-a2d8-f8904cc44810
+          panelId: 1
+          noDataState: OK
+          execErrState: OK
+          for: 5m
+          annotations:
+            __dashboardUid__: 7186fe6e-9e7a-4a82-a2d8-f8904cc44810
+            __panelId__: "1"
+            description: |-
+                Slow request detected: {{ $labels.RequestMethod }} {{ $labels.RequestPath }}
+                  took {{ $labels.ElapsedMilliseconds }} ms (status: {{ $labels.StatusCode }}).
+                  Service: {{ $labels.service_name }}
+            runbook_url: http://100.103.185.79/d/7186fe6e-9e7a-4a82-a2d8-f8904cc44810/slow-responses
+            summary: Response times >= 5s
+          isPaused: false
+          notification_settings:
+            receiver: bfstats.io | Discord
         - uid: af3awpkr14r9ce
           title: High Memory Usage
           condition: C
@@ -140,7 +144,7 @@ groups:
                       container_memory_working_set_bytes{job="kubelet", metrics_path="/metrics/cadvisor", container!="", image!=""}
                     * on(namespace,pod)
                       group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel
-                    ) by (workload, namespace) > 1e9  # 2GB
+                    ) by (workload, namespace) > 7e6  # 2GB
                 instant: true
                 intervalMs: 1000
                 legendFormat: __auto
@@ -176,7 +180,7 @@ groups:
           execErrState: OK
           for: 5m
           annotations:
-            description: '{{ $labels.namespace }}/{{ $labels.workload }} using {{ $values.A.Value | humanizeBytes }}'
+            description: ${{ labels.namespace }}/${{ labels.workload }} using ${{ humanizeBytes(value) }}
             summary: 'High memory usage: {{ $labels.workload }}'
           isPaused: false
           notification_settings:
