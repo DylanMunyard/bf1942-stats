@@ -53,8 +53,8 @@ groups:
                 type: threshold
           dashboardUid: 7186fe6e-9e7a-4a82-a2d8-f8904cc44810
           panelId: 1
-          noDataState: NoData
-          execErrState: Error
+          noDataState: OK
+          execErrState: OK
           for: 5m
           annotations:
             __dashboardUid__: 7186fe6e-9e7a-4a82-a2d8-f8904cc44810
@@ -171,8 +171,8 @@ groups:
                 type: threshold
           dashboardUid: a164a7f0339f99e89cea5cb47e9be617
           panelId: 1
-          noDataState: NoData
-          execErrState: Error
+          noDataState: OK
+          execErrState: OK
           annotations:
             __dashboardUid__: a164a7f0339f99e89cea5cb47e9be617
             __panelId__: "1"
