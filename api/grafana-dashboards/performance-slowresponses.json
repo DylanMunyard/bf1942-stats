@@ -1,0 +1,269 @@
+{
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "id": 4085,
+    "links": [],
+    "panels": [
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "auto",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "inspect": false
+            },
+            "links": [
+              {
+                "title": "View Trace",
+                "url": "/d/7186fe6e-9e7a-4a82-a2d8-f8904cc44810?var-traceId=${__data.fields.TraceID}"
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Time"
+              },
+              "properties": [
+                {
+                  "id": "custom.width",
+                  "value": 194
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "RequestPath"
+              },
+              "properties": [
+                {
+                  "id": "custom.width",
+                  "value": 428
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "ElapsedMilliseconds"
+              },
+              "properties": [
+                {
+                  "id": "custom.width",
+                  "value": 190
+                },
+                {
+                  "id": "unit",
+                  "value": "ms"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "Elapsed"
+            }
+          ]
+        },
+        "pluginVersion": "12.1.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "direction": "backward",
+            "editorMode": "code",
+            "expr": "{service_name=\"junie-des-1942stats\"} \n| json \n| ElapsedMilliseconds >= 5000\n| SourceContext = \"Microsoft.AspNetCore.Hosting.Diagnostics\"\n| label_format RequestPath=\"{{.RequestPath}}\", Elapsed=\"{{.ElapsedMilliseconds}}\", TraceId=\"{{.TraceId}}\"",
+            "queryType": "range",
+            "refId": "A"
+          }
+        ],
+        "title": "Responses >= 5s",
+        "transformations": [
+          {
+            "id": "extractFields",
+            "options": {
+              "delimiter": ",",
+              "format": "json",
+              "jsonPaths": [
+                {
+                  "path": "RequestPath"
+                },
+                {
+                  "path": "ElapsedMilliseconds"
+                }
+              ],
+              "source": "labels"
+            }
+          },
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Line": true,
+                "id": true,
+                "labelTypes": true,
+                "labels": true,
+                "tsNs": true
+              },
+              "includeByName": {},
+              "indexByName": {
+                "ElapsedMilliseconds": 7,
+                "Line": 2,
+                "RequestPath": 6,
+                "Time": 1,
+                "TraceID": 8,
+                "id": 5,
+                "labelTypes": 4,
+                "labels": 0,
+                "tsNs": 3
+              },
+              "renameByName": {
+                "ElapsedMilliseconds": "Elapsed",
+                "RequestPath": "Path",
+                "TraceID": "Trace"
+              }
+            }
+          }
+        ],
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "tempo",
+          "uid": "tempo"
+        },
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 14,
+          "w": 24,
+          "x": 0,
+          "y": 9
+        },
+        "id": 2,
+        "options": {
+          "spanFilters": {
+            "criticalPathOnly": false,
+            "matchesOnly": false,
+            "serviceNameOperator": "=",
+            "spanNameOperator": "=",
+            "tags": [
+              {
+                "id": "c9c6f4e3-55d",
+                "operator": "="
+              }
+            ]
+          }
+        },
+        "pluginVersion": "12.1.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "tempo",
+              "uid": "tempo"
+            },
+            "limit": 20,
+            "metricsQueryType": "range",
+            "query": "${traceId:raw}",
+            "queryType": "traceql",
+            "refId": "A",
+            "tableType": "traces"
+          }
+        ],
+        "title": "New panel",
+        "type": "traces"
+      }
+    ],
+    "preload": false,
+    "schemaVersion": 41,
+    "tags": [],
+    "templating": {
+      "list": [
+        {
+          "current": {
+            "text": "1aa16e3c39c1d35c99e520766f80c605",
+            "value": "1aa16e3c39c1d35c99e520766f80c605"
+          },
+          "name": "traceId",
+          "options": [],
+          "query": "",
+          "type": "custom"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-3h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Slow Responses",
+    "uid": "7186fe6e-9e7a-4a82-a2d8-f8904cc44810",
+    "version": 13
+  }
