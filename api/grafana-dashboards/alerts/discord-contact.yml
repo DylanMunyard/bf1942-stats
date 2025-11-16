@@ -1,0 +1,17 @@
+apiVersion: 1
+contactPoints:
+    - orgId: 1
+      name: bfstats.io | Discord
+      receivers:
+        - uid: ff3avnzx7typsa
+          type: discord
+          settings:
+            message: |
+                **{{ .CommonLabels.alertname }}**
+                **Status:** {{ .Status }}
+                {{ range .Alerts }}• {{ .Annotations.summary }} - {{ .Annotations.description }}
+                {{ end }}
+            title: '{{ template "discord.default.title" . }}'
+            url: https://discord.com/api/webhooks/PUT_HOOK_URI_HERE
+            use_discord_username: true
+          disableResolveMessage: false
