@@ -64,63 +64,6 @@ groups:
           isPaused: false
           notification_settings:
             receiver: bfstats.io | Discord
-        - uid: af3awpkr14r9ce
-          title: High Memory Usage
-          condition: C
-          data:
-            - refId: A
-              relativeTimeRange:
-                from: 600
-                to: 0
-              datasourceUid: prometheus
-              model:
-                editorMode: code
-                expr: |-
-                    sum(
-                      container_memory_working_set_bytes{job="kubelet", metrics_path="/metrics/cadvisor", container!="", image!=""}
-                    * on(namespace,pod)
-                      group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel
-                    ) by (workload, namespace) > 1e9  # 2GB
-                instant: true
-                intervalMs: 1000
-                legendFormat: __auto
-                maxDataPoints: 43200
-                range: false
-                refId: A
-            - refId: C
-              datasourceUid: __expr__
-              model:
-                conditions:
-                    - evaluator:
-                        params:
-                            - 0
-                        type: gt
-                      operator:
-                        type: and
-                      query:
-                        params:
-                            - C
-                      reducer:
-                        params: []
-                        type: last
-                      type: query
-                datasource:
-                    type: __expr__
-                    uid: __expr__
-                expression: A
-                intervalMs: 1000
-                maxDataPoints: 43200
-                refId: C
-                type: threshold
-          noDataState: NoData
-          execErrState: Error
-          for: 5m
-          annotations:
-            description: '{{ $labels.namespace }}/{{ $labels.workload }} using {{ $value | humanizeBytes }}'
-            summary: 'High memory usage: {{ $labels.workload }}'
-          isPaused: false
-          notification_settings:
-            receiver: bfstats.io | Discord
         - uid: ff3awvq8gim0we
           title: High CPU Usage
           condition: C
@@ -176,8 +119,65 @@ groups:
           annotations:
             __dashboardUid__: a164a7f0339f99e89cea5cb47e9be617
             __panelId__: "1"
-            description: '{{ $labels.namespace }}/{{ $labels.workload }} using {{ $value | humanize }} cores'
+            description: '{{ $labels.namespace }}/{{ $labels.workload }} using {{ $values.A.Value | humanize }} cores'
             summary: 'High CPU usage: {{ $labels.workload }}'
+          isPaused: false
+          notification_settings:
+            receiver: bfstats.io | Discord
+        - uid: af3awpkr14r9ce
+          title: High Memory Usage
+          condition: C
+          data:
+            - refId: A
+              relativeTimeRange:
+                from: 600
+                to: 0
+              datasourceUid: prometheus
+              model:
+                editorMode: code
+                expr: |-
+                    sum(
+                      container_memory_working_set_bytes{job="kubelet", metrics_path="/metrics/cadvisor", container!="", image!=""}
+                    * on(namespace,pod)
+                      group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel
+                    ) by (workload, namespace) > 1e9  # 2GB
+                instant: true
+                intervalMs: 1000
+                legendFormat: __auto
+                maxDataPoints: 43200
+                range: false
+                refId: A
+            - refId: C
+              datasourceUid: __expr__
+              model:
+                conditions:
+                    - evaluator:
+                        params:
+                            - 0
+                        type: gt
+                      operator:
+                        type: and
+                      query:
+                        params:
+                            - C
+                      reducer:
+                        params: []
+                        type: last
+                      type: query
+                datasource:
+                    type: __expr__
+                    uid: __expr__
+                expression: A
+                intervalMs: 1000
+                maxDataPoints: 43200
+                refId: C
+                type: threshold
+          noDataState: OK
+          execErrState: OK
+          for: 5m
+          annotations:
+            description: '{{ $labels.namespace }}/{{ $labels.workload }} using {{ $values.A.Value | humanizeBytes }}'
+            summary: 'High memory usage: {{ $labels.workload }}'
           isPaused: false
           notification_settings:
             receiver: bfstats.io | Discord
