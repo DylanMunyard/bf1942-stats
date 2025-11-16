@@ -144,7 +144,7 @@ groups:
                       container_memory_working_set_bytes{job="kubelet", metrics_path="/metrics/cadvisor", container!="", image!=""}
                     * on(namespace,pod)
                       group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel
-                    ) by (workload, namespace) > 7e6  # 2GB
+                    ) by (workload, namespace) > 2e9 # 2GB
                 instant: true
                 intervalMs: 1000
                 legendFormat: __auto
@@ -178,9 +178,8 @@ groups:
                 type: threshold
           noDataState: OK
           execErrState: OK
-          for: 5m
           annotations:
-            description: ${{ labels.namespace }}/${{ labels.workload }} using ${{ humanizeBytes(value) }}
+            description: '{{ $labels.namespace }}/{{ $labels.workload }} using {{ humanize1024 $value }}'
             summary: 'High memory usage: {{ $labels.workload }}'
           isPaused: false
           notification_settings:
