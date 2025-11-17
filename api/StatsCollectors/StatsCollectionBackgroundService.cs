@@ -111,7 +111,7 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
                 activity?.SetTag("bfvietnam_servers_processed", bfvietnamServers.Count);
 
                 // Calculate active player count for metrics
-                var activePlayers = allServers.Sum(s => s.CurrentPlayers);
+                var activePlayers = allServers.Sum(s => s.Players.Count());
                 BackgroundJobMetrics.SetActivePlayers(activePlayers);
 
                 // Emit metrics
