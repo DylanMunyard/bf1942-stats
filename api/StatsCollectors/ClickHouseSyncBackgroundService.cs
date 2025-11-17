@@ -101,6 +101,12 @@ public class ClickHouseSyncBackgroundService(IServiceScopeFactory scopeFactory, 
                 logger.LogInformation("ClickHouse player_metrics sync: {TotalMetrics} rows ({Duration}ms)", totalMetrics, metricsStopwatch.ElapsedMilliseconds);
                 activity?.SetTag("player_metrics_count", totalMetrics);
                 activity?.SetTag("player_metrics_duration_ms", metricsStopwatch.ElapsedMilliseconds);
+
+                // Emit metrics
+                BackgroundJobMetrics.ClickHouseRecordsSynced.Add(totalMetrics,
+                    new KeyValuePair<string, object?>("operation", "player_metrics"));
+                BackgroundJobMetrics.ClickHouseSyncDuration.Record(metricsStopwatch.Elapsed.TotalSeconds,
+                    new KeyValuePair<string, object?>("operation", "player_metrics"));
             }
 
             if (_enableServerOnlineCountsSyncing)
@@ -115,6 +121,10 @@ public class ClickHouseSyncBackgroundService(IServiceScopeFactory scopeFactory, 
                 logger.LogInformation("ClickHouse online_counts sync: {Count} rows ({Duration}ms)", counts.Count, countsStopwatch.ElapsedMilliseconds);
                 activity?.SetTag("online_counts_count", counts.Count);
                 activity?.SetTag("online_counts_duration_ms", countsStopwatch.ElapsedMilliseconds);
+
+                // Emit metrics
+                BackgroundJobMetrics.ClickHouseRecordsSynced.Add(counts.Count,
+                    new KeyValuePair<string, object?>("operation", "server_counts"));
             }
 
             if (_enableRoundsSyncing)
@@ -125,6 +135,12 @@ public class ClickHouseSyncBackgroundService(IServiceScopeFactory scopeFactory, 
                 logger.LogInformation("ClickHouse player_rounds sync: {ProcessedCount} records ({Duration}ms)", result.ProcessedCount, roundsStopwatch.ElapsedMilliseconds);
                 activity?.SetTag("rounds_synced_count", result.ProcessedCount);
                 activity?.SetTag("rounds_sync_duration_ms", roundsStopwatch.ElapsedMilliseconds);
+
+                // Emit metrics
+                BackgroundJobMetrics.ClickHouseRecordsSynced.Add(result.ProcessedCount,
+                    new KeyValuePair<string, object?>("operation", "rounds"));
+                BackgroundJobMetrics.ClickHouseSyncDuration.Record(roundsStopwatch.Elapsed.TotalSeconds,
+                    new KeyValuePair<string, object?>("operation", "rounds"));
             }
         }
         catch (Exception ex)
@@ -136,6 +152,13 @@ public class ClickHouseSyncBackgroundService(IServiceScopeFactory scopeFactory, 
         finally
         {
             cycleStopwatch.Stop();
+
+            // Emit job execution metrics for correlation with memory/CPU spikes
+            BackgroundJobMetrics.JobExecutions.Add(1,
+                new KeyValuePair<string, object?>("job", "clickhouse_sync"));
+            BackgroundJobMetrics.JobDuration.Record(cycleStopwatch.Elapsed.TotalSeconds,
+                new KeyValuePair<string, object?>("job", "clickhouse_sync"));
+
             activity?.SetTag("cycle_duration_ms", cycleStopwatch.ElapsedMilliseconds);
             Interlocked.Exchange(ref _isRunning, 0);
         }
@@ -325,5 +348,4 @@ public class ClickHouseSyncBackgroundService(IServiceScopeFactory scopeFactory, 
         _timer?.Dispose();
     }
 }
-
 

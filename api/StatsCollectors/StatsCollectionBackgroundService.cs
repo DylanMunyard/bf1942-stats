@@ -110,6 +110,14 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
                 activity?.SetTag("fh2_servers_processed", fh2Servers.Count);
                 activity?.SetTag("bfvietnam_servers_processed", bfvietnamServers.Count);
 
+                // Calculate active player count for metrics
+                var activePlayers = allServers.Sum(s => s.CurrentPlayers);
+                BackgroundJobMetrics.SetActivePlayers(activePlayers);
+
+                // Emit metrics
+                BackgroundJobMetrics.ServersProcessed.Add(allServers.Count,
+                    new KeyValuePair<string, object?>("game", "all"));
+
                 // Removed PlayerRounds sync to ClickHouse. Rounds syncing handled by ClickHouseSyncBackgroundService.
             }
         }
@@ -122,6 +130,13 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
         finally
         {
             cycleStopwatch.Stop();
+
+            // Emit job execution metrics for correlation with memory/CPU spikes
+            BackgroundJobMetrics.JobExecutions.Add(1,
+                new KeyValuePair<string, object?>("job", "stats_collection"));
+            BackgroundJobMetrics.JobDuration.Record(cycleStopwatch.Elapsed.TotalSeconds,
+                new KeyValuePair<string, object?>("job", "stats_collection"));
+
             Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Cycle #{currentCycle} completed in {cycleStopwatch.ElapsedMilliseconds}ms");
             activity?.SetTag("cycle_duration_ms", cycleStopwatch.ElapsedMilliseconds);
             Interlocked.Exchange(ref _isRunning, 0);

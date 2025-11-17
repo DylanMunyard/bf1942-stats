@@ -118,6 +118,9 @@ try
                 // Add runtime instrumentation for GC, thread pool, etc.
                 metrics.AddRuntimeInstrumentation();
 
+                // Add custom background job meters for correlation analysis
+                metrics.AddMeter("junie-des-1942stats.BackgroundJobs");
+
                 metrics.AddPrometheusExporter();
             })
         .WithTracing(tracing =>
