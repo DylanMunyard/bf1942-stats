@@ -2,14 +2,13 @@
 
 ## ClickHouse Plugin Installation
 
-1. Install the Grafana ClickHouse plugin in your Grafana instance
-2. Restart Grafana if needed
+1. Install the Grafana ClickHouse plugin (in Grafana UI)
 
-## ClickHouse Datasource Configuration
+### ClickHouse Datasource Configuration
 
-Add a new ClickHouse datasource with the following settings:
+In Grafana add a ClickHouse datasource:
 
-- **Server:** `clickhouse-aks-external.monitoring` (no `http://` prefix)
+- **Server:** `clickhouse-service.clickhouse` (no `http://` prefix)
 - **Port:** `9000`
 - **Protocol:** Native
 - **User:** `default`

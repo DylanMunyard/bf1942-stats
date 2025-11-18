@@ -230,6 +230,8 @@ kind: Service
 metadata:
   name: clickhouse-service
   namespace: clickhouse
+  labels:
+    app: clickhouse
   annotations:
     tailscale.com/expose: "true"
     tailscale.com/hostname: clickhouse-aks
@@ -250,3 +252,20 @@ spec:
       port: 9363
       targetPort: 9363
       protocol: TCP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: clickhouse-metrics
+  namespace: clickhouse
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: clickhouse
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+

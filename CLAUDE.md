@@ -91,3 +91,4 @@ junie-des-1942stats/
 - Use the latest C# language features, e.g. primary constructors, collection expressions Tiers = ["bronze"] instead of Tiers = new[] { "bronze" }, and other features like range expressions and pattern matching.
 - Use record types for DTOs and data structures that are primarily data carriers.
 - All timestamp properties use NodaTime Instant type—must configure HasConversion() in OnModelCreating() with InstantPattern.ExtendedIso for EF Core mapping.
+- Confirm every time you run a kubectl command, even if I've approved a kubectl command in the same chat, unless I explicitly say otherwise.

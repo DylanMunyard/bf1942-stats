@@ -209,10 +209,24 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
             }
 
             var query = @"
-                SELECT player_name, achievement_type, achievement_id, achievement_name, tier,
-                       value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version, game
-                FROM player_achievements_deduplicated
+                SELECT 
+                    player_name,
+                    achievement_type,
+                    achievement_id,
+                    argMax(achievement_name, version) as achievement_name,
+                    argMax(tier, version) as tier,
+                    argMax(value, version) as value,
+                    achieved_at,
+                    argMax(processed_at, version) as processed_at,
+                    argMax(server_guid, version) as server_guid,
+                    argMax(map_name, version) as map_name,
+                    round_id,
+                    argMax(metadata, version) as metadata,
+                    max(version) as version,
+                    argMax(game, version) as game
+                FROM player_achievements
                 WHERE player_name = {playerName:String}
+                GROUP BY player_name, achievement_type, achievement_id, round_id, achieved_at
                 ORDER BY achieved_at DESC
                 LIMIT {limit:UInt32}";
 
@@ -265,11 +279,25 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
             }
 
             var query = @"
-                SELECT player_name, achievement_type, achievement_id, achievement_name, tier,
-                       value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version, game
-                FROM player_achievements_deduplicated
+                SELECT 
+                    player_name,
+                    achievement_type,
+                    achievement_id,
+                    argMax(achievement_name, version) as achievement_name,
+                    argMax(tier, version) as tier,
+                    argMax(value, version) as value,
+                    achieved_at,
+                    argMax(processed_at, version) as processed_at,
+                    argMax(server_guid, version) as server_guid,
+                    argMax(map_name, version) as map_name,
+                    round_id,
+                    argMax(metadata, version) as metadata,
+                    max(version) as version,
+                    argMax(game, version) as game
+                FROM player_achievements
                 WHERE player_name = {playerName:String}
                 AND achievement_type = {achievementType:String}
+                GROUP BY player_name, achievement_type, achievement_id, round_id, achieved_at
                 ORDER BY achieved_at DESC";
 
             // Add pagination if specified
@@ -335,9 +363,10 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
 
             var query = @"
                 SELECT DISTINCT achievement_id
-                FROM player_achievements_deduplicated
+                FROM player_achievements
                 WHERE player_name = {playerName:String}
-                AND achievement_type = {achievementType:String}";
+                AND achievement_type = {achievementType:String}
+                GROUP BY player_name, achievement_type, achievement_id, round_id, achieved_at";
 
             var results = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -372,10 +401,24 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
             }
 
             var query = @"
-                SELECT player_name, achievement_type, achievement_id, achievement_name, tier,
-                       value, achieved_at, processed_at, server_guid, map_name, round_id, metadata, version, game
-                FROM player_achievements_deduplicated
+                SELECT 
+                    player_name,
+                    achievement_type,
+                    achievement_id,
+                    argMax(achievement_name, version) as achievement_name,
+                    argMax(tier, version) as tier,
+                    argMax(value, version) as value,
+                    achieved_at,
+                    argMax(processed_at, version) as processed_at,
+                    argMax(server_guid, version) as server_guid,
+                    argMax(map_name, version) as map_name,
+                    round_id,
+                    argMax(metadata, version) as metadata,
+                    max(version) as version,
+                    argMax(game, version) as game
+                FROM player_achievements
                 WHERE round_id = {roundId:String}
+                GROUP BY player_name, achievement_type, achievement_id, round_id, achieved_at
                 ORDER BY achieved_at ASC";
 
             var results = new List<Achievement>();
@@ -427,9 +470,10 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
 
             var query = @"
                 SELECT COUNT(*) as count
-                FROM player_achievements_deduplicated
+                FROM player_achievements
                 WHERE player_name = {playerName:String}
-                AND achievement_id = {achievementId:String}";
+                AND achievement_id = {achievementId:String}
+                GROUP BY player_name, achievement_type, achievement_id, round_id, achieved_at";
 
             await using var command = _connection.CreateCommand();
             command.CommandText = query;
@@ -458,8 +502,9 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
 
             var query = @"
                 SELECT DISTINCT achievement_id
-                FROM player_achievements_deduplicated
+                FROM player_achievements
                 WHERE player_name = {playerName:String}
+                GROUP BY player_name, achievement_type, achievement_id, round_id, achieved_at
                 ORDER BY achievement_id";
 
             var results = new List<string>();
