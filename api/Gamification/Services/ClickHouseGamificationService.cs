@@ -222,7 +222,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
                     argMax(map_name, version) as map_name,
                     round_id,
                     argMax(metadata, version) as metadata,
-                    argMax(version, version) as version,
+                    max(version) as version,
                     argMax(game, version) as game
                 FROM player_achievements
                 WHERE player_name = {playerName:String}
@@ -292,7 +292,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
                     argMax(map_name, version) as map_name,
                     round_id,
                     argMax(metadata, version) as metadata,
-                    argMax(version, version) as version,
+                    max(version) as version,
                     argMax(game, version) as game
                 FROM player_achievements
                 WHERE player_name = {playerName:String}
@@ -414,7 +414,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
                     argMax(map_name, version) as map_name,
                     round_id,
                     argMax(metadata, version) as metadata,
-                    argMax(version, version) as version,
+                    max(version) as version,
                     argMax(game, version) as game
                 FROM player_achievements
                 WHERE round_id = {roundId:String}
