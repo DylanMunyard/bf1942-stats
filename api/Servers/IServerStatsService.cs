@@ -60,8 +60,9 @@ public interface IServerStatsService
     /// </summary>
     /// <param name="serverName">The name of the server.</param>
     /// <param name="days">Number of days to include in analysis.</param>
+    /// <param name="rollingWindowDays">Optional: Override the rolling window for data aggregation. If not specified, it's calculated based on the days parameter.</param>
     /// <returns>Server insights with trends and analysis.</returns>
-    Task<ServerInsights> GetServerInsights(string serverName, int days = 7);
+    Task<ServerInsights> GetServerInsights(string serverName, int days = 7, int? rollingWindowDays = null);
 
     /// <summary>
     /// Gets insights about maps played on the server.

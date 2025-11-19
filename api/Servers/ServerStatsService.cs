@@ -518,7 +518,7 @@ FORMAT TabSeparated";
 
 
 
-    public async Task<ServerInsights> GetServerInsights(string serverName, int days = 7)
+    public async Task<ServerInsights> GetServerInsights(string serverName, int days = 7, int? rollingWindowDays = null)
     {
         // Validate days parameter
         if (days <= 0)
@@ -530,16 +530,16 @@ FORMAT TabSeparated";
         var granularity = CalculateGranularity(days);
 
         // Check cache first
-        var cacheKey = cacheKeyService.GetServerInsightsKey(serverName, days);
+        var cacheKey = cacheKeyService.GetServerInsightsKey(serverName, days, rollingWindowDays);
         var cachedResult = await cacheService.GetAsync<ServerInsights>(cacheKey);
 
         if (cachedResult != null)
         {
-            logger.LogDebug("Cache hit for server insights: {ServerName}, days: {Days}", serverName, days);
+            logger.LogDebug("Cache hit for server insights: {ServerName}, days: {Days}, rollingWindowDays: {RollingWindowDays}", serverName, days, rollingWindowDays);
             return cachedResult;
         }
 
-        logger.LogDebug("Cache miss for server insights: {ServerName}, days: {Days}", serverName, days);
+        logger.LogDebug("Cache miss for server insights: {ServerName}, days: {Days}, rollingWindowDays: {RollingWindowDays}", serverName, days, rollingWindowDays);
 
         // Get the server by name
         var server = await dbContext.Servers
@@ -560,6 +560,12 @@ FORMAT TabSeparated";
 
         // Convert days to appropriate period string and rolling window
         var (period, rollingWindow) = ConvertDaysToPeriod(days);
+
+        // Use provided rollingWindowDays if specified, otherwise use calculated value
+        if (rollingWindowDays.HasValue && rollingWindowDays.Value > 0)
+        {
+            rollingWindow = rollingWindowDays.Value;
+        }
 
         // Fetch players online history
         try

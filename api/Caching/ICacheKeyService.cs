@@ -10,7 +10,7 @@ public interface ICacheKeyService
     string GetServerStatisticsKey(string serverName, int daysToAnalyze);
     string GetServerLeaderboardsKey(string serverName, int days);
     string GetServerRankingsKey(string serverName, int? year, int page, int pageSize, string? playerName, int? minScore, int? minKills, int? minDeaths, double? minKdRatio, int? minPlayTimeMinutes, string? orderBy, string? orderDirection);
-    string GetServerInsightsKey(string serverName, int daysToAnalyze);
+    string GetServerInsightsKey(string serverName, int daysToAnalyze, int? rollingWindowDays = null);
     string GetServerMapsInsightsKey(string serverName, int daysToAnalyze);
     string GetServersPageKey(int page, int pageSize, string sortBy, string sortOrder, object? filters);
 }
@@ -55,9 +55,14 @@ public class CacheKeyService : ICacheKeyService
         return $"server_rankings:{serverName}:{parametersHash}";
     }
 
-    public string GetServerInsightsKey(string serverName, int daysToAnalyze)
+    public string GetServerInsightsKey(string serverName, int daysToAnalyze, int? rollingWindowDays = null)
     {
-        return $"server_insights:{serverName}:{daysToAnalyze}";
+        var key = $"server_insights:{serverName}:{daysToAnalyze}";
+        if (rollingWindowDays.HasValue)
+        {
+            key += $":{rollingWindowDays}";
+        }
+        return key;
     }
 
     public string GetServerMapsInsightsKey(string serverName, int daysToAnalyze)

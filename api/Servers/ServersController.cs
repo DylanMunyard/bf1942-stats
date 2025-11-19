@@ -124,7 +124,8 @@ public class ServersController(
     [HttpGet("{serverName}/insights")]
     public async Task<ActionResult<ServerInsights>> GetServerInsights(
         string serverName,
-        [FromQuery] int? days)
+        [FromQuery] int? days,
+        [FromQuery] int? rollingWindowDays)
     {
         if (string.IsNullOrWhiteSpace(serverName))
             return BadRequest(ApiConstants.ValidationMessages.ServerNameEmpty);
@@ -132,13 +133,14 @@ public class ServersController(
         // Use modern URL decoding that preserves + signs
         serverName = Uri.UnescapeDataString(serverName);
 
-        logger.LogInformation("Looking up server insights for server name: '{ServerName}' with days: {Days}", serverName, days);
+        logger.LogInformation("Looking up server insights for server name: '{ServerName}' with days: {Days} and rollingWindowDays: {RollingWindowDays}", serverName, days, rollingWindowDays);
 
         try
         {
             var insights = await serverStatsService.GetServerInsights(
                 serverName,
-                days ?? ApiConstants.TimePeriods.DefaultDays);
+                days ?? ApiConstants.TimePeriods.DefaultDays,
+                rollingWindowDays);
 
             if (string.IsNullOrEmpty(insights.ServerGuid))
             {
