@@ -209,7 +209,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
             }
 
             var query = @"
-                SELECT 
+                SELECT
                     player_name,
                     achievement_type,
                     achievement_id,
@@ -222,7 +222,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
                     argMax(map_name, version) as map_name,
                     round_id,
                     argMax(metadata, version) as metadata,
-                    max(version) as version,
+                    argMax(version, version) as version,
                     argMax(game, version) as game
                 FROM player_achievements
                 WHERE player_name = {playerName:String}
@@ -279,7 +279,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
             }
 
             var query = @"
-                SELECT 
+                SELECT
                     player_name,
                     achievement_type,
                     achievement_id,
@@ -292,7 +292,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
                     argMax(map_name, version) as map_name,
                     round_id,
                     argMax(metadata, version) as metadata,
-                    max(version) as version,
+                    argMax(version, version) as version,
                     argMax(game, version) as game
                 FROM player_achievements
                 WHERE player_name = {playerName:String}
@@ -401,7 +401,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
             }
 
             var query = @"
-                SELECT 
+                SELECT
                     player_name,
                     achievement_type,
                     achievement_id,
@@ -414,7 +414,7 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
                     argMax(map_name, version) as map_name,
                     round_id,
                     argMax(metadata, version) as metadata,
-                    max(version) as version,
+                    argMax(version, version) as version,
                     argMax(game, version) as game
                 FROM player_achievements
                 WHERE round_id = {roundId:String}
