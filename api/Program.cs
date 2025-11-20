@@ -72,6 +72,7 @@ var loggerConfig = new LoggerConfiguration()
     .Enrich.WithMachineName()
     .Enrich.WithEnvironmentUserName()
     .Enrich.WithSpan()
+    .Enrich.With<UserAgentEnricher>()
     .WriteTo.Console(
         outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj} {Properties:j}{NewLine}{Exception}")
     .WriteTo.GrafanaLoki(lokiUrl,
