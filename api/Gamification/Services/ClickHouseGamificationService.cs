@@ -213,20 +213,19 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
                     player_name,
                     achievement_type,
                     achievement_id,
-                    argMax(achievement_name, version) as achievement_name,
-                    argMax(tier, version) as tier,
-                    argMax(value, version) as value,
+                    achievement_name,
+                    tier,
+                    value,
                     achieved_at,
-                    argMax(processed_at, version) as processed_at,
-                    argMax(server_guid, version) as server_guid,
-                    argMax(map_name, version) as map_name,
+                    processed_at,
+                    server_guid,
+                    map_name,
                     round_id,
-                    argMax(metadata, version) as metadata,
-                    max(version) as version,
-                    argMax(game, version) as game
+                    metadata,
+                    version,
+                    game
                 FROM player_achievements
                 WHERE player_name = {playerName:String}
-                GROUP BY player_name, achievement_type, achievement_id, round_id, achieved_at
                 ORDER BY achieved_at DESC
                 LIMIT {limit:UInt32}";
 
@@ -283,21 +282,20 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
                     player_name,
                     achievement_type,
                     achievement_id,
-                    argMax(achievement_name, version) as achievement_name,
-                    argMax(tier, version) as tier,
-                    argMax(value, version) as value,
+                    achievement_name,
+                    tier,
+                    value,
                     achieved_at,
-                    argMax(processed_at, version) as processed_at,
-                    argMax(server_guid, version) as server_guid,
-                    argMax(map_name, version) as map_name,
+                    processed_at,
+                    server_guid,
+                    map_name,
                     round_id,
-                    argMax(metadata, version) as metadata,
-                    max(version) as version,
-                    argMax(game, version) as game
+                    metadata,
+                    version,
+                    game
                 FROM player_achievements
                 WHERE player_name = {playerName:String}
                 AND achievement_type = {achievementType:String}
-                GROUP BY player_name, achievement_type, achievement_id, round_id, achieved_at
                 ORDER BY achieved_at DESC";
 
             // Add pagination if specified
@@ -405,20 +403,19 @@ public class ClickHouseGamificationService(ILogger<ClickHouseGamificationService
                     player_name,
                     achievement_type,
                     achievement_id,
-                    argMax(achievement_name, version) as achievement_name,
-                    argMax(tier, version) as tier,
-                    argMax(value, version) as value,
+                    achievement_name,
+                    tier,
+                    value,
                     achieved_at,
-                    argMax(processed_at, version) as processed_at,
-                    argMax(server_guid, version) as server_guid,
-                    argMax(map_name, version) as map_name,
+                    processed_at,
+                    server_guid,
+                    map_name,
                     round_id,
-                    argMax(metadata, version) as metadata,
-                    max(version) as version,
-                    argMax(game, version) as game
+                    metadata,
+                    version,
+                    game
                 FROM player_achievements
                 WHERE round_id = {roundId:String}
-                GROUP BY player_name, achievement_type, achievement_id, round_id, achieved_at
                 ORDER BY achieved_at ASC";
 
             var results = new List<Achievement>();
