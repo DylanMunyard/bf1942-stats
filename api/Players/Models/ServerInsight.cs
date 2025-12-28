@@ -10,8 +10,6 @@ public class ServerInsight
     public int TotalDeaths { get; set; }
     public int HighestScore { get; set; }
     public string HighestScoreRoundId { get; set; } = "";
-    public string HighestScoreMapName { get; set; } = "";
-    public DateTime HighestScoreStartTime { get; set; }
     public double KillsPerMinute { get; set; }
     public int TotalRounds { get; set; }
     public ServerRanking? Ranking { get; set; }

@@ -2,6 +2,8 @@ using api.ClickHouse;
 using api.ClickHouse.Models;
 using api.Constants;
 using api.Players.Models;
+using api.PlayerStats;
+using api.Utils;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -13,10 +15,15 @@ namespace api.Players;
 public class PlayersController(
     IPlayerStatsService playerStatsService,
     IServerStatisticsService serverStatisticsService,
+    ISqlitePlayerStatsService sqlitePlayerStatsService,
     IPlayerComparisonService playerComparisonService,
+    ISqlitePlayerComparisonService sqlitePlayerComparisonService,
+    IQuerySourceSelector querySourceSelector,
     PlayerRoundsReadService playerRoundsService,
     ILogger<PlayersController> logger) : ControllerBase
 {
+    private bool UseSqlite(string endpointName) =>
+        querySourceSelector.GetSource(endpointName) == QuerySource.SQLite;
 
     /// <summary>
     /// Retrieves a paginated list of all players with optional filtering and sorting.
@@ -176,7 +183,9 @@ public class PlayersController(
 
         try
         {
-            var stats = await serverStatisticsService.GetServerStats(playerName, period, serverGuid);
+            var stats = UseSqlite("GetServerStats")
+                ? await sqlitePlayerStatsService.GetPlayerMapStatsAsync(playerName, period, serverGuid)
+                : await serverStatisticsService.GetServerStats(playerName, period, serverGuid);
 
             if (!stats.Any())
                 return NotFound($"No statistics found for player '{playerName}' on server '{serverGuid}' for the specified period");
@@ -234,7 +243,15 @@ public class PlayersController(
 
         try
         {
-            var result = await playerComparisonService.ComparePlayersAsync(player1, player2, serverGuid);
+            PlayerComparisonResult result;
+            if (UseSqlite("ComparePlayers"))
+            {
+                result = await sqlitePlayerComparisonService.ComparePlayersAsync(player1, player2, serverGuid);
+            }
+            else
+            {
+                result = await playerComparisonService.ComparePlayersAsync(player1, player2, serverGuid);
+            }
             return Ok(result);
         }
         catch (Exception ex)

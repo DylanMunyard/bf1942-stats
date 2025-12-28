@@ -1,7 +1,10 @@
+using api.Data.Entities;
 using api.ImageStorage.Models;
 using api.Players.Models;
 using Microsoft.EntityFrameworkCore;
 using NodaTime;
+using NodaTime.Text;
+using System.Globalization;
 
 namespace api.PlayerTracking;
 
@@ -30,6 +33,23 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<TournamentMatchFile> TournamentMatchFiles { get; set; }
     public DbSet<TournamentMatchComment> TournamentMatchComments { get; set; }
     public DbSet<TournamentImageIndex> TournamentImageIndices { get; set; }
+
+    // ClickHouse Migration: Pre-computed aggregate tables
+    public DbSet<PlayerStatsMonthly> PlayerStatsMonthly { get; set; }
+    public DbSet<PlayerServerStats> PlayerServerStats { get; set; }
+    public DbSet<PlayerMapStats> PlayerMapStats { get; set; }
+    public DbSet<PlayerBestScore> PlayerBestScores { get; set; }
+    public DbSet<ServerOnlineCount> ServerOnlineCounts { get; set; }
+    public DbSet<ServerHourlyPattern> ServerHourlyPatterns { get; set; }
+    public DbSet<HourlyPlayerPrediction> HourlyPlayerPredictions { get; set; }
+    public DbSet<HourlyActivityPattern> HourlyActivityPatterns { get; set; }
+    public DbSet<MapGlobalAverage> MapGlobalAverages { get; set; }
+    public DbSet<ServerMapStats> ServerMapStats { get; set; }
+    public DbSet<PlayerAchievement> PlayerAchievements { get; set; }
+
+    private static readonly InstantPattern InstantExtendedIsoPattern = InstantPattern.ExtendedIso;
+    private static readonly LocalDateTimePattern LegacySqliteInstantPattern =
+        LocalDateTimePattern.CreateWithInvariantCulture("yyyy-MM-dd HH:mm:ss.FFFFFFF");
 
     public PlayerTrackerDbContext(DbContextOptions<PlayerTrackerDbContext> options)
         : base(options)
@@ -305,8 +325,8 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<Tournament>()
             .Property(t => t.CreatedAt)
             .HasConversion(
-                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
-                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
 
         // Configure relationship: Tournament -> TournamentTeam
         modelBuilder.Entity<Tournament>()
@@ -337,8 +357,8 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<TournamentTeam>()
             .Property(tt => tt.CreatedAt)
             .HasConversion(
-                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
-                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
 
 
         // Configure TournamentTeamPlayer entity
@@ -394,14 +414,14 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<TournamentMatch>()
             .Property(tm => tm.ScheduledDate)
             .HasConversion(
-                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
-                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
 
         modelBuilder.Entity<TournamentMatch>()
             .Property(tm => tm.CreatedAt)
             .HasConversion(
-                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
-                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
 
 
         // Configure relationship: TournamentMatch -> Team1
@@ -465,14 +485,14 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<TournamentMatchResult>()
             .Property(tmr => tmr.CreatedAt)
             .HasConversion(
-                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
-                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
 
         modelBuilder.Entity<TournamentMatchResult>()
             .Property(tmr => tmr.UpdatedAt)
             .HasConversion(
-                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
-                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
 
         // Configure relationship: TournamentMatchResult -> Tournament
         modelBuilder.Entity<TournamentMatchResult>()
@@ -544,8 +564,8 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<TournamentTeamRanking>()
             .Property(ttr => ttr.UpdatedAt)
             .HasConversion(
-                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
-                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
 
         // Configure relationship: TournamentTeamRanking -> Tournament
         modelBuilder.Entity<TournamentTeamRanking>()
@@ -565,8 +585,8 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<TournamentFile>()
             .Property(tf => tf.UploadedAt)
             .HasConversion(
-                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
-                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
 
         // Configure relationship: TournamentFile -> Tournament
         modelBuilder.Entity<TournamentFile>()
@@ -610,21 +630,21 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<TournamentImageIndex>()
             .Property(tii => tii.IndexedAt)
             .HasConversion(
-                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
-                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
 
         modelBuilder.Entity<TournamentImageIndex>()
             .Property(tii => tii.FileLastModified)
             .HasConversion(
-                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
-                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
 
         // Configure NodaTime Instant conversion for TournamentMatchFile
         modelBuilder.Entity<TournamentMatchFile>()
             .Property(tmf => tmf.UploadedAt)
             .HasConversion(
-                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
-                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
 
         // Configure relationship: TournamentMatchFile -> TournamentMatch
         modelBuilder.Entity<TournamentMatchFile>()
@@ -637,14 +657,14 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<TournamentMatchComment>()
             .Property(tmc => tmc.CreatedAt)
             .HasConversion(
-                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
-                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
 
         modelBuilder.Entity<TournamentMatchComment>()
             .Property(tmc => tmc.UpdatedAt)
             .HasConversion(
-                instant => NodaTime.Text.InstantPattern.ExtendedIso.Format(instant),
-                str => NodaTime.Text.InstantPattern.ExtendedIso.Parse(str).Value);
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
 
         // Configure relationship: TournamentMatchComment -> TournamentMatch
         modelBuilder.Entity<TournamentMatchComment>()
@@ -659,6 +679,224 @@ public class PlayerTrackerDbContext : DbContext
             .WithMany()
             .HasForeignKey(tmc => tmc.CreatedByUserId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // ============================================================
+        // ClickHouse Migration: Pre-computed aggregate tables
+        // ============================================================
+
+        // Configure PlayerStatsMonthly entity (period-based aggregation)
+        modelBuilder.Entity<PlayerStatsMonthly>()
+            .HasKey(psm => new { psm.PlayerName, psm.Year, psm.Month });
+
+        modelBuilder.Entity<PlayerStatsMonthly>()
+            .HasIndex(psm => new { psm.Year, psm.Month });
+
+        modelBuilder.Entity<PlayerStatsMonthly>()
+            .Property(psm => psm.FirstRoundTime)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        modelBuilder.Entity<PlayerStatsMonthly>()
+            .Property(psm => psm.LastRoundTime)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        modelBuilder.Entity<PlayerStatsMonthly>()
+            .Property(psm => psm.UpdatedAt)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        // Configure PlayerServerStats entity (weekly aggregation for leaderboards)
+        modelBuilder.Entity<PlayerServerStats>()
+            .HasKey(pss => new { pss.PlayerName, pss.ServerGuid, pss.Year, pss.Week });
+
+        modelBuilder.Entity<PlayerServerStats>()
+            .HasIndex(pss => pss.ServerGuid);
+
+        modelBuilder.Entity<PlayerServerStats>()
+            .HasIndex(pss => new { pss.Year, pss.Week });
+
+        modelBuilder.Entity<PlayerServerStats>()
+            .HasIndex(pss => new { pss.ServerGuid, pss.Year, pss.Week });
+
+        modelBuilder.Entity<PlayerServerStats>()
+            .Property(pss => pss.UpdatedAt)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        // Configure PlayerMapStats entity (period-based aggregation)
+        modelBuilder.Entity<PlayerMapStats>()
+            .HasKey(pms => new { pms.PlayerName, pms.MapName, pms.ServerGuid, pms.Year, pms.Month });
+
+        modelBuilder.Entity<PlayerMapStats>()
+            .HasIndex(pms => pms.MapName);
+
+        modelBuilder.Entity<PlayerMapStats>()
+            .HasIndex(pms => new { pms.Year, pms.Month });
+
+        modelBuilder.Entity<PlayerMapStats>()
+            .Property(pms => pms.UpdatedAt)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        // Configure PlayerBestScore entity
+        modelBuilder.Entity<PlayerBestScore>()
+            .HasKey(pbs => new { pbs.PlayerName, pbs.Period, pbs.Rank });
+
+        modelBuilder.Entity<PlayerBestScore>()
+            .Property(pbs => pbs.RoundEndTime)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        // Configure ServerOnlineCount entity
+        modelBuilder.Entity<ServerOnlineCount>()
+            .HasKey(soc => new { soc.ServerGuid, soc.HourTimestamp });
+
+        modelBuilder.Entity<ServerOnlineCount>()
+            .HasIndex(soc => soc.HourTimestamp);
+
+        modelBuilder.Entity<ServerOnlineCount>()
+            .HasIndex(soc => new { soc.Game, soc.HourTimestamp });
+
+        modelBuilder.Entity<ServerOnlineCount>()
+            .Property(soc => soc.HourTimestamp)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        // Configure ServerHourlyPattern entity
+        modelBuilder.Entity<ServerHourlyPattern>()
+            .HasKey(shp => new { shp.ServerGuid, shp.DayOfWeek, shp.HourOfDay });
+
+        modelBuilder.Entity<ServerHourlyPattern>()
+            .Property(shp => shp.UpdatedAt)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        // Configure HourlyPlayerPrediction entity
+        modelBuilder.Entity<HourlyPlayerPrediction>()
+            .HasKey(hpp => new { hpp.Game, hpp.DayOfWeek, hpp.HourOfDay });
+
+        modelBuilder.Entity<HourlyPlayerPrediction>()
+            .Property(hpp => hpp.UpdatedAt)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        // Configure HourlyActivityPattern entity
+        modelBuilder.Entity<HourlyActivityPattern>()
+            .HasKey(hap => new { hap.Game, hap.DayOfWeek, hap.HourOfDay });
+
+        modelBuilder.Entity<HourlyActivityPattern>()
+            .Property(hap => hap.UpdatedAt)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        // Configure MapGlobalAverage entity
+        modelBuilder.Entity<MapGlobalAverage>()
+            .HasKey(mga => new { mga.MapName, mga.ServerGuid });
+
+        modelBuilder.Entity<MapGlobalAverage>()
+            .Property(mga => mga.UpdatedAt)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        // Configure ServerMapStats entity (monthly server map aggregation)
+        modelBuilder.Entity<ServerMapStats>()
+            .HasKey(sms => new { sms.ServerGuid, sms.MapName, sms.Year, sms.Month });
+
+        modelBuilder.Entity<ServerMapStats>()
+            .HasIndex(sms => sms.ServerGuid);
+
+        modelBuilder.Entity<ServerMapStats>()
+            .HasIndex(sms => new { sms.ServerGuid, sms.Year, sms.Month });
+
+        modelBuilder.Entity<ServerMapStats>()
+            .Property(sms => sms.UpdatedAt)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        // Configure PlayerAchievement entity
+        modelBuilder.Entity<PlayerAchievement>()
+            .HasKey(pa => pa.Id);
+
+        modelBuilder.Entity<PlayerAchievement>()
+            .HasIndex(pa => new { pa.PlayerName, pa.AchievementId, pa.AchievedAt })
+            .IsUnique();
+
+        modelBuilder.Entity<PlayerAchievement>()
+            .HasIndex(pa => new { pa.PlayerName, pa.AchievedAt });
+
+        modelBuilder.Entity<PlayerAchievement>()
+            .HasIndex(pa => pa.AchievementType);
+
+        modelBuilder.Entity<PlayerAchievement>()
+            .HasIndex(pa => pa.AchievementId);
+
+        modelBuilder.Entity<PlayerAchievement>()
+            .HasIndex(pa => pa.ServerGuid);
+
+        modelBuilder.Entity<PlayerAchievement>()
+            .HasIndex(pa => pa.MapName);
+
+        modelBuilder.Entity<PlayerAchievement>()
+            .HasIndex(pa => pa.AchievedAt);
+
+        modelBuilder.Entity<PlayerAchievement>()
+            .Property(pa => pa.AchievedAt)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        modelBuilder.Entity<PlayerAchievement>()
+            .Property(pa => pa.ProcessedAt)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        modelBuilder.Entity<PlayerAchievement>()
+            .Property(pa => pa.Version)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+    }
+
+    private static string FormatInstant(Instant instant) => InstantExtendedIsoPattern.Format(instant);
+
+    private static Instant ParseInstant(string value)
+    {
+        var extended = InstantExtendedIsoPattern.Parse(value);
+        if (extended.Success)
+        {
+            return extended.Value;
+        }
+
+        var legacy = LegacySqliteInstantPattern.Parse(value);
+        if (legacy.Success)
+        {
+            return legacy.Value.InZoneLeniently(DateTimeZone.Utc).ToInstant();
+        }
+
+        if (DateTime.TryParse(
+                value,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out var dateTime))
+        {
+            return Instant.FromDateTimeUtc(DateTime.SpecifyKind(dateTime, DateTimeKind.Utc));
+        }
+
+        throw new FormatException($"Unable to parse Instant value '{value}'");
     }
 }
 

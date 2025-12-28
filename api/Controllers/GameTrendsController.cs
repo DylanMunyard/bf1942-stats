@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Mvc;
 using api.ClickHouse;
 using api.ClickHouse.Models;
 using api.Caching;
+using api.GameTrends;
+using api.Utils;
 using Microsoft.Extensions.Logging;
 
 namespace api.Controllers;
@@ -10,9 +12,13 @@ namespace api.Controllers;
 [Route("stats/[controller]")]
 public class GameTrendsController(
     GameTrendsService gameTrendsService,
+    ISqliteGameTrendsService sqliteGameTrendsService,
+    IQuerySourceSelector querySourceSelector,
     ICacheService cacheService,
     ILogger<GameTrendsController> logger) : ControllerBase
 {
+    private bool UseSqlite(string endpointName) =>
+        querySourceSelector.GetSource(endpointName) == QuerySource.SQLite;
 
     /// <summary>
     /// Gets current activity status across all games and servers.
@@ -74,7 +80,15 @@ public class GameTrendsController(
                 return Ok(cachedData);
             }
 
-            var patterns = await gameTrendsService.GetWeeklyActivityPatternsAsync(game, daysPeriod);
+            List<WeeklyActivityPattern> patterns;
+            if (UseSqlite("GetWeeklyActivityPatterns"))
+            {
+                patterns = await sqliteGameTrendsService.GetWeeklyActivityPatternsAsync(game, daysPeriod);
+            }
+            else
+            {
+                patterns = await gameTrendsService.GetWeeklyActivityPatternsAsync(game, daysPeriod);
+            }
 
             // Cache for 1 hour - weekly patterns are stable
             await cacheService.SetAsync(cacheKey, patterns, TimeSpan.FromHours(1));
@@ -119,7 +133,15 @@ public class GameTrendsController(
                 return Ok(cachedData);
             }
 
-            var busyIndicator = await gameTrendsService.GetServerBusyIndicatorAsync(serverGuids);
+            GroupedServerBusyIndicatorResult busyIndicator;
+            if (UseSqlite("GetBusyIndicator"))
+            {
+                busyIndicator = await sqliteGameTrendsService.GetServerBusyIndicatorAsync(serverGuids);
+            }
+            else
+            {
+                busyIndicator = await gameTrendsService.GetServerBusyIndicatorAsync(serverGuids);
+            }
 
             // Cache for 5 minutes - busy indicator should be current
             await cacheService.SetAsync(cacheKey, busyIndicator, TimeSpan.FromMinutes(5));
@@ -159,7 +181,15 @@ public class GameTrendsController(
             }
 
             // Get insights which now includes current player count and comparison
-            var insights = await gameTrendsService.GetSmartPredictionInsightsAsync(game);
+            SmartPredictionInsights insights;
+            if (UseSqlite("GetSmartPredictionInsights"))
+            {
+                insights = await sqliteGameTrendsService.GetSmartPredictionInsightsAsync(game);
+            }
+            else
+            {
+                insights = await gameTrendsService.GetSmartPredictionInsightsAsync(game);
+            }
 
             var summary = new LandingPageTrendSummary
             {

@@ -12,7 +12,13 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace api.ClickHouse;
 
-public class PlayerRoundsWriteService(HttpClient httpClient, string clickHouseUrl, IServiceScopeFactory scopeFactory, ILogger<PlayerRoundsWriteService> logger, IClickHouseReader? reader = null) : BaseClickHouseService(httpClient, clickHouseUrl), IClickHouseWriter
+public class PlayerRoundsWriteService(
+    HttpClient httpClient,
+    string clickHouseUrl,
+    IServiceScopeFactory scopeFactory,
+    ILogger<PlayerRoundsWriteService> logger,
+    IClickHouseReader? reader = null
+) : BaseClickHouseService(httpClient, clickHouseUrl), IClickHouseWriter
 {
     private readonly IClickHouseReader? _reader = reader;
 

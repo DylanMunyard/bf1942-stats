@@ -282,7 +282,7 @@ public class ServersControllerTests
             .Returns(Task.FromResult(mockInsights));
 
         // Act
-        var result = await _controller.GetServerInsights(serverName, null);
+        var result = await _controller.GetServerInsights(serverName, null, null);
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
@@ -295,7 +295,7 @@ public class ServersControllerTests
     public async Task GetServerInsights_ReturnsBadRequest_WhenServerNameIsEmpty()
     {
         // Act
-        var result = await _controller.GetServerInsights("", null);
+        var result = await _controller.GetServerInsights("", null, null);
 
         // Assert
         Assert.IsType<BadRequestObjectResult>(result.Result);
@@ -316,7 +316,7 @@ public class ServersControllerTests
             .Returns(Task.FromResult(mockInsights));
 
         // Act
-        var result = await _controller.GetServerInsights(serverName, null);
+        var result = await _controller.GetServerInsights(serverName, null, null);
 
         // Assert
         var notFoundResult = Assert.IsType<NotFoundObjectResult>(result.Result);

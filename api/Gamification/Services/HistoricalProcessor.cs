@@ -6,22 +6,23 @@ namespace api.Gamification.Services;
 
 /// <summary>
 /// Historical processor that uses ClickHouse native operations
-/// instead of round-by-round processing to dramatically reduce query count
+/// instead of round-by-round processing to dramatically reduce query count.
+/// Note: This processor reads from ClickHouse but writes to SQLite for the migration.
 /// </summary>
 public class HistoricalProcessor
 {
-    private readonly ClickHouseGamificationService _gamificationService;
+    private readonly SqliteGamificationService _gamificationService;
     private readonly BadgeDefinitionsService _badgeDefinitionsService;
     private readonly IClickHouseReader _clickHouseReader;
     private readonly ILogger<HistoricalProcessor> _logger;
 
     // Milestone thresholds
-    private readonly int[] _killMilestones = { 100, 500, 1000, 2500, 5000, 10000, 25000, 50000 };
-    private readonly int[] _playtimeHourMilestones = { 10, 50, 100, 500, 1000 };
-    private readonly int[] _scoreMilestones = { 10000, 50000, 100000, 500000, 1000000 };
+    private readonly int[] _killMilestones = [100, 500, 1000, 2500, 5000, 10000, 25000, 50000];
+    private readonly int[] _playtimeHourMilestones = [10, 50, 100, 500, 1000];
+    private readonly int[] _scoreMilestones = [10000, 50000, 100000, 500000, 1000000];
 
     public HistoricalProcessor(
-        ClickHouseGamificationService gamificationService,
+        SqliteGamificationService gamificationService,
         BadgeDefinitionsService badgeDefinitionsService,
         IClickHouseReader clickHouseReader,
         ILogger<HistoricalProcessor> logger)
@@ -596,31 +597,6 @@ ORDER BY player_name, threshold";
             },
             _ => "common"
         };
-    }
-
-    private List<PlayerGameStats> ParsePlayerStats(string result)
-    {
-        var stats = new List<PlayerGameStats>();
-        var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-        foreach (var line in lines)
-        {
-            var parts = line.Split('\t');
-            if (parts.Length >= 6)
-            {
-                stats.Add(new PlayerGameStats
-                {
-                    PlayerName = parts[0],
-                    TotalKills = int.Parse(parts[1]),
-                    TotalDeaths = int.Parse(parts[2]),
-                    TotalScore = int.Parse(parts[3]),
-                    TotalPlayTimeMinutes = (int)Math.Round(double.Parse(parts[4])),
-                    LastUpdated = DateTime.UtcNow
-                });
-            }
-        }
-
-        return stats;
     }
 
     private List<StreakData> ParseStreakData(string result)

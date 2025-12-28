@@ -1,9 +1,11 @@
 using api.Caching;
 using api.ClickHouse;
 using api.ClickHouse.Interfaces;
+using api.GameTrends;
 using api.Gamification.Models;
 using api.PlayerTracking;
 using api.Servers.Models;
+using api.Utils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -18,8 +20,12 @@ public class ServerStatsService(
     IClickHouseReader clickHouseReader,
     RoundsService roundsService,
     GameTrendsService gameTrendsService,
-    PlayersOnlineHistoryService playersOnlineHistoryService) : IServerStatsService
+    PlayersOnlineHistoryService playersOnlineHistoryService,
+    ISqliteGameTrendsService sqliteGameTrendsService,
+    IQuerySourceSelector querySourceSelector) : IServerStatsService
 {
+    private bool UseSqlite(string endpointName) =>
+        querySourceSelector.GetSource(endpointName) == QuerySource.SQLite;
 
     public async Task<ServerStatistics> GetServerStatistics(
         string serverName,
@@ -570,8 +576,9 @@ FORMAT TabSeparated";
         // Fetch players online history
         try
         {
-            insights.PlayersOnlineHistory = await playersOnlineHistoryService.GetPlayersOnlineHistory(
-                server.GameId, period, rollingWindow, server.Guid);
+            insights.PlayersOnlineHistory = UseSqlite("GetPlayersOnlineHistory")
+                ? await sqliteGameTrendsService.GetPlayersOnlineHistoryAsync(server.GameId, period, rollingWindow, server.Guid)
+                : await playersOnlineHistoryService.GetPlayersOnlineHistory(server.GameId, period, rollingWindow, server.Guid);
         }
         catch (Exception ex)
         {
@@ -627,7 +634,9 @@ FORMAT TabSeparated";
         // Fetch maps data
         try
         {
-            mapsInsights.Maps = await GetAllMapsFromClickHouse(server.Guid, startPeriod, endPeriod);
+            mapsInsights.Maps = UseSqlite("GetServerMapsInsights")
+                ? await GetAllMapsFromSqlite(server.Guid, startPeriod, endPeriod)
+                : await GetAllMapsFromClickHouse(server.Guid, startPeriod, endPeriod);
         }
         catch (Exception ex)
         {
@@ -773,6 +782,68 @@ FORMAT TabSeparated";
         logger.LogDebug("All maps count: {Count}", allMaps.Count);
 
         return allMaps;
+    }
+
+    /// <summary>
+    /// Gets map statistics from SQLite ServerMapStats aggregate table.
+    /// Aggregates monthly buckets within the date range.
+    /// </summary>
+    private async Task<List<PopularMapDataPoint>> GetAllMapsFromSqlite(
+        string serverGuid, DateTime startPeriod, DateTime endPeriod)
+    {
+        // Calculate year/month bounds for filtering
+        var startYear = startPeriod.Year;
+        var startMonth = startPeriod.Month;
+        var endYear = endPeriod.Year;
+        var endMonth = endPeriod.Month;
+
+        // Query and aggregate across months
+        var mapStats = await dbContext.ServerMapStats
+            .AsNoTracking()
+            .Where(sms => sms.ServerGuid == serverGuid
+                && ((sms.Year > startYear || (sms.Year == startYear && sms.Month >= startMonth))
+                && (sms.Year < endYear || (sms.Year == endYear && sms.Month <= endMonth))))
+            .GroupBy(sms => sms.MapName)
+            .Select(g => new
+            {
+                MapName = g.Key,
+                TotalRounds = g.Sum(sms => sms.TotalRounds),
+                TotalPlayTimeMinutes = g.Sum(sms => sms.TotalPlayTimeMinutes),
+                // Weighted average of concurrent players by rounds
+                AvgConcurrentPlayers = g.Sum(sms => sms.AvgConcurrentPlayers * sms.TotalRounds) /
+                    Math.Max(g.Sum(sms => sms.TotalRounds), 1),
+                PeakConcurrentPlayers = g.Max(sms => sms.PeakConcurrentPlayers),
+                Team1Victories = g.Sum(sms => sms.Team1Victories),
+                Team2Victories = g.Sum(sms => sms.Team2Victories),
+                // Pick any non-null label (they should be consistent per server/map)
+                Team1Label = g.Select(sms => sms.Team1Label).FirstOrDefault(l => l != null),
+                Team2Label = g.Select(sms => sms.Team2Label).FirstOrDefault(l => l != null)
+            })
+            .OrderByDescending(m => m.TotalPlayTimeMinutes)
+            .ThenByDescending(m => m.AvgConcurrentPlayers)
+            .ToListAsync();
+
+        // Calculate total play time for percentage
+        var totalPlayTime = mapStats.Sum(m => m.TotalPlayTimeMinutes);
+
+        var result = mapStats.Select(m => new PopularMapDataPoint
+        {
+            MapName = m.MapName,
+            AveragePlayerCount = Math.Round(m.AvgConcurrentPlayers, 2),
+            PeakPlayerCount = m.PeakConcurrentPlayers,
+            TotalPlayTime = m.TotalPlayTimeMinutes,
+            PlayTimePercentage = totalPlayTime > 0
+                ? Math.Round(m.TotalPlayTimeMinutes * 100.0 / totalPlayTime, 2)
+                : 0,
+            Team1Victories = m.Team1Victories,
+            Team2Victories = m.Team2Victories,
+            Team1Label = m.Team1Label,
+            Team2Label = m.Team2Label
+        }).ToList();
+
+        logger.LogDebug("SQLite maps query returned {Count} maps for server {ServerGuid}", result.Count, serverGuid);
+
+        return result;
     }
 
     public async Task<PagedResult<ServerBasicInfo>> GetAllServersWithPaging(

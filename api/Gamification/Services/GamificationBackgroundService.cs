@@ -6,18 +6,14 @@ namespace api.Gamification.Services;
 
 public class GamificationBackgroundService(IServiceProvider services, ILogger<GamificationBackgroundService> logger) : BackgroundService
 {
+    private static readonly TimeSpan StartupDelay = TimeSpan.FromMinutes(1);
 
     // Check environment variable for gamification processing - default to false (disabled)
     private readonly bool _enableGamificationProcessing = Environment.GetEnvironmentVariable("ENABLE_GAMIFICATION_PROCESSING")?.ToLowerInvariant() == "true";
 
-    // Log configuration in static constructor-like fashion would require a different approach
-    // We'll log it in ExecuteAsync instead to avoid issues with logging in field initializers
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("Gamification processing: {Status}", _enableGamificationProcessing ? "ENABLED" : "DISABLED");
-        logger.LogInformation("To enable gamification processing: Set ENABLE_GAMIFICATION_PROCESSING=true");
-        logger.LogInformation("Gamification background service started");
 
         if (!_enableGamificationProcessing)
         {
@@ -30,6 +26,11 @@ public class GamificationBackgroundService(IServiceProvider services, ILogger<Ga
             }
             return;
         }
+
+        logger.LogInformation("GamificationBackgroundService waiting {Delay} before first run", StartupDelay);
+
+        // Delay startup to avoid blocking Kestrel initialization
+        await Task.Delay(StartupDelay, stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
         {

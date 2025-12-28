@@ -9,9 +9,13 @@ using api.Servers;
 
 namespace api.PlayerTracking;
 
-public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetectionService botDetectionService, IPlayerEventPublisher? eventPublisher = null, ILogger<PlayerTrackingService>? logger = null)
+public class PlayerTrackingService(
+    PlayerTrackerDbContext dbContext,
+    IBotDetectionService botDetectionService,
+    PlayerStats.IPlayerBestScoresService bestScoresService,
+    IPlayerEventPublisher? eventPublisher = null,
+    ILogger<PlayerTrackingService>? logger = null)
 {
-    private readonly IPlayerEventPublisher? _eventPublisher = eventPublisher;
     private readonly ILogger<PlayerTrackingService> _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<PlayerTrackingService>.Instance;
     private readonly TimeSpan _sessionTimeout = TimeSpan.FromMinutes(5);
     private static readonly SemaphoreSlim IpInfoSemaphore = new(10); // max 10 concurrent
@@ -70,6 +74,7 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
         var newPlayers = new List<Player>();
         var sessionsToUpdate = new List<PlayerSession>();
         var sessionsToCreate = new List<PlayerSession>();
+        var sessionsClosedForBestScores = new List<PlayerSession>();
         var pendingObservations = new List<(PlayerInfo Info, PlayerSession Session)>();
 
         // Track events to publish after successful database operations
@@ -135,6 +140,7 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
                     {
                         session.IsActive = false;
                         sessionsToUpdate.Add(session);
+                        sessionsClosedForBestScores.Add(session);
                     }
 
                     // Create new session for new map
@@ -213,6 +219,19 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
                 {
                     await dbContext.PlayerObservations.AddRangeAsync(observations);
                     await dbContext.SaveChangesAsync();
+                }
+
+                // Update best scores for sessions that ended due to map change
+                if (sessionsClosedForBestScores.Any())
+                {
+                    try
+                    {
+                        await bestScoresService.UpdateBestScoresForCompletedSessionsAsync(sessionsClosedForBestScores);
+                    }
+                    catch (Exception bestScoresEx)
+                    {
+                        _logger.LogError(bestScoresEx, "Error updating best scores for {SessionCount} sessions closed on map change", sessionsClosedForBestScores.Count);
+                    }
                 }
 
                 // Update participant count for the round (all players since bots are no longer stored)
@@ -367,6 +386,16 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
             if (timedOutSessions.Any())
             {
                 await dbContext.SaveChangesAsync();
+
+                // Update best scores for completed sessions
+                try
+                {
+                    await bestScoresService.UpdateBestScoresForCompletedSessionsAsync(timedOutSessions);
+                }
+                catch (Exception bestScoresEx)
+                {
+                    _logger.LogError(bestScoresEx, "Error updating best scores for {SessionCount} completed sessions", timedOutSessions.Count);
+                }
             }
         }
         catch (Exception ex)
@@ -665,7 +694,7 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
 
     private async Task PublishPlayerEvents(List<(string EventType, PlayerInfo PlayerInfo, PlayerSession Session, string? OldMapName)> eventsToPublish, IGameServer server)
     {
-        if (_eventPublisher == null || !eventsToPublish.Any())
+        if (eventPublisher == null || !eventsToPublish.Any())
         {
             return;
         }
@@ -677,7 +706,7 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
                 switch (eventData.EventType)
                 {
                     case "player_online":
-                        await _eventPublisher.PublishPlayerOnlineEvent(
+                        await eventPublisher.PublishPlayerOnlineEvent(
                             eventData.PlayerInfo.Name,
                             server.Guid,
                             server.Name,
@@ -698,14 +727,14 @@ public class PlayerTrackingService(PlayerTrackerDbContext dbContext, IBotDetecti
 
     private async Task PublishServerMapChangeEvent(IGameServer server, string oldMapName)
     {
-        if (_eventPublisher == null)
+        if (eventPublisher == null)
         {
             return;
         }
 
         try
         {
-            await _eventPublisher.PublishServerMapChangeEvent(
+            await eventPublisher.PublishServerMapChangeEvent(
                 server.Guid,
                 server.Name,
                 oldMapName,

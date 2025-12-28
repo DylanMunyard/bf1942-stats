@@ -12,6 +12,7 @@ namespace api.Controllers;
 
 [ApiController]
 [Route("stats/admin/tournaments")]
+[Authorize]
 public class AdminTournamentController(
     PlayerTrackerDbContext context,
     ILogger<AdminTournamentController> logger,
@@ -264,7 +265,7 @@ public class AdminTournamentController(
                         MapOrder = m.MapOrder,
                         TeamId = m.TeamId,
                         TeamName = m.Team != null ? m.Team.Name : null,
-                    ImagePath = m.ImagePath,
+                        ImagePath = m.ImagePath,
                         MatchResults = m.MatchResults.Select(mr => new TournamentMatchResultResponse
                         {
                             Id = mr.Id,
@@ -1885,7 +1886,7 @@ public class AdminTournamentController(
                         MapOrder = m.MapOrder,
                         TeamId = m.TeamId,
                         TeamName = m.Team != null ? m.Team.Name : null,
-                    ImagePath = m.ImagePath,
+                        ImagePath = m.ImagePath,
                         MatchResults = m.MatchResults.Select(mr => new TournamentMatchResultResponse
                         {
                             Id = mr.Id,

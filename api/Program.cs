@@ -10,6 +10,7 @@ using api.ClickHouse.Base;
 using api.Caching;
 using api.Services;
 using api.Gamification.Services;
+using api.Services.BackgroundJobs;
 using Serilog;
 using Serilog.Enrichers.Span;
 using Microsoft.Extensions.Logging;
@@ -285,7 +286,11 @@ try
             IssuerSigningKey = CreateRsaKey(privateKeyPem ?? throw new InvalidOperationException("JWT private key not configured. Set Jwt:PrivateKey (inline PEM) or Jwt:PrivateKeyPath (file path)."))
         };
     });
-    builder.Services.AddAuthorization();
+    builder.Services.AddAuthorization(options =>
+    {
+        options.AddPolicy("Admin", policy =>
+            policy.RequireClaim(System.Security.Claims.ClaimTypes.Email, "dmunyard@gmail.com"));
+    });
 
     // DI for auth services
     builder.Services.AddScoped<ITokenService, TokenService>();
@@ -426,6 +431,20 @@ try
     builder.Services.AddHostedService<StatsCollectionBackgroundService>();
     builder.Services.AddHostedService<ClickHouseSyncBackgroundService>();
     builder.Services.AddHostedService<RankingCalculationService>();
+    builder.Services.AddHostedService<AggregateCalculationService>();
+
+    // Register NodaTime clock for time-based services
+    builder.Services.AddSingleton<IClock>(SystemClock.Instance);
+
+    // Register job runners (can be triggered on-demand via AdminJobsController)
+    builder.Services.AddScoped<IDailyAggregateRefreshBackgroundService, DailyAggregateRefreshJob>();
+    builder.Services.AddScoped<IWeeklyCleanupBackgroundService, WeeklyCleanupBackgroundService>();
+    builder.Services.AddScoped<IAggregateBackfillBackgroundService, AggregateBackfillBackgroundService>();
+    builder.Services.AddScoped<IServerOnlineCountsBackfillBackgroundService, ServerOnlineCountsBackfillBackgroundService>();
+
+    // Register background jobs for scheduled execution
+    builder.Services.AddHostedService<DailyAggregateRefreshBackgroundService>();
+    builder.Services.AddHostedService<WeeklyCleanupJob>();
 
 
     // Add ClickHouse HTTP clients with longer timeout for write operations
@@ -724,24 +743,14 @@ try
     builder.Services.AddScoped<api.Gamification.Services.IBadgeDefinitionsService, api.Gamification.Services.BadgeDefinitionsService>();
     builder.Services.AddScoped<api.Gamification.Services.AchievementLabelingService>();
 
-    // Register HttpClient for ClickHouse Gamification Service
-    builder.Services.AddHttpClient<api.Gamification.Services.ClickHouseGamificationService>(client =>
-    {
-        client.Timeout = TimeSpan.FromSeconds(10); // Longer timeout for bulk operations
-        client.DefaultRequestHeaders.Add("X-ClickHouse-User", "default");
-    })
-    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-    {
-        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-    });
-
-    // Register ClickHouse Gamification Service as Singleton to match other ClickHouse services
-    builder.Services.AddSingleton<api.Gamification.Services.ClickHouseGamificationService>();
+    // Achievement services for ClickHouse migration
+    builder.Services.AddScoped<api.Gamification.Services.SqliteGamificationService>();
+    builder.Services.AddScoped<api.Gamification.Services.AchievementCalculationService>();
+    builder.Services.AddScoped<api.Gamification.Services.AchievementBackfillService>();
 
     builder.Services.AddScoped<api.Gamification.Services.HistoricalProcessor>();
     builder.Services.AddScoped<api.Gamification.Services.KillStreakDetector>();
     builder.Services.AddScoped<api.Gamification.Services.MilestoneCalculator>();
-    builder.Services.AddScoped<api.Gamification.Services.PerformanceBadgeCalculator>();
     builder.Services.AddScoped<api.Gamification.Services.PlacementProcessor>();
     builder.Services.AddScoped<api.Gamification.Services.TeamVictoryProcessor>();
     builder.Services.AddScoped<api.Gamification.Services.GamificationService>();
@@ -798,6 +807,14 @@ try
         return new GameTrendsService(httpClient, clickHouseReadUrl, logger, dbContext);
     });
     builder.Services.AddScoped<IGameTrendsService>(sp => sp.GetRequiredService<GameTrendsService>());
+
+    // SQLite-based analytics services for ClickHouse migration
+    builder.Services.AddSingleton<api.Utils.IQuerySourceSelector, api.Utils.QuerySourceSelector>();
+    builder.Services.AddScoped<api.GameTrends.ISqliteGameTrendsService, api.GameTrends.SqliteGameTrendsService>();
+    builder.Services.AddScoped<api.PlayerStats.ISqliteLeaderboardService, api.PlayerStats.SqliteLeaderboardService>();
+    builder.Services.AddScoped<api.PlayerStats.ISqlitePlayerStatsService, api.PlayerStats.SqlitePlayerStatsService>();
+    builder.Services.AddScoped<api.PlayerStats.ISqlitePlayerComparisonService, api.PlayerStats.SqlitePlayerComparisonService>();
+    builder.Services.AddScoped<api.PlayerStats.IPlayerBestScoresService, api.PlayerStats.PlayerBestScoresService>();
 
     var host = builder.Build();
 

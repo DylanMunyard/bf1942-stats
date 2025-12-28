@@ -1,12 +1,15 @@
 using api.Gamification.Models;
 using api.ClickHouse.Models;
+using api.PlayerTracking;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace api.Gamification.Services;
 
 public class MilestoneCalculator(
-    ClickHouseGamificationService readService,
+    SqliteGamificationService readService,
     BadgeDefinitionsService badgeService,
+    PlayerTrackerDbContext dbContext,
     ILogger<MilestoneCalculator> logger)
 {
 
@@ -25,8 +28,8 @@ public class MilestoneCalculator(
             var existingMilestoneIds = await readService.GetPlayerAchievementIdsByTypeAsync(
                 round.PlayerName, AchievementTypes.Milestone);
 
-            // Get player's totals before this round
-            var previousStats = await readService.GetPlayerStatsBeforeTimestampAsync(
+            // Get player's totals before this round from SQLite
+            var previousStats = await GetPlayerStatsBeforeTimestampAsync(
                 round.PlayerName, round.RoundEndTime) ?? new PlayerGameStats { PlayerName = round.PlayerName };
 
             // Calculate new totals after this round
@@ -207,5 +210,39 @@ public class MilestoneCalculator(
     public List<BadgeDefinition> GetAvailableMilestones()
     {
         return badgeService.GetBadgesByCategory(BadgeCategories.Milestone);
+    }
+
+    /// <summary>
+    /// Get player's cumulative stats before a specific timestamp using PlayerStatsMonthly aggregates.
+    /// </summary>
+    private async Task<PlayerGameStats?> GetPlayerStatsBeforeTimestampAsync(string playerName, DateTime beforeTimestamp)
+    {
+        try
+        {
+            var beforeInstant = NodaTime.Instant.FromDateTimeUtc(DateTime.SpecifyKind(beforeTimestamp, DateTimeKind.Utc));
+
+            // Use pre-aggregated monthly stats - much more efficient than scanning sessions
+            var monthlyStats = await dbContext.PlayerStatsMonthly
+                .Where(ps => ps.PlayerName == playerName && ps.LastRoundTime < beforeInstant)
+                .ToListAsync();
+
+            if (monthlyStats.Count == 0)
+                return null;
+
+            return new PlayerGameStats
+            {
+                PlayerName = playerName,
+                TotalKills = monthlyStats.Sum(ps => ps.TotalKills),
+                TotalDeaths = monthlyStats.Sum(ps => ps.TotalDeaths),
+                TotalScore = monthlyStats.Sum(ps => ps.TotalScore),
+                TotalPlayTimeMinutes = (int)monthlyStats.Sum(ps => ps.TotalPlayTimeMinutes),
+                LastUpdated = DateTime.UtcNow
+            };
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error getting player stats before timestamp for {PlayerName}", playerName);
+            return null;
+        }
     }
 }

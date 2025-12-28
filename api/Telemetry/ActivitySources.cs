@@ -13,4 +13,7 @@ public static class ActivitySources
     public static readonly ActivitySource ClickHouseSync = new("junie-des-1942stats.ClickHouseSync");
     public static readonly ActivitySource Gamification = new("junie-des-1942stats.Gamification");
     public static readonly ActivitySource RankingCalculation = new("junie-des-1942stats.RankingCalculation");
+    public static readonly ActivitySource AggregateCalculation = new("junie-des-1942stats.AggregateCalculation");
+    public static readonly ActivitySource SqliteAnalytics = new("BfStats.SqliteAnalytics");
+    public static readonly ActivitySource Backfill = new("BfStats.Backfill");
 }

@@ -70,13 +70,37 @@ spec:
             - name: ENABLE_GAMIFICATION_PROCESSING
               value: "true"
             - name: ENABLE_PLAYER_METRICS_SYNCING
-              value: "true"
+              value: "false"
             - name: ENABLE_SERVER_ONLINE_COUNTS_SYNCING
-              value: "true"
+              value: "false"
             - name: GAMIFICATION_MAX_CONCURRENT_ROUNDS
               value: "10"
             - name: PLAYER_INSIGHTS_MAX_CONCURRENT_QUERIES
               value: "10"
+            - name: ClickHouseMigration__UseSqlite__GetSmartPredictionInsights
+              value: "true"
+            - name: ClickHouseMigration__UseSqlite__GetBusyIndicator
+              value: "true"
+            - name: ClickHouseMigration__UseSqlite__GetWeeklyActivityPatterns
+              value: "true"
+            - name: ClickHouseMigration__UseSqlite__ComparePlayers
+              value: "true"
+            - name: ClickHouseMigration__UseSqlite__GetPlayerBestScores
+              value: "true"
+            - name: ClickHouseMigration__UseSqlite__GetPlayerStats
+              value: "true"
+            - name: ClickHouseMigration__UseSqlite__GetPlayerServerInsights
+              value: "true"
+            - name: ClickHouseMigration__UseSqlite__GetActivityByHour
+              value: "true"
+            - name: ClickHouseMigration__UseSqlite__GetAveragePing
+              value: "true"
+            - name: ClickHouseMigration__UseSqlite__GetPlayersOnlineHistory
+              value: "true"
+            - name: ClickHouseMigration__UseSqlite__GetServerStats
+              value: "true"
+            - name: ClickHouseMigration__UseSqlite__GetServerMapsInsights
+              value: "true"
             - name: DiscordOAuth__ClientId
               valueFrom:
                 secretKeyRef:

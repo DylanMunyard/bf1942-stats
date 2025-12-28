@@ -1,6 +1,8 @@
 using api.ClickHouse;
 using api.Players;
 using api.Players.Models;
+using api.PlayerStats;
+using api.Utils;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -11,7 +13,10 @@ public class PlayersControllerTests
 {
     private readonly IPlayerStatsService _playerStatsService;
     private readonly IServerStatisticsService _serverStatisticsService;
+    private readonly ISqlitePlayerStatsService _sqlitePlayerStatsService;
     private readonly IPlayerComparisonService _playerComparisonService;
+    private readonly ISqlitePlayerComparisonService _sqlitePlayerComparisonService;
+    private readonly IQuerySourceSelector _querySourceSelector;
     private readonly PlayerRoundsReadService _playerRoundsService;
     private readonly PlayersController _controller;
 
@@ -20,7 +25,10 @@ public class PlayersControllerTests
         // Mock interfaces
         _playerStatsService = Substitute.For<IPlayerStatsService>();
         _serverStatisticsService = Substitute.For<IServerStatisticsService>();
+        _sqlitePlayerStatsService = Substitute.For<ISqlitePlayerStatsService>();
         _playerComparisonService = Substitute.For<IPlayerComparisonService>();
+        _sqlitePlayerComparisonService = Substitute.For<ISqlitePlayerComparisonService>();
+        _querySourceSelector = Substitute.For<IQuerySourceSelector>();
 
         // Create dependencies for PlayerRoundsReadService
         var httpClient = new HttpClient();
@@ -38,7 +46,10 @@ public class PlayersControllerTests
         _controller = new PlayersController(
             _playerStatsService,
             _serverStatisticsService,
+            _sqlitePlayerStatsService,
             _playerComparisonService,
+            _sqlitePlayerComparisonService,
+            _querySourceSelector,
             _playerRoundsService,
             logger);
     }

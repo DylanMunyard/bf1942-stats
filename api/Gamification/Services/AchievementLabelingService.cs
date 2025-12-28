@@ -80,47 +80,6 @@ public class AchievementLabelingService(
         return AchievementTypes.Badge;
     }
 
-    /// <summary>
-    /// Initialize all achievement labels by deriving from badge definitions
-    /// </summary>
-    private Dictionary<string, AchievementLabel> InitializeAchievementLabels(BadgeDefinitionsService badgeDefinitionsService)
-    {
-        var labels = new Dictionary<string, AchievementLabel>();
-
-        // Get all badge definitions and convert them to achievement labels
-        var allBadges = badgeDefinitionsService.GetAllBadges();
-
-        foreach (var badge in allBadges)
-        {
-            labels[badge.Id] = new AchievementLabel
-            {
-                AchievementId = badge.Id,
-                AchievementType = DetermineAchievementTypeFromBadge(badge),
-                Tier = badge.Tier,
-                Category = badge.Category,
-                DisplayName = badge.Name
-            };
-        }
-
-        return labels;
-    }
-
-    /// <summary>
-    /// Determine achievement type based on badge definition
-    /// </summary>
-    private string DetermineAchievementTypeFromBadge(BadgeDefinition badge)
-    {
-        if (badge.Id.StartsWith("kill_streak_"))
-            return AchievementTypes.KillStreak;
-        if (badge.Id.StartsWith("total_kills_") || badge.Id.StartsWith("milestone_playtime_") || badge.Id.StartsWith("total_score_"))
-            return AchievementTypes.Milestone;
-        if (badge.Id.StartsWith("round_placement_"))
-            return AchievementTypes.Placement;
-        if (badge.Id == "team_victory" || badge.Id == "team_victory_switched")
-            return AchievementTypes.TeamVictory;
-        return AchievementTypes.Badge;
-    }
-
     private string DetermineAchievementType(string achievementId)
     {
         if (achievementId.StartsWith("kill_streak_"))

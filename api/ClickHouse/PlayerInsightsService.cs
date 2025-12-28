@@ -120,8 +120,6 @@ SELECT
     SUM(final_deaths) as total_deaths,
     MAX(final_score) as highest_score,
     argMax(round_id, final_score) as highest_score_round_id,
-    argMax(map_name, final_score) as highest_score_map_name,
-    argMax(round_start_time, final_score) as highest_score_start_time,
     COUNT(*) as total_rounds
 FROM player_rounds
 WHERE player_name = '{playerName.Replace("'", "''")}'
@@ -136,7 +134,7 @@ FORMAT TabSeparated";
         foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             var parts = line.Split('\t');
-            if (parts.Length >= 9)
+            if (parts.Length >= 7)
             {
                 var totalMinutes = double.Parse(parts[1]);
                 var totalKills = int.Parse(parts[2]);
@@ -150,10 +148,8 @@ FORMAT TabSeparated";
                     TotalDeaths = int.Parse(parts[3]),
                     HighestScore = int.TryParse(parts[4], out var score) ? score : 0,
                     HighestScoreRoundId = parts[5],
-                    HighestScoreMapName = parts[6],
-                    HighestScoreStartTime = DateTime.TryParse(parts[7], out var hsTime) ? hsTime : DateTime.MinValue,
                     KillsPerMinute = killsPerMinute,
-                    TotalRounds = int.Parse(parts[8])
+                    TotalRounds = int.Parse(parts[6])
                 });
             }
         }

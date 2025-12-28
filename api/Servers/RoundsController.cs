@@ -126,7 +126,7 @@ public class RoundsController(
     [HttpGet("{roundId}/report")]
     public async Task<ActionResult<SessionRoundReport>> GetRoundReport(
         string roundId,
-        [FromServices] Gamification.Services.ClickHouseGamificationService gamificationService)
+        [FromServices] Gamification.Services.SqliteGamificationService gamificationService)
     {
         if (string.IsNullOrWhiteSpace(roundId))
             return BadRequest("Round ID is required");

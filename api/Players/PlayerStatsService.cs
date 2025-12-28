@@ -1,6 +1,8 @@
 using api.ClickHouse;
 using api.Players.Models;
 using api.PlayerTracking;
+using api.PlayerStats;
+using api.Utils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -9,8 +11,13 @@ namespace api.Players;
 public class PlayerStatsService(PlayerTrackerDbContext dbContext,
     PlayerInsightsService playerInsightsService,
     PlayerRoundsReadService playerRoundsReadService,
+    ISqlitePlayerStatsService sqlitePlayerStatsService,
+    IQuerySourceSelector querySourceSelector,
     ILogger<PlayerStatsService> logger) : IPlayerStatsService
 {
+
+    private bool UseSqlite(string endpointName) =>
+        querySourceSelector.GetSource(endpointName) == QuerySource.SQLite;
 
     // Define a threshold for considering a player "active" (e.g., 5 minutes)
     private readonly TimeSpan _activeThreshold = TimeSpan.FromMinutes(1);
@@ -166,10 +173,11 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
 
         var now = DateTime.UtcNow;
 
-        // Execute all independent queries in parallel for better performance
-        var clickHouseStatsTask = GetPlayerStatsFromClickHouse(playerName);
+        // Execute queries - SQLite paths run sequentially to avoid DbContext threading issues
+        // ClickHouse paths can run in parallel via Task.Run since they have separate connections
 
-        var sessionStatsTask = dbContext.PlayerSessions
+        // 1. First run all DbContext queries sequentially
+        var sessionStats = await dbContext.PlayerSessions
             .Where(ps => ps.PlayerName == playerName)
             .GroupBy(ps => ps.PlayerName)
             .Select(g => new
@@ -179,7 +187,7 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             })
             .FirstOrDefaultAsync();
 
-        var recentSessionsTask = dbContext.PlayerSessions
+        var recentSessions = await dbContext.PlayerSessions
             .Where(ps => ps.PlayerName == playerName)
             .OrderByDescending(s => s.LastSeenTime)
             .Include(s => s.Server)
@@ -202,51 +210,66 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             })
             .ToListAsync();
 
-        var insightsTask = GetPlayerInsights(playerName);
-
-        var serverInsightsTask = Task.Run(async () =>
+        // 2. Get player stats (SQLite or ClickHouse)
+        Models.PlayerClickHouseStats? clickHouseStats = null;
+        try
         {
-            try
+            if (UseSqlite("GetPlayerStats"))
             {
-                return await playerInsightsService.GetPlayerServerInsightsAsync(playerName);
+                var sqliteStats = await sqlitePlayerStatsService.GetPlayerStatsAsync(playerName);
+                if (sqliteStats != null)
+                {
+                    clickHouseStats = new Models.PlayerClickHouseStats
+                    {
+                        PlayerName = sqliteStats.PlayerName,
+                        TotalRounds = sqliteStats.TotalRounds,
+                        TotalKills = sqliteStats.TotalKills,
+                        TotalDeaths = sqliteStats.TotalDeaths,
+                        TotalPlayTimeMinutes = (int)Math.Round(sqliteStats.TotalPlayTimeMinutes)
+                    };
+                }
             }
-            catch (Exception)
+            else
             {
-                return new List<ServerInsight>();
+                clickHouseStats = await GetPlayerStatsFromClickHouse(playerName);
             }
-        });
-
-        var timeSeriesTrendTask = CalculateTimeSeriesTrendAsync(playerName);
-
-        var bestScoresTask = Task.Run(async () =>
+        }
+        catch (Exception ex)
         {
-            try
-            {
-                return await playerRoundsReadService.GetPlayerBestScoresAsync(playerName);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to get best scores for player: {PlayerName}", playerName);
-                return new PlayerBestScores();
-            }
-        });
+            logger.LogWarning(ex, "Failed to get player stats for player: {PlayerName}", playerName);
+        }
 
-        // Wait for all parallel queries to complete
-        await Task.WhenAll(
-            clickHouseStatsTask,
-            sessionStatsTask,
-            recentSessionsTask,
-            insightsTask,
-            serverInsightsTask,
-            timeSeriesTrendTask,
-            bestScoresTask);
+        // 3. Get server insights (SQLite or ClickHouse)
+        List<ServerInsight> serverInsights;
+        try
+        {
+            serverInsights = UseSqlite("GetPlayerServerInsights")
+                ? await sqlitePlayerStatsService.GetPlayerServerInsightsAsync(playerName)
+                : await playerInsightsService.GetPlayerServerInsightsAsync(playerName);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to get server insights for player: {PlayerName}", playerName);
+            serverInsights = [];
+        }
 
-        // Extract results
-        var clickHouseStats = await clickHouseStatsTask;
-        var sessionStats = await sessionStatsTask;
-        var recentSessions = await recentSessionsTask;
-        var insights = await insightsTask;
-        var serverInsights = await serverInsightsTask;
+        // 4. Get best scores (SQLite or ClickHouse)
+        PlayerBestScores bestScores;
+        try
+        {
+            bestScores = UseSqlite("GetPlayerBestScores")
+                ? await sqlitePlayerStatsService.GetPlayerBestScoresAsync(playerName)
+                : await playerRoundsReadService.GetPlayerBestScoresAsync(playerName);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to get best scores for player: {PlayerName}", playerName);
+            bestScores = new PlayerBestScores();
+        }
+
+        // 5. Get insights and time series (these don't conflict)
+        var insights = await GetPlayerInsights(playerName);
+        var recentStats = await CalculateTimeSeriesTrendAsync(playerName);
 
         var aggregateStats = new
         {
@@ -310,8 +333,8 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             RecentSessions = recentSessions,
             Insights = insights,
             Servers = serverInsights,
-            RecentStats = await timeSeriesTrendTask,
-            BestScores = await bestScoresTask
+            RecentStats = recentStats,
+            BestScores = bestScores
         };
 
         return stats;
@@ -430,8 +453,10 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             .OrderBy(r => r.Rank)
             .ToList();
 
-        // 2. Calculate activity by hour using native ClickHouse query
-        var activityByHour = await GetActivityByHourFromClickHouse(playerName, startPeriod, endPeriod);
+        // 2. Calculate activity by hour
+        var activityByHour = UseSqlite("GetActivityByHour")
+            ? await GetActivityByHourFromSessions(playerName, startPeriod, endPeriod)
+            : await GetActivityByHourFromClickHouse(playerName, startPeriod, endPeriod);
         insights.ActivityByHour = activityByHour;
 
         return insights;
@@ -620,8 +645,10 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             .Where(s => serverGuids.Contains(s.Guid))
             .ToDictionaryAsync(s => s.Guid, s => s.Name);
 
-        // Get ping data from ClickHouse with native sampling - much more efficient
-        var pingData = await GetAveragePingFromClickHouse(playerName, serverGuids);
+        // Get ping data - use SQLite PlayerSessions or ClickHouse based on toggle
+        var pingData = UseSqlite("GetAveragePing")
+            ? await GetAveragePingFromSessions(playerName, serverGuids)
+            : await GetAveragePingFromClickHouse(playerName, serverGuids);
 
         // Calculate rankings using a more efficient approach - one query per server but much faster
         var results = new List<ServerRanking>();
@@ -708,6 +735,38 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to get ping data from ClickHouse for player {PlayerName}", playerName);
+            return new Dictionary<string, double>();
+        }
+    }
+
+    private async Task<Dictionary<string, double>> GetAveragePingFromSessions(string playerName, List<string> serverGuids)
+    {
+        if (!serverGuids.Any())
+            return new Dictionary<string, double>();
+
+        try
+        {
+            var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
+
+            var pingData = await dbContext.PlayerSessions
+                .Where(ps => ps.PlayerName == playerName &&
+                            serverGuids.Contains(ps.ServerGuid) &&
+                            ps.AveragePing > 0 &&
+                            ps.AveragePing < 1000 &&
+                            ps.StartTime >= sixMonthsAgo)
+                .GroupBy(ps => ps.ServerGuid)
+                .Select(g => new
+                {
+                    ServerGuid = g.Key,
+                    AvgPing = g.Average(ps => ps.AveragePing)
+                })
+                .ToListAsync();
+
+            return pingData.ToDictionary(p => p.ServerGuid, p => p.AvgPing ?? 0);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to get ping data from SQLite for player {PlayerName}", playerName);
             return new Dictionary<string, double>();
         }
     }
