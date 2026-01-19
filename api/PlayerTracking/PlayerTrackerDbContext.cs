@@ -360,6 +360,14 @@ public class PlayerTrackerDbContext : DbContext
                 instant => FormatInstant(instant),
                 str => ParseInstant(str));
 
+        // Configure relationship: TournamentTeam -> User (Leader)
+        modelBuilder.Entity<TournamentTeam>()
+            .HasOne(tt => tt.Leader)
+            .WithMany()
+            .HasForeignKey(tt => tt.LeaderUserId)
+            .OnDelete(DeleteBehavior.SetNull)
+            .IsRequired(false);
+
 
         // Configure TournamentTeamPlayer entity
         modelBuilder.Entity<TournamentTeamPlayer>()
@@ -390,6 +398,31 @@ public class PlayerTrackerDbContext : DbContext
             .HasForeignKey(ttp => ttp.PlayerName)
             .HasPrincipalKey(p => p.Name)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // Index on UserId for efficient user lookup
+        modelBuilder.Entity<TournamentTeamPlayer>()
+            .HasIndex(ttp => ttp.UserId);
+
+        // Configure NodaTime Instant conversions for TournamentTeamPlayer
+        modelBuilder.Entity<TournamentTeamPlayer>()
+            .Property(ttp => ttp.RulesAcknowledgedAt)
+            .HasConversion(
+                instant => instant.HasValue ? FormatInstant(instant.Value) : null,
+                str => str != null ? ParseInstant(str) : null);
+
+        modelBuilder.Entity<TournamentTeamPlayer>()
+            .Property(ttp => ttp.JoinedAt)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        // Configure relationship: TournamentTeamPlayer -> User (optional)
+        modelBuilder.Entity<TournamentTeamPlayer>()
+            .HasOne(ttp => ttp.User)
+            .WithMany()
+            .HasForeignKey(ttp => ttp.UserId)
+            .OnDelete(DeleteBehavior.SetNull)
+            .IsRequired(false);
 
         // Configure TournamentMatch entity
         modelBuilder.Entity<TournamentMatch>()
@@ -1167,10 +1200,13 @@ public class TournamentTeam
     public int Id { get; set; }
     public int TournamentId { get; set; }
     public string Name { get; set; } = ""; // Team name (usually clan tag)
+    public string? Tag { get; set; } // Short clan tag e.g. "[GGE]"
+    public int? LeaderUserId { get; set; } // User who created/leads team
     public Instant CreatedAt { get; set; }
 
     // Navigation properties
     public Tournament Tournament { get; set; } = null!;
+    public User? Leader { get; set; }
     public List<TournamentTeamPlayer> TeamPlayers { get; set; } = [];
 }
 
@@ -1227,9 +1263,17 @@ public class TournamentTeamPlayer
     public int TournamentTeamId { get; set; }
     public string PlayerName { get; set; } = ""; // References Player.Name
 
+    // Self-service registration fields
+    public int? UserId { get; set; } // Link to User if they joined themselves
+    public bool IsTeamLeader { get; set; } = false;
+    public bool RulesAcknowledged { get; set; } = false;
+    public Instant? RulesAcknowledgedAt { get; set; }
+    public Instant JoinedAt { get; set; }
+
     // Navigation properties
     public TournamentTeam TournamentTeam { get; set; } = null!;
     public Player Player { get; set; } = null!;
+    public User? User { get; set; }
 }
 
 public class TournamentMatchResult

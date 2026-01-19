@@ -235,9 +235,9 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             bestScores = new PlayerBestScores();
         }
 
-        // 5. Get insights (time series trends are retired)
+        // 5. Get insights and recent stats trends
         var insights = await GetPlayerInsights(playerName);
-        RecentStats? recentStats = null;
+        var recentStats = await GetRecentStatsTrends(playerName);
 
         var aggregateStats = new
         {
@@ -581,6 +581,82 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             .Select(kvp => new HourlyActivity { Hour = kvp.Key, MinutesActive = kvp.Value })
             .OrderByDescending(ha => ha.MinutesActive)
             .ToList();
+    }
+
+    private async Task<RecentStats> GetRecentStatsTrends(string playerName)
+    {
+        // Calculate trends over the last 90 days
+        var endDate = DateTime.UtcNow;
+        var startDate = endDate.AddDays(-90);
+
+        // Use raw SQL to aggregate data directly in the database to avoid loading all sessions into memory
+        var sql = @"
+            SELECT
+                DATE(StartTime) as Date,
+                SUM(TotalKills) as TotalKills,
+                SUM(TotalDeaths) as TotalDeaths,
+                CAST(SUM((julianday(LastSeenTime) - julianday(StartTime)) * 1440) AS REAL) as TotalMinutes,
+                COUNT(*) as SessionCount
+            FROM PlayerSessions
+            WHERE PlayerName = {0}
+                AND StartTime >= {1}
+                AND LastSeenTime <= {2}
+            GROUP BY DATE(StartTime)
+            ORDER BY DATE(StartTime)";
+
+        var dailyStats = await dbContext.Database
+            .SqlQueryRaw<DailyStatsResult>(sql, playerName, startDate, endDate)
+            .ToListAsync();
+
+        // Calculate total rounds analyzed
+        var totalRoundsAnalyzed = dailyStats.Sum(d => d.SessionCount);
+
+        if (!dailyStats.Any())
+        {
+            return new RecentStats
+            {
+                AnalysisPeriodStart = startDate,
+                AnalysisPeriodEnd = endDate,
+                TotalRoundsAnalyzed = 0,
+                KdRatioTrend = new List<TrendDataPoint>(),
+                KillRateTrend = new List<TrendDataPoint>()
+            };
+        }
+
+        // Create trend data points with calculations done in memory (only for aggregated daily data)
+        var kdRatioTrend = dailyStats
+            .Select(d => new TrendDataPoint
+            {
+                Timestamp = d.Date,
+                Value = d.TotalDeaths > 0 ? (double)d.TotalKills / d.TotalDeaths : d.TotalKills
+            })
+            .ToList();
+
+        var killRateTrend = dailyStats
+            .Select(d => new TrendDataPoint
+            {
+                Timestamp = d.Date,
+                Value = d.TotalMinutes > 0 ? (double)d.TotalKills / d.TotalMinutes : 0
+            })
+            .ToList();
+
+        return new RecentStats
+        {
+            AnalysisPeriodStart = startDate,
+            AnalysisPeriodEnd = endDate,
+            TotalRoundsAnalyzed = totalRoundsAnalyzed,
+            KdRatioTrend = kdRatioTrend,
+            KillRateTrend = killRateTrend
+        };
+    }
+
+    private class DailyStatsResult
+    {
+        public DateTime Date { get; set; }
+        public int TotalKills { get; set; }
+        public int TotalDeaths { get; set; }
+        public double TotalMinutes { get; set; }
+        public int SessionCount { get; set; }
     }
 
 

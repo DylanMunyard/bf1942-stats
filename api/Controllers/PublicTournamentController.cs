@@ -34,32 +34,48 @@ public class PublicTournamentController(
         // Load teams for this tournament
         var teams = await context.TournamentTeams
             .Where(tt => tt.TournamentId == tournamentId)
-            .Select(tt => new { tt.Id, tt.Name, tt.CreatedAt })
+            .Select(tt => new { tt.Id, tt.Name, tt.Tag, tt.CreatedAt })
             .ToListAsync();
 
         var teamIds = teams.Select(t => t.Id).ToList();
 
-        // Batch load all team players
+        // Batch load all team players with leader info
         var teamPlayers = teamIds.Count > 0
             ? await context.TournamentTeamPlayers
                 .Where(ttp => teamIds.Contains(ttp.TournamentTeamId))
-                .Select(ttp => new { ttp.TournamentTeamId, ttp.PlayerName })
+                .Select(ttp => new { ttp.TournamentTeamId, ttp.PlayerName, ttp.IsTeamLeader })
                 .ToListAsync()
             : [];
 
         var teamPlayersLookup = teamPlayers
             .GroupBy(tp => tp.TournamentTeamId)
-            .ToDictionary(g => g.Key, g => g.Select(x => x.PlayerName).ToList());
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(x => x.IsTeamLeader)
+                      .Select(x => new { x.PlayerName, x.IsTeamLeader })
+                      .ToList());
 
         // Build team responses
-        return teams.Select(t => new PublicTournamentTeamResponse
+        return teams.Select(t =>
         {
-            Id = t.Id,
-            Name = t.Name,
-            CreatedAt = t.CreatedAt,
-            Players = teamPlayersLookup.GetValueOrDefault(t.Id, new List<string>())
-                .Select(pn => new PublicTournamentTeamPlayerResponse { PlayerName = pn })
-                .ToList()
+            var players = teamPlayersLookup.GetValueOrDefault(t.Id, []);
+            var leaderPlayerName = players.FirstOrDefault(p => p.IsTeamLeader)?.PlayerName;
+
+            return new PublicTournamentTeamResponse
+            {
+                Id = t.Id,
+                Name = t.Name,
+                Tag = t.Tag,
+                CreatedAt = t.CreatedAt,
+                LeaderPlayerName = leaderPlayerName,
+                Players = players
+                    .Select(p => new PublicTournamentTeamPlayerResponse
+                    {
+                        PlayerName = p.PlayerName,
+                        IsLeader = p.IsTeamLeader
+                    })
+                    .ToList()
+            };
         }).ToList();
     }
 
@@ -543,13 +559,16 @@ public class PublicTournamentTeamResponse
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
+    public string? Tag { get; set; }
     public Instant CreatedAt { get; set; }
+    public string? LeaderPlayerName { get; set; }
     public List<PublicTournamentTeamPlayerResponse> Players { get; set; } = [];
 }
 
 public class PublicTournamentTeamPlayerResponse
 {
     public string PlayerName { get; set; } = "";
+    public bool IsLeader { get; set; }
 }
 
 public class PublicTournamentMatchResponse

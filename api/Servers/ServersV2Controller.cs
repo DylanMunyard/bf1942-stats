@@ -25,7 +25,8 @@ public class ServersV2Controller(
     public async Task<ActionResult<ServerLeaderboards>> GetServerLeaderboards(
         string serverName,
         [FromQuery] int days = ApiConstants.TimePeriods.DefaultDays,
-        [FromQuery] int? minPlayersForWeighting = null)
+        [FromQuery] int? minPlayersForWeighting = null,
+        [FromQuery] int? minRoundsForKillBoards = null)
     {
         if (string.IsNullOrWhiteSpace(serverName))
             return BadRequest(ApiConstants.ValidationMessages.ServerNameEmpty);
@@ -42,7 +43,7 @@ public class ServersV2Controller(
                 return BadRequest("Days must be greater than 0");
             }
 
-            var cacheKey = $"{cacheKeyService.GetServerLeaderboardsKey(serverName, days)}_v2_weight_{minPlayersForWeighting}";
+            var cacheKey = $"{cacheKeyService.GetServerLeaderboardsKey(serverName, days)}_v2_weight_{minPlayersForWeighting}_minrounds_{minRoundsForKillBoards}";
             var cachedResult = await cacheService.GetAsync<ServerLeaderboards>(cacheKey);
 
             if (cachedResult != null)
@@ -75,8 +76,8 @@ public class ServersV2Controller(
             // SQLite leaderboards
             var mostActivePlayersTask = sqliteLeaderboardService.GetMostActivePlayersAsync(server.Guid, startPeriod, endPeriod, 10);
             var topScoresTask = sqliteLeaderboardService.GetTopScoresAsync(server.Guid, startPeriod, endPeriod, 10);
-            var topKDRatiosTask = sqliteLeaderboardService.GetTopKDRatiosAsync(server.Guid, startPeriod, endPeriod, 10);
-            var topKillRatesTask = sqliteLeaderboardService.GetTopKillRatesAsync(server.Guid, startPeriod, endPeriod, 10);
+            var topKDRatiosTask = sqliteLeaderboardService.GetTopKDRatiosAsync(server.Guid, startPeriod, endPeriod, 10, minRoundsForKillBoards);
+            var topKillRatesTask = sqliteLeaderboardService.GetTopKillRatesAsync(server.Guid, startPeriod, endPeriod, 10, minRoundsForKillBoards);
             var topPlacementsTask = GetPlacementLeaderboardAsync(server.Guid, startPeriod, endPeriod, 10);
 
             await Task.WhenAll(mostActivePlayersTask, topScoresTask, topKDRatiosTask, topKillRatesTask, topPlacementsTask);
