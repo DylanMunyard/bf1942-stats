@@ -58,9 +58,20 @@ var loggerConfig = new LoggerConfiguration()
     // Keep controller logs at Information level
     .MinimumLevel.Override("api.PlayerStats.PlayersController", Serilog.Events.LogEventLevel.Information)
     .MinimumLevel.Override("api.ServerStats.ServersController", Serilog.Events.LogEventLevel.Information)
-    // Suppress verbose HTTP client logs from the OTLP trace exporter
+    // Suppress verbose HTTP client logs from the OTLP trace exporter and buddy services
     .MinimumLevel.Override("System.Net.Http.HttpClient.OtlpTraceExporter.LogicalHandler", Serilog.Events.LogEventLevel.Warning)
     .MinimumLevel.Override("System.Net.Http.HttpClient.OtlpTraceExporter.ClientHandler", Serilog.Events.LogEventLevel.Warning)
+    .MinimumLevel.Override("System.Net.Http.HttpClient.IBuddyApiService.ClientHandler", Serilog.Events.LogEventLevel.Warning)
+    // Filter out OTLP trace export HTTP requests
+    .Filter.ByExcluding(logEvent =>
+    {
+        if (logEvent.MessageTemplate.Text?.Contains("Sending HTTP request") == true &&
+            logEvent.MessageTemplate.Text?.Contains("http://tempo.monitoring:4318/v1/traces") == true)
+        {
+            return true; // Exclude this log
+        }
+        return false; // Include this log
+    })
     .Enrich.WithProperty("service.name", serviceName)
     .Enrich.WithProperty("service.version", "1.0.0")
     .Enrich.WithProperty("deployment.environment", environment)
