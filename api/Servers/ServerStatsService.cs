@@ -985,4 +985,92 @@ LIMIT $limit";
         return busyIndicator;
     }
 
+    /// <summary>
+    /// Get server rankings by total playtime for the last N days
+    /// </summary>
+    public async Task<List<ServerRank>> GetServerRankingsByPlaytimeAsync(
+        IEnumerable<string> serverGuids,
+        int days = 30)
+    {
+        var serverGuidList = serverGuids.ToList();
+        if (!serverGuidList.Any())
+        {
+            return new List<ServerRank>();
+        }
+
+        // Check cache first
+        var cacheKey = cacheKeyService.GetServerPlaytimeRankingsKey(serverGuidList, days);
+        var cachedResult = await cacheService.GetAsync<List<ServerRank>>(cacheKey);
+        if (cachedResult != null)
+        {
+            logger.LogDebug("Cache hit for server rankings: {ServerCount} servers, {Days} days", serverGuidList.Count, days);
+            return cachedResult;
+        }
+
+        logger.LogDebug("Cache miss for server rankings: {ServerCount} servers, {Days} days", serverGuidList.Count, days);
+
+        // Calculate the start date (last N days ago)
+        var startDate = DateTime.UtcNow.AddDays(-days);
+
+        // Get the ISO week boundary for the start date
+        var startIsoWeek = GetIsoWeek(startDate);
+        var startIsoYear = startDate.Year;
+
+        // Query PlayerServerStats to sum playtime per server from the start date onwards
+        // Include all records from the week containing the start date up to the latest available data
+        var serverPlaytimeTotals = await dbContext.PlayerServerStats
+            .Where(pss => serverGuidList.Contains(pss.ServerGuid))
+            .Where(pss =>
+                // Include records where year > start year, or year == start year and week >= start week
+                (pss.Year > startIsoYear) ||
+                (pss.Year == startIsoYear && pss.Week >= startIsoWeek))
+            .GroupBy(pss => pss.ServerGuid)
+            .Select(g => new
+            {
+                ServerGuid = g.Key,
+                TotalPlayTimeMinutes = g.Sum(pss => pss.TotalPlayTimeMinutes)
+            })
+            .Where(x => x.TotalPlayTimeMinutes > 0) // Only include servers with playtime
+            .OrderByDescending(x => x.TotalPlayTimeMinutes)
+            .ToListAsync();
+
+        // Create rankings
+        var rankings = serverPlaytimeTotals
+            .Select((server, index) => new ServerRank
+            {
+                ServerGuid = server.ServerGuid,
+                Rank = index + 1,
+                TotalPlayTimeMinutes = server.TotalPlayTimeMinutes
+            })
+            .ToList();
+
+        // Include servers with no playtime data at the end
+        var serversWithData = new HashSet<string>(rankings.Select(r => r.ServerGuid));
+        var serversWithoutData = serverGuidList
+            .Where(guid => !serversWithData.Contains(guid))
+            .Select((guid, index) => new ServerRank
+            {
+                ServerGuid = guid,
+                Rank = rankings.Count + index + 1,
+                TotalPlayTimeMinutes = 0
+            });
+
+        rankings.AddRange(serversWithoutData);
+
+        // Cache the result for 15 minutes (shorter than server stats since rankings can change more frequently)
+        await cacheService.SetAsync(cacheKey, rankings, TimeSpan.FromMinutes(15));
+        logger.LogDebug("Cached server rankings: {ServerCount} servers, {Days} days", serverGuidList.Count, days);
+
+        return rankings;
+    }
+
+    /// <summary>
+    /// Get ISO week number for a given date
+    /// </summary>
+    private static int GetIsoWeek(DateTime date)
+    {
+        var day = (int)System.Globalization.CultureInfo.CurrentCulture.Calendar.GetDayOfWeek(date);
+        return System.Globalization.CultureInfo.CurrentCulture.Calendar.GetWeekOfYear(date, System.Globalization.CalendarWeekRule.FirstFourDayWeek, DayOfWeek.Monday);
+    }
+
 }

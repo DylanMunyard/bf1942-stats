@@ -323,4 +323,28 @@ public class ServersController(
             return BadRequest(ex.Message);
         }
     }
+
+    // Get server rankings by total playtime
+    [HttpGet("rankings")]
+    public async Task<ActionResult<List<ServerRank>>> GetServerRankings(
+        [FromQuery] List<string> serverGuids,
+        [FromQuery] int days = 30)
+    {
+        if (serverGuids == null || !serverGuids.Any())
+            return BadRequest("At least one server GUID must be provided");
+
+        if (days < 1 || days > 365)
+            return BadRequest("Days must be between 1 and 365");
+
+        try
+        {
+            var rankings = await serverStatsService.GetServerRankingsByPlaytimeAsync(serverGuids, days);
+            return Ok(rankings);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to get server rankings for {ServerCount} servers, {Days} days", serverGuids.Count, days);
+            return StatusCode(500, "Internal server error");
+        }
+    }
 }
