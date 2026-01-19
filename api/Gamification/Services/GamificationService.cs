@@ -333,6 +333,11 @@ public class GamificationService(SqliteGamificationService gamificationService, 
         return await gamificationService.PlayerHasAchievementAsync(playerName, achievementId);
     }
 
+    public Task<List<PlayerAchievementGroup>> GetPlayerAchievementGroupsAsync(string playerName)
+    {
+        return gamificationService.GetPlayerAchievementGroupsAsync(playerName);
+    }
+
     /// <summary>
     /// Get all achievements with pagination, filtering, and player achievement IDs
     /// </summary>

@@ -93,6 +93,27 @@ public class GamificationController(
     }
 
     /// <summary>
+    /// Get grouped achievement counts for a player
+    /// </summary>
+    [HttpGet("player/{playerName}/achievement-groups")]
+    public async Task<ActionResult<List<PlayerAchievementGroup>>> GetPlayerAchievementGroups(string playerName)
+    {
+        if (string.IsNullOrWhiteSpace(playerName))
+            return BadRequest("Player name is required");
+
+        try
+        {
+            var groups = await gamificationService.GetPlayerAchievementGroupsAsync(playerName);
+            return Ok(groups);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error getting grouped achievements for player {PlayerName}", playerName);
+            return StatusCode(500, "An internal server error occurred while retrieving player achievements.");
+        }
+    }
+
+    /// <summary>
     /// Get leaderboard for specific category
     /// </summary>
     [HttpGet("leaderboard/{category}")]

@@ -219,6 +219,55 @@ public class SqliteGamificationService(
     }
 
     /// <summary>
+    /// Get grouped achievement counts for a player
+    /// </summary>
+    public async Task<List<PlayerAchievementGroup>> GetPlayerAchievementGroupsAsync(string playerName)
+    {
+        try
+        {
+            var grouped = await dbContext.PlayerAchievements
+                .Where(pa => pa.PlayerName == playerName)
+                .GroupBy(pa => new
+                {
+                    pa.AchievementId,
+                    pa.AchievementName,
+                    pa.AchievementType,
+                    pa.Tier,
+                    pa.Game
+                })
+                .Select(g => new
+                {
+                    g.Key.AchievementId,
+                    g.Key.AchievementName,
+                    g.Key.AchievementType,
+                    g.Key.Tier,
+                    g.Key.Game,
+                    Count = g.Count(),
+                    LatestValue = g.Max(pa => pa.Value),
+                    LatestAchievedAt = g.Max(pa => pa.AchievedAt)
+                })
+                .ToListAsync();
+
+            return grouped.Select(g => new PlayerAchievementGroup
+            {
+                AchievementId = g.AchievementId,
+                AchievementName = g.AchievementName,
+                AchievementType = g.AchievementType,
+                Tier = g.Tier,
+                Game = g.Game,
+                Count = g.Count,
+                LatestValue = g.LatestValue,
+                LatestAchievedAt = g.LatestAchievedAt.ToDateTimeUtc()
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to get grouped achievements for player {PlayerName}", playerName);
+            return new List<PlayerAchievementGroup>();
+        }
+    }
+
+    /// <summary>
     /// Get player's achievements by type
     /// </summary>
     public async Task<List<Achievement>> GetPlayerAchievementsByTypeAsync(
