@@ -1,5 +1,5 @@
 using api.Gamification.Models;
-using api.ClickHouse.Models;
+using api.Analytics.Models;
 using api.Telemetry;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
@@ -7,7 +7,7 @@ using System.Diagnostics;
 
 namespace api.Gamification.Services;
 
-public class GamificationService(SqliteGamificationService gamificationService, KillStreakDetector killStreakDetector, MilestoneCalculator milestoneCalculator, BadgeDefinitionsService badgeDefinitionsService, HistoricalProcessor historicalProcessor, AchievementLabelingService achievementLabelingService, PlacementProcessor placementProcessor, TeamVictoryProcessor teamVictoryProcessor, IConfiguration configuration, ILogger<GamificationService> logger) : IDisposable
+public class GamificationService(SqliteGamificationService gamificationService, KillStreakDetector killStreakDetector, MilestoneCalculator milestoneCalculator, BadgeDefinitionsService badgeDefinitionsService, AchievementLabelingService achievementLabelingService, PlacementProcessor placementProcessor, TeamVictoryProcessor teamVictoryProcessor, IConfiguration configuration, ILogger<GamificationService> logger) : IDisposable
 {
     private readonly ILogger<GamificationService> _logger = InitializeLogger(logger, configuration);
     private readonly int _maxConcurrentRounds = configuration.GetValue<int>("GAMIFICATION_MAX_CONCURRENT_ROUNDS", 10);
@@ -84,13 +84,13 @@ public class GamificationService(SqliteGamificationService gamificationService, 
     }
 
     /// <summary>
-    /// Process achievements for a specific set of rounds using ClickHouse player_metrics
+    /// Process achievements for a specific set of rounds using player metrics
     /// </summary>
     public async Task<List<Achievement>> ProcessAchievementsForRounds(List<PlayerRound> rounds)
     {
         try
         {
-            _logger.LogInformation("Processing achievements for {RoundCount} rounds using ClickHouse player_metrics", rounds.Count);
+            _logger.LogInformation("Processing achievements for {RoundCount} rounds using player metrics", rounds.Count);
 
             // Use batch processing for better performance
             if (rounds.Count > 10)
@@ -118,7 +118,7 @@ public class GamificationService(SqliteGamificationService gamificationService, 
         {
             var roundAchievements = new List<Achievement>();
 
-            // 1. Kill Streak Achievements using ClickHouse player_metrics
+            // 1. Kill Streak Achievements using player metrics
             var streakAchievements = await killStreakDetector.CalculateKillStreaksForRoundAsync(round);
             roundAchievements.AddRange(streakAchievements);
 
@@ -146,7 +146,7 @@ public class GamificationService(SqliteGamificationService gamificationService, 
 
     /// <summary>
     /// Batch process achievements for better performance with large datasets
-    /// Uses ClickHouse player_metrics for more efficient calculations
+    /// Uses player metrics for more efficient calculations
     /// </summary>
     private async Task<List<Achievement>> ProcessAchievementsForRoundsBatchAsync(List<PlayerRound> rounds)
     {
@@ -307,34 +307,6 @@ public class GamificationService(SqliteGamificationService gamificationService, 
     public async Task<List<PlacementLeaderboardEntry>> GetPlacementLeaderboardAsync(string? serverGuid = null, string? mapName = null, int limit = 100)
     {
         return await gamificationService.GetPlacementLeaderboardAsync(serverGuid, mapName, limit);
-    }
-
-    /// <summary>
-    /// Historical processing for initial migration - uses ClickHouse-native approach
-    /// </summary>
-    public async Task ProcessHistoricalDataAsync(DateTime? fromDate = null, DateTime? toDate = null)
-    {
-        using var activity = ActivitySources.Gamification.StartActivity("Gamification.ProcessHistoricalData");
-
-        try
-        {
-            var startDate = fromDate ?? DateTime.UtcNow.AddMonths(-6); // Default: 6 months
-            var endDate = toDate ?? DateTime.UtcNow;
-
-            _logger.LogInformation("Starting historical gamification processing from {StartDate} to {EndDate}",
-                startDate, endDate);
-
-            // Use the injected historical processor that leverages ClickHouse native operations
-            // This reduces query count from ~100k individual queries to ~10-50 aggregate queries
-            await historicalProcessor.ProcessHistoricalDataAsync(startDate, endDate);
-
-            _logger.LogInformation("Historical gamification processing completed");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error during historical processing");
-            throw;
-        }
     }
 
     /// <summary>

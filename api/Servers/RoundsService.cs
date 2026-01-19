@@ -1,4 +1,3 @@
-using api.ClickHouse;
 using api.Players.Models;
 using api.PlayerTracking;
 using api.Servers.Models;

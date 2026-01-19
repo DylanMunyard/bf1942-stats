@@ -1,8 +1,6 @@
-using api.Gamification.Services;
 using api.Services.BackgroundJobs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace api.Controllers;
@@ -18,8 +16,6 @@ public class AdminJobsController(
     IDailyAggregateRefreshBackgroundService dailyAggregateRunner,
     IWeeklyCleanupBackgroundService weeklyCleanupRunner,
     IAggregateBackfillBackgroundService aggregateBackfillRunner,
-    IServerOnlineCountsBackfillBackgroundService serverOnlineCountsBackfillRunner,
-    IServiceScopeFactory scopeFactory,
     ILogger<AdminJobsController> logger
 ) : ControllerBase
 {
@@ -126,38 +122,6 @@ public class AdminJobsController(
     }
 
     /// <summary>
-    /// Trigger ServerOnlineCounts backfill from ClickHouse to SQLite (fire-and-forget).
-    /// Aggregates minute-level data to hourly granularity.
-    /// Returns immediately - check logs for progress.
-    /// </summary>
-    /// <param name="days">Number of days to backfill (default 60)</param>
-    [HttpPost("server-online-counts-backfill")]
-    public IActionResult TriggerServerOnlineCountsBackfill([FromQuery] int days = 60)
-    {
-        if (days < 1 || days > 365)
-        {
-            return BadRequest(new { error = "Days must be between 1 and 365" });
-        }
-
-        logger.LogInformation("Manual trigger: ServerOnlineCountsBackfill for {Days} days (fire-and-forget)", days);
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await serverOnlineCountsBackfillRunner.RunAsync(days);
-                logger.LogInformation("ServerOnlineCountsBackfill ({Days} days) completed successfully", days);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "ServerOnlineCountsBackfill failed");
-            }
-        });
-
-        return Accepted(new { message = $"ServerOnlineCounts backfill ({days} days) started in background. Check logs for progress." });
-    }
-
-    /// <summary>
     /// Trigger full ServerMapStats backfill from all historical Rounds data (fire-and-forget).
     /// Use this for initial population - daily refresh only updates last 2 months.
     /// Returns immediately - check logs for progress.
@@ -181,86 +145,6 @@ public class AdminJobsController(
         });
 
         return Accepted(new { message = "ServerMapStats full backfill started in background. Check logs for progress." });
-    }
-
-    /// <summary>
-    /// Trigger full achievement backfill from ClickHouse to SQLite (fire-and-forget).
-    /// Migrates all player achievements to the new SQLite storage.
-    /// Returns immediately - check logs for progress.
-    /// </summary>
-    [HttpPost("achievement-backfill")]
-    public IActionResult TriggerAchievementBackfill()
-    {
-        logger.LogInformation("Manual trigger: AchievementBackfill (fire-and-forget)");
-
-        _ = Task.Run(async () =>
-        {
-            using var scope = scopeFactory.CreateScope();
-            var scopedRunner = scope.ServiceProvider.GetRequiredService<AchievementBackfillService>();
-
-            try
-            {
-                var result = await scopedRunner.BackfillAllAchievementsAsync();
-                if (result.Success)
-                {
-                    logger.LogInformation("AchievementBackfill completed successfully: {Migrated} achievements in {DurationMs}ms",
-                        result.MigratedCount, result.DurationMs);
-                }
-                else
-                {
-                    logger.LogError("AchievementBackfill failed: {Error}", result.ErrorMessage);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "AchievementBackfill failed");
-            }
-        });
-
-        return Accepted(new { message = "Achievement backfill started in background. Check logs for progress." });
-    }
-
-    /// <summary>
-    /// Trigger achievement backfill for a specific player (fire-and-forget).
-    /// Migrates all achievements for the specified player to SQLite.
-    /// Returns immediately - check logs for progress.
-    /// </summary>
-    /// <param name="playerName">The player name to backfill achievements for</param>
-    [HttpPost("achievement-backfill/player/{playerName}")]
-    public IActionResult TriggerPlayerAchievementBackfill(string playerName)
-    {
-        if (string.IsNullOrWhiteSpace(playerName))
-        {
-            return BadRequest(new { error = "Player name is required" });
-        }
-
-        logger.LogInformation("Manual trigger: AchievementBackfill for player {PlayerName} (fire-and-forget)", playerName);
-
-        _ = Task.Run(async () =>
-        {
-            using var scope = scopeFactory.CreateScope();
-            var scopedRunner = scope.ServiceProvider.GetRequiredService<AchievementBackfillService>();
-
-            try
-            {
-                var result = await scopedRunner.BackfillPlayerAchievementsAsync(playerName);
-                if (result.Success)
-                {
-                    logger.LogInformation("AchievementBackfill for player {PlayerName} completed: {Migrated} achievements in {DurationMs}ms",
-                        playerName, result.MigratedCount, result.DurationMs);
-                }
-                else
-                {
-                    logger.LogError("AchievementBackfill for player {PlayerName} failed: {Error}", playerName, result.ErrorMessage);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "AchievementBackfill for player {PlayerName} failed", playerName);
-            }
-        });
-
-        return Accepted(new { message = $"Achievement backfill for player '{playerName}' started in background. Check logs for progress." });
     }
 
     /// <summary>

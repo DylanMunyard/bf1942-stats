@@ -15,7 +15,7 @@ public static class BackgroundJobMetrics
 
     /// <summary>
     /// Counter incremented each time a job completes. Use rate() to see job frequency.
-    /// Labels: job={stats_collection|clickhouse_sync|ranking_calc|gamification}
+    /// Labels: job={stats_collection|ranking_calc|gamification}
     /// </summary>
     public static readonly Counter<long> JobExecutions = Meter.CreateCounter<long>(
         "bg_job_executions_total",
@@ -23,7 +23,7 @@ public static class BackgroundJobMetrics
 
     /// <summary>
     /// Histogram of job execution durations. Correlate with memory spikes.
-    /// Labels: job={stats_collection|clickhouse_sync|ranking_calc|gamification}
+    /// Labels: job={stats_collection|ranking_calc|gamification}
     /// </summary>
     public static readonly Histogram<double> JobDuration = Meter.CreateHistogram<double>(
         "bg_job_duration_seconds",
@@ -50,23 +50,6 @@ public static class BackgroundJobMetrics
     public static readonly Counter<long> ServersProcessed = Meter.CreateCounter<long>(
         "bg_servers_processed_total",
         description: "Total game servers processed by stats collection");
-
-    /// <summary>
-    /// Counter for ClickHouse records synced. High volume = potential spike.
-    /// Labels: operation={player_metrics|server_counts|rounds}
-    /// </summary>
-    public static readonly Counter<long> ClickHouseRecordsSynced = Meter.CreateCounter<long>(
-        "bg_clickhouse_records_synced_total",
-        description: "Total records synced to ClickHouse");
-
-    /// <summary>
-    /// Duration of ClickHouse sync operations. Slow syncs may indicate issues.
-    /// Labels: operation={player_metrics|server_counts|rounds}
-    /// </summary>
-    public static readonly Histogram<double> ClickHouseSyncDuration = Meter.CreateHistogram<double>(
-        "bg_clickhouse_sync_duration_seconds",
-        unit: "s",
-        description: "Duration of ClickHouse sync operations");
 
     /// <summary>
     /// Counter for player rankings inserted. High volume = potential spike.

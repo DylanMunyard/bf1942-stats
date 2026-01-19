@@ -1,4 +1,4 @@
-namespace api.ClickHouse.Models;
+namespace api.Analytics.Models;
 
 public enum TimePeriod
 {

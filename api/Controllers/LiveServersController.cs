@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using api.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
-using api.ClickHouse;
+using api.GameTrends;
 
 namespace api.Controllers;
 
@@ -14,7 +14,7 @@ public class LiveServersController(
     IBfListApiService bfListApiService,
     ILogger<LiveServersController> logger,
     PlayerTrackerDbContext dbContext,
-    PlayersOnlineHistoryService playersOnlineHistoryService) : ControllerBase
+    ISqliteGameTrendsService sqliteGameTrendsService) : ControllerBase
 {
 
     private static readonly string[] ValidGames = ["bf1942", "fh2", "bfvietnam"];
@@ -338,7 +338,8 @@ public class LiveServersController(
 
         try
         {
-            var history = await playersOnlineHistoryService.GetPlayersOnlineHistory(game.ToLower(), period.ToLower(), rollingWindowDays);
+            var history = await sqliteGameTrendsService.GetPlayersOnlineHistoryAsync(
+                game.ToLower(), period.ToLower(), rollingWindowDays);
             return Ok(history);
         }
         catch (Exception ex)

@@ -1,7 +1,7 @@
 using api.Data.Entities;
 using api.Gamification.Models;
 using api.PlayerTracking;
-using api.ClickHouse.Models;
+using api.Analytics.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NodaTime;
@@ -12,7 +12,7 @@ namespace api.Gamification.Services;
 
 /// <summary>
 /// SQLite-based gamification service for achievement storage and retrieval.
-/// Replaces ClickHouseGamificationService for the ClickHouse migration.
+/// SQLite-backed gamification service.
 /// </summary>
 public class SqliteGamificationService(
     PlayerTrackerDbContext dbContext,

@@ -313,7 +313,7 @@ FROM (
 
 1. Run the count queries first to understand data volume
 2. Add `LIMIT 100` to SELECT queries to test without full execution
-3. Use `EXPLAIN QUERY PLAN` (SQLite) or `EXPLAIN` (ClickHouse) to analyze query plans
+3. Use `EXPLAIN QUERY PLAN` (SQLite) to analyze query plans
 4. Time each query: `time sqlite3 database.db "SELECT ..."`
 5. Consider adding indexes if queries are slow:
    ```sql

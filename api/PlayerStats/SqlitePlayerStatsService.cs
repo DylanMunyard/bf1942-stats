@@ -1,10 +1,10 @@
 using System.Diagnostics;
-using api.ClickHouse.Models;
+using api.Analytics.Models;
 using api.Players.Models;
 using api.PlayerTracking;
 using api.Telemetry;
 using Microsoft.EntityFrameworkCore;
-using ServerStatistics = api.ClickHouse.Models.ServerStatistics;
+using ServerStatistics = api.Analytics.Models.ServerStatistics;
 
 namespace api.PlayerStats;
 

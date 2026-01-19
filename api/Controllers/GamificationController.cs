@@ -200,39 +200,6 @@ public class GamificationController(
     }
 
 
-    /// <summary>
-    /// Trigger historical data processing (admin only)
-    /// </summary>
-    [HttpPost("admin/process-historical")]
-    public Task<ActionResult> ProcessHistoricalData(
-        [FromQuery] DateTime? fromDate = null,
-        [FromQuery] DateTime? toDate = null)
-    {
-        try
-        {
-            // This is a long-running operation, so we'll run it in the background
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await gamificationService.ProcessHistoricalDataAsync(fromDate, toDate);
-                    logger.LogInformation("Historical gamification processing completed");
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Error during historical gamification processing");
-                }
-            });
-
-            return Task.FromResult<ActionResult>(Accepted("Historical processing started. Check logs for progress."));
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error starting historical processing");
-            return Task.FromResult<ActionResult>(StatusCode(500, "An internal server error occurred while starting historical processing."));
-        }
-    }
-
     /* 
         /// <summary>
         /// Trigger incremental processing (admin only)

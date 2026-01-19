@@ -1,24 +1,15 @@
-using api.ClickHouse;
 using api.Players.Models;
 using api.PlayerTracking;
 using api.PlayerStats;
-using api.Utils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace api.Players;
 
 public class PlayerStatsService(PlayerTrackerDbContext dbContext,
-    PlayerInsightsService playerInsightsService,
-    PlayerRoundsReadService playerRoundsReadService,
     ISqlitePlayerStatsService sqlitePlayerStatsService,
-    IQuerySourceSelector querySourceSelector,
     ILogger<PlayerStatsService> logger) : IPlayerStatsService
 {
-
-    private bool UseSqlite(string endpointName) =>
-        querySourceSelector.GetSource(endpointName) == QuerySource.SQLite;
-
     // Define a threshold for considering a player "active" (e.g., 5 minutes)
     private readonly TimeSpan _activeThreshold = TimeSpan.FromMinutes(1);
 
@@ -174,7 +165,6 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         var now = DateTime.UtcNow;
 
         // Execute queries - SQLite paths run sequentially to avoid DbContext threading issues
-        // ClickHouse paths can run in parallel via Task.Run since they have separate connections
 
         // 1. First run all DbContext queries sequentially
         var sessionStats = await dbContext.PlayerSessions
@@ -210,42 +200,22 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             })
             .ToListAsync();
 
-        // 2. Get player stats (SQLite or ClickHouse)
-        Models.PlayerClickHouseStats? clickHouseStats = null;
+        // 2. Get player stats (SQLite)
+        PlayerLifetimeStats? lifetimeStats = null;
         try
         {
-            if (UseSqlite("GetPlayerStats"))
-            {
-                var sqliteStats = await sqlitePlayerStatsService.GetPlayerStatsAsync(playerName);
-                if (sqliteStats != null)
-                {
-                    clickHouseStats = new Models.PlayerClickHouseStats
-                    {
-                        PlayerName = sqliteStats.PlayerName,
-                        TotalRounds = sqliteStats.TotalRounds,
-                        TotalKills = sqliteStats.TotalKills,
-                        TotalDeaths = sqliteStats.TotalDeaths,
-                        TotalPlayTimeMinutes = (int)Math.Round(sqliteStats.TotalPlayTimeMinutes)
-                    };
-                }
-            }
-            else
-            {
-                clickHouseStats = await GetPlayerStatsFromClickHouse(playerName);
-            }
+            lifetimeStats = await sqlitePlayerStatsService.GetPlayerStatsAsync(playerName);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to get player stats for player: {PlayerName}", playerName);
         }
 
-        // 3. Get server insights (SQLite or ClickHouse)
+        // 3. Get server insights (SQLite)
         List<ServerInsight> serverInsights;
         try
         {
-            serverInsights = UseSqlite("GetPlayerServerInsights")
-                ? await sqlitePlayerStatsService.GetPlayerServerInsightsAsync(playerName)
-                : await playerInsightsService.GetPlayerServerInsightsAsync(playerName);
+            serverInsights = await sqlitePlayerStatsService.GetPlayerServerInsightsAsync(playerName);
         }
         catch (Exception ex)
         {
@@ -253,13 +223,11 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             serverInsights = [];
         }
 
-        // 4. Get best scores (SQLite or ClickHouse)
+        // 4. Get best scores (SQLite)
         PlayerBestScores bestScores;
         try
         {
-            bestScores = UseSqlite("GetPlayerBestScores")
-                ? await sqlitePlayerStatsService.GetPlayerBestScoresAsync(playerName)
-                : await playerRoundsReadService.GetPlayerBestScoresAsync(playerName);
+            bestScores = await sqlitePlayerStatsService.GetPlayerBestScoresAsync(playerName);
         }
         catch (Exception ex)
         {
@@ -267,17 +235,19 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             bestScores = new PlayerBestScores();
         }
 
-        // 5. Get insights and time series (these don't conflict)
+        // 5. Get insights (time series trends are retired)
         var insights = await GetPlayerInsights(playerName);
-        var recentStats = await CalculateTimeSeriesTrendAsync(playerName);
+        RecentStats? recentStats = null;
 
         var aggregateStats = new
         {
             FirstPlayed = sessionStats?.FirstPlayed ?? DateTime.MinValue,
             LastPlayed = sessionStats?.LastPlayed ?? DateTime.MinValue,
-            TotalKills = clickHouseStats?.TotalKills ?? 0,
-            TotalDeaths = clickHouseStats?.TotalDeaths ?? 0,
-            TotalPlayTimeMinutes = clickHouseStats?.TotalPlayTimeMinutes ?? 0
+            TotalKills = lifetimeStats?.TotalKills ?? 0,
+            TotalDeaths = lifetimeStats?.TotalDeaths ?? 0,
+            TotalPlayTimeMinutes = lifetimeStats != null
+                ? (int)Math.Round(lifetimeStats.TotalPlayTimeMinutes)
+                : 0
         };
 
         // Get server names for the insights using batch query
@@ -453,174 +423,11 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             .OrderBy(r => r.Rank)
             .ToList();
 
-        // 2. Calculate activity by hour
-        var activityByHour = UseSqlite("GetActivityByHour")
-            ? await GetActivityByHourFromSessions(playerName, startPeriod, endPeriod)
-            : await GetActivityByHourFromClickHouse(playerName, startPeriod, endPeriod);
+        // 2. Calculate activity by hour from sessions
+        var activityByHour = await GetActivityByHourFromSessions(playerName, startPeriod, endPeriod);
         insights.ActivityByHour = activityByHour;
 
         return insights;
-    }
-
-    private async Task<Models.PlayerClickHouseStats?> GetPlayerStatsFromClickHouse(string playerName)
-    {
-        try
-        {
-            var result = await playerRoundsReadService.GetPlayerStatsAsync(playerName);
-
-            // Parse the tab-separated results
-            // Expected format: player_name	total_rounds	total_kills	total_deaths	total_play_time_minutes	avg_score_per_round	kd_ratio
-            var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-            // Skip header row if it exists
-            var dataLines = lines.Where(line => !line.StartsWith("player_name")).ToArray();
-
-            if (dataLines.Length == 0)
-                return null;
-
-            var parts = dataLines[0].Split('\t');
-            if (parts.Length >= 5)
-            {
-                return new Models.PlayerClickHouseStats
-                {
-                    PlayerName = parts[0],
-                    TotalRounds = int.Parse(parts[1]),
-                    TotalKills = int.Parse(parts[2]),
-                    TotalDeaths = int.Parse(parts[3]),
-                    TotalPlayTimeMinutes = (int)Math.Round(double.Parse(parts[4]))
-                };
-            }
-        }
-        catch (Exception)
-        {
-            // Log error but don't fail the request
-            // logger?.LogError(ex, "Failed to get player stats from ClickHouse for player: {PlayerName}", playerName);
-        }
-
-        return null;
-    }
-
-    private async Task<RecentStats?> CalculateTimeSeriesTrendAsync(string playerName)
-    {
-        try
-        {
-            logger.LogDebug("Calculating time series trend data for player: {PlayerName}", playerName);
-
-            // Look back 6 months for trend analysis
-            var sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
-
-            // Get time series data from ClickHouse
-            var timeSeriesResult = await playerRoundsReadService.GetPlayerTimeSeriesTrendAsync(playerName, sixMonthsAgo);
-
-            logger.LogDebug("ClickHouse time series result for {PlayerName}: {Result}", playerName,
-                timeSeriesResult?.Substring(0, Math.Min(200, timeSeriesResult?.Length ?? 0)));
-
-            // Parse time series data
-            var trendPoints = ParseTimeSeriesData(timeSeriesResult ?? "");
-            if (!trendPoints.Any())
-            {
-                logger.LogWarning("No time series data found for player: {PlayerName}. Raw result: {RawResult}",
-                    playerName, timeSeriesResult);
-                return null;
-            }
-
-            // Calculate total rounds analyzed from the time series query
-            var totalRounds = await GetPlayerRoundCountAsync(playerName, sixMonthsAgo);
-
-            var recentStats = new RecentStats
-            {
-                AnalysisPeriodStart = sixMonthsAgo,
-                AnalysisPeriodEnd = DateTime.UtcNow,
-                TotalRoundsAnalyzed = totalRounds,
-                KdRatioTrend = trendPoints.Select(tp => new TrendDataPoint
-                {
-                    Timestamp = tp.Timestamp,
-                    Value = tp.KdRatio
-                }).ToList(),
-                KillRateTrend = trendPoints.Select(tp => new TrendDataPoint
-                {
-                    Timestamp = tp.Timestamp,
-                    Value = tp.KillRate
-                }).ToList()
-            };
-
-            return recentStats;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to calculate time series trend for player: {PlayerName}", playerName);
-            return null;
-        }
-    }
-
-    private async Task<int> GetPlayerRoundCountAsync(string playerName, DateTime fromDate)
-    {
-        try
-        {
-            var countResult = await playerRoundsReadService.ExecuteQueryAsync($@"
-                SELECT COUNT(*) as round_count
-                FROM player_rounds
-                WHERE player_name = '{playerName.Replace("'", "''")}'
-                  AND round_end_time >= '{fromDate:yyyy-MM-dd HH:mm:ss}'
-                FORMAT TabSeparated");
-
-            var lines = countResult.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            if (lines.Length > 0 && int.TryParse(lines[0], out var count))
-            {
-                return count;
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to get round count for player: {PlayerName}", playerName);
-        }
-
-        return 0;
-    }
-
-    private List<Models.TimeSeriesPoint> ParseTimeSeriesData(string result)
-    {
-        var points = new List<Models.TimeSeriesPoint>();
-
-        if (string.IsNullOrWhiteSpace(result))
-        {
-            logger.LogWarning("Empty or null time series result from ClickHouse");
-            return points;
-        }
-
-        var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        logger.LogDebug("Parsing {LineCount} lines of time series data", lines.Length);
-
-        // Skip header row
-        var dataLines = lines.Skip(1);
-
-        foreach (var line in dataLines)
-        {
-            try
-            {
-                var parts = line.Split('\t');
-                if (parts.Length >= 3)
-                {
-                    points.Add(new Models.TimeSeriesPoint
-                    {
-                        Timestamp = DateTime.Parse(parts[0]),
-                        KdRatio = double.Parse(parts[1]),
-                        KillRate = double.Parse(parts[2])
-                    });
-                }
-                else
-                {
-                    logger.LogWarning("Invalid time series line format (expected 3+ parts, got {PartCount}): {Line}", parts.Length, line);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to parse time series line: {Line}", line);
-            }
-        }
-
-        logger.LogDebug("Successfully parsed {PointCount} time series points", points.Count);
-        return points;
     }
 
     private async Task<List<ServerRanking>> GetServerRankingsWithPing(string playerName)
@@ -645,10 +452,8 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
             .Where(s => serverGuids.Contains(s.Guid))
             .ToDictionaryAsync(s => s.Guid, s => s.Name);
 
-        // Get ping data - use SQLite PlayerSessions or ClickHouse based on toggle
-        var pingData = UseSqlite("GetAveragePing")
-            ? await GetAveragePingFromSessions(playerName, serverGuids)
-            : await GetAveragePingFromClickHouse(playerName, serverGuids);
+        // Get ping data from SQLite PlayerSessions
+        var pingData = await GetAveragePingFromSessions(playerName, serverGuids);
 
         // Calculate rankings using a more efficient approach - one query per server but much faster
         var results = new List<ServerRanking>();
@@ -688,57 +493,6 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         return results;
     }
 
-    private async Task<Dictionary<string, double>> GetAveragePingFromClickHouse(string playerName, List<string> serverGuids)
-    {
-        if (!serverGuids.Any())
-            return new Dictionary<string, double>();
-
-        try
-        {
-            // Escape single quotes to prevent SQL injection
-            var escapedPlayerName = playerName.Replace("'", "''");
-            var serverGuidsParam = string.Join("','", serverGuids.Select(g => g.Replace("'", "''")));
-
-            // Use pre-aggregated player_rounds table instead of player_metrics
-            var query = $@"
-                SELECT
-                    server_guid,
-                    AVG(average_ping) as avg_ping,
-                    COUNT(*) as sample_size
-                FROM player_rounds
-                WHERE player_name = '{escapedPlayerName}'
-                    AND server_guid IN ('{serverGuidsParam}')
-                    AND average_ping IS NOT NULL
-                    AND round_start_time >= now() - INTERVAL 6 MONTH
-                GROUP BY server_guid";
-
-            var result = await playerRoundsReadService.ExecuteQueryAsync(query);
-            var pingResults = new List<ClickHousePingResult>();
-
-            foreach (var line in result.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-            {
-                var parts = line.Split('\t');
-                if (parts.Length >= 2 &&
-                    double.TryParse(parts[1], out var avgPing))
-                {
-                    pingResults.Add(new ClickHousePingResult
-                    {
-                        server_guid = parts[0],
-                        average_ping = avgPing,
-                        sample_size = parts.Length > 2 && int.TryParse(parts[2], out var size) ? size : 0
-                    });
-                }
-            }
-
-            return pingResults.ToDictionary(r => r.server_guid, r => r.average_ping);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to get ping data from ClickHouse for player {PlayerName}", playerName);
-            return new Dictionary<string, double>();
-        }
-    }
-
     private async Task<Dictionary<string, double>> GetAveragePingFromSessions(string playerName, List<string> serverGuids)
     {
         if (!serverGuids.Any())
@@ -768,112 +522,6 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
         {
             logger.LogWarning(ex, "Failed to get ping data from SQLite for player {PlayerName}", playerName);
             return new Dictionary<string, double>();
-        }
-    }
-
-    private async Task<List<HourlyActivity>> GetActivityByHourFromClickHouse(string playerName, DateTime startPeriod, DateTime endPeriod)
-    {
-        try
-        {
-            // Use ClickHouse's native time functions to calculate activity by hour
-            // This query aggregates session time directly in the database
-            var query = $@"
-WITH sessions_with_duration AS (
-    SELECT
-        toHour(round_start_time) as start_hour,
-        toHour(round_end_time) as end_hour,
-        round_start_time as start_time,
-        round_end_time as last_seen_time,
-        CASE
-            WHEN toHour(round_start_time) = toHour(round_end_time) THEN
-                -- Session within same hour
-                dateDiff('minute', round_start_time, round_end_time)
-            ELSE 0
-        END as same_hour_minutes
-    FROM player_rounds
-    WHERE player_name = '{playerName.Replace("'", "''")}'
-      AND round_start_time >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
-      AND round_end_time <= '{endPeriod:yyyy-MM-dd HH:mm:ss}'
-),
-hour_breakdown AS (
-    -- Generate all possible hours (0-23)
-    SELECT number as hour
-    FROM numbers(24)
-),
-session_hours AS (
-    SELECT
-        h.hour,
-        s.start_time,
-        s.last_seen_time,
-        CASE
-            WHEN s.start_hour = s.end_hour AND s.start_hour = h.hour THEN
-                -- Entire session in this hour
-                s.same_hour_minutes
-            WHEN s.start_hour <= h.hour AND h.hour <= s.end_hour THEN
-                CASE
-                    WHEN h.hour = s.start_hour THEN
-                        -- First hour of multi-hour session
-                        dateDiff('minute', s.start_time, toStartOfHour(s.start_time) + INTERVAL 1 HOUR)
-                    WHEN h.hour = s.end_hour THEN
-                        -- Last hour of multi-hour session
-                        dateDiff('minute', toStartOfHour(s.last_seen_time), s.last_seen_time)
-                    ELSE
-                        -- Full hour in middle of session
-                        60
-                END
-            ELSE 0
-        END as minutes_in_hour
-    FROM hour_breakdown h
-    CROSS JOIN sessions_with_duration s
-    WHERE s.start_hour <= h.hour AND h.hour <= s.end_hour
-)
-SELECT
-    hour,
-    SUM(minutes_in_hour) as total_minutes
-FROM session_hours
-WHERE minutes_in_hour > 0
-GROUP BY hour
-ORDER BY total_minutes DESC
-FORMAT TabSeparated";
-
-            var result = await playerInsightsService.ExecuteQueryAsync(query);
-            var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-            var hourlyActivity = new List<HourlyActivity>();
-
-            foreach (var line in lines)
-            {
-                var parts = line.Split('\t');
-                if (parts.Length == 2 &&
-                    int.TryParse(parts[0], out var hour) &&
-                    int.TryParse(parts[1], out var minutes))
-                {
-                    hourlyActivity.Add(new HourlyActivity
-                    {
-                        Hour = hour,
-                        MinutesActive = minutes
-                    });
-                }
-            }
-
-            // Fill in missing hours with 0 minutes
-            var existingHours = hourlyActivity.Select(h => h.Hour).ToHashSet();
-            for (int hour = 0; hour < 24; hour++)
-            {
-                if (!existingHours.Contains(hour))
-                {
-                    hourlyActivity.Add(new HourlyActivity { Hour = hour, MinutesActive = 0 });
-                }
-            }
-
-            return hourlyActivity.OrderByDescending(h => h.MinutesActive).ToList();
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to get activity by hour from ClickHouse for player {PlayerName}, falling back to SQLite calculation", playerName);
-
-            // Fallback to original SQLite-based calculation if ClickHouse fails
-            return await GetActivityByHourFromSessions(playerName, startPeriod, endPeriod);
         }
     }
 

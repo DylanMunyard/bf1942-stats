@@ -1,11 +1,11 @@
 using api.Bflist.Models;
-using api.ClickHouse.Models;
+using api.Analytics.Models;
 
 namespace api.GameTrends;
 
 /// <summary>
 /// SQLite-based implementation of game trends service.
-/// Queries pre-computed tables instead of ClickHouse for analytics.
+/// Queries pre-computed tables for analytics.
 /// </summary>
 public interface ISqliteGameTrendsService
 {

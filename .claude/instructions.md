@@ -2,12 +2,12 @@
 
 ## Project Overview
 
-This is the API backend for bfstats.io. It provides an API layer interfacing with both analytics (Clickhouse) and operational (SQLite) databases.
+This is the API backend for bfstats.io. It provides an API layer backed by SQLite for analytics and operational data.
 
 ## Tech Stack & Dependencies
 
 - **Framework**: ASP.NET Core
-- **Data Access**: Entity Framework (SQLite), Clickhouse ADO.NET
+- **Data Access**: Entity Framework Core (SQLite)
 - **Logging**: Seq with OTEL sinks to Loki and Tempo
 - **Real-time**: SignalR (junie-des-1942stats.Notifications project)
 
@@ -16,9 +16,6 @@ This is the API backend for bfstats.io. It provides an API layer interfacing wit
 ```bash
 # Start dev dependencies
 docker-compose -f docker-compose.dev.yml up -d
-
-# Port-forward remote Clickhouse (in k3s cluster)
-kubectl port-forward clickhouse-staging-598945d9f5-8f79b 8123:8123 -n clickhouse-staging --context proxmox
 
 # Run API
 dotnet run  # Runs on localhost:9222

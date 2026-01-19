@@ -10,7 +10,6 @@
 - **Controllers/**: API endpoints
 - **Services/**: Business logic services
 - **Models/**: Data transfer objects and domain models
-- **ClickHouse/**: ClickHouse-specific services and interfaces
 - **PlayerStats/**: Player-related functionality
 - **ServerStats/**: Server-related functionality
 - **Gamification/**: Achievement and badge systems
@@ -25,5 +24,4 @@
 
 ## Database Conventions
 - **SQLite**: Entity Framework Core migrations
-- **ClickHouse**: Raw SQL queries with parameterization
 - **Connection Strings**: Environment variable based configuration

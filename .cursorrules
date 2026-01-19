@@ -26,7 +26,7 @@
 - Always consider query performance implications
 - Use indexes for frequently queried fields
 - Prefer direct field access over subqueries when possible
-- Use ClickHouse for analytics queries, SQLite/EF Core for transactional data
+- Use SQLite/EF Core for analytics and transactional data
 - Create Entity Framework migrations for all schema changes
 - Test performance impact of database changes
 
@@ -35,7 +35,7 @@
 - Controllers should be thin, delegate to services
 - Services contain business logic
 - Use background services for data collection/processing
-- Maintain separation between PlayerTracking, ServerStats, and ClickHouse modules
+- Maintain separation between PlayerTracking and ServerStats modules
 - Use proper error handling and logging throughout
 
 ## Code Quality
@@ -51,7 +51,7 @@
 This is a Battlefield 1942 server statistics tracking system that:
 - Tracks player sessions across game servers
 - Collects real-time player data from game servers
-- Provides analytics via ClickHouse
+- Provides analytics via SQLite
 - Supports multiple game variants (BF1942, FH2, BF Vietnam)
 - Uses SignalR for real-time notifications
 - Implements OAuth authentication for users

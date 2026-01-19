@@ -1,6 +1,6 @@
-using api.ClickHouse.Models;
+using api.Analytics.Models;
 using api.Players.Models;
-using ServerStatistics = api.ClickHouse.Models.ServerStatistics;
+using ServerStatistics = api.Analytics.Models.ServerStatistics;
 
 namespace api.PlayerStats;
 

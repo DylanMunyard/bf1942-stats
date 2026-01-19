@@ -34,7 +34,7 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<TournamentMatchComment> TournamentMatchComments { get; set; }
     public DbSet<TournamentImageIndex> TournamentImageIndices { get; set; }
 
-    // ClickHouse Migration: Pre-computed aggregate tables
+    // Pre-computed aggregate tables
     public DbSet<PlayerStatsMonthly> PlayerStatsMonthly { get; set; }
     public DbSet<PlayerServerStats> PlayerServerStats { get; set; }
     public DbSet<PlayerMapStats> PlayerMapStats { get; set; }
@@ -681,7 +681,7 @@ public class PlayerTrackerDbContext : DbContext
             .OnDelete(DeleteBehavior.Restrict);
 
         // ============================================================
-        // ClickHouse Migration: Pre-computed aggregate tables
+        // Pre-computed aggregate tables
         // ============================================================
 
         // Configure PlayerStatsMonthly entity (period-based aggregation)

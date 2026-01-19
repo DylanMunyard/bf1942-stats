@@ -1,7 +1,7 @@
-namespace api.ClickHouse.Models;
+namespace api.Analytics.Models;
 
 /// <summary>
-/// Current activity status across games and servers
+/// Current activity status across games and servers.
 /// </summary>
 public class CurrentActivityStatus
 {
@@ -13,7 +13,7 @@ public class CurrentActivityStatus
 }
 
 /// <summary>
-/// Weekly activity patterns to identify weekend vs weekday differences
+/// Weekly activity patterns to identify weekend vs weekday differences.
 /// </summary>
 public class WeeklyActivityPattern
 {
@@ -26,7 +26,7 @@ public class WeeklyActivityPattern
 }
 
 /// <summary>
-/// Trend insights for server activity
+/// Trend insights for server activity.
 /// </summary>
 public class TrendInsights
 {
@@ -34,12 +34,12 @@ public class TrendInsights
     public double CurrentHourAvgRounds { get; set; }
     public double NextHourAvgPlayers { get; set; }
     public double NextHourAvgRounds { get; set; }
-    public string TrendDirection { get; set; } = ""; // "increasing" or "decreasing"
+    public string TrendDirection { get; set; } = ""; // increasing/decreasing
     public DateTime GeneratedAt { get; set; }
 }
 
 /// <summary>
-/// Activity metrics for current state
+/// Activity metrics for current state.
 /// </summary>
 public class ActivityMetrics
 {
@@ -48,7 +48,7 @@ public class ActivityMetrics
 }
 
 /// <summary>
-/// Smart prediction insights combining real-time and historical data
+/// Smart prediction insights combining real-time and historical data.
 /// </summary>
 public class SmartPredictionInsights
 {
@@ -64,7 +64,7 @@ public class SmartPredictionInsights
 }
 
 /// <summary>
-/// Hourly prediction data point
+/// Hourly prediction data point.
 /// </summary>
 public class HourlyPrediction
 {
@@ -78,7 +78,7 @@ public class HourlyPrediction
 }
 
 /// <summary>
-/// Peak prediction for a 24-hour period
+/// Peak prediction for a 24-hour period.
 /// </summary>
 public class Peak24HourPrediction
 {
@@ -88,7 +88,7 @@ public class Peak24HourPrediction
 }
 
 /// <summary>
-/// Data structure for querying hourly timeline data from ClickHouse
+/// Data structure for querying hourly timeline data.
 /// </summary>
 internal class HourlyTimelineData
 {
@@ -97,7 +97,7 @@ internal class HourlyTimelineData
 }
 
 /// <summary>
-/// Hourly timeline data per server
+/// Hourly timeline data per server.
 /// </summary>
 internal class ServerHourlyTimelineData
 {
@@ -107,7 +107,7 @@ internal class ServerHourlyTimelineData
 }
 
 /// <summary>
-/// Represents hourly busyness data for timeline visualization
+/// Represents hourly busyness data for timeline visualization.
 /// </summary>
 public class HourlyBusyData
 {
@@ -118,7 +118,7 @@ public class HourlyBusyData
 }
 
 /// <summary>
-/// Busy indicator result for a specific server
+/// Busy indicator result for a specific server.
 /// </summary>
 public class BusyIndicatorResult
 {
@@ -132,7 +132,7 @@ public class BusyIndicatorResult
 }
 
 /// <summary>
-/// Busy indicator result for a single server
+/// Busy indicator result for a single server.
 /// </summary>
 public class ServerBusyIndicatorResult
 {
@@ -144,7 +144,7 @@ public class ServerBusyIndicatorResult
 }
 
 /// <summary>
-/// Grouped result containing busy indicators for multiple servers
+/// Grouped result containing busy indicators for multiple servers.
 /// </summary>
 public class GroupedServerBusyIndicatorResult
 {
@@ -153,7 +153,7 @@ public class GroupedServerBusyIndicatorResult
 }
 
 /// <summary>
-/// Server information for game trends
+/// Server information for game trends.
 /// </summary>
 public class GameTrendsServerInfo
 {
@@ -163,7 +163,7 @@ public class GameTrendsServerInfo
 }
 
 /// <summary>
-/// Historical range statistics
+/// Historical range statistics.
 /// </summary>
 public class HistoricalRange
 {
@@ -177,7 +177,7 @@ public class HistoricalRange
 }
 
 /// <summary>
-/// Current busy metrics
+/// Current busy metrics.
 /// </summary>
 public class CurrentBusyMetrics
 {
@@ -185,7 +185,7 @@ public class CurrentBusyMetrics
 }
 
 /// <summary>
-/// Historical busyness statistics
+/// Historical busyness statistics.
 /// </summary>
 public class HistoricalBusyStats
 {
@@ -200,7 +200,7 @@ public class HistoricalBusyStats
 }
 
 /// <summary>
-/// Daily averages result
+/// Daily averages result.
 /// </summary>
 public class DailyAveragesResult
 {
@@ -208,7 +208,7 @@ public class DailyAveragesResult
 }
 
 /// <summary>
-/// Current activity per server
+/// Current activity per server.
 /// </summary>
 public class ServerCurrentActivity
 {
@@ -217,7 +217,7 @@ public class ServerCurrentActivity
 }
 
 /// <summary>
-/// Historical data per server
+/// Historical data per server.
 /// </summary>
 public class ServerHistoricalData
 {

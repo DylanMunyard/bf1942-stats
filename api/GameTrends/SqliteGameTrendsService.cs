@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using api.Bflist.Models;
-using api.ClickHouse.Models;
+using api.Analytics.Models;
 using api.PlayerTracking;
 using api.Telemetry;
 using Microsoft.EntityFrameworkCore;
@@ -10,7 +10,7 @@ namespace api.GameTrends;
 
 /// <summary>
 /// SQLite-based implementation of game trends service.
-/// Queries pre-computed tables instead of ClickHouse for analytics.
+/// Queries pre-computed tables for analytics.
 /// </summary>
 public class SqliteGameTrendsService(PlayerTrackerDbContext dbContext) : ISqliteGameTrendsService
 {
@@ -28,7 +28,7 @@ public class SqliteGameTrendsService(PlayerTrackerDbContext dbContext) : ISqlite
         // SQLite/C# uses Sunday=0, Saturday=6
         var currentDayOfWeek = (int)currentTime.DayOfWeek;
 
-        // Get current player count from active sessions (same as ClickHouse service)
+        // Get current player count from active sessions
         var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
         var currentPlayerQuery = dbContext.PlayerSessions
             .Include(ps => ps.Server)

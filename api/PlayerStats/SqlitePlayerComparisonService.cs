@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
-using api.ClickHouse.Models;
+using api.Analytics.Models;
 using api.Players.Models;
 using api.PlayerTracking;
 using api.Telemetry;
@@ -65,6 +65,9 @@ public class SqlitePlayerComparisonService(
             h.ServerName = serverNames.GetValueOrDefault(h.ServerName, h.ServerName);
             return h;
         }).ToList();
+
+        // 6. Hourly overlap (last 30 days)
+        result.HourlyOverlap = await GetHourlyOverlapAsync(player1, player2, serverGuid);
 
         // 6. Common Servers
         var (commonServers, _) = await GetCommonServersDataAsync(player1, player2);
@@ -487,6 +490,184 @@ public class SqlitePlayerComparisonService(
                 PlayerName = s.PlayerName,
                 KillRate = s.TotalPlayTimeMinutes > 0 ? s.TotalKills / s.TotalPlayTimeMinutes : 0
             }).ToList();
+        }
+    }
+
+    private async Task<List<HourlyOverlap>> GetHourlyOverlapAsync(
+        string player1, string player2, string? serverGuid = null)
+    {
+        using var activity = ActivitySources.SqliteAnalytics.StartActivity("GetHourlyOverlapAsync");
+        activity?.SetTag("query.name", "GetHourlyOverlap");
+        activity?.SetTag("query.filters", $"player1:{player1},player2:{player2},server:{serverGuid ?? "all"}");
+
+        var stopwatch = Stopwatch.StartNew();
+
+        var endPeriod = DateTime.UtcNow;
+        var startPeriod = endPeriod.AddDays(-30);
+
+        var player1Intervals = await GetPlayerIntervalsAsync(player1, startPeriod, endPeriod, serverGuid);
+        var player2Intervals = await GetPlayerIntervalsAsync(player2, startPeriod, endPeriod, serverGuid);
+
+        var player1MinutesByHour = InitializeHourlyBuckets();
+        var player2MinutesByHour = InitializeHourlyBuckets();
+        var overlapMinutesByHour = InitializeHourlyBuckets();
+
+        foreach (var interval in player1Intervals)
+        {
+            AccumulateMinutesByHour(player1MinutesByHour, interval.Start, interval.End);
+        }
+
+        foreach (var interval in player2Intervals)
+        {
+            AccumulateMinutesByHour(player2MinutesByHour, interval.Start, interval.End);
+        }
+
+        var overlapIntervals = GetOverlapIntervals(player1Intervals, player2Intervals);
+        foreach (var interval in overlapIntervals)
+        {
+            AccumulateMinutesByHour(overlapMinutesByHour, interval.Start, interval.End);
+        }
+
+        var results = Enumerable.Range(0, 24)
+            .Select(hour => new HourlyOverlap
+            {
+                Hour = hour,
+                Player1Minutes = player1MinutesByHour[hour],
+                Player2Minutes = player2MinutesByHour[hour],
+                OverlapMinutes = overlapMinutesByHour[hour]
+            })
+            .ToList();
+
+        stopwatch.Stop();
+        activity?.SetTag("result.row_count", results.Count);
+        activity?.SetTag("result.duration_ms", stopwatch.ElapsedMilliseconds);
+        activity?.SetTag("result.table", "PlayerSessions");
+
+        return results;
+    }
+
+    private async Task<List<(DateTime Start, DateTime End)>> GetPlayerIntervalsAsync(
+        string playerName,
+        DateTime startPeriod,
+        DateTime endPeriod,
+        string? serverGuid)
+    {
+        var query = dbContext.PlayerSessions
+            .AsNoTracking()
+            .Where(ps => ps.PlayerName == playerName)
+            .Where(ps => ps.StartTime <= endPeriod && ps.LastSeenTime >= startPeriod);
+
+        if (!string.IsNullOrEmpty(serverGuid))
+        {
+            query = query.Where(ps => ps.ServerGuid == serverGuid);
+        }
+
+        var sessions = await query
+            .Select(ps => new { ps.StartTime, ps.LastSeenTime })
+            .ToListAsync();
+
+        var intervals = sessions
+            .Select(session => (
+                Start: session.StartTime < startPeriod ? startPeriod : session.StartTime,
+                End: session.LastSeenTime > endPeriod ? endPeriod : session.LastSeenTime))
+            .Where(interval => interval.End > interval.Start)
+            .OrderBy(interval => interval.Start)
+            .ToList();
+
+        return MergeIntervals(intervals);
+    }
+
+    private static List<(DateTime Start, DateTime End)> MergeIntervals(
+        List<(DateTime Start, DateTime End)> intervals)
+    {
+        if (intervals.Count == 0)
+            return intervals;
+
+        var merged = new List<(DateTime Start, DateTime End)> { intervals[0] };
+
+        foreach (var interval in intervals.Skip(1))
+        {
+            var last = merged[^1];
+            if (interval.Start <= last.End)
+            {
+                merged[^1] = (last.Start, interval.End > last.End ? interval.End : last.End);
+            }
+            else
+            {
+                merged.Add(interval);
+            }
+        }
+
+        return merged;
+    }
+
+    private static List<(DateTime Start, DateTime End)> GetOverlapIntervals(
+        List<(DateTime Start, DateTime End)> player1Intervals,
+        List<(DateTime Start, DateTime End)> player2Intervals)
+    {
+        var overlaps = new List<(DateTime Start, DateTime End)>();
+        var i = 0;
+        var j = 0;
+
+        while (i < player1Intervals.Count && j < player2Intervals.Count)
+        {
+            var a = player1Intervals[i];
+            var b = player2Intervals[j];
+
+            var start = a.Start > b.Start ? a.Start : b.Start;
+            var end = a.End < b.End ? a.End : b.End;
+
+            if (end > start)
+            {
+                overlaps.Add((start, end));
+            }
+
+            if (a.End < b.End)
+                i++;
+            else
+                j++;
+        }
+
+        return overlaps;
+    }
+
+    private static Dictionary<int, double> InitializeHourlyBuckets()
+    {
+        return Enumerable.Range(0, 24).ToDictionary(hour => hour, _ => 0.0);
+    }
+
+    private static void AccumulateMinutesByHour(
+        Dictionary<int, double> minutesByHour,
+        DateTime start,
+        DateTime end)
+    {
+        var currentTime = start;
+
+        while (currentTime < end)
+        {
+            var hour = currentTime.Hour;
+            var hourEnd = new DateTime(
+                currentTime.Year,
+                currentTime.Month,
+                currentTime.Day,
+                hour,
+                59,
+                59,
+                999,
+                currentTime.Kind);
+
+            if (hourEnd > end)
+            {
+                hourEnd = end;
+            }
+
+            var minutesInHour = (hourEnd - currentTime).TotalMinutes;
+            if (minutesInHour > 0)
+            {
+                minutesByHour[hour] += minutesInHour;
+            }
+
+            currentTime = hourEnd.AddMilliseconds(1);
         }
     }
 

@@ -1,8 +1,6 @@
-using api.ClickHouse;
 using api.Players;
 using api.Players.Models;
 using api.PlayerStats;
-using api.Utils;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -12,45 +10,22 @@ namespace api.tests.Controllers;
 public class PlayersControllerTests
 {
     private readonly IPlayerStatsService _playerStatsService;
-    private readonly IServerStatisticsService _serverStatisticsService;
     private readonly ISqlitePlayerStatsService _sqlitePlayerStatsService;
-    private readonly IPlayerComparisonService _playerComparisonService;
     private readonly ISqlitePlayerComparisonService _sqlitePlayerComparisonService;
-    private readonly IQuerySourceSelector _querySourceSelector;
-    private readonly PlayerRoundsReadService _playerRoundsService;
     private readonly PlayersController _controller;
 
     public PlayersControllerTests()
     {
         // Mock interfaces
         _playerStatsService = Substitute.For<IPlayerStatsService>();
-        _serverStatisticsService = Substitute.For<IServerStatisticsService>();
         _sqlitePlayerStatsService = Substitute.For<ISqlitePlayerStatsService>();
-        _playerComparisonService = Substitute.For<IPlayerComparisonService>();
         _sqlitePlayerComparisonService = Substitute.For<ISqlitePlayerComparisonService>();
-        _querySourceSelector = Substitute.For<IQuerySourceSelector>();
-
-        // Create dependencies for PlayerRoundsReadService
-        var httpClient = new HttpClient();
-        var playerRoundsLogger = Substitute.For<ILogger<PlayerRoundsReadService>>();
-        var serviceProvider = Substitute.For<IServiceProvider>();
-
-        // Create PlayerRoundsReadService with mock dependencies
-        _playerRoundsService = new PlayerRoundsReadService(
-            httpClient,
-            "http://localhost:8123",
-            playerRoundsLogger,
-            serviceProvider);
 
         var logger = Substitute.For<ILogger<PlayersController>>();
         _controller = new PlayersController(
             _playerStatsService,
-            _serverStatisticsService,
             _sqlitePlayerStatsService,
-            _playerComparisonService,
             _sqlitePlayerComparisonService,
-            _querySourceSelector,
-            _playerRoundsService,
             logger);
     }
 

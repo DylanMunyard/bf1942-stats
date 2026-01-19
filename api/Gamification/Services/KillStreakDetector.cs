@@ -1,5 +1,5 @@
 using api.Gamification.Models;
-using api.ClickHouse.Models;
+using api.Analytics.Models;
 using api.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -86,8 +86,8 @@ public class KillStreakDetector(
     }
 
     /// <summary>
-    /// Calculate kill streaks using ClickHouse player_metrics data
-    /// This provides accurate and granular streak detection
+    /// Calculate kill streaks using player observation data.
+    /// This provides accurate and granular streak detection.
     /// </summary>
     private async Task<List<Achievement>> CalculateKillStreaksFromPlayerMetricsAsync(PlayerRound round)
     {
@@ -146,7 +146,7 @@ public class KillStreakDetector(
                             Version = streakInstance.AchievedAt  // Use achieved_at as deterministic version for idempotency
                         });
 
-                        logger.LogInformation("ClickHouse kill streak achievement: {PlayerName} achieved {AchievementName} with {Threshold} kills at {AchievementTime}",
+                        logger.LogInformation("Kill streak achievement: {PlayerName} achieved {AchievementName} with {Threshold} kills at {AchievementTime}",
                             round.PlayerName, badgeDefinition.Name, streakInstance.Threshold, streakInstance.AchievedAt);
                     }
                 }
@@ -262,7 +262,7 @@ public class KillStreakDetector(
     }
 
     /// <summary>
-    /// Simple PlayerMetric class for ClickHouse queries
+    /// Simple PlayerMetric class for streak calculations
     /// </summary>
     private class PlayerMetric
     {

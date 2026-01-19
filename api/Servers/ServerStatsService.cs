@@ -1,13 +1,12 @@
 using api.Caching;
-using api.ClickHouse;
-using api.ClickHouse.Interfaces;
 using api.GameTrends;
 using api.Gamification.Models;
+using api.PlayerStats;
 using api.PlayerTracking;
 using api.Servers.Models;
-using api.Utils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using NodaTime;
 
 namespace api.Servers;
 
@@ -16,17 +15,10 @@ public class ServerStatsService(
     ILogger<ServerStatsService> logger,
     ICacheService cacheService,
     ICacheKeyService cacheKeyService,
-    PlayerRoundsReadService playerRoundsService,
-    IClickHouseReader clickHouseReader,
     RoundsService roundsService,
-    GameTrendsService gameTrendsService,
-    PlayersOnlineHistoryService playersOnlineHistoryService,
     ISqliteGameTrendsService sqliteGameTrendsService,
-    IQuerySourceSelector querySourceSelector) : IServerStatsService
+    ISqliteLeaderboardService sqliteLeaderboardService) : IServerStatsService
 {
-    private bool UseSqlite(string endpointName) =>
-        querySourceSelector.GetSource(endpointName) == QuerySource.SQLite;
-
     public async Task<ServerStatistics> GetServerStatistics(
         string serverName,
         int daysToAnalyze = 7)
@@ -165,10 +157,10 @@ public class ServerStatsService(
         // Execute leaderboard queries in parallel for the specified time period
         try
         {
-            var mostActivePlayersTask = playerRoundsService.GetMostActivePlayersAsync(server.Guid, startPeriod, endPeriod, 10);
-            var topScoresTask = playerRoundsService.GetTopScoresAsync(server.Guid, startPeriod, endPeriod, 10);
-            var topKDRatiosTask = playerRoundsService.GetTopKDRatiosAsync(server.Guid, startPeriod, endPeriod, 10);
-            var topKillRatesTask = playerRoundsService.GetTopKillRatesAsync(server.Guid, startPeriod, endPeriod, 10);
+            var mostActivePlayersTask = sqliteLeaderboardService.GetMostActivePlayersAsync(server.Guid, startPeriod, endPeriod, 10);
+            var topScoresTask = sqliteLeaderboardService.GetTopScoresAsync(server.Guid, startPeriod, endPeriod, 10);
+            var topKDRatiosTask = sqliteLeaderboardService.GetTopKDRatiosAsync(server.Guid, startPeriod, endPeriod, 10);
+            var topKillRatesTask = sqliteLeaderboardService.GetTopKillRatesAsync(server.Guid, startPeriod, endPeriod, 10);
             var topPlacementsTask = GetPlacementLeaderboardAsync(server.Guid, startPeriod, endPeriod, 10);
 
             // Wait for all queries to complete
@@ -234,56 +226,38 @@ public class ServerStatsService(
     {
         try
         {
-            // Query placement achievements from ClickHouse
-            // Group by player and count first/second/third place finishes
-            // Order by Olympic-style ranking (gold first, then silver, then bronze)
-            var query = $@"
-SELECT 
-    player_name,
-    countIf(tier = 'gold') as first_places,
-    countIf(tier = 'silver') as second_places,
-    countIf(tier = 'bronze') as third_places
-FROM player_achievements_deduplicated
-WHERE achievement_type = 'round_placement'
-    AND server_guid = '{serverGuid.Replace("'", "''")}'
-    AND achieved_at >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
-    AND achieved_at < '{endPeriod:yyyy-MM-dd HH:mm:ss}'
-GROUP BY player_name
-HAVING first_places > 0 OR second_places > 0 OR third_places > 0
-ORDER BY first_places DESC, second_places DESC, third_places DESC
-LIMIT {limit}
-FORMAT TabSeparated";
+            var startInstant = Instant.FromDateTimeUtc(DateTime.SpecifyKind(startPeriod, DateTimeKind.Utc));
+            var endInstant = Instant.FromDateTimeUtc(DateTime.SpecifyKind(endPeriod, DateTimeKind.Utc));
 
-            logger.LogDebug("Executing placement leaderboard query for server {ServerGuid} from {Start} to {End}",
-                serverGuid, startPeriod, endPeriod);
-
-            var result = await clickHouseReader.ExecuteQueryAsync(query);
-            var entries = new List<PlacementLeaderboardEntry>();
-
-            var lines = result?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
-            for (int i = 0; i < lines.Length; i++)
-            {
-                var parts = lines[i].Split('\t');
-                if (parts.Length >= 4 &&
-                    int.TryParse(parts[1], out var firstPlaces) &&
-                    int.TryParse(parts[2], out var secondPlaces) &&
-                    int.TryParse(parts[3], out var thirdPlaces))
+            var results = await dbContext.PlayerAchievements
+                .AsNoTracking()
+                .Where(pa => pa.AchievementType == AchievementTypes.Placement
+                             && pa.ServerGuid == serverGuid
+                             && pa.AchievedAt >= startInstant
+                             && pa.AchievedAt < endInstant)
+                .GroupBy(pa => pa.PlayerName)
+                .Select(g => new
                 {
-                    entries.Add(new PlacementLeaderboardEntry
-                    {
-                        Rank = i + 1,
-                        PlayerName = parts[0],
-                        FirstPlaces = firstPlaces,
-                        SecondPlaces = secondPlaces,
-                        ThirdPlaces = thirdPlaces
-                    });
-                }
-            }
+                    PlayerName = g.Key,
+                    FirstPlaces = g.Count(pa => pa.Tier == "gold"),
+                    SecondPlaces = g.Count(pa => pa.Tier == "silver"),
+                    ThirdPlaces = g.Count(pa => pa.Tier == "bronze")
+                })
+                .Where(x => x.FirstPlaces > 0 || x.SecondPlaces > 0 || x.ThirdPlaces > 0)
+                .OrderByDescending(x => x.FirstPlaces)
+                .ThenByDescending(x => x.SecondPlaces)
+                .ThenByDescending(x => x.ThirdPlaces)
+                .Take(limit)
+                .ToListAsync();
 
-            logger.LogDebug("Found {Count} placement leaderboard entries for server {ServerGuid}",
-                entries.Count, serverGuid);
-
-            return entries;
+            return results.Select((entry, index) => new PlacementLeaderboardEntry
+            {
+                Rank = index + 1,
+                PlayerName = entry.PlayerName,
+                FirstPlaces = entry.FirstPlaces,
+                SecondPlaces = entry.SecondPlaces,
+                ThirdPlaces = entry.ThirdPlaces
+            }).ToList();
         }
         catch (Exception ex)
         {
@@ -305,53 +279,77 @@ FORMAT TabSeparated";
     {
         try
         {
-            // Query placement achievements from ClickHouse with JSON metadata parsing
-            // Extract TotalPlayers from metadata and only count placements meeting minimum player count
-            var query = $@"
-SELECT 
-    player_name,
-    countIf(tier = 'gold' AND JSONExtract(metadata, 'TotalPlayers', 'Nullable(UInt32)') >= {minPlayerCount}) as first_places,
-    countIf(tier = 'silver' AND JSONExtract(metadata, 'TotalPlayers', 'Nullable(UInt32)') >= {minPlayerCount}) as second_places,
-    countIf(tier = 'bronze' AND JSONExtract(metadata, 'TotalPlayers', 'Nullable(UInt32)') >= {minPlayerCount}) as third_places
-FROM player_achievements_deduplicated
-WHERE achievement_type = 'round_placement'
-    AND server_guid = '{serverGuid.Replace("'", "''")}'
-    AND achieved_at >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
-    AND achieved_at < '{endPeriod:yyyy-MM-dd HH:mm:ss}'
-GROUP BY player_name
-HAVING first_places > 0 OR second_places > 0 OR third_places > 0
-ORDER BY first_places DESC, second_places DESC, third_places DESC
-LIMIT {limit}
-FORMAT TabSeparated";
+            var startInstant = Instant.FromDateTimeUtc(DateTime.SpecifyKind(startPeriod, DateTimeKind.Utc));
+            var endInstant = Instant.FromDateTimeUtc(DateTime.SpecifyKind(endPeriod, DateTimeKind.Utc));
 
-            logger.LogDebug("Executing weighted placement leaderboard query for server {ServerGuid} from {Start} to {End} with minPlayerCount {MinPlayerCount}",
-                serverGuid, startPeriod, endPeriod, minPlayerCount);
-
-            var result = await clickHouseReader.ExecuteQueryAsync(query);
-            var entries = new List<PlacementLeaderboardEntry>();
-
-            var lines = result?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
-            for (int i = 0; i < lines.Length; i++)
+            var connection = dbContext.Database.GetDbConnection();
+            if (connection.State != System.Data.ConnectionState.Open)
             {
-                var parts = lines[i].Split('\t');
-                if (parts.Length >= 4 &&
-                    int.TryParse(parts[1], out var firstPlaces) &&
-                    int.TryParse(parts[2], out var secondPlaces) &&
-                    int.TryParse(parts[3], out var thirdPlaces))
-                {
-                    entries.Add(new PlacementLeaderboardEntry
-                    {
-                        Rank = i + 1,
-                        PlayerName = parts[0],
-                        FirstPlaces = firstPlaces,
-                        SecondPlaces = secondPlaces,
-                        ThirdPlaces = thirdPlaces
-                    });
-                }
+                await connection.OpenAsync();
             }
 
-            logger.LogDebug("Found {Count} placement leaderboard entries for server {ServerGuid}",
-                entries.Count, serverGuid);
+            await using var command = connection.CreateCommand();
+            command.CommandText = @"
+SELECT
+    PlayerName,
+    SUM(CASE WHEN Tier = 'gold' THEN 1 ELSE 0 END) AS FirstPlaces,
+    SUM(CASE WHEN Tier = 'silver' THEN 1 ELSE 0 END) AS SecondPlaces,
+    SUM(CASE WHEN Tier = 'bronze' THEN 1 ELSE 0 END) AS ThirdPlaces
+FROM PlayerAchievements
+WHERE AchievementType = $achievementType
+  AND ServerGuid = $serverGuid
+  AND AchievedAt >= $startInstant
+  AND AchievedAt < $endInstant
+  AND COALESCE(CAST(json_extract(Metadata, '$.TotalPlayers') AS INTEGER), 0) >= $minPlayerCount
+GROUP BY PlayerName
+HAVING FirstPlaces > 0 OR SecondPlaces > 0 OR ThirdPlaces > 0
+ORDER BY FirstPlaces DESC, SecondPlaces DESC, ThirdPlaces DESC
+LIMIT $limit";
+
+            var pAchievementType = command.CreateParameter();
+            pAchievementType.ParameterName = "$achievementType";
+            pAchievementType.Value = AchievementTypes.Placement;
+            command.Parameters.Add(pAchievementType);
+
+            var pServerGuid = command.CreateParameter();
+            pServerGuid.ParameterName = "$serverGuid";
+            pServerGuid.Value = serverGuid;
+            command.Parameters.Add(pServerGuid);
+
+            var pStartInstant = command.CreateParameter();
+            pStartInstant.ParameterName = "$startInstant";
+            pStartInstant.Value = startInstant.ToString();
+            command.Parameters.Add(pStartInstant);
+
+            var pEndInstant = command.CreateParameter();
+            pEndInstant.ParameterName = "$endInstant";
+            pEndInstant.Value = endInstant.ToString();
+            command.Parameters.Add(pEndInstant);
+
+            var pMinPlayerCount = command.CreateParameter();
+            pMinPlayerCount.ParameterName = "$minPlayerCount";
+            pMinPlayerCount.Value = minPlayerCount;
+            command.Parameters.Add(pMinPlayerCount);
+
+            var pLimit = command.CreateParameter();
+            pLimit.ParameterName = "$limit";
+            pLimit.Value = limit;
+            command.Parameters.Add(pLimit);
+
+            var entries = new List<PlacementLeaderboardEntry>();
+            await using var reader = await command.ExecuteReaderAsync();
+            var rank = 1;
+            while (await reader.ReadAsync())
+            {
+                entries.Add(new PlacementLeaderboardEntry
+                {
+                    Rank = rank++,
+                    PlayerName = reader.GetString(0),
+                    FirstPlaces = reader.GetInt32(1),
+                    SecondPlaces = reader.GetInt32(2),
+                    ThirdPlaces = reader.GetInt32(3)
+                });
+            }
 
             return entries;
         }
@@ -576,9 +574,8 @@ FORMAT TabSeparated";
         // Fetch players online history
         try
         {
-            insights.PlayersOnlineHistory = UseSqlite("GetPlayersOnlineHistory")
-                ? await sqliteGameTrendsService.GetPlayersOnlineHistoryAsync(server.GameId, period, rollingWindow, server.Guid)
-                : await playersOnlineHistoryService.GetPlayersOnlineHistory(server.GameId, period, rollingWindow, server.Guid);
+            insights.PlayersOnlineHistory = await sqliteGameTrendsService.GetPlayersOnlineHistoryAsync(
+                server.GameId, period, rollingWindow, server.Guid);
         }
         catch (Exception ex)
         {
@@ -634,9 +631,7 @@ FORMAT TabSeparated";
         // Fetch maps data
         try
         {
-            mapsInsights.Maps = UseSqlite("GetServerMapsInsights")
-                ? await GetAllMapsFromSqlite(server.Guid, startPeriod, endPeriod)
-                : await GetAllMapsFromClickHouse(server.Guid, startPeriod, endPeriod);
+            mapsInsights.Maps = await GetAllMapsFromSqlite(server.Guid, startPeriod, endPeriod);
         }
         catch (Exception ex)
         {
@@ -676,112 +671,6 @@ FORMAT TabSeparated";
             >= 36500 => ("alltime", 30),  // 100+ years = all time
             _ => ($"{days}d", 30)  // Support arbitrary day values
         };
-    }
-
-    private async Task<List<PopularMapDataPoint>> GetAllMapsFromClickHouse(
-        string serverGuid, DateTime startPeriod, DateTime endPeriod)
-    {
-        // Simple and reliable approach: aggregate by map directly
-        var query = $@"
-WITH map_data AS (
-    SELECT 
-        map_name,
-        COUNT() AS data_points,
-        AVG(players_online) AS avg_players,
-        MAX(players_online) AS peak_players,
-        MIN(timestamp) AS first_seen,
-        MAX(timestamp) AS last_seen
-    FROM server_online_counts
-    WHERE server_guid = '{serverGuid.Replace("'", "''")}'
-        AND timestamp >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
-        AND timestamp < '{endPeriod:yyyy-MM-dd HH:mm:ss}'
-        AND map_name != ''
-    GROUP BY map_name
-),
-victory_data AS (
-    SELECT 
-        map_name,
-        COUNT(DISTINCT CASE 
-            WHEN JSONExtractInt(metadata, 'WinningTeam') = 1 THEN round_id 
-            ELSE NULL 
-        END) AS team1_victories,
-        COUNT(DISTINCT CASE 
-            WHEN JSONExtractInt(metadata, 'WinningTeam') = 2 THEN round_id 
-            ELSE NULL 
-        END) AS team2_victories,
-        anyIf(JSONExtractString(metadata, 'WinningTeamLabel'), JSONExtractInt(metadata, 'WinningTeam') = 1) AS team1_label,
-        anyIf(JSONExtractString(metadata, 'WinningTeamLabel'), JSONExtractInt(metadata, 'WinningTeam') = 2) AS team2_label
-    FROM player_achievements_deduplicated
-    WHERE server_guid = '{serverGuid.Replace("'", "''")}'
-        AND achievement_type = 'team_victory'
-        AND achieved_at >= '{startPeriod:yyyy-MM-dd HH:mm:ss}'
-        AND achieved_at < '{endPeriod:yyyy-MM-dd HH:mm:ss}'
-        AND map_name != ''
-    GROUP BY map_name
-),
-total_data AS (
-    SELECT SUM(data_points) AS total_points
-    FROM map_data
-)
-SELECT 
-    md.map_name,
-    ROUND(md.avg_players, 2) AS avg_players,
-    md.peak_players,
-    ROUND(md.data_points * 0.5, 0) AS estimated_play_time_minutes, -- 30 seconds per data point = 0.5 minutes
-    ROUND(md.data_points * 100.0 / NULLIF(td.total_points, 0), 2) AS play_time_percentage,
-    COALESCE(vd.team1_victories, 0) AS team1_victories,
-    COALESCE(vd.team2_victories, 0) AS team2_victories,
-    vd.team1_label,
-    vd.team2_label
-FROM map_data md
-LEFT JOIN victory_data vd ON md.map_name = vd.map_name
-CROSS JOIN total_data td
-ORDER BY md.data_points DESC, md.avg_players DESC
-FORMAT TabSeparated";
-
-        logger.LogDebug("=== ALL MAPS QUERY (30-second intervals) ===");
-        logger.LogDebug("Server GUID: {ServerGuid}", serverGuid);
-        logger.LogDebug("Start Period: {StartPeriod}", startPeriod);
-        logger.LogDebug("End Period: {EndPeriod}", endPeriod);
-        logger.LogDebug("FULL QUERY:\n{Query}", query);
-
-        var result = await clickHouseReader.ExecuteQueryAsync(query);
-
-        logger.LogDebug("RAW RESULT:\n{Result}", result);
-
-        var allMaps = new List<PopularMapDataPoint>();
-
-        foreach (var line in result?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>())
-        {
-            var parts = line.Split('\t');
-            if (parts.Length >= 9)
-            {
-                if (double.TryParse(parts[1], out var avgPlayers) &&
-                    int.TryParse(parts[2], out var peakPlayers) &&
-                    int.TryParse(parts[3], out var totalPlayTime) &&
-                    double.TryParse(parts[4], out var playTimePercentage) &&
-                    int.TryParse(parts[5], out var team1Victories) &&
-                    int.TryParse(parts[6], out var team2Victories))
-                {
-                    allMaps.Add(new PopularMapDataPoint
-                    {
-                        MapName = parts[0],
-                        AveragePlayerCount = Math.Round(avgPlayers, 2),
-                        PeakPlayerCount = peakPlayers,
-                        TotalPlayTime = totalPlayTime,
-                        PlayTimePercentage = Math.Round(playTimePercentage, 2),
-                        Team1Victories = team1Victories,
-                        Team2Victories = team2Victories,
-                        Team1Label = string.IsNullOrEmpty(parts[7]) ? null : parts[7],
-                        Team2Label = string.IsNullOrEmpty(parts[8]) ? null : parts[8]
-                    });
-                }
-            }
-        }
-
-        logger.LogDebug("All maps count: {Count}", allMaps.Count);
-
-        return allMaps;
     }
 
     /// <summary>
@@ -1037,13 +926,8 @@ FORMAT TabSeparated";
     /// </summary>
     private async Task<ServerBusyIndicator> GetServerBusyIndicatorAsync(string serverGuid)
     {
-        var currentTime = DateTime.UtcNow;
-        var currentHour = currentTime.Hour;
-        var currentDayOfWeek = (int)currentTime.DayOfWeek;
-        var clickHouseDayOfWeek = currentDayOfWeek == 0 ? 7 : currentDayOfWeek;
-
-        // Get busy indicator data from GameTrendsService for this single server with 8 hours before/after
-        var busyIndicatorResult = await gameTrendsService.GetServerBusyIndicatorAsync(new[] { serverGuid }, timelineHourRange: 8);
+        // Get busy indicator data for this single server with 8 hours before/after
+        var busyIndicatorResult = await sqliteGameTrendsService.GetServerBusyIndicatorAsync(new[] { serverGuid }, timelineHourRange: 8);
         var serverResult = busyIndicatorResult.ServerResults.FirstOrDefault();
 
         if (serverResult == null)

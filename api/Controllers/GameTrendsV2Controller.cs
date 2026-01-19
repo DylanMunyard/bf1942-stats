@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using api.ClickHouse.Models;
+using api.Analytics.Models;
 using api.Caching;
 using api.GameTrends;
 using Microsoft.Extensions.Logging;

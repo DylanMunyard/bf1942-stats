@@ -41,17 +41,3 @@ public interface IAggregateBackfillBackgroundService : IJobBackgroundService
     /// <param name="ct">Cancellation token</param>
     Task RunTierAsync(int tier, CancellationToken ct = default);
 }
-
-/// <summary>
-/// Backfills ServerOnlineCounts from ClickHouse to SQLite.
-/// Aggregates minute-level data to hourly granularity.
-/// </summary>
-public interface IServerOnlineCountsBackfillBackgroundService : IJobBackgroundService
-{
-    /// <summary>
-    /// Run backfill for a specific number of days.
-    /// </summary>
-    /// <param name="days">Number of days to backfill (default 60)</param>
-    /// <param name="ct">Cancellation token</param>
-    Task RunAsync(int days, CancellationToken ct = default);
-}

@@ -1,4 +1,4 @@
-using api.ClickHouse.Models;
+using api.Analytics.Models;
 
 namespace api.PlayerStats;
 
@@ -9,7 +9,7 @@ public interface ISqlitePlayerComparisonService
 {
     /// <summary>
     /// Compares two players and returns a comprehensive comparison result.
-    /// This is the main entry point for player comparison, matching the ClickHouse interface.
+    /// This is the main entry point for player comparison.
     /// </summary>
     Task<PlayerComparisonResult> ComparePlayersAsync(string player1, string player2, string? serverGuid = null);
 

@@ -109,7 +109,7 @@ public class ServersV2Controller(
     }
 
     /// <summary>
-    /// Placement leaderboard uses existing ClickHouse achievements table for now.
+    /// Placement leaderboard uses SQLite achievements data.
     /// </summary>
     private async Task<List<PlacementLeaderboardEntry>> GetPlacementLeaderboardAsync(
         string serverGuid,

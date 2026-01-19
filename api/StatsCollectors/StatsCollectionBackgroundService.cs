@@ -125,7 +125,6 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
                 BackgroundJobMetrics.ServersProcessed.Add(allServers.Count,
                     new KeyValuePair<string, object?>("game", "all"));
 
-                // Removed PlayerRounds sync to ClickHouse. Rounds syncing handled by ClickHouseSyncBackgroundService.
             }
         }
         catch (Exception ex)
@@ -160,7 +159,7 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
 
         foreach (var server in allServers)
         {
-            // Create adapter for ClickHouse batching
+            // Create adapter for batching
             var adapter = new Bf1942ServerAdapter(server);
             gameServerAdapters.Add(adapter);
 
@@ -181,7 +180,7 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
 
         foreach (var server in allServers)
         {
-            // Create adapter for ClickHouse batching
+            // Create adapter for batching
             var adapter = new BfvietnamServerAdapter(server);
             gameServerAdapters.Add(adapter);
 
@@ -202,7 +201,7 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
 
         foreach (var server in allServers)
         {
-            // Create adapter for ClickHouse batching
+            // Create adapter for batching
             var adapter = new Fh2ServerAdapter(server);
             gameServerAdapters.Add(adapter);
 

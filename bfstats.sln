@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "api", "api\api.csproj", "{8407897C-9190-4688-835C-0B1D2CD6D9D4}"
 EndProject
@@ -26,16 +26,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "app", "app", "{E9373366-3A5
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "k3s", "k3s", "{67D0EE3E-1825-4084-8A52-33C1888346B8}"
 	ProjectSection(SolutionItems) = preProject
-		deploy\app\k3s\clickhouse-aks-monitor.yml = deploy\app\k3s\clickhouse-aks-monitor.yml
 		deploy\app\k3s\bf42-api-aks-monitor.yml = deploy\app\k3s\bf42-api-aks-monitor.yml
 		deploy\app\k3s\MONITORING.md = deploy\app\k3s\MONITORING.md
 		deploy\app\k3s\README.md = deploy\app\k3s\README.md
-	EndProjectSection
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "clickhouse", "clickhouse", "{62EA89F3-92D5-4441-96F3-007EE2F1712D}"
-	ProjectSection(SolutionItems) = preProject
-		deploy\app\clickhouse\deployment.yml = deploy\app\clickhouse\deployment.yml
-		deploy\app\clickhouse\batch-job-scale-down.yml = deploy\app\clickhouse\batch-job-scale-down.yml
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "api.tests", "tests\api\api.tests.csproj", "{09D635B4-2E52-4D4C-8F45-F8B8A0D557C3}"
@@ -49,10 +42,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "agents", "agents", "{8A2456
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "features", "features", "{F38BB0E5-DA50-4C54-9FBE-BB04D731BBA3}"
 	ProjectSection(SolutionItems) = preProject
-		features\race-condition-analysis\RACE_CONDITION_ANALYSIS.md = features\race-condition-analysis\RACE_CONDITION_ANALYSIS.md
-		features\system-stats-ui\SYSTEM_STATS_UI_PROMPT.md = features\system-stats-ui\SYSTEM_STATS_UI_PROMPT.md
 		features\achievements\achievements.md = features\achievements\achievements.md
-		features\team-victory-idempotency\TEAM_VICTORY_IDEMPOTENCY_CHANGES.md = features\team-victory-idempotency\TEAM_VICTORY_IDEMPOTENCY_CHANGES.md
 		features\api-testing\api-test-example.md = features\api-testing\api-test-example.md
 		features\admin-tournament-changes\ADMIN_TOURNAMENT_CHANGES.md = features\admin-tournament-changes\ADMIN_TOURNAMENT_CHANGES.md
 		features\oauth-implementation\OAUTH_IMPLEMENTATION_GUIDE.md = features\oauth-implementation\OAUTH_IMPLEMENTATION_GUIDE.md
@@ -62,18 +52,16 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "features", "features", "{F3
 		features\code-quality-refactoring\IMPLEMENTATION_SUMMARY.md = features\code-quality-refactoring\IMPLEMENTATION_SUMMARY.md
 		features\observability-monitoring\README-observability.md = features\observability-monitoring\README-observability.md
 		features\tournament-leaderboard-implementation\TOURNAMENT_LEADERBOARD_IMPLEMENTATION.md = features\tournament-leaderboard-implementation\TOURNAMENT_LEADERBOARD_IMPLEMENTATION.md
-		features\performance-analysis\PERFORMANCE_ANALYSIS.md = features\performance-analysis\PERFORMANCE_ANALYSIS.md
 		features\discord-alerts\discord-alerts-setup.md = features\discord-alerts\discord-alerts-setup.md
-		features\gamification-design\Gamification.md = features\gamification-design\Gamification.md
 		features\tournament-rules-xss-prevention\TOURNAMENT_RULES_XSS_PREVENTION.md = features\tournament-rules-xss-prevention\TOURNAMENT_RULES_XSS_PREVENTION.md
 		features\api-change-quick-reference\API_CHANGE_QUICK_REFERENCE.md = features\api-change-quick-reference\API_CHANGE_QUICK_REFERENCE.md
 		features\tournament-rounds-update\TOURNAMENT_ROUNDS_UPDATE.md = features\tournament-rounds-update\TOURNAMENT_ROUNDS_UPDATE.md
 		features\discord-oauth-backend-setup\DISCORD_OAUTH_BACKEND_SETUP.md = features\discord-oauth-backend-setup\DISCORD_OAUTH_BACKEND_SETUP.md
 		features\test-achievement-response\test-achievement-response.md = features\test-achievement-response\test-achievement-response.md
-		features\round-entity-design\ROUND_ENTITY_DESIGN.md = features\round-entity-design\ROUND_ENTITY_DESIGN.md
 		features\tournament-ui-spec\TOURNAMENT_UI_SPEC.md = features\tournament-ui-spec\TOURNAMENT_UI_SPEC.md
 		features\discord-oauth-quick-start\DISCORD_OAUTH_QUICK_START.md = features\discord-oauth-quick-start\DISCORD_OAUTH_QUICK_START.md
 		features\game-trends-api\GAME_TRENDS_API.md = features\game-trends-api\GAME_TRENDS_API.md
+		features\similar-players\SIMILAR_PLAYERS_ALGORITHM.md = features\similar-players\SIMILAR_PLAYERS_ALGORITHM.md
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "local.dev", "local.dev", "{674057F4-2C8B-47AA-BBCC-9C302B2DCA2D}"

@@ -25,7 +25,7 @@ We use a **feature-first organization** pattern rather than type-based organizat
    - **Each DTO class should be in its own file** (e.g., `UserDto.cs`, `LoginRequest.cs`)
    - **Exception**: Small related value objects can be grouped if they form a cohesive domain concept
 5. **Avoid root-level type-based folders** like `/Services`, `/Controllers`, `/Models`
-6. **Shared/cross-cutting concerns** like `Telemetry`, `Caching`, `ClickHouse` can be in their own feature folders
+6. **Shared/cross-cutting concerns** like `Telemetry` and `Caching` can be in their own feature folders
 7. **Migrations and build artifacts** stay in their special folders (`/Migrations`, `/bin`, `/obj`, etc.)
 
 ### Example Structure

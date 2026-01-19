@@ -1,9 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
-using api.ClickHouse;
-using api.ClickHouse.Models;
+using api.Analytics.Models;
 using api.Caching;
 using api.GameTrends;
-using api.Utils;
 using Microsoft.Extensions.Logging;
 
 namespace api.Controllers;
@@ -11,52 +9,10 @@ namespace api.Controllers;
 [ApiController]
 [Route("stats/[controller]")]
 public class GameTrendsController(
-    GameTrendsService gameTrendsService,
     ISqliteGameTrendsService sqliteGameTrendsService,
-    IQuerySourceSelector querySourceSelector,
     ICacheService cacheService,
     ILogger<GameTrendsController> logger) : ControllerBase
 {
-    private bool UseSqlite(string endpointName) =>
-        querySourceSelector.GetSource(endpointName) == QuerySource.SQLite;
-
-    /// <summary>
-    /// Gets current activity status across all games and servers.
-    /// Shows real-time activity to answer "is it busy right now?"
-    /// </summary>
-    [HttpGet("current-activity")]
-    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Any)] // 1 minute cache
-    public async Task<ActionResult<List<CurrentActivityStatus>>> GetCurrentActivityStatus(
-        [FromQuery] string? game = null)
-    {
-        try
-        {
-            var cacheKey = $"trends:current:activity:{game ?? "all"}";
-            var cachedData = await cacheService.GetAsync<List<CurrentActivityStatus>>(cacheKey);
-
-            if (cachedData != null)
-            {
-                logger.LogDebug("Returning cached current activity status for game {Game}", game ?? "all");
-                return Ok(cachedData);
-            }
-
-            var currentActivity = await gameTrendsService.GetCurrentActivityStatusAsync(game);
-
-            // Cache for 5 minutes - current activity needs to be relatively fresh
-            await cacheService.SetAsync(cacheKey, currentActivity, TimeSpan.FromMinutes(1));
-
-            logger.LogInformation("Retrieved current activity status for {ServerCount} servers, game {Game}",
-                currentActivity.Count, game ?? "all");
-
-            return Ok(currentActivity);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error retrieving current activity status for game {Game}", game);
-            return StatusCode(500, "Failed to retrieve current activity status");
-        }
-    }
-
     /// <summary>
     /// Gets weekly activity patterns showing weekend vs weekday differences.
     /// Helps identify when servers are most active throughout the week.
@@ -80,15 +36,7 @@ public class GameTrendsController(
                 return Ok(cachedData);
             }
 
-            List<WeeklyActivityPattern> patterns;
-            if (UseSqlite("GetWeeklyActivityPatterns"))
-            {
-                patterns = await sqliteGameTrendsService.GetWeeklyActivityPatternsAsync(game, daysPeriod);
-            }
-            else
-            {
-                patterns = await gameTrendsService.GetWeeklyActivityPatternsAsync(game, daysPeriod);
-            }
+            var patterns = await sqliteGameTrendsService.GetWeeklyActivityPatternsAsync(game, daysPeriod);
 
             // Cache for 1 hour - weekly patterns are stable
             await cacheService.SetAsync(cacheKey, patterns, TimeSpan.FromHours(1));
@@ -133,15 +81,7 @@ public class GameTrendsController(
                 return Ok(cachedData);
             }
 
-            GroupedServerBusyIndicatorResult busyIndicator;
-            if (UseSqlite("GetBusyIndicator"))
-            {
-                busyIndicator = await sqliteGameTrendsService.GetServerBusyIndicatorAsync(serverGuids);
-            }
-            else
-            {
-                busyIndicator = await gameTrendsService.GetServerBusyIndicatorAsync(serverGuids);
-            }
+            var busyIndicator = await sqliteGameTrendsService.GetServerBusyIndicatorAsync(serverGuids);
 
             // Cache for 5 minutes - busy indicator should be current
             await cacheService.SetAsync(cacheKey, busyIndicator, TimeSpan.FromMinutes(5));
@@ -181,15 +121,7 @@ public class GameTrendsController(
             }
 
             // Get insights which now includes current player count and comparison
-            SmartPredictionInsights insights;
-            if (UseSqlite("GetSmartPredictionInsights"))
-            {
-                insights = await sqliteGameTrendsService.GetSmartPredictionInsightsAsync(game);
-            }
-            else
-            {
-                insights = await gameTrendsService.GetSmartPredictionInsightsAsync(game);
-            }
+            var insights = await sqliteGameTrendsService.GetSmartPredictionInsightsAsync(game);
 
             var summary = new LandingPageTrendSummary
             {

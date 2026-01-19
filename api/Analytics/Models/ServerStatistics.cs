@@ -1,8 +1,8 @@
 using System.Runtime.Serialization;
 
-namespace api.ClickHouse.Models;
+namespace api.Analytics.Models;
 
-[DataContract(Name = "ClickHouseServerStatistics")]
+[DataContract(Name = "ServerStatistics")]
 public class ServerStatistics
 {
     public string MapName { get; set; } = "";

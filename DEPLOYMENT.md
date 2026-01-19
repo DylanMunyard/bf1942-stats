@@ -106,7 +106,7 @@ env:
 
 ## Azure Storage Secret for Backups
 
-Both SQLite and ClickHouse backup sidecars upload backups to Azure Storage. Create the storage secret:
+The SQLite backup sidecar uploads backups to Azure Storage. Create the storage secret:
 
 ```bash
 kubectl create secret generic storage-secret \
@@ -121,7 +121,6 @@ DefaultEndpointsProtocol=https;AccountName=<account-name>;AccountKey=<account-ke
 
 This secret is used by:
 - SQLite backup uploader (uploads to `sqlite` container)
-- ClickHouse backup uploader (uploads to `clickhouse` container)
 
 ## Notes
 

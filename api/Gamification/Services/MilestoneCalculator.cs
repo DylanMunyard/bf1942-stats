@@ -1,5 +1,5 @@
 using api.Gamification.Models;
-using api.ClickHouse.Models;
+using api.Analytics.Models;
 using api.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -54,7 +54,7 @@ public class MilestoneCalculator(
                 .Select(g => g.First())
                 .ToList();
 
-            // 2. Filter out milestones the player already possesses in ClickHouse
+            // 2. Filter out milestones the player already possesses
             var newUniqueAchievements = distinctById
                 .Where(a => !existingMilestoneIds.Contains(a.AchievementId))
                 .ToList();
@@ -205,11 +205,6 @@ public class MilestoneCalculator(
             logger.LogError(ex, "Error getting milestones for player {PlayerName}", playerName);
             return new List<Achievement>();
         }
-    }
-
-    public List<BadgeDefinition> GetAvailableMilestones()
-    {
-        return badgeService.GetBadgesByCategory(BadgeCategories.Milestone);
     }
 
     /// <summary>
