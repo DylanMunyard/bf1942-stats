@@ -86,6 +86,40 @@ public class TeamRegistrationController(
     }
 
     /// <summary>
+    /// Get available teams for joining
+    /// </summary>
+    [HttpGet("teams")]
+    public async Task<ActionResult<List<AvailableTeamResponse>>> GetAvailableTeams(int tournamentId)
+    {
+        try
+        {
+            // Check tournament exists
+            var tournament = await context.Tournaments
+                .FirstOrDefaultAsync(t => t.Id == tournamentId);
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            // Get all teams for this tournament with player counts
+            var teams = await context.TournamentTeams
+                .Where(tt => tt.TournamentId == tournamentId)
+                .Select(tt => new AvailableTeamResponse(
+                    tt.Id,
+                    tt.Name,
+                    tt.Tag,
+                    tt.TeamPlayers.Count))
+                .ToListAsync();
+
+            return Ok(teams);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error getting available teams for tournament {TournamentId}", tournamentId);
+            return StatusCode(500, new { message = "Error retrieving teams" });
+        }
+    }
+
+    /// <summary>
     /// Create a new team (user becomes leader)
     /// </summary>
     [HttpPost("teams")]
