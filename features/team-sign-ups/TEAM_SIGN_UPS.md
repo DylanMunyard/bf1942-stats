@@ -9,7 +9,54 @@
 | Phase 3: Public API Extensions | ✅ Complete | Team list enhanced with leader info |
 | Phase 4: Frontend Implementation | ⏳ Pending | Not yet started |
 
-**Next Steps:** Apply migration (`dotnet ef database update`), then implement frontend.
+**Migration Applied:** ✅ Yes (2026-01-20)
+
+**Next Steps:** Implement frontend (Phase 4)
+
+---
+
+## Backend Implementation Details
+
+### Files Created
+
+**Entities Modified:**
+- `api/PlayerTracking/PlayerTrackerDbContext.cs` - Added new fields to `TournamentTeam` and `TournamentTeamPlayer`
+
+**New Controllers:**
+- `api/Gamification/TeamRegistrationController.cs` - Self-service registration endpoints
+- `api/Gamification/TeamLeaderController.cs` - Team leader management endpoints
+
+**New DTOs (in `api/Gamification/Models/`):**
+- `RegistrationStatusResponse.cs` - User's registration status
+- `CreateTeamRequest.cs` / `CreateTeamResponse.cs` - Team creation
+- `JoinTeamRequest.cs` - Join team request
+- `TeamDetailsResponse.cs` - Team details with players
+- `UpdateTeamRequest.cs` - Update team info
+- `AddPlayerRequest.cs` - Add player to team
+
+**Migration:**
+- `api/Migrations/20260119112721_AddTeamRegistrationFields.cs`
+
+### API Endpoints Summary
+
+**TeamRegistrationController** (`/stats/tournament/{tournamentId}/registration`):
+```
+GET  /my-status              → RegistrationStatusResponse
+POST /teams                  → CreateTeamResponse
+POST /teams/{teamId}/join    → 200 OK
+DELETE /teams/{teamId}/leave → 200 OK
+```
+
+**TeamLeaderController** (`/stats/tournament/{tournamentId}/my-team`):
+```
+GET    /                      → TeamDetailsResponse
+PUT    /                      → 200 OK
+POST   /players               → 200 OK
+DELETE /players/{playerName}  → 200 OK
+```
+
+**PublicTournamentController** (enhanced):
+- Team list now includes `Tag`, `LeaderPlayerName`, and `IsLeader` per player
 
 ---
 
@@ -132,16 +179,37 @@ Existing team list endpoint enhanced to include leader info.
 - `api/Controllers/PublicTournamentController.cs`
 
 ### Phase 4: Frontend Implementation
-1. Create LinkPlayerNameModal.vue for player name linking
-2. Create CreateTeamModal.vue and JoinTeamModal.vue
-3. Create TeamManagementPanel.vue for team leaders
-4. Update PublicTournamentTeams.vue with registration flow
-5. Add teamRegistrationService.ts
+1. Create `teamRegistrationService.ts` - API client for registration endpoints
+2. Create `CreateTeamModal.vue` - Form for team name, tag, player name selection, rules acknowledgment
+3. Create `JoinTeamModal.vue` - Team selection, player name selection, rules acknowledgment
+4. Create `TeamManagementPanel.vue` - Team leader view to manage roster
+5. Update `PublicTournamentTeams.vue` - Add registration flow with status checks
+
+**Required API Calls:**
+```typescript
+// teamRegistrationService.ts should implement:
+getMyStatus(tournamentId: number): Promise<RegistrationStatusResponse>
+createTeam(tournamentId: number, request: CreateTeamRequest): Promise<CreateTeamResponse>
+joinTeam(tournamentId: number, teamId: number, request: JoinTeamRequest): Promise<void>
+leaveTeam(tournamentId: number, teamId: number): Promise<void>
+getMyTeam(tournamentId: number): Promise<TeamDetailsResponse>
+updateTeam(tournamentId: number, request: UpdateTeamRequest): Promise<void>
+addPlayer(tournamentId: number, playerName: string): Promise<void>
+removePlayer(tournamentId: number, playerName: string): Promise<void>
+```
+
+**UI Flow:**
+1. Check `tournament.status === "registration"` to show registration UI
+2. Call `/my-status` to get user's linked player names and current team membership
+3. If no linked player names → show prompt to link player names first
+4. If no team → show "Create Team" and "Join Team" buttons
+5. If on team as leader → show TeamManagementPanel
+6. If on team as member → show team info with "Leave Team" button
 
 **Files:**
-- `bf1942-ui/src/components/tournament/` (new components)
-- `bf1942-ui/src/views/PublicTournamentTeams.vue`
-- `bf1942-ui/src/services/teamRegistrationService.ts` (new)
+- `src/components/tournament/` (new components)
+- `src/views/PublicTournamentTeams.vue`
+- `src/services/teamRegistrationService.ts` (new)
 
 ## Verification Plan
 

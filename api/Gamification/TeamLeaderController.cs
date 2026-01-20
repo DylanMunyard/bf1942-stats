@@ -305,4 +305,77 @@ public class TeamLeaderController(
             return StatusCode(500, new { message = "Error removing player" });
         }
     }
+
+
+    /// <summary>
+    /// Delete the team entirely (leader only). Team cannot have completed any matches.
+    /// </summary>
+    [HttpDelete]
+    public async Task<IActionResult> DeleteTeam(int tournamentId)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found" });
+
+            var user = await context.Users
+                .FirstOrDefaultAsync(u => u.Email == userEmail);
+
+            if (user == null)
+                return Unauthorized(new { message = "User not found" });
+
+            // Find user's team membership and verify they are the leader
+            var membership = await context.TournamentTeamPlayers
+                .Include(ttp => ttp.TournamentTeam)
+                .Where(ttp => ttp.UserId == user.Id && ttp.TournamentTeam.TournamentId == tournamentId)
+                .FirstOrDefaultAsync();
+
+            if (membership == null)
+                return NotFound(new { message = "You are not on a team for this tournament" });
+
+            if (!membership.IsTeamLeader)
+                return Forbid();
+
+            var team = membership.TournamentTeam;
+
+            // Check if team has completed any matches
+            var hasCompletedMatches = await context.TournamentMatchResults
+                .Where(tmr => tmr.Team1Id == team.Id || tmr.Team2Id == team.Id)
+                .AnyAsync();
+
+            if (hasCompletedMatches)
+                return BadRequest(new { message = "Cannot delete team: team has completed matches" });
+
+            // Check if team has any scheduled matches
+            var hasScheduledMatches = await context.TournamentMatches
+                .Where(tm => tm.Team1Id == team.Id || tm.Team2Id == team.Id)
+                .AnyAsync();
+
+            if (hasScheduledMatches)
+                return BadRequest(new { message = "Cannot delete team: team has scheduled matches" });
+
+            // Delete all team players first (cascade should handle this, but being explicit)
+            var teamPlayers = await context.TournamentTeamPlayers
+                .Where(ttp => ttp.TournamentTeamId == team.Id)
+                .ToListAsync();
+
+            context.TournamentTeamPlayers.RemoveRange(teamPlayers);
+
+            // Delete the team
+            context.TournamentTeams.Remove(team);
+
+            await context.SaveChangesAsync();
+
+            logger.LogInformation("User {UserEmail} deleted team {TeamId} ({TeamName}) from tournament {TournamentId}",
+                userEmail, team.Id, team.Name, tournamentId);
+
+            return Ok(new { message = "Team deleted successfully" });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error deleting team from tournament {TournamentId}", tournamentId);
+            return StatusCode(500, new { message = "Error deleting team" });
+        }
+    }
 }
