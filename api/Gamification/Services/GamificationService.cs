@@ -339,6 +339,14 @@ public class GamificationService(SqliteGamificationService gamificationService, 
     }
 
     /// <summary>
+    /// Get hero achievements for a player (latest milestone + 5 recent achievements with full details)
+    /// </summary>
+    public async Task<List<Achievement>> GetPlayerHeroAchievementsAsync(string playerName)
+    {
+        return await gamificationService.GetPlayerHeroAchievementsAsync(playerName);
+    }
+
+    /// <summary>
     /// Get all achievements with pagination, filtering, and player achievement IDs
     /// </summary>
     private static List<Achievement> DeduplicateAchievements(IEnumerable<Achievement> achievements)

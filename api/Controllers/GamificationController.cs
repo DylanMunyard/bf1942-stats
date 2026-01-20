@@ -93,6 +93,27 @@ public class GamificationController(
     }
 
     /// <summary>
+    /// Get hero achievements for a player (latest milestone + 5 recent achievements with full details)
+    /// </summary>
+    [HttpGet("player/{playerName}/hero-achievements")]
+    public async Task<ActionResult<List<Achievement>>> GetPlayerHeroAchievements(string playerName)
+    {
+        if (string.IsNullOrWhiteSpace(playerName))
+            return BadRequest("Player name is required");
+
+        try
+        {
+            var heroAchievements = await gamificationService.GetPlayerHeroAchievementsAsync(playerName);
+            return Ok(heroAchievements);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error getting hero achievements for player {PlayerName}", playerName);
+            return StatusCode(500, "An internal server error occurred while retrieving player hero achievements.");
+        }
+    }
+
+    /// <summary>
     /// Get grouped achievement counts for a player
     /// </summary>
     [HttpGet("player/{playerName}/achievement-groups")]

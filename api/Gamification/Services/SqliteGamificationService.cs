@@ -268,6 +268,54 @@ public class SqliteGamificationService(
     }
 
     /// <summary>
+    /// Get hero achievements for a player (5 most recent achievements with full details)
+    /// </summary>
+    public async Task<List<Achievement>> GetPlayerHeroAchievementsAsync(string playerName)
+    {
+        try
+        {
+            // Get the 5 most recent achievements
+            var recentAchievementsQuery = @"
+                SELECT pa.PlayerName, pa.AchievementType, pa.AchievementId, pa.AchievementName,
+                       pa.Tier, pa.Value, pa.AchievedAt, pa.ProcessedAt, pa.ServerGuid,
+                       pa.MapName, pa.RoundId, pa.Metadata, pa.Game, pa.Version
+                FROM PlayerAchievements pa
+                WHERE pa.PlayerName = @playerName
+                ORDER BY pa.AchievedAt DESC
+                LIMIT 5";
+
+            var achievements = await dbContext.PlayerAchievements
+                .FromSqlRaw(recentAchievementsQuery,
+                    new Microsoft.Data.Sqlite.SqliteParameter("@playerName", playerName))
+                .Select(pa => new Achievement
+                {
+                    PlayerName = pa.PlayerName,
+                    AchievementType = pa.AchievementType,
+                    AchievementId = pa.AchievementId,
+                    AchievementName = pa.AchievementName,
+                    Tier = pa.Tier,
+                    Value = (uint)pa.Value,
+                    AchievedAt = pa.AchievedAt.ToDateTimeUtc(),
+                    ProcessedAt = pa.ProcessedAt.ToDateTimeUtc(),
+                    ServerGuid = pa.ServerGuid,
+                    MapName = pa.MapName,
+                    RoundId = pa.RoundId,
+                    Metadata = pa.Metadata,
+                    Game = pa.Game,
+                    Version = pa.AchievedAt.ToDateTimeUtc()
+                })
+                .ToListAsync();
+
+            return achievements;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to get hero achievements for player {PlayerName}", playerName);
+            return new List<Achievement>();
+        }
+    }
+
+    /// <summary>
     /// Get player's achievements by type
     /// </summary>
     public async Task<List<Achievement>> GetPlayerAchievementsByTypeAsync(
