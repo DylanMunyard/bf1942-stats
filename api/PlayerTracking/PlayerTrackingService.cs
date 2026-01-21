@@ -278,6 +278,9 @@ public class PlayerTrackingService(
         bool ipChanged = false;
         string? oldMapName = null;
 
+        // Count human players only (exclude AI bots)
+        var humanPlayerCount = serverInfo.Players.Count(p => !botDetectionService.IsBotPlayer(p.Name, p.AiBot));
+
         if (server == null)
         {
             server = new GameServer
@@ -292,7 +295,7 @@ public class PlayerTrackingService(
                 MapName = serverInfo.MapName,
                 JoinLink = serverInfo.JoinLink,
                 CurrentMap = serverInfo.MapName,
-                CurrentNumPlayers = serverInfo.Players.Count()
+                CurrentNumPlayers = humanPlayerCount
             };
             dbContext.Servers.Add(server);
             ipChanged = true;
@@ -326,7 +329,7 @@ public class PlayerTrackingService(
             server.MaxPlayers = serverInfo.MaxPlayers;
             server.MapName = serverInfo.MapName;
             server.JoinLink = serverInfo.JoinLink;
-            server.CurrentNumPlayers = serverInfo.Players.Count();
+            server.CurrentNumPlayers = humanPlayerCount;
 
             // Update current map from active sessions or server info
             server.CurrentMap = serverInfo.MapName;
