@@ -153,9 +153,20 @@ public class PlayerBestScoresService(
             .ToList();
 
         // Delete existing records for this player/period
+        // ExecuteDeleteAsync runs directly against the DB but doesn't clear the change tracker,
+        // so we must clear any tracked PlayerBestScore entities to avoid key conflicts when adding new ones
         await dbContext.PlayerBestScores
             .Where(pbs => pbs.PlayerName == playerName && pbs.Period == period)
             .ExecuteDeleteAsync(ct);
+
+        // Clear tracked PlayerBestScore entities for this player/period to prevent duplicate key conflicts
+        var trackedEntries = dbContext.ChangeTracker.Entries<PlayerBestScore>()
+            .Where(e => e.Entity.PlayerName == playerName && e.Entity.Period == period)
+            .ToList();
+        foreach (var entry in trackedEntries)
+        {
+            entry.State = EntityState.Detached;
+        }
 
         // Insert new top 3
         for (var rank = 1; rank <= allCandidates.Count; rank++)

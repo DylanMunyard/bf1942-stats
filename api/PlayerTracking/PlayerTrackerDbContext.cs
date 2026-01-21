@@ -771,6 +771,10 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<PlayerMapStats>()
             .HasIndex(pms => new { pms.Year, pms.Month });
 
+        // Optimizes queries that filter by ServerGuid and MapName (e.g., top players per map)
+        modelBuilder.Entity<PlayerMapStats>()
+            .HasIndex(pms => new { pms.ServerGuid, pms.MapName });
+
         modelBuilder.Entity<PlayerMapStats>()
             .Property(pms => pms.UpdatedAt)
             .HasConversion(
