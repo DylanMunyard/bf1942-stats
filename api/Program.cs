@@ -538,6 +538,9 @@ try
     builder.Services.AddScoped<api.PlayerStats.ISqlitePlayerComparisonService, api.PlayerStats.SqlitePlayerComparisonService>();
     builder.Services.AddScoped<api.PlayerStats.IPlayerBestScoresService, api.PlayerStats.PlayerBestScoresService>();
 
+    // Register Data Explorer service
+    builder.Services.AddScoped<api.DataExplorer.IDataExplorerService, api.DataExplorer.DataExplorerService>();
+
     var host = builder.Build();
 
     // Configure the HTTP request pipeline
