@@ -12,15 +12,25 @@ public class DataExplorerController(
     ILogger<DataExplorerController> logger) : ControllerBase
 {
     /// <summary>
-    /// Get all servers with summary information, filtered by game.
+    /// Get paginated servers with summary information, filtered by game.
     /// </summary>
     /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
+    /// <param name="page">Page number (1-based, default 1)</param>
+    /// <param name="pageSize">Number of results per page (default 50, max 100)</param>
     [HttpGet("servers")]
     [ProducesResponseType(typeof(ServerListResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<ServerListResponse>> GetServers([FromQuery] string game = "bf1942")
+    public async Task<ActionResult<ServerListResponse>> GetServers(
+        [FromQuery] string game = "bf1942",
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50)
     {
-        logger.LogInformation("Getting servers for data explorer with game filter: {Game}", game);
-        var result = await dataExplorerService.GetServersAsync(game);
+        // Clamp page and page size
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        
+        logger.LogInformation("Getting servers for data explorer with game filter: {Game}, page: {Page}, pageSize: {PageSize}", 
+            game, page, pageSize);
+        var result = await dataExplorerService.GetServersAsync(game, page, pageSize);
         return Ok(result);
     }
 
@@ -108,6 +118,99 @@ public class DataExplorerController(
         {
             logger.LogWarning("Server-map combination not found: {ServerGuid}/{MapName}", serverGuid, mapName);
             return NotFound($"No data found for server '{serverGuid}' and map '{mapName}'");
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Search for players by name prefix.
+    /// Requires at least 3 characters. Returns top 50 matches by score.
+    /// </summary>
+    /// <param name="query">Search query (min 3 characters)</param>
+    /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
+    [HttpGet("players/search")]
+    [ProducesResponseType(typeof(PlayerSearchResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PlayerSearchResponse>> SearchPlayers(
+        [FromQuery] string query,
+        [FromQuery] string game = "bf1942")
+    {
+        logger.LogInformation("Searching players with query: {Query} for game: {Game}", query, game);
+        var result = await dataExplorerService.SearchPlayersAsync(query, game);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Get player map rankings with per-server breakdown and rank information.
+    /// </summary>
+    /// <param name="playerName">The player name</param>
+    /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
+    /// <param name="days">Number of days to look back (default 60)</param>
+    [HttpGet("players/{playerName}/maps")]
+    [ProducesResponseType(typeof(PlayerMapRankingsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PlayerMapRankingsResponse>> GetPlayerMapRankings(
+        string playerName,
+        [FromQuery] string game = "bf1942",
+        [FromQuery] int days = 60)
+    {
+        // URL decode the player name
+        playerName = Uri.UnescapeDataString(playerName);
+
+        logger.LogInformation("Getting player map rankings for {PlayerName} with game: {Game}, days: {Days}",
+            playerName, game, days);
+
+        var result = await dataExplorerService.GetPlayerMapRankingsAsync(playerName, game, days);
+
+        if (result == null)
+        {
+            logger.LogWarning("Player not found or no data: {PlayerName} for game: {Game}", playerName, game);
+            return NotFound($"No data found for player '{playerName}' in game '{game}'");
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Get paginated player rankings for a specific map (aggregated across all servers).
+    /// </summary>
+    /// <param name="mapName">The map name</param>
+    /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
+    /// <param name="page">Page number (1-based, default 1)</param>
+    /// <param name="pageSize">Number of results per page (default 10, max 50)</param>
+    /// <param name="search">Optional player name search filter (min 2 characters)</param>
+    /// <param name="serverGuid">Optional server GUID filter</param>
+    /// <param name="days">Number of days to look back (default 60)</param>
+    [HttpGet("maps/{mapName}/rankings")]
+    [ProducesResponseType(typeof(MapPlayerRankingsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<MapPlayerRankingsResponse>> GetMapPlayerRankings(
+        string mapName,
+        [FromQuery] string game = "bf1942",
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        [FromQuery] string? serverGuid = null,
+        [FromQuery] int days = 60)
+    {
+        // URL decode the map name
+        mapName = Uri.UnescapeDataString(mapName);
+
+        // Clamp page size
+        pageSize = Math.Clamp(pageSize, 1, 50);
+        page = Math.Max(1, page);
+
+        logger.LogInformation(
+            "Getting map player rankings for {MapName} with game: {Game}, page: {Page}, pageSize: {PageSize}, search: {Search}, serverGuid: {ServerGuid}",
+            mapName, game, page, pageSize, search, serverGuid);
+
+        var result = await dataExplorerService.GetMapPlayerRankingsAsync(
+            mapName, game, page, pageSize, search, serverGuid, days);
+
+        if (result == null)
+        {
+            logger.LogWarning("Map not found or no data: {MapName} for game: {Game}", mapName, game);
+            return NotFound($"No data found for map '{mapName}' in game '{game}'");
         }
 
         return Ok(result);

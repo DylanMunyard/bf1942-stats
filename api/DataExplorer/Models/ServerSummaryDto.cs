@@ -16,9 +16,12 @@ public record ServerSummaryDto(
 );
 
 /// <summary>
-/// Response containing list of servers.
+/// Response containing list of servers with pagination info.
 /// </summary>
 public record ServerListResponse(
     List<ServerSummaryDto> Servers,
-    int TotalCount
+    int TotalCount,
+    int Page,
+    int PageSize,
+    bool HasMore
 );
