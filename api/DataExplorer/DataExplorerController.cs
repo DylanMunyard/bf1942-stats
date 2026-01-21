@@ -181,6 +181,7 @@ public class DataExplorerController(
     /// <param name="search">Optional player name search filter (min 2 characters)</param>
     /// <param name="serverGuid">Optional server GUID filter</param>
     /// <param name="days">Number of days to look back (default 60)</param>
+    /// <param name="sortBy">Sort field: score (default), kills, kdRatio, killRate</param>
     [HttpGet("maps/{mapName}/rankings")]
     [ProducesResponseType(typeof(MapPlayerRankingsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -191,7 +192,8 @@ public class DataExplorerController(
         [FromQuery] int pageSize = 10,
         [FromQuery] string? search = null,
         [FromQuery] string? serverGuid = null,
-        [FromQuery] int days = 60)
+        [FromQuery] int days = 60,
+        [FromQuery] string sortBy = "score")
     {
         // URL decode the map name
         mapName = Uri.UnescapeDataString(mapName);
@@ -200,12 +202,17 @@ public class DataExplorerController(
         pageSize = Math.Clamp(pageSize, 1, 50);
         page = Math.Max(1, page);
 
+        // Validate sortBy
+        var validSortFields = new[] { "score", "kills", "kdRatio", "killRate" };
+        if (!validSortFields.Contains(sortBy.ToLowerInvariant()))
+            sortBy = "score";
+
         logger.LogInformation(
-            "Getting map player rankings for {MapName} with game: {Game}, page: {Page}, pageSize: {PageSize}, search: {Search}, serverGuid: {ServerGuid}",
-            mapName, game, page, pageSize, search, serverGuid);
+            "Getting map player rankings for {MapName} with game: {Game}, page: {Page}, pageSize: {PageSize}, search: {Search}, serverGuid: {ServerGuid}, sortBy: {SortBy}",
+            mapName, game, page, pageSize, search, serverGuid, sortBy);
 
         var result = await dataExplorerService.GetMapPlayerRankingsAsync(
-            mapName, game, page, pageSize, search, serverGuid, days);
+            mapName, game, page, pageSize, search, serverGuid, days, sortBy);
 
         if (result == null)
         {

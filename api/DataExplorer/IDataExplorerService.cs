@@ -61,6 +61,7 @@ public interface IDataExplorerService
     /// <param name="searchQuery">Optional player name search filter</param>
     /// <param name="serverGuid">Optional server GUID filter</param>
     /// <param name="days">Number of days to look back (default 60)</param>
+    /// <param name="sortBy">Sort field: score (default), kills, kdRatio, killRate</param>
     Task<MapPlayerRankingsResponse?> GetMapPlayerRankingsAsync(
         string mapName,
         string game = "bf1942",
@@ -68,5 +69,6 @@ public interface IDataExplorerService
         int pageSize = 10,
         string? searchQuery = null,
         string? serverGuid = null,
-        int days = 60);
+        int days = 60,
+        string sortBy = "score");
 }

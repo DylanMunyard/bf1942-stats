@@ -23,6 +23,7 @@ public record MapPlayerRankingDto(
     int TotalKills,
     int TotalDeaths,
     double KdRatio,
+    double KillsPerMinute,
     int TotalRounds,
     double PlayTimeMinutes,
     int UniqueServers

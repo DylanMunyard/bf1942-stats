@@ -823,7 +823,8 @@ public class DataExplorerService(
         int pageSize = 10,
         string? searchQuery = null,
         string? serverGuid = null,
-        int days = 60)
+        int days = 60,
+        string sortBy = "score")
     {
         var normalizedGame = NormalizeGame(game);
 
@@ -870,14 +871,19 @@ public class DataExplorerService(
         }
 
         // Count total matching players (for pagination)
-        // Note: Column must be named "Value" for SqlQueryRaw<int> to work correctly
+        // Must use same HAVING filter as data query to get accurate count
         var countSql = $@"
-            SELECT COUNT(DISTINCT PlayerName) as Value
-            FROM PlayerMapStats
-            WHERE MapName = @p0
-              AND ((Year > @p1) OR (Year = @p1 AND Month >= @p2))
-              AND ServerGuid IN ({guidParams})
-              {playerFilter}";
+            SELECT COUNT(*) as Value
+            FROM (
+                SELECT PlayerName
+                FROM PlayerMapStats
+                WHERE MapName = @p0
+                  AND ((Year > @p1) OR (Year = @p1 AND Month >= @p2))
+                  AND ServerGuid IN ({guidParams})
+                  {playerFilter}
+                GROUP BY PlayerName
+                HAVING SUM(TotalRounds) >= 3
+            )";
 
         var totalCount = await dbContext.Database
             .SqlQueryRaw<int>(countSql, sqlParams.ToArray())
@@ -886,15 +892,25 @@ public class DataExplorerService(
         // Calculate offset for pagination
         var offset = (page - 1) * pageSize;
 
+        // Determine sort column and ORDER BY clause
+        var (sortColumn, orderByClause) = sortBy.ToLowerInvariant() switch
+        {
+            "kills" => ("TotalKills", "TotalKills DESC"),
+            "kdratio" => ("KdRatio", "KdRatio DESC"),
+            "killrate" => ("KillsPerMinute", "KillsPerMinute DESC"),
+            _ => ("TotalScore", "TotalScore DESC") // default to score
+        };
+
         // Query player rankings with pagination
         var rankingsSql = $@"
             SELECT
-                ROW_NUMBER() OVER (ORDER BY TotalScore DESC) as Rank,
+                ROW_NUMBER() OVER (ORDER BY {orderByClause}) as Rank,
                 PlayerName,
                 TotalScore,
                 TotalKills,
                 TotalDeaths,
                 KdRatio,
+                KillsPerMinute,
                 TotalRounds,
                 TotalPlayTimeMinutes as PlayTimeMinutes,
                 UniqueServers
@@ -907,6 +923,9 @@ public class DataExplorerService(
                     CASE WHEN SUM(TotalDeaths) > 0
                          THEN ROUND(CAST(SUM(TotalKills) AS REAL) / SUM(TotalDeaths), 2)
                          ELSE CAST(SUM(TotalKills) AS REAL) END as KdRatio,
+                    CASE WHEN SUM(TotalPlayTimeMinutes) > 0
+                         THEN ROUND(CAST(SUM(TotalKills) AS REAL) / SUM(TotalPlayTimeMinutes), 3)
+                         ELSE 0 END as KillsPerMinute,
                     SUM(TotalRounds) as TotalRounds,
                     SUM(TotalPlayTimeMinutes) as TotalPlayTimeMinutes,
                     COUNT(DISTINCT ServerGuid) as UniqueServers
@@ -916,9 +935,9 @@ public class DataExplorerService(
                   AND ServerGuid IN ({guidParams})
                   {playerFilter}
                 GROUP BY PlayerName
-                HAVING SUM(TotalRounds) >= 1
+                HAVING SUM(TotalRounds) >= 3
             )
-            ORDER BY TotalScore DESC
+            ORDER BY {orderByClause}
             LIMIT @p{paramOffset} OFFSET @p{paramOffset + 1}";
 
         sqlParams.Add(pageSize);
@@ -935,6 +954,7 @@ public class DataExplorerService(
             TotalKills: r.TotalKills,
             TotalDeaths: r.TotalDeaths,
             KdRatio: r.KdRatio,
+            KillsPerMinute: r.KillsPerMinute,
             TotalRounds: r.TotalRounds,
             PlayTimeMinutes: r.PlayTimeMinutes,
             UniqueServers: r.UniqueServers
@@ -1076,6 +1096,7 @@ public class DataExplorerService(
         public int TotalKills { get; set; }
         public int TotalDeaths { get; set; }
         public double KdRatio { get; set; }
+        public double KillsPerMinute { get; set; }
         public int TotalRounds { get; set; }
         public double PlayTimeMinutes { get; set; }
         public int UniqueServers { get; set; }
