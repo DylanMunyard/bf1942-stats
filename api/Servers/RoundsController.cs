@@ -106,9 +106,6 @@ public class RoundsController(
 
             var result = await roundsService.GetRounds(page, pageSize, sortBy, sortOrder, filters, includeTopPlayers, onlySpecifiedPlayers);
 
-            if (result.TotalItems == 0)
-                return NotFound("No rounds found with the specified filters");
-
             return Ok(result);
         }
         catch (ArgumentException ex)

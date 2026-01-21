@@ -1,4 +1,3 @@
-using api.Bflist;
 using api.DataExplorer.Models;
 using api.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
@@ -10,67 +9,76 @@ namespace api.DataExplorer;
 /// Data Explorer service implementation.
 /// Uses raw SQL aggregation on existing tables (ServerMapStats, PlayerMapStats)
 /// instead of loading data into memory. Leverages year/month bucketing for time-slicing.
+/// Reads server online status from the Servers table instead of calling external APIs.
 /// </summary>
 public class DataExplorerService(
     PlayerTrackerDbContext dbContext,
-    IBfListApiService bfListApiService,
     ILogger<DataExplorerService> logger) : IDataExplorerService
 {
     private const int Last30Days = 30;
 
-    public async Task<ServerListResponse> GetServersAsync()
+    /// <summary>
+    /// Valid game types for filtering.
+    /// </summary>
+    private static readonly HashSet<string> ValidGames = new(StringComparer.OrdinalIgnoreCase) 
+    { 
+        "bf1942", "fh2", "bfvietnam" 
+    };
+
+    /// <summary>
+    /// Normalize game parameter to lowercase, defaulting to bf1942 if invalid.
+    /// </summary>
+    private static string NormalizeGame(string? game) =>
+        !string.IsNullOrWhiteSpace(game) && ValidGames.Contains(game) 
+            ? game.ToLowerInvariant() 
+            : "bf1942";
+
+    public async Task<ServerListResponse> GetServersAsync(string game = "bf1942")
     {
-        // Get all online servers from BfList API
-        var onlineServers = new Dictionary<string, (int CurrentPlayers, int MaxPlayers)>();
-        try
-        {
-            var bf1942Servers = await bfListApiService.FetchAllServerSummariesAsync("bf1942");
-            var fh2Servers = await bfListApiService.FetchAllServerSummariesAsync("fh2");
-            var bfvietnamServers = await bfListApiService.FetchAllServerSummariesAsync("bfvietnam");
+        var normalizedGame = NormalizeGame(game);
 
-            foreach (var server in bf1942Servers.Concat(fh2Servers).Concat(bfvietnamServers))
-            {
-                onlineServers[server.Guid] = (server.NumPlayers, server.MaxPlayers);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to fetch online servers from BfList API");
-        }
-
-        // Get all servers
+        // Get servers for the specified game from the database
+        // The IsOnline flag is maintained by the background job that polls the BfList API
         var servers = await dbContext.Servers
             .AsNoTracking()
-            .Select(s => new { s.Guid, s.Name, s.Game, s.Country, s.MaxPlayers })
+            .Where(s => s.Game == normalizedGame)
+            .Select(s => new { s.Guid, s.Name, s.Game, s.Country, s.MaxPlayers, s.IsOnline })
             .ToListAsync();
 
+        if (servers.Count == 0)
+            return new ServerListResponse([], 0);
+
         // Use raw SQL to aggregate ServerMapStats for last 30 days - fully computed in SQLite
+        // Filter by game through the server GUIDs
         var cutoffDate = DateTime.UtcNow.AddDays(-Last30Days);
         var cutoffYear = cutoffDate.Year;
         var cutoffMonth = cutoffDate.Month;
 
-        var serverStatsSql = @"
+        var serverGuids = servers.Select(s => s.Guid).ToList();
+        
+        // Build parameterized IN clause for server GUIDs
+        var guidParams = string.Join(", ", serverGuids.Select((_, i) => $"@p{i + 2}"));
+        var serverStatsSql = $@"
             SELECT 
                 ServerGuid,
                 COUNT(DISTINCT MapName) as TotalMaps,
                 SUM(TotalRounds) as TotalRounds
             FROM ServerMapStats
-            WHERE (Year > @p0) OR (Year = @p0 AND Month >= @p1)
+            WHERE ((Year > @p0) OR (Year = @p0 AND Month >= @p1))
+              AND ServerGuid IN ({guidParams})
             GROUP BY ServerGuid";
 
+        var sqlParams = new List<object> { cutoffYear, cutoffMonth };
+        sqlParams.AddRange(serverGuids.Cast<object>());
+
         var serverStats = await dbContext.Database
-            .SqlQueryRaw<ServerStatsQueryResult>(serverStatsSql, cutoffYear, cutoffMonth)
+            .SqlQueryRaw<ServerStatsQueryResult>(serverStatsSql, sqlParams.ToArray())
             .ToListAsync();
 
         var statsDict = serverStats.ToDictionary(x => x.ServerGuid);
 
         var serverSummaries = servers.Select(s =>
         {
-            var isOnline = onlineServers.ContainsKey(s.Guid);
-            var (currentPlayers, maxPlayers) = isOnline
-                ? onlineServers[s.Guid]
-                : (0, s.MaxPlayers ?? 0);
-
             statsDict.TryGetValue(s.Guid, out var stats);
 
             return new ServerSummaryDto(
@@ -78,15 +86,15 @@ public class DataExplorerService(
                 Name: s.Name,
                 Game: s.Game,
                 Country: s.Country,
-                IsOnline: isOnline,
-                CurrentPlayers: currentPlayers,
-                MaxPlayers: maxPlayers,
+                IsOnline: s.IsOnline,
+                CurrentPlayers: 0, // Current players would require live API call - not needed for data explorer
+                MaxPlayers: s.MaxPlayers ?? 0,
                 TotalMaps: stats?.TotalMaps ?? 0,
                 TotalRoundsLast30Days: stats?.TotalRounds ?? 0
             );
         })
         .OrderByDescending(s => s.IsOnline)
-        .ThenByDescending(s => s.CurrentPlayers)
+        .ThenByDescending(s => s.TotalRoundsLast30Days)
         .ThenBy(s => s.Name)
         .ToList();
 
@@ -102,17 +110,8 @@ public class DataExplorerService(
         if (server == null)
             return null;
 
-        // Check if server is online
-        var isOnline = false;
-        try
-        {
-            var onlineServer = await bfListApiService.FetchSingleServerSummaryAsync(server.Game, serverGuid);
-            isOnline = onlineServer != null;
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to check online status for server {ServerGuid}", serverGuid);
-        }
+        // Use the IsOnline flag from the database (maintained by background job)
+        var isOnline = server.IsOnline;
 
         // Use raw SQL to aggregate map rotation data with window function for percentage
         // All computation happens in SQLite - no in-memory grouping
@@ -274,26 +273,45 @@ public class DataExplorerService(
         );
     }
 
-    public async Task<MapListResponse> GetMapsAsync()
+    public async Task<MapListResponse> GetMapsAsync(string game = "bf1942")
     {
+        var normalizedGame = NormalizeGame(game);
         var cutoffDate = DateTime.UtcNow.AddDays(-Last30Days);
         var cutoffYear = cutoffDate.Year;
         var cutoffMonth = cutoffDate.Month;
 
+        // Get server GUIDs for the specified game
+        var serverGuids = await dbContext.Servers
+            .AsNoTracking()
+            .Where(s => s.Game == normalizedGame)
+            .Select(s => s.Guid)
+            .ToListAsync();
+
+        if (serverGuids.Count == 0)
+            return new MapListResponse([], 0);
+
+        // Build parameterized IN clause for server GUIDs
+        var guidParams = string.Join(", ", serverGuids.Select((_, i) => $"@p{i + 2}"));
+
         // Use raw SQL to aggregate ServerMapStats by map - fully computed in SQLite
-        var mapStatsSql = @"
+        // Filter by game through the server GUIDs
+        var mapStatsSql = $@"
             SELECT 
                 MapName,
                 COUNT(DISTINCT ServerGuid) as ServersPlayingCount,
                 SUM(TotalRounds) as TotalRoundsLast30Days,
                 ROUND(AVG(AvgConcurrentPlayers), 1) as AvgPlayersWhenPlayed
             FROM ServerMapStats
-            WHERE (Year > @p0) OR (Year = @p0 AND Month >= @p1)
+            WHERE ((Year > @p0) OR (Year = @p0 AND Month >= @p1))
+              AND ServerGuid IN ({guidParams})
             GROUP BY MapName
             ORDER BY TotalRoundsLast30Days DESC";
 
+        var sqlParams = new List<object> { cutoffYear, cutoffMonth };
+        sqlParams.AddRange(serverGuids.Cast<object>());
+
         var mapStats = await dbContext.Database
-            .SqlQueryRaw<MapStatsQueryResult>(mapStatsSql, cutoffYear, cutoffMonth)
+            .SqlQueryRaw<MapStatsQueryResult>(mapStatsSql, sqlParams.ToArray())
             .ToListAsync();
 
         var result = mapStats.Select(m => new MapSummaryDto(
@@ -306,10 +324,25 @@ public class DataExplorerService(
         return new MapListResponse(result, result.Count);
     }
 
-    public async Task<MapDetailDto?> GetMapDetailAsync(string mapName)
+    public async Task<MapDetailDto?> GetMapDetailAsync(string mapName, string game = "bf1942")
     {
-        // Use raw SQL to aggregate ServerMapStats by server for this map
-        var serverStatsSql = @"
+        var normalizedGame = NormalizeGame(game);
+
+        // Get server GUIDs for the specified game
+        var gameServerGuids = await dbContext.Servers
+            .AsNoTracking()
+            .Where(s => s.Game == normalizedGame)
+            .Select(s => s.Guid)
+            .ToListAsync();
+
+        if (gameServerGuids.Count == 0)
+            return null;
+
+        // Build parameterized IN clause for server GUIDs
+        var guidParams = string.Join(", ", gameServerGuids.Select((_, i) => $"@p{i + 1}"));
+
+        // Use raw SQL to aggregate ServerMapStats by server for this map, filtered by game
+        var serverStatsSql = $@"
             SELECT
                 ServerGuid,
                 SUM(TotalRounds) as TotalRounds,
@@ -325,42 +358,28 @@ public class DataExplorerService(
                 MAX(Team2Label) as Team2Label
             FROM ServerMapStats
             WHERE MapName = @p0
+              AND ServerGuid IN ({guidParams})
             GROUP BY ServerGuid
             ORDER BY TotalRounds DESC";
 
+        var sqlParams = new List<object> { mapName };
+        sqlParams.AddRange(gameServerGuids.Cast<object>());
+
         var serverStatsData = await dbContext.Database
-            .SqlQueryRaw<ServerOnMapQueryResult>(serverStatsSql, mapName)
+            .SqlQueryRaw<ServerOnMapQueryResult>(serverStatsSql, sqlParams.ToArray())
             .ToListAsync();
 
         if (serverStatsData.Count == 0)
             return null;
 
-        // Get server info
+        // Get server info (including IsOnline status from database)
         var serverGuids = serverStatsData.Select(x => x.ServerGuid).ToList();
         var servers = await dbContext.Servers
             .AsNoTracking()
             .Where(s => serverGuids.Contains(s.Guid))
             .ToDictionaryAsync(s => s.Guid);
 
-        // Check online status
-        var onlineServers = new HashSet<string>();
-        try
-        {
-            var bf1942Servers = await bfListApiService.FetchAllServerSummariesAsync("bf1942");
-            var fh2Servers = await bfListApiService.FetchAllServerSummariesAsync("fh2");
-            var bfvietnamServers = await bfListApiService.FetchAllServerSummariesAsync("bfvietnam");
-
-            foreach (var server in bf1942Servers.Concat(fh2Servers).Concat(bfvietnamServers))
-            {
-                onlineServers.Add(server.Guid);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to fetch online servers from BfList API");
-        }
-
-        // Build server list
+        // Build server list using IsOnline from the database
         var serverList = serverStatsData
             .Select(ssd =>
             {
@@ -369,8 +388,8 @@ public class DataExplorerService(
                 return new ServerOnMapDto(
                     ServerGuid: ssd.ServerGuid,
                     ServerName: server?.Name ?? "Unknown Server",
-                    Game: server?.Game ?? "unknown",
-                    IsOnline: onlineServers.Contains(ssd.ServerGuid),
+                    Game: server?.Game ?? normalizedGame,
+                    IsOnline: server?.IsOnline ?? false,
                     TotalRoundsOnMap: ssd.TotalRounds,
                     WinStats: new WinStatsDto(
                         Team1Label: ssd.Team1Label ?? "Team 1",
@@ -409,6 +428,149 @@ public class DataExplorerService(
             MapName: mapName,
             Servers: serverList,
             AggregatedWinStats: aggregatedWinStats
+        );
+    }
+
+
+    public async Task<ServerMapDetailDto?> GetServerMapDetailAsync(string serverGuid, string mapName, int days = 60)
+    {
+        // Get server info (including IsOnline status from database)
+        var server = await dbContext.Servers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Guid == serverGuid);
+
+        if (server == null)
+            return null;
+
+        // Use the IsOnline flag from the database (maintained by background job)
+        var isOnline = server.IsOnline;
+
+        // Calculate date range
+        var toDate = DateTime.UtcNow;
+        var fromDate = toDate.AddDays(-days);
+        var cutoffYear = fromDate.Year;
+        var cutoffMonth = fromDate.Month;
+
+        // Query 1: Map Activity from ServerMapStats
+        var mapActivitySql = @"
+            SELECT
+                COALESCE(SUM(TotalRounds), 0) as TotalRounds,
+                COALESCE(SUM(TotalPlayTimeMinutes), 0) as TotalPlayTimeMinutes,
+                ROUND(COALESCE(AVG(AvgConcurrentPlayers), 0), 1) as AvgConcurrentPlayers,
+                COALESCE(MAX(PeakConcurrentPlayers), 0) as PeakConcurrentPlayers,
+                COALESCE(SUM(Team1Victories), 0) as Team1Victories,
+                COALESCE(SUM(Team2Victories), 0) as Team2Victories,
+                MAX(Team1Label) as Team1Label,
+                MAX(Team2Label) as Team2Label
+            FROM ServerMapStats
+            WHERE ServerGuid = @p0 AND MapName = @p1
+              AND ((Year > @p2) OR (Year = @p2 AND Month >= @p3))";
+
+        var mapActivityData = await dbContext.Database
+            .SqlQueryRaw<ServerMapActivityQueryResult>(mapActivitySql, serverGuid, mapName, cutoffYear, cutoffMonth)
+            .FirstOrDefaultAsync();
+
+        // If no data found for this server/map combination
+        if (mapActivityData == null || mapActivityData.TotalRounds == 0)
+            return null;
+
+        var mapActivity = new MapActivityStatsDto(
+            TotalRounds: mapActivityData.TotalRounds,
+            TotalPlayTimeMinutes: mapActivityData.TotalPlayTimeMinutes,
+            AvgConcurrentPlayers: mapActivityData.AvgConcurrentPlayers,
+            PeakConcurrentPlayers: mapActivityData.PeakConcurrentPlayers
+        );
+
+        // Calculate win stats
+        var totalWins = mapActivityData.Team1Victories + mapActivityData.Team2Victories;
+        var winStats = new WinStatsDto(
+            Team1Label: mapActivityData.Team1Label ?? "Team 1",
+            Team2Label: mapActivityData.Team2Label ?? "Team 2",
+            Team1Victories: mapActivityData.Team1Victories,
+            Team2Victories: mapActivityData.Team2Victories,
+            Team1WinPercentage: totalWins > 0 ? Math.Round(100.0 * mapActivityData.Team1Victories / totalWins, 1) : 0,
+            Team2WinPercentage: totalWins > 0 ? Math.Round(100.0 * mapActivityData.Team2Victories / totalWins, 1) : 0,
+            TotalRounds: mapActivityData.TotalRounds
+        );
+
+        // Query 2: Player Leaderboards from PlayerMapStats
+        var playerStatsSql = @"
+            SELECT
+                PlayerName,
+                SUM(TotalScore) as TotalScore,
+                SUM(TotalKills) as TotalKills,
+                SUM(TotalDeaths) as TotalDeaths,
+                CASE WHEN SUM(TotalDeaths) > 0 
+                     THEN ROUND(CAST(SUM(TotalKills) AS REAL) / SUM(TotalDeaths), 2) 
+                     ELSE CAST(SUM(TotalKills) AS REAL) END as KdRatio,
+                CASE WHEN SUM(TotalPlayTimeMinutes) > 0 
+                     THEN ROUND(CAST(SUM(TotalKills) AS REAL) / SUM(TotalPlayTimeMinutes), 3) 
+                     ELSE 0 END as KillsPerMinute,
+                SUM(TotalRounds) as TotalRounds,
+                SUM(TotalPlayTimeMinutes) as TotalPlayTimeMinutes
+            FROM PlayerMapStats
+            WHERE ServerGuid = @p0 AND MapName = @p1 
+              AND ((Year > @p2) OR (Year = @p2 AND Month >= @p3))
+            GROUP BY PlayerName
+            HAVING SUM(TotalRounds) >= 3";
+
+        var playerStats = await dbContext.Database
+            .SqlQueryRaw<PlayerLeaderboardQueryResult>(playerStatsSql, serverGuid, mapName, cutoffYear, cutoffMonth)
+            .ToListAsync();
+
+        // Create leaderboard entries from the player stats
+        var allEntries = playerStats.Select(p => new LeaderboardEntryDto(
+            PlayerName: p.PlayerName,
+            TotalScore: p.TotalScore,
+            TotalKills: p.TotalKills,
+            TotalDeaths: p.TotalDeaths,
+            KdRatio: p.KdRatio,
+            KillsPerMinute: p.KillsPerMinute,
+            TotalRounds: p.TotalRounds,
+            PlayTimeMinutes: p.TotalPlayTimeMinutes
+        )).ToList();
+
+        // Sort and get top 10 for each category
+        var topByScore = allEntries
+            .OrderByDescending(e => e.TotalScore)
+            .Take(10)
+            .ToList();
+
+        var topByKills = allEntries
+            .OrderByDescending(e => e.TotalKills)
+            .Take(10)
+            .ToList();
+
+        var topByKdRatio = allEntries
+            .OrderByDescending(e => e.KdRatio)
+            .Take(10)
+            .ToList();
+
+        var topByKillRate = allEntries
+            .Where(e => e.PlayTimeMinutes >= 10) // Minimum 10 minutes playtime for kill rate
+            .OrderByDescending(e => e.KillsPerMinute)
+            .Take(10)
+            .ToList();
+
+        var dateRange = new DateRangeDto(
+            Days: days,
+            FromDate: fromDate,
+            ToDate: toDate
+        );
+
+        return new ServerMapDetailDto(
+            ServerGuid: serverGuid,
+            ServerName: server.Name,
+            MapName: mapName,
+            Game: server.Game,
+            IsServerOnline: isOnline,
+            MapActivity: mapActivity,
+            WinStats: winStats,
+            TopByScore: topByScore,
+            TopByKills: topByKills,
+            TopByKdRatio: topByKdRatio,
+            TopByKillRate: topByKillRate,
+            DateRange: dateRange
         );
     }
 
@@ -465,6 +627,31 @@ public class DataExplorerService(
         public double Team2WinPercentage { get; set; }
         public string? Team1Label { get; set; }
         public string? Team2Label { get; set; }
+    }
+
+
+    private class ServerMapActivityQueryResult
+    {
+        public int TotalRounds { get; set; }
+        public int TotalPlayTimeMinutes { get; set; }
+        public double AvgConcurrentPlayers { get; set; }
+        public int PeakConcurrentPlayers { get; set; }
+        public int Team1Victories { get; set; }
+        public int Team2Victories { get; set; }
+        public string? Team1Label { get; set; }
+        public string? Team2Label { get; set; }
+    }
+
+    private class PlayerLeaderboardQueryResult
+    {
+        public string PlayerName { get; set; } = "";
+        public int TotalScore { get; set; }
+        public int TotalKills { get; set; }
+        public int TotalDeaths { get; set; }
+        public double KdRatio { get; set; }
+        public double KillsPerMinute { get; set; }
+        public int TotalRounds { get; set; }
+        public double TotalPlayTimeMinutes { get; set; }
     }
 
     #endregion

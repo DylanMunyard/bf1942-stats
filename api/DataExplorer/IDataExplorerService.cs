@@ -5,9 +5,10 @@ namespace api.DataExplorer;
 public interface IDataExplorerService
 {
     /// <summary>
-    /// Get all servers with summary information.
+    /// Get all servers with summary information, filtered by game.
     /// </summary>
-    Task<ServerListResponse> GetServersAsync();
+    /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
+    Task<ServerListResponse> GetServersAsync(string game = "bf1942");
 
     /// <summary>
     /// Get detailed information for a specific server.
@@ -15,12 +16,20 @@ public interface IDataExplorerService
     Task<ServerDetailDto?> GetServerDetailAsync(string serverGuid);
 
     /// <summary>
-    /// Get all maps with summary information.
+    /// Get all maps with summary information, filtered by game.
     /// </summary>
-    Task<MapListResponse> GetMapsAsync();
+    /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
+    Task<MapListResponse> GetMapsAsync(string game = "bf1942");
 
     /// <summary>
-    /// Get detailed information for a specific map.
+    /// Get detailed information for a specific map, filtered by game.
     /// </summary>
-    Task<MapDetailDto?> GetMapDetailAsync(string mapName);
+    /// <param name="mapName">The map name</param>
+    /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
+    Task<MapDetailDto?> GetMapDetailAsync(string mapName, string game = "bf1942");
+
+    /// <summary>
+    /// Get detailed information for a specific server-map combination.
+    /// </summary>
+    Task<ServerMapDetailDto?> GetServerMapDetailAsync(string serverGuid, string mapName, int days = 60);
 }
