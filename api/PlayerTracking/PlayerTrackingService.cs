@@ -291,7 +291,8 @@ public class PlayerTrackingService(
                 MaxPlayers = serverInfo.MaxPlayers,
                 MapName = serverInfo.MapName,
                 JoinLink = serverInfo.JoinLink,
-                CurrentMap = serverInfo.MapName
+                CurrentMap = serverInfo.MapName,
+                CurrentNumPlayers = serverInfo.Players.Count()
             };
             dbContext.Servers.Add(server);
             ipChanged = true;
@@ -325,6 +326,7 @@ public class PlayerTrackingService(
             server.MaxPlayers = serverInfo.MaxPlayers;
             server.MapName = serverInfo.MapName;
             server.JoinLink = serverInfo.JoinLink;
+            server.CurrentNumPlayers = serverInfo.Players.Count();
 
             // Update current map from active sessions or server info
             server.CurrentMap = serverInfo.MapName;

@@ -42,7 +42,7 @@ public class DataExplorerService(
         var servers = await dbContext.Servers
             .AsNoTracking()
             .Where(s => s.Game == normalizedGame)
-            .Select(s => new { s.Guid, s.Name, s.Game, s.Country, s.MaxPlayers, s.IsOnline })
+            .Select(s => new { s.Guid, s.Name, s.Game, s.Country, s.MaxPlayers, s.CurrentNumPlayers, s.IsOnline })
             .ToListAsync();
 
         if (servers.Count == 0)
@@ -87,13 +87,14 @@ public class DataExplorerService(
                 Game: s.Game,
                 Country: s.Country,
                 IsOnline: s.IsOnline,
-                CurrentPlayers: 0, // Current players would require live API call - not needed for data explorer
+                CurrentPlayers: s.CurrentNumPlayers, // Current players from database field
                 MaxPlayers: s.MaxPlayers ?? 0,
                 TotalMaps: stats?.TotalMaps ?? 0,
                 TotalRoundsLast30Days: stats?.TotalRounds ?? 0
             );
         })
         .OrderByDescending(s => s.IsOnline)
+        .ThenByDescending(s => s.CurrentPlayers) // Sort by current active players
         .ThenByDescending(s => s.TotalRoundsLast30Days)
         .ThenBy(s => s.Name)
         .ToList();

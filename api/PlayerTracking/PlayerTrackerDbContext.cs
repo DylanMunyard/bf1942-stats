@@ -959,6 +959,7 @@ public class GameServer
 
     // Server info fields from bflist API
     public int? MaxPlayers { get; set; }
+    public int CurrentNumPlayers { get; set; } = 0; // Current number of players online
     public string? MapName { get; set; }
     public string? JoinLink { get; set; }
 
