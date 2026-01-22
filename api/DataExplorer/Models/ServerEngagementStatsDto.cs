@@ -19,6 +19,11 @@ public class ServerEngagementStat
     /// Optional context or additional information
     /// </summary>
     public string? Context { get; set; }
+
+    /// <summary>
+    /// Complete engaging message for CTA display. Use this instead of constructing from value/label.
+    /// </summary>
+    public string Message { get; set; } = string.Empty;
 }
 
 /// <summary>

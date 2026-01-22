@@ -1210,11 +1210,20 @@ public class DataExplorerService(
                          (sms.Year > cutoffYear || (sms.Year == cutoffYear && sms.Month >= cutoffMonth)))
             .SumAsync(sms => sms.TotalRounds);
 
+        var roundMessages = new[]
+        {
+            $"{totalRounds:N0} battles fought {timeLabel}. Who's leading the charge?",
+            $"{totalRounds:N0} rounds of carnage {timeLabel}. See who dominated.",
+            $"{totalRounds:N0} matches hosted {timeLabel}. Find the top fraggers.",
+            $"{totalRounds:N0} rounds played. Discover the legends of this server."
+        };
+
         stats.Add(new ServerEngagementStat
         {
             Value = totalRounds.ToString("N0"),
             Label = "rounds played",
-            Context = $"Total matches in {timeLabel}"
+            Context = $"Total matches in {timeLabel}",
+            Message = roundMessages[random.Next(roundMessages.Length)]
         });
 
         // Stat 2: Unique maps played in selected period
@@ -1225,11 +1234,20 @@ public class DataExplorerService(
             .Distinct()
             .CountAsync();
 
+        var mapMessages = new[]
+        {
+            $"{uniqueMaps} maps in rotation. Discover the kings of each battlefield.",
+            $"{uniqueMaps} battlefields await. Who dominates each one?",
+            $"{uniqueMaps} maps, countless rivalries. Find your name on the leaderboards.",
+            $"This server runs {uniqueMaps} maps. See who owns them."
+        };
+
         stats.Add(new ServerEngagementStat
         {
             Value = uniqueMaps.ToString("N0"),
             Label = "maps in rotation",
-            Context = $"Active in {timeLabel}"
+            Context = $"Active in {timeLabel}",
+            Message = mapMessages[random.Next(mapMessages.Length)]
         });
 
         // Stat 3: Peak concurrent players from activity patterns
@@ -1237,11 +1255,20 @@ public class DataExplorerService(
             .Where(mshp => mshp.ServerGuid == serverGuid)
             .MaxAsync(mshp => (double?)mshp.AvgPlayers) ?? 0;
 
+        var peakPlayerMessages = new[]
+        {
+            $"Peak of {Math.Round(peakPlayers)} soldiers at once. When's the best time to strike?",
+            $"Up to {Math.Round(peakPlayers)} players in battle. See when this server gets wild.",
+            $"{Math.Round(peakPlayers)} concurrent warriors at peak. Find the hot hours.",
+            $"This server hits {Math.Round(peakPlayers)} players. Check the activity patterns."
+        };
+
         stats.Add(new ServerEngagementStat
         {
             Value = Math.Round(peakPlayers).ToString("N0"),
             Label = "peak concurrent players",
-            Context = "Highest count recorded"
+            Context = "Highest count recorded",
+            Message = peakPlayerMessages[random.Next(peakPlayerMessages.Length)]
         });
 
         // Stat 4: Total unique players in selected period (bonus stat)
@@ -1252,11 +1279,20 @@ public class DataExplorerService(
             .Distinct()
             .CountAsync();
 
+        var playerMessages = new[]
+        {
+            $"{totalPlayers:N0} players have fought here {timeLabel}. Find your rivals.",
+            $"{totalPlayers:N0} warriors battled {timeLabel}. See who came out on top.",
+            $"{totalPlayers:N0} soldiers, one leaderboard. Where do you rank?",
+            $"{totalPlayers:N0} unique combatants. Discover the elite of this server."
+        };
+
         stats.Add(new ServerEngagementStat
         {
             Value = totalPlayers.ToString("N0"),
             Label = "unique players",
-            Context = $"Active in {timeLabel}"
+            Context = $"Active in {timeLabel}",
+            Message = playerMessages[random.Next(playerMessages.Length)]
         });
 
         // Shuffle the stats for randomization and take 3
@@ -1315,11 +1351,20 @@ public class DataExplorerService(
 
         if (periodStats != null && periodStats.TotalKills > 0)
         {
+            var killMessages = new[]
+            {
+                $"{periodStats.TotalKills:N0} kills {timeLabel}. See how you stack up against the competition.",
+                $"{periodStats.TotalKills:N0} confirmed kills. Are you climbing the ranks?",
+                $"{periodStats.TotalKills:N0} enemies down {timeLabel}. Where does that put you?",
+                $"Racked up {periodStats.TotalKills:N0} kills. Let's see who you're really up against."
+            };
+
             stats.Add(new PlayerEngagementStat
             {
                 Value = periodStats.TotalKills.ToString("N0"),
                 Label = "kills earned",
-                Context = $"{periodStats.TotalRounds:N0} rounds in {timeLabel}"
+                Context = $"{periodStats.TotalRounds:N0} rounds in {timeLabel}",
+                Message = killMessages[random.Next(killMessages.Length)]
             });
         }
 
@@ -1333,11 +1378,20 @@ public class DataExplorerService(
 
         if (uniqueServers > 0)
         {
+            var serverMessages = new[]
+            {
+                $"Active on {uniqueServers} servers {timeLabel}. See your rank on each one.",
+                $"Fought across {uniqueServers} battlefields. Check your standings everywhere.",
+                $"{uniqueServers} servers, {uniqueServers} leaderboards. Where do you dominate?",
+                $"You've hit {uniqueServers} servers {timeLabel}. Discover your rankings."
+            };
+
             stats.Add(new PlayerEngagementStat
             {
                 Value = uniqueServers.ToString("N0"),
                 Label = "servers active on",
-                Context = $"In {timeLabel}"
+                Context = $"In {timeLabel}",
+                Message = serverMessages[random.Next(serverMessages.Length)]
             });
         }
 
@@ -1351,11 +1405,20 @@ public class DataExplorerService(
 
         if (uniqueMaps > 0)
         {
+            var mapMessages = new[]
+            {
+                $"{uniqueMaps} maps conquered {timeLabel}. Who else is dominating them?",
+                $"Played {uniqueMaps} different maps. Ready to claim map leaderboards?",
+                $"{uniqueMaps} battlefields, endless rivalries. Find your name in the rankings.",
+                $"You've fought on {uniqueMaps} maps. See where you rank on each."
+            };
+
             stats.Add(new PlayerEngagementStat
             {
                 Value = uniqueMaps.ToString("N0"),
                 Label = "maps played",
-                Context = $"In {timeLabel}"
+                Context = $"In {timeLabel}",
+                Message = mapMessages[random.Next(mapMessages.Length)]
             });
         }
 
@@ -1370,11 +1433,20 @@ public class DataExplorerService(
 
         if (bestKdStats != null)
         {
+            var kdMessages = new[]
+            {
+                $"A {bestKdStats.KdRatio:N2} K/D ratio. Think that's top tier? Let's find out.",
+                $"{bestKdStats.KdRatio:N2} K/D. See how you measure up against the best.",
+                $"Sitting at {bestKdStats.KdRatio:N2} K/D. Where does that rank you?",
+                $"Your {bestKdStats.KdRatio:N2} K/D ratio - impressive or just average? Check the rankings."
+            };
+
             stats.Add(new PlayerEngagementStat
             {
                 Value = bestKdStats.KdRatio.ToString("N2"),
                 Label = "best K/D ratio",
-                Context = $"{bestKdStats.TotalKills}K/{bestKdStats.TotalDeaths}D in {timeLabel}"
+                Context = $"{bestKdStats.TotalKills}K/{bestKdStats.TotalDeaths}D in {timeLabel}",
+                Message = kdMessages[random.Next(kdMessages.Length)]
             });
         }
 
@@ -1389,11 +1461,21 @@ public class DataExplorerService(
 
         if (favoriteMap != null && favoriteMap.TotalRounds > 0)
         {
+            var mapName = favoriteMap.MapName.Replace("_", " ");
+            var favoriteMapMessages = new[]
+            {
+                $"{mapName} is your playground. Ready to claim the throne?",
+                $"You've been grinding {mapName}. See who else rules that map.",
+                $"{mapName} - {favoriteMap.TotalRounds} rounds {timeLabel}. Are you the top dog?",
+                $"Most played: {mapName}. Time to check your ranking there."
+            };
+
             stats.Add(new PlayerEngagementStat
             {
                 Value = favoriteMap.MapName,
                 Label = "most active map",
-                Context = $"{favoriteMap.TotalRounds:N0} rounds in {timeLabel}"
+                Context = $"{favoriteMap.TotalRounds:N0} rounds in {timeLabel}",
+                Message = favoriteMapMessages[random.Next(favoriteMapMessages.Length)]
             });
         }
 
@@ -1409,11 +1491,20 @@ public class DataExplorerService(
 
             if (allTimeFavorite != null && allTimeFavorite.TotalRounds > 0 && !stats.Any(s => s.Value == allTimeFavorite.MapName))
             {
+                var mapName = allTimeFavorite.MapName.Replace("_", " ");
+                var allTimeMessages = new[]
+                {
+                    $"{mapName} - your all-time favorite. Own the leaderboard there?",
+                    $"All-time most played: {mapName}. Who else dominates it?",
+                    $"You've clocked {allTimeFavorite.TotalRounds:N0} rounds on {mapName}. Check your legacy."
+                };
+
                 stats.Add(new PlayerEngagementStat
                 {
                     Value = allTimeFavorite.MapName,
                     Label = "all-time favorite",
-                    Context = $"{allTimeFavorite.TotalRounds:N0} total rounds"
+                    Context = $"{allTimeFavorite.TotalRounds:N0} total rounds",
+                    Message = allTimeMessages[random.Next(allTimeMessages.Length)]
                 });
             }
         }
@@ -1425,9 +1516,22 @@ public class DataExplorerService(
         // If we don't have enough stats, add some defaults
         if (randomizedStats.Length < 3)
         {
+            var defaultMessages = new[]
+            {
+                "Start playing to unlock your stats and see where you rank!",
+                "Get in the fight! Your stats are waiting to be built.",
+                "Jump into battle and start climbing the leaderboards."
+            };
+
             var defaultStats = new[]
             {
-                new PlayerEngagementStat { Value = "0", Label = "recent activity", Context = "Keep playing!" }
+                new PlayerEngagementStat
+                {
+                    Value = "0",
+                    Label = "recent activity",
+                    Context = "Keep playing!",
+                    Message = defaultMessages[random.Next(defaultMessages.Length)]
+                }
             };
 
             var combinedStats = randomizedStats.Concat(defaultStats).Take(3).ToArray();
