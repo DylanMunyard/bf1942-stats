@@ -1001,16 +1001,26 @@ public class DataExplorerService(
         var patterns = await dbContext.MapServerHourlyPatterns
             .Where(p => p.MapName == mapName && p.Game == normalizedGame)
             .GroupBy(p => new { p.DayOfWeek, p.HourOfDay })
-            .Select(g => new MapActivityPatternDto(
+            .Select(g => new {
                 g.Key.DayOfWeek,
                 g.Key.HourOfDay,
-                Math.Round(g.Sum(p => p.AvgPlayers), 2),
-                g.Sum(p => p.TimesPlayed)
-            ))
+                AvgPlayers = g.Sum(p => p.AvgPlayers),
+                TimesPlayed = g.Sum(p => p.TimesPlayed)
+            })
             .OrderBy(p => p.DayOfWeek).ThenBy(p => p.HourOfDay)
             .ToListAsync();
 
-        if (patterns.Count == 0)
+        // Apply rounding on the client side since Math.Round cannot be translated to SQL
+        var roundedPatterns = patterns
+            .Select(p => new MapActivityPatternDto(
+                p.DayOfWeek,
+                p.HourOfDay,
+                Math.Round(p.AvgPlayers, 2),
+                p.TimesPlayed
+            ))
+            .ToList();
+
+        if (roundedPatterns.Count == 0)
         {
             logger.LogDebug("No activity patterns found for map {MapName} in game {Game}", mapName, normalizedGame);
             return null;
@@ -1024,7 +1034,7 @@ public class DataExplorerService(
         return new MapActivityPatternsResponse(
             MapName: mapName,
             Game: normalizedGame,
-            ActivityPatterns: patterns,
+            ActivityPatterns: roundedPatterns,
             TotalDataPoints: totalDataPoints
         );
     }
