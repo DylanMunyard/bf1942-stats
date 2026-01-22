@@ -79,4 +79,19 @@ public interface IDataExplorerService
     /// <param name="mapName">The map name</param>
     /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
     Task<MapActivityPatternsResponse?> GetMapActivityPatternsAsync(string mapName, string game = "bf1942");
+
+    /// <summary>
+    /// Get randomized engagement stats for a specific server to encourage exploration.
+    /// Returns 3 different randomized interesting statistics.
+    /// </summary>
+    /// <param name="serverGuid">The server GUID</param>
+    Task<ServerEngagementStatsDto> GetServerEngagementStatsAsync(string serverGuid);
+
+    /// <summary>
+    /// Get randomized engagement stats for a specific player to encourage exploration.
+    /// Returns 3 different randomized interesting statistics.
+    /// </summary>
+    /// <param name="playerName">The player name</param>
+    /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
+    Task<PlayerEngagementStatsDto> GetPlayerEngagementStatsAsync(string playerName, string game = "bf1942");
 }

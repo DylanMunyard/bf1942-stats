@@ -1164,5 +1164,278 @@ public class DataExplorerService(
         public int UniqueServers { get; set; }
     }
 
+    /// <inheritdoc/>
+    public async Task<ServerEngagementStatsDto> GetServerEngagementStatsAsync(string serverGuid)
+    {
+        logger.LogInformation("Getting randomized engagement stats for server: {ServerGuid}", serverGuid);
+
+        var stats = new List<ServerEngagementStat>();
+
+        // Randomize time period: last 1 month, last 2 months, or current month
+        var random = new Random();
+        var timePeriod = random.Next(3); // 0, 1, or 2
+
+        var now = DateTime.UtcNow;
+        int monthsBack;
+        string timeLabel;
+
+        switch (timePeriod)
+        {
+            case 0: // Last month
+                monthsBack = 1;
+                timeLabel = "last month";
+                break;
+            case 1: // Last 2 months
+                monthsBack = 2;
+                timeLabel = "last 2 months";
+                break;
+            case 2: // Current month
+                monthsBack = 0;
+                timeLabel = "this month";
+                break;
+            default:
+                monthsBack = 1;
+                timeLabel = "last month";
+                break;
+        }
+
+        // Calculate year/months to include
+        var cutoffDate = now.AddMonths(-monthsBack);
+        var cutoffYear = cutoffDate.Year;
+        var cutoffMonth = cutoffDate.Month;
+
+        // Stat 1: Total rounds in selected period
+        var totalRounds = await dbContext.ServerMapStats
+            .Where(sms => sms.ServerGuid == serverGuid &&
+                         (sms.Year > cutoffYear || (sms.Year == cutoffYear && sms.Month >= cutoffMonth)))
+            .SumAsync(sms => sms.TotalRounds);
+
+        stats.Add(new ServerEngagementStat
+        {
+            Value = totalRounds.ToString("N0"),
+            Label = "rounds played",
+            Context = $"Total matches in {timeLabel}"
+        });
+
+        // Stat 2: Unique maps played in selected period
+        var uniqueMaps = await dbContext.ServerMapStats
+            .Where(sms => sms.ServerGuid == serverGuid &&
+                         (sms.Year > cutoffYear || (sms.Year == cutoffYear && sms.Month >= cutoffMonth)))
+            .Select(sms => sms.MapName)
+            .Distinct()
+            .CountAsync();
+
+        stats.Add(new ServerEngagementStat
+        {
+            Value = uniqueMaps.ToString("N0"),
+            Label = "maps in rotation",
+            Context = $"Active in {timeLabel}"
+        });
+
+        // Stat 3: Peak concurrent players from activity patterns
+        var peakPlayers = await dbContext.MapServerHourlyPatterns
+            .Where(mshp => mshp.ServerGuid == serverGuid)
+            .MaxAsync(mshp => (double?)mshp.AvgPlayers) ?? 0;
+
+        stats.Add(new ServerEngagementStat
+        {
+            Value = Math.Round(peakPlayers).ToString("N0"),
+            Label = "peak concurrent players",
+            Context = "Highest count recorded"
+        });
+
+        // Stat 4: Total unique players in selected period (bonus stat)
+        var totalPlayers = await dbContext.PlayerMapStats
+            .Where(pms => pms.ServerGuid == serverGuid &&
+                         (pms.Year > cutoffYear || (pms.Year == cutoffYear && pms.Month >= cutoffMonth)))
+            .Select(pms => pms.PlayerName)
+            .Distinct()
+            .CountAsync();
+
+        stats.Add(new ServerEngagementStat
+        {
+            Value = totalPlayers.ToString("N0"),
+            Label = "unique players",
+            Context = $"Active in {timeLabel}"
+        });
+
+        // Shuffle the stats for randomization and take 3
+        var randomizedStats = stats.OrderBy(_ => random.Next()).Take(3).ToArray();
+
+        return new ServerEngagementStatsDto { Stats = randomizedStats };
+    }
+
+    /// <inheritdoc/>
+    public async Task<PlayerEngagementStatsDto> GetPlayerEngagementStatsAsync(string playerName, string game = "bf1942")
+    {
+        logger.LogInformation("Getting randomized engagement stats for player: {PlayerName}", playerName);
+
+        var stats = new List<PlayerEngagementStat>();
+
+        // Randomize time period: last 1 month, last 2 months, or current month
+        var random = new Random();
+        var timePeriod = random.Next(3); // 0, 1, or 2
+
+        var now = DateTime.UtcNow;
+        int monthsBack;
+        string timeLabel;
+
+        switch (timePeriod)
+        {
+            case 0: // Last month
+                monthsBack = 1;
+                timeLabel = "last month";
+                break;
+            case 1: // Last 2 months
+                monthsBack = 2;
+                timeLabel = "last 2 months";
+                break;
+            case 2: // Current month
+                monthsBack = 0;
+                timeLabel = "this month";
+                break;
+            default:
+                monthsBack = 1;
+                timeLabel = "last month";
+                break;
+        }
+
+        // Calculate year/months to include
+        var cutoffDate = now.AddMonths(-monthsBack);
+        var cutoffYear = cutoffDate.Year;
+        var cutoffMonth = cutoffDate.Month;
+
+        // Stat 1: Total kills and rounds in selected period
+        var periodStats = await dbContext.PlayerMapStats
+            .Where(pms => pms.PlayerName == playerName &&
+                         (pms.Year > cutoffYear || (pms.Year == cutoffYear && pms.Month >= cutoffMonth)))
+            .GroupBy(_ => 1)
+            .Select(g => new { TotalKills = g.Sum(pms => pms.TotalKills), TotalRounds = g.Sum(pms => pms.TotalRounds) })
+            .FirstOrDefaultAsync();
+
+        if (periodStats != null && periodStats.TotalKills > 0)
+        {
+            stats.Add(new PlayerEngagementStat
+            {
+                Value = periodStats.TotalKills.ToString("N0"),
+                Label = "kills earned",
+                Context = $"{periodStats.TotalRounds:N0} rounds in {timeLabel}"
+            });
+        }
+
+        // Stat 2: Number of unique servers played on in period
+        var uniqueServers = await dbContext.PlayerMapStats
+            .Where(pms => pms.PlayerName == playerName &&
+                         (pms.Year > cutoffYear || (pms.Year == cutoffYear && pms.Month >= cutoffMonth)))
+            .Select(pms => pms.ServerGuid)
+            .Distinct()
+            .CountAsync();
+
+        if (uniqueServers > 0)
+        {
+            stats.Add(new PlayerEngagementStat
+            {
+                Value = uniqueServers.ToString("N0"),
+                Label = "servers active on",
+                Context = $"In {timeLabel}"
+            });
+        }
+
+        // Stat 3: Number of unique maps played in period
+        var uniqueMaps = await dbContext.PlayerMapStats
+            .Where(pms => pms.PlayerName == playerName &&
+                         (pms.Year > cutoffYear || (pms.Year == cutoffYear && pms.Month >= cutoffMonth)))
+            .Select(pms => pms.MapName)
+            .Distinct()
+            .CountAsync();
+
+        if (uniqueMaps > 0)
+        {
+            stats.Add(new PlayerEngagementStat
+            {
+                Value = uniqueMaps.ToString("N0"),
+                Label = "maps played",
+                Context = $"In {timeLabel}"
+            });
+        }
+
+        // Stat 4: Best K/D ratio from period data
+        var bestKdStats = await dbContext.PlayerMapStats
+            .Where(pms => pms.PlayerName == playerName &&
+                         (pms.Year > cutoffYear || (pms.Year == cutoffYear && pms.Month >= cutoffMonth)) &&
+                         pms.TotalDeaths > 0)
+            .Select(pms => new { KdRatio = (double)pms.TotalKills / pms.TotalDeaths, pms.TotalKills, pms.TotalDeaths })
+            .OrderByDescending(x => x.KdRatio)
+            .FirstOrDefaultAsync();
+
+        if (bestKdStats != null)
+        {
+            stats.Add(new PlayerEngagementStat
+            {
+                Value = bestKdStats.KdRatio.ToString("N2"),
+                Label = "best K/D ratio",
+                Context = $"{bestKdStats.TotalKills}K/{bestKdStats.TotalDeaths}D in {timeLabel}"
+            });
+        }
+
+        // Stat 5: Most active map in period
+        var favoriteMap = await dbContext.PlayerMapStats
+            .Where(pms => pms.PlayerName == playerName &&
+                         (pms.Year > cutoffYear || (pms.Year == cutoffYear && pms.Month >= cutoffMonth)))
+            .GroupBy(pms => pms.MapName)
+            .Select(g => new { MapName = g.Key, TotalRounds = g.Sum(pms => pms.TotalRounds) })
+            .OrderByDescending(x => x.TotalRounds)
+            .FirstOrDefaultAsync();
+
+        if (favoriteMap != null && favoriteMap.TotalRounds > 0)
+        {
+            stats.Add(new PlayerEngagementStat
+            {
+                Value = favoriteMap.MapName,
+                Label = "most active map",
+                Context = $"{favoriteMap.TotalRounds:N0} rounds in {timeLabel}"
+            });
+        }
+
+        // Stat 6: All-time favorite map (if period data is sparse)
+        if (stats.Count < 3)
+        {
+            var allTimeFavorite = await dbContext.PlayerMapStats
+                .Where(pms => pms.PlayerName == playerName)
+                .GroupBy(pms => pms.MapName)
+                .Select(g => new { MapName = g.Key, TotalRounds = g.Sum(pms => pms.TotalRounds) })
+                .OrderByDescending(x => x.TotalRounds)
+                .FirstOrDefaultAsync();
+
+            if (allTimeFavorite != null && allTimeFavorite.TotalRounds > 0 && !stats.Any(s => s.Value == allTimeFavorite.MapName))
+            {
+                stats.Add(new PlayerEngagementStat
+                {
+                    Value = allTimeFavorite.MapName,
+                    Label = "all-time favorite",
+                    Context = $"{allTimeFavorite.TotalRounds:N0} total rounds"
+                });
+            }
+        }
+
+        // Shuffle the stats for randomization and take 3 (or fewer if not enough data)
+        var availableStats = stats.Where(s => !string.IsNullOrEmpty(s.Value) && s.Value != "0").ToList();
+        var randomizedStats = availableStats.OrderBy(_ => random.Next()).Take(Math.Min(3, availableStats.Count)).ToArray();
+
+        // If we don't have enough stats, add some defaults
+        if (randomizedStats.Length < 3)
+        {
+            var defaultStats = new[]
+            {
+                new PlayerEngagementStat { Value = "0", Label = "recent activity", Context = "Keep playing!" }
+            };
+
+            var combinedStats = randomizedStats.Concat(defaultStats).Take(3).ToArray();
+            randomizedStats = combinedStats;
+        }
+
+        return new PlayerEngagementStatsDto { Stats = randomizedStats };
+    }
+
     #endregion
 }

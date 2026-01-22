@@ -251,4 +251,41 @@ public class DataExplorerController(
 
         return Ok(result);
     }
+
+    /// <summary>
+    /// Get randomized engagement statistics for a specific server to encourage exploration.
+    /// Returns 3 different randomized interesting statistics about the server.
+    /// </summary>
+    [HttpGet("engagement/server/{serverGuid}")]
+    [ProducesResponseType(typeof(ServerEngagementStatsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ServerEngagementStatsDto>> GetServerEngagementStats(string serverGuid)
+    {
+        logger.LogInformation("Getting randomized engagement stats for server: {ServerGuid}", serverGuid);
+
+        var result = await dataExplorerService.GetServerEngagementStatsAsync(serverGuid);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Get randomized engagement statistics for a specific player to encourage exploration.
+    /// Returns 3 different randomized interesting statistics about the player.
+    /// </summary>
+    /// <param name="playerName">The player name</param>
+    /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
+    [HttpGet("engagement/player/{playerName}")]
+    [ProducesResponseType(typeof(PlayerEngagementStatsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PlayerEngagementStatsDto>> GetPlayerEngagementStats(
+        string playerName,
+        [FromQuery] string game = "bf1942")
+    {
+        // URL decode the player name
+        playerName = Uri.UnescapeDataString(playerName);
+
+        logger.LogInformation("Getting randomized engagement stats for player: {PlayerName} in game: {Game}", playerName, game);
+
+        var result = await dataExplorerService.GetPlayerEngagementStatsAsync(playerName, game);
+        return Ok(result);
+    }
 }
