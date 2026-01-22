@@ -148,6 +148,32 @@ public class AdminJobsController(
     }
 
     /// <summary>
+    /// Trigger full MapHourlyPatterns backfill from all historical Rounds data (fire-and-forget).
+    /// Use this for initial population - daily refresh only updates last 60 days.
+    /// Returns immediately - check logs for progress.
+    /// </summary>
+    [HttpPost("map-hourly-patterns-backfill")]
+    public IActionResult TriggerMapHourlyPatternsBackfill()
+    {
+        logger.LogInformation("Manual trigger: MapHourlyPatterns full backfill (fire-and-forget)");
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await dailyAggregateRunner.BackfillMapHourlyPatternsAsync();
+                logger.LogInformation("MapHourlyPatterns full backfill completed successfully");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "MapHourlyPatterns full backfill failed");
+            }
+        });
+
+        return Accepted(new { message = "MapHourlyPatterns full backfill started in background. Check logs for progress." });
+    }
+
+    /// <summary>
     /// Trigger all background jobs in sequence (fire-and-forget).
     /// Returns immediately - check logs for progress.
     /// </summary>

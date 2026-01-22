@@ -21,6 +21,12 @@ public interface IDailyAggregateRefreshBackgroundService : IJobBackgroundService
     /// Use for initial population - daily refresh only updates last 2 months.
     /// </summary>
     Task BackfillServerMapStatsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// One-time full backfill of MapHourlyPatterns from all historical Rounds data.
+    /// Use for initial population - daily refresh only updates last 60 days.
+    /// </summary>
+    Task BackfillMapHourlyPatternsAsync(CancellationToken ct = default);
 }
 
 /// <summary>

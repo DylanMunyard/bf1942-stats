@@ -71,4 +71,12 @@ public interface IDataExplorerService
         string? serverGuid = null,
         int days = 60,
         string sortBy = "score");
+
+    /// <summary>
+    /// Get activity patterns for a specific map showing when it's typically played.
+    /// Returns hourly patterns grouped by day of week.
+    /// </summary>
+    /// <param name="mapName">The map name</param>
+    /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
+    Task<MapActivityPatternsResponse?> GetMapActivityPatternsAsync(string mapName, string game = "bf1942");
 }

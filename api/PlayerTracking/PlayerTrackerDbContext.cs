@@ -45,6 +45,7 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<HourlyActivityPattern> HourlyActivityPatterns { get; set; }
     public DbSet<MapGlobalAverage> MapGlobalAverages { get; set; }
     public DbSet<ServerMapStats> ServerMapStats { get; set; }
+    public DbSet<MapServerHourlyPattern> MapServerHourlyPatterns { get; set; }
     public DbSet<PlayerAchievement> PlayerAchievements { get; set; }
 
     private static readonly InstantPattern InstantExtendedIsoPattern = InstantPattern.ExtendedIso;
@@ -859,6 +860,19 @@ public class PlayerTrackerDbContext : DbContext
 
         modelBuilder.Entity<ServerMapStats>()
             .Property(sms => sms.UpdatedAt)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        // Configure MapServerHourlyPattern entity (map activity heatmap data per server)
+        modelBuilder.Entity<MapServerHourlyPattern>()
+            .HasKey(mhp => new { mhp.ServerGuid, mhp.MapName, mhp.Game, mhp.DayOfWeek, mhp.HourOfDay });
+
+        modelBuilder.Entity<MapServerHourlyPattern>()
+            .HasIndex(mhp => new { mhp.MapName, mhp.Game });
+
+        modelBuilder.Entity<MapServerHourlyPattern>()
+            .Property(mhp => mhp.UpdatedAt)
             .HasConversion(
                 instant => FormatInstant(instant),
                 str => ParseInstant(str));

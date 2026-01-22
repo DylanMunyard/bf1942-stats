@@ -12,6 +12,7 @@ public record ServerMapDetailDto(
     List<LeaderboardEntryDto> TopByKills,
     List<LeaderboardEntryDto> TopByKdRatio,
     List<LeaderboardEntryDto> TopByKillRate,
+    List<ActivityPatternDto> ActivityPatterns,
     DateRangeDto DateRange
 );
 

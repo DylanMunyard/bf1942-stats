@@ -570,6 +570,19 @@ public class DataExplorerService(
             ToDate: toDate
         );
 
+        // Get activity patterns for this specific server + map
+        var activityPatterns = await dbContext.MapServerHourlyPatterns
+            .Where(p => p.ServerGuid == serverGuid && p.MapName == mapName)
+            .OrderBy(p => p.DayOfWeek)
+            .ThenBy(p => p.HourOfDay)
+            .Select(p => new ActivityPatternDto(
+                p.DayOfWeek,
+                p.HourOfDay,
+                Math.Round(p.AvgPlayers, 1),
+                Math.Round(p.AvgPlayers, 1)  // Use avg as median placeholder
+            ))
+            .ToListAsync();
+
         return new ServerMapDetailDto(
             ServerGuid: serverGuid,
             ServerName: server.Name,
@@ -582,6 +595,7 @@ public class DataExplorerService(
             TopByKills: topByKills,
             TopByKdRatio: topByKdRatio,
             TopByKillRate: topByKillRate,
+            ActivityPatterns: activityPatterns,
             DateRange: dateRange
         );
     }
@@ -974,6 +988,44 @@ public class DataExplorerService(
             Page: page,
             PageSize: pageSize,
             DateRange: dateRange
+        );
+    }
+
+    public async Task<MapActivityPatternsResponse?> GetMapActivityPatternsAsync(string mapName, string game = "bf1942")
+    {
+        var normalizedGame = NormalizeGame(game);
+
+        logger.LogDebug("Getting map activity patterns for {MapName} with game filter {Game}", mapName, normalizedGame);
+
+        // Query the pre-computed MapServerHourlyPatterns table and aggregate across all servers
+        var patterns = await dbContext.MapServerHourlyPatterns
+            .Where(p => p.MapName == mapName && p.Game == normalizedGame)
+            .GroupBy(p => new { p.DayOfWeek, p.HourOfDay })
+            .Select(g => new MapActivityPatternDto(
+                g.Key.DayOfWeek,
+                g.Key.HourOfDay,
+                Math.Round(g.Sum(p => p.AvgPlayers), 2),
+                g.Sum(p => p.TimesPlayed)
+            ))
+            .OrderBy(p => p.DayOfWeek).ThenBy(p => p.HourOfDay)
+            .ToListAsync();
+
+        if (patterns.Count == 0)
+        {
+            logger.LogDebug("No activity patterns found for map {MapName} in game {Game}", mapName, normalizedGame);
+            return null;
+        }
+
+        // Calculate total data points from the patterns (sum of distinct days with data)
+        var totalDataPoints = await dbContext.MapServerHourlyPatterns
+            .Where(p => p.MapName == mapName && p.Game == normalizedGame)
+            .SumAsync(p => p.DataPoints);
+
+        return new MapActivityPatternsResponse(
+            MapName: mapName,
+            Game: normalizedGame,
+            ActivityPatterns: patterns,
+            TotalDataPoints: totalDataPoints
         );
     }
 

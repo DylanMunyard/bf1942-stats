@@ -35,6 +35,7 @@ public class DailyAggregateRefreshJob(
             await RefreshHourlyActivityPatternsAsync(dbContext, ct);
             await RefreshMapGlobalAveragesAsync(dbContext, ct);
             await RefreshServerMapStatsAsync(dbContext, ct);
+            await RefreshMapServerHourlyPatternsAsync(dbContext, ct);
 
             stopwatch.Stop();
             activity?.SetTag("result.duration_ms", stopwatch.ElapsedMilliseconds);
@@ -376,6 +377,98 @@ public class DailyAggregateRefreshJob(
 
         stopwatch.Stop();
         logger.LogInformation("Refreshed {Count} server map stats (last 2 months) in {Duration}ms",
+            rowsAffected, stopwatch.ElapsedMilliseconds);
+    }
+
+    /// <summary>
+    /// Refreshes map-server hourly patterns aggregated from Rounds table.
+    /// Used for "When is this map played?" heatmaps in Data Explorer.
+    /// Groups by server guid, map name, game, day of week, and hour to show server-specific activity patterns.
+    /// </summary>
+    private async Task RefreshMapServerHourlyPatternsAsync(PlayerTrackerDbContext dbContext, CancellationToken ct)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var now = clock.GetCurrentInstant();
+        var lookbackDays = 60;
+        var cutoffTime = now.Minus(Duration.FromDays(lookbackDays)).ToDateTimeUtc().ToString("yyyy-MM-dd HH:mm:ss");
+        var nowIso = InstantPattern.ExtendedIso.Format(now);
+
+        // Aggregate from Rounds table - group by server, map, game, day of week, hour
+        // AvgPlayers = average participant count when this map was played at this time
+        // TimesPlayed = total number of rounds at this time slot
+        // DataPoints = number of distinct days with data (for statistical validity)
+        var sql = @"
+            INSERT OR REPLACE INTO MapServerHourlyPatterns
+                (ServerGuid, MapName, Game, DayOfWeek, HourOfDay, AvgPlayers, TimesPlayed, DataPoints, UpdatedAt)
+            SELECT
+                r.ServerGuid,
+                r.MapName,
+                s.Game,
+                CAST(strftime('%w', r.StartTime) AS INTEGER) as DayOfWeek,
+                CAST(strftime('%H', r.StartTime) AS INTEGER) as HourOfDay,
+                ROUND(AVG(COALESCE(r.ParticipantCount, 0)), 2) as AvgPlayers,
+                COUNT(*) as TimesPlayed,
+                COUNT(DISTINCT date(r.StartTime)) as DataPoints,
+                @p0 as UpdatedAt
+            FROM Rounds r
+            INNER JOIN Servers s ON r.ServerGuid = s.Guid
+            WHERE r.StartTime >= @p1
+              AND r.IsActive = 0
+              AND r.MapName IS NOT NULL
+              AND r.MapName != ''
+              AND s.Game IN ('bf1942', 'fh2', 'bfvietnam')
+            GROUP BY r.ServerGuid, r.MapName, s.Game,
+                     CAST(strftime('%w', r.StartTime) AS INTEGER),
+                     CAST(strftime('%H', r.StartTime) AS INTEGER)";
+
+        var rowsAffected = await dbContext.Database.ExecuteSqlRawAsync(sql, [nowIso, cutoffTime], ct);
+
+        stopwatch.Stop();
+        logger.LogInformation("Refreshed {Count} map-server hourly patterns in {Duration}ms",
+            rowsAffected, stopwatch.ElapsedMilliseconds);
+    }
+
+    /// <summary>
+    /// One-time full backfill of MapHourlyPatterns from all historical Rounds data.
+    /// Use for initial population - daily refresh only updates last 60 days.
+    /// </summary>
+    public async Task BackfillMapHourlyPatternsAsync(CancellationToken ct = default)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        logger.LogInformation("Starting full MapServerHourlyPatterns backfill from all Rounds data");
+
+        using var scope = scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
+
+        var nowIso = InstantPattern.ExtendedIso.Format(clock.GetCurrentInstant());
+
+        var sql = @"
+            INSERT OR REPLACE INTO MapServerHourlyPatterns
+                (ServerGuid, MapName, Game, DayOfWeek, HourOfDay, AvgPlayers, TimesPlayed, DataPoints, UpdatedAt)
+            SELECT
+                r.ServerGuid,
+                r.MapName,
+                s.Game,
+                CAST(strftime('%w', r.StartTime) AS INTEGER) as DayOfWeek,
+                CAST(strftime('%H', r.StartTime) AS INTEGER) as HourOfDay,
+                ROUND(AVG(COALESCE(r.ParticipantCount, 0)), 2) as AvgPlayers,
+                COUNT(*) as TimesPlayed,
+                COUNT(DISTINCT date(r.StartTime)) as DataPoints,
+                @p0 as UpdatedAt
+            FROM Rounds r
+            INNER JOIN Servers s ON r.ServerGuid = s.Guid
+            WHERE r.IsActive = 0
+              AND r.MapName IS NOT NULL
+              AND r.MapName != ''
+              AND s.Game IN ('bf1942', 'fh2', 'bfvietnam')
+            GROUP BY r.ServerGuid, r.MapName, s.Game,
+                     CAST(strftime('%w', r.StartTime) AS INTEGER),
+                     CAST(strftime('%H', r.StartTime) AS INTEGER)";
+
+        var rowsAffected = await dbContext.Database.ExecuteSqlRawAsync(sql, [nowIso], ct);
+
+        stopwatch.Stop();
+        logger.LogInformation("Backfilled {Count} map-server hourly patterns from all historical data in {Duration}ms",
             rowsAffected, stopwatch.ElapsedMilliseconds);
     }
 

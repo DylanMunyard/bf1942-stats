@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using api.PlayerTracking;
 
@@ -10,9 +11,11 @@ using api.PlayerTracking;
 namespace api.Migrations
 {
     [DbContext(typeof(PlayerTrackerDbContext))]
-    partial class PlayerTrackerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260122005514_AddMapHourlyPatterns")]
+    partial class AddMapHourlyPatterns
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.5");
@@ -102,11 +105,8 @@ namespace api.Migrations
                     b.ToTable("MapGlobalAverages");
                 });
 
-            modelBuilder.Entity("api.Data.Entities.MapServerHourlyPattern", b =>
+            modelBuilder.Entity("api.Data.Entities.MapHourlyPattern", b =>
                 {
-                    b.Property<string>("ServerGuid")
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("MapName")
                         .HasColumnType("TEXT");
 
@@ -132,11 +132,11 @@ namespace api.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.HasKey("ServerGuid", "MapName", "Game", "DayOfWeek", "HourOfDay");
+                    b.HasKey("MapName", "Game", "DayOfWeek", "HourOfDay");
 
                     b.HasIndex("MapName", "Game");
 
-                    b.ToTable("MapServerHourlyPatterns");
+                    b.ToTable("MapHourlyPatterns");
                 });
 
             modelBuilder.Entity("api.Data.Entities.PlayerAchievement", b =>

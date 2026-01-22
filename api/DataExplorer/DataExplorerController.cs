@@ -172,6 +172,35 @@ public class DataExplorerController(
     }
 
     /// <summary>
+    /// Get activity patterns for a specific map showing when it's typically played.
+    /// Returns hourly patterns grouped by day of week for heatmap visualization.
+    /// </summary>
+    /// <param name="mapName">The map name</param>
+    /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
+    [HttpGet("maps/{mapName}/activity-patterns")]
+    [ProducesResponseType(typeof(MapActivityPatternsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<MapActivityPatternsResponse>> GetMapActivityPatterns(
+        string mapName,
+        [FromQuery] string game = "bf1942")
+    {
+        // URL decode the map name
+        mapName = Uri.UnescapeDataString(mapName);
+
+        logger.LogInformation("Getting map activity patterns for {MapName} with game filter: {Game}", mapName, game);
+
+        var result = await dataExplorerService.GetMapActivityPatternsAsync(mapName, game);
+
+        if (result == null)
+        {
+            logger.LogWarning("No activity patterns found for map: {MapName} in game: {Game}", mapName, game);
+            return NotFound($"No activity patterns found for map '{mapName}' in game '{game}'");
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Get paginated player rankings for a specific map (aggregated across all servers).
     /// </summary>
     /// <param name="mapName">The map name</param>
