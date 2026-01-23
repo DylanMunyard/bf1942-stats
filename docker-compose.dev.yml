@@ -93,32 +93,6 @@ services:
       timeout: 10s
       retries: 3
 
-  clickhouse:
-      image: clickhouse/clickhouse-server:latest
-      container_name: bf1942-clickhouse
-      ports:
-          - "8123:8123"   # HTTP interface
-          - "9000:9000"   # Native protocol
-          - "9009:9009"   # Replication interface
-      networks:
-          - bf1942-dev
-      user: "${UID:-1000}:${GID:-1000}"
-      volumes:
-          - ./clickhouse-data:/var/lib/clickhouse
-          - ./clickhouse-backups:/backups
-          - ./clickhouse-users.xml:/etc/clickhouse-server/users.d/users.xml
-      environment:
-          - CLICKHOUSE_DB=default
-          - CLICKHOUSE_USER=default
-      configs:
-          -   source: clickhouse_backup_config
-              target: /etc/clickhouse-server/config.d/backups.xml
-      healthcheck:
-          test: [ "CMD-SHELL", "curl --no-progress-meter --fail http://localhost:8123/ping || exit 1" ]
-          interval: 30s
-          timeout: 10s
-          retries: 3
-
   filebrowser:
     image: filebrowser/filebrowser:latest
     container_name: bf1942-filebrowser
@@ -141,22 +115,30 @@ services:
       timeout: 10s
       retries: 3
 
-configs:
-  clickhouse_backup_config:
-      content: |
-          <clickhouse>
-              <storage_configuration>
-                  <disks>
-                      <backups>
-                          <type>local</type>
-                          <path>/backups/</path>
-                      </backups>
-                  </disks>
-              </storage_configuration>
-              <backups>
-                  <allowed_disk>backups</allowed_disk>
-              </backups>
-          </clickhouse>
+  sqlite-browser:
+    image: alpine:latest
+    container_name: bf1942-sqlite-browser
+    ports:
+      - "8082:8080"
+    networks:
+      - bf1942-dev
+    command:
+      - /bin/sh
+      - -c
+      - |
+        # Install Python and sqlite-web
+        apk add --no-cache python3 py3-pip sqlite
+        pip3 install sqlite-web --break-system-packages
+        # Start the web interface - database is mounted as a single file
+        sqlite_web /data/playertracker.db --host 0.0.0.0 --port 8080
+    volumes:
+      # SECURITY: Mount ONLY the database file, not the entire api directory
+      - ./api/playertracker.db:/data/playertracker.db
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   bf1942-dev:

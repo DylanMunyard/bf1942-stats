@@ -147,7 +147,7 @@ const insights = await fetch('/stats/gametrends/insights?timeZoneOffsetHours=14&
 - Filtered queries to avoid unnecessary data processing
 
 ### Database Performance
-- All queries use the high-performance ClickHouse `player_rounds` table
+- All queries use the pre-computed SQLite analytics tables
 - Queries are designed for fast aggregation operations
 - Proper indexing ensures sub-second response times
 - Timezone handling done in database for efficiency

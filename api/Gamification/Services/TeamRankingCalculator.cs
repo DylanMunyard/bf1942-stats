@@ -16,13 +16,15 @@ public class TeamRankingCalculator : ITeamRankingCalculator
         _logger = logger;
     }
 
-    public async Task<List<TournamentTeamRanking>> CalculateRankingsAsync(int tournamentId, string? week = null)
+    public async Task<List<TournamentTeamRanking>> CalculateRankingsAsync(int tournamentId, string? week = null, string? gameMode = null)
     {
         try
         {
+            var isCTF = string.Equals(gameMode, "CTF", StringComparison.OrdinalIgnoreCase);
+
             _logger.LogInformation(
-                "Starting ranking calculation | TournamentId={TournamentId} Week={Week}",
-                tournamentId, week ?? "cumulative");
+                "Starting ranking calculation | TournamentId={TournamentId} Week={Week} GameMode={GameMode} IsCTF={IsCTF}",
+                tournamentId, week ?? "cumulative", gameMode ?? "default", isCTF);
 
             // Get all match results for this tournament and optional week filter
             var query = _dbContext.TournamentMatchResults
@@ -61,7 +63,7 @@ public class TeamRankingCalculator : ITeamRankingCalculator
 
             foreach (var teamId in teamIds)
             {
-                var stats = CalculateTeamStatistics(matchResults, teamId, tournamentId);
+                var stats = CalculateTeamStatistics(matchResults, teamId, tournamentId, isCTF);
                 teamStats[teamId] = stats;
 
                 _logger.LogInformation(
@@ -70,27 +72,43 @@ public class TeamRankingCalculator : ITeamRankingCalculator
             }
 
             // Sort by ranking criteria (hierarchical per spec)
-            // Primary: Points (= RoundsWon)
-            // Tier 1a: Rounds Tied (prefer tied over lost)
-            // Tier 1b: Rounds Lost (implicit - lower is better)
-            // Tier 2: Ticket Differential
-            var rankedTeams = teamStats
-                .OrderByDescending(kvp => kvp.Value.Points)             // PRIMARY: Points (= RoundsWon)
-                .ThenByDescending(kvp => kvp.Value.RoundsTied)         // TIER 1a: Rounds tied (prefer tied)
-                .ThenByDescending(kvp => -kvp.Value.RoundsLost)        // TIER 1b: Rounds lost (ascending = prefer fewer losses)
-                .ThenByDescending(kvp => kvp.Value.TicketDifferential) // TIER 2: Ticket differential
-                .ToList();
+            // CTF: Points (match-based: 3*wins + 1*draws) > Ticket differential
+            // Default: Points (= RoundsWon) > RoundsTied > -RoundsLost > Ticket differential
+            IOrderedEnumerable<KeyValuePair<int, (int RoundsWon, int RoundsTied, int RoundsLost, int TicketDifferential, int MatchesPlayed, int Victories, int Ties, int Losses, int TicketsFor, int TicketsAgainst, int Points)>> rankedTeams;
 
-            _logger.LogInformation(
-                "Teams sorted by ranking criteria | TournamentId={TournamentId} Week={Week} Criteria=(Points > RoundsTied > -RoundsLost > TicketDifferential)",
-                tournamentId, week ?? "cumulative");
+            if (isCTF)
+            {
+                // CTF scoring: Points (match-based) > Flag differential
+                rankedTeams = teamStats
+                    .OrderByDescending(kvp => kvp.Value.Points)             // PRIMARY: Points (= 3*wins + 1*draws)
+                    .ThenByDescending(kvp => kvp.Value.TicketDifferential); // TIER 2: Flag differential
+
+                _logger.LogInformation(
+                    "Teams sorted by CTF ranking criteria | TournamentId={TournamentId} Week={Week} Criteria=(Points[match-based] > FlagDifferential)",
+                    tournamentId, week ?? "cumulative");
+            }
+            else
+            {
+                // Default (Conquest) scoring: Points (round-based) > RoundsTied > -RoundsLost > Ticket differential
+                rankedTeams = teamStats
+                    .OrderByDescending(kvp => kvp.Value.Points)             // PRIMARY: Points (= RoundsWon)
+                    .ThenByDescending(kvp => kvp.Value.RoundsTied)          // TIER 1a: Rounds tied (prefer tied)
+                    .ThenByDescending(kvp => -kvp.Value.RoundsLost)         // TIER 1b: Rounds lost (ascending = prefer fewer losses)
+                    .ThenByDescending(kvp => kvp.Value.TicketDifferential); // TIER 2: Ticket differential
+
+                _logger.LogInformation(
+                    "Teams sorted by ranking criteria | TournamentId={TournamentId} Week={Week} Criteria=(Points > RoundsTied > -RoundsLost > TicketDifferential)",
+                    tournamentId, week ?? "cumulative");
+            }
+
+            var rankedTeamsList = rankedTeams.ToList();
 
             // Create ranking records with assigned positions
             var rankings = new List<TournamentTeamRanking>();
-            for (int i = 0; i < rankedTeams.Count; i++)
+            for (int i = 0; i < rankedTeamsList.Count; i++)
             {
-                var teamId = rankedTeams[i].Key;
-                var stats = rankedTeams[i].Value;
+                var teamId = rankedTeamsList[i].Key;
+                var stats = rankedTeamsList[i].Value;
                 var rank = i + 1;
 
                 var ranking = new TournamentTeamRanking
@@ -135,13 +153,13 @@ public class TeamRankingCalculator : ITeamRankingCalculator
         }
     }
 
-    public async Task<int> RecalculateAllRankingsAsync(int tournamentId)
+    public async Task<int> RecalculateAllRankingsAsync(int tournamentId, string? gameMode = null)
     {
         try
         {
             _logger.LogInformation(
-                "Starting full ranking recalculation | TournamentId={TournamentId}",
-                tournamentId);
+                "Starting full ranking recalculation | TournamentId={TournamentId} GameMode={GameMode}",
+                tournamentId, gameMode ?? "default");
 
             // Get all distinct weeks for this tournament, plus null for cumulative
             var weeksInTournament = await _dbContext.TournamentMatchResults
@@ -172,7 +190,7 @@ public class TeamRankingCalculator : ITeamRankingCalculator
                         "Recalculating rankings for week | TournamentId={TournamentId} Week={Week}",
                         tournamentId, week ?? "cumulative");
 
-                    var rankings = await CalculateRankingsAsync(tournamentId, week);
+                    var rankings = await CalculateRankingsAsync(tournamentId, week, gameMode);
 
                     // Delete old rankings for this tournament/week combo
                     var oldRankings = await _dbContext.TournamentTeamRankings
@@ -225,9 +243,10 @@ public class TeamRankingCalculator : ITeamRankingCalculator
     private (int RoundsWon, int RoundsTied, int RoundsLost, int TicketDifferential, int MatchesPlayed, int Victories, int Ties, int Losses, int TicketsFor, int TicketsAgainst, int Points) CalculateTeamStatistics(
         List<TournamentMatchResult> matchResults,
         int teamId,
-        int tournamentId)
+        int tournamentId,
+        bool isCTF = false)
     {
-        _logger.LogDebug("Starting statistics calculation for TeamId={TeamId}", teamId);
+        _logger.LogDebug("Starting statistics calculation for TeamId={TeamId} IsCTF={IsCTF}", teamId, isCTF);
 
         int roundsWon = 0;
         int roundsTied = 0;
@@ -363,13 +382,17 @@ public class TeamRankingCalculator : ITeamRankingCalculator
                 teamId, matchDetails.Count, string.Join(" | ", matchDetails));
         }
 
-        // Points = RoundsWon (per spec: 1 point per round won)
-        int points = roundsWon;
+        // Points calculation differs by game mode
+        // CTF: 3 points for match win, 1 point for match draw, 0 for loss
+        // Default (Conquest): 1 point per round won
+        int points = isCTF
+            ? (victories * 3) + (ties * 1)
+            : roundsWon;
 
         // Summary log
         _logger.LogDebug(
-            "Statistics summary for TeamId={TeamId} | Points={Points} RoundsWon={RoundsWon} RoundsTied={RoundsTied} RoundsLost={RoundsLost} | MatchesPlayed={MatchesPlayed} Victories={Victories} Ties={Ties} Losses={Losses} | TicketsFor={TicketsFor} TicketsAgainst={TicketsAgainst} Differential={TicketDifferential}",
-            teamId, points, roundsWon, roundsTied, roundsLost, matchesPlayed, victories, ties, losses, ticketsFor, ticketsAgainst, ticketDifferential);
+            "Statistics summary for TeamId={TeamId} | IsCTF={IsCTF} Points={Points} RoundsWon={RoundsWon} RoundsTied={RoundsTied} RoundsLost={RoundsLost} | MatchesPlayed={MatchesPlayed} Victories={Victories} Ties={Ties} Losses={Losses} | TicketsFor={TicketsFor} TicketsAgainst={TicketsAgainst} Differential={TicketDifferential}",
+            teamId, isCTF, points, roundsWon, roundsTied, roundsLost, matchesPlayed, victories, ties, losses, ticketsFor, ticketsAgainst, ticketDifferential);
 
         return (roundsWon, roundsTied, roundsLost, ticketDifferential, matchesPlayed, victories, ties, losses, ticketsFor, ticketsAgainst, points);
     }

@@ -12,6 +12,7 @@ namespace api.Controllers;
 
 [ApiController]
 [Route("stats/admin/tournaments")]
+[Authorize]
 public class AdminTournamentController(
     PlayerTrackerDbContext context,
     ILogger<AdminTournamentController> logger,
@@ -264,7 +265,7 @@ public class AdminTournamentController(
                         MapOrder = m.MapOrder,
                         TeamId = m.TeamId,
                         TeamName = m.Team != null ? m.Team.Name : null,
-                    ImagePath = m.ImagePath,
+                        ImagePath = m.ImagePath,
                         MatchResults = m.MatchResults.Select(mr => new TournamentMatchResultResponse
                         {
                             Id = mr.Id,
@@ -1885,7 +1886,7 @@ public class AdminTournamentController(
                         MapOrder = m.MapOrder,
                         TeamId = m.TeamId,
                         TeamName = m.Team != null ? m.Team.Name : null,
-                    ImagePath = m.ImagePath,
+                        ImagePath = m.ImagePath,
                         MatchResults = m.MatchResults.Select(mr => new TournamentMatchResultResponse
                         {
                             Id = mr.Id,
@@ -3176,7 +3177,7 @@ public class AdminTournamentController(
                 .ToDictionaryAsync(t => t.Id, t => t.Name);
 
             var weeksToRecalculate = new List<string?>();
-            var (allWeeks, cumulativeUpdated) = await GetAllWeeksAndRecalculateCumulativeAsync(tournamentId);
+            var (allWeeks, cumulativeUpdated) = await GetAllWeeksAndRecalculateCumulativeAsync(tournamentId, tournament.GameMode);
 
             if (!string.IsNullOrWhiteSpace(request.Week))
             {
@@ -3247,7 +3248,7 @@ public class AdminTournamentController(
             }
 
             // Get cumulative rankings
-            var cumulativeRankingsList = await rankingCalculator.CalculateRankingsAsync(tournamentId, null);
+            var cumulativeRankingsList = await rankingCalculator.CalculateRankingsAsync(tournamentId, null, tournament.GameMode);
 
             // Save cumulative rankings to database
             var oldCumulativeRankings = await context.TournamentTeamRankings
@@ -3268,7 +3269,7 @@ public class AdminTournamentController(
                 if (string.IsNullOrWhiteSpace(week))
                     continue;
 
-                var rankings = await rankingCalculator.CalculateRankingsAsync(tournamentId, week);
+                var rankings = await rankingCalculator.CalculateRankingsAsync(tournamentId, week, tournament.GameMode);
                 weeklyRankingsUpdated += rankings.Count;
 
                 // Save weekly rankings to database
@@ -3313,7 +3314,7 @@ public class AdminTournamentController(
     /// <summary>
     /// Helper method to get all distinct weeks and recalculate cumulative rankings
     /// </summary>
-    private async Task<(List<string?>, int)> GetAllWeeksAndRecalculateCumulativeAsync(int tournamentId)
+    private async Task<(List<string?>, int)> GetAllWeeksAndRecalculateCumulativeAsync(int tournamentId, string? gameMode = null)
     {
         // Get all distinct weeks from match results
         var weeks = await context.TournamentMatchResults
@@ -3324,7 +3325,7 @@ public class AdminTournamentController(
             .ToListAsync();
 
         // Always recalculate cumulative rankings (week = null)
-        var cumulativeRankings = await rankingCalculator.CalculateRankingsAsync(tournamentId, null);
+        var cumulativeRankings = await rankingCalculator.CalculateRankingsAsync(tournamentId, null, gameMode);
 
         logger.LogInformation(
             "Recalculated cumulative rankings for tournament {TournamentId}: {Count} rankings",

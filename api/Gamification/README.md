@@ -4,33 +4,20 @@ A comprehensive achievement and badge system for BF1942 stats tracking.
 
 ## 🚀 Quick Setup
 
-### 1. Create ClickHouse Tables
-Run the SQL commands in `../Migrations/clickhouse-gamification.sql` in your ClickHouse instance:
+### 1. Ensure SQLite DB is configured
+- Uses `DB_PATH` if set, otherwise defaults to `playertracker.db`.
 
-```bash
-# Connect to ClickHouse and run:
-clickhouse-client --query "$(cat Migrations/clickhouse-gamification.sql)"
-```
-
-### 2. Start the System
-The gamification system will automatically start with the main application. It includes:
-- **Background Service**: Processes new achievements every 5 minutes
+### 2. Start the system
+The gamification system starts automatically with the main application. It includes:
+- **Background Service**: Processes new achievements on a schedule
 - **API Endpoints**: Access achievements and leaderboards
-- **Incremental Processing**: Only processes new data since last run
-
-### 3. Initial Historical Processing (Optional)
-To process existing historical data for achievements:
-
-```bash
-# Trigger historical processing via API (admin endpoint)
-POST /api/gamification/admin/process-historical
-```
+- **Incremental Processing**: Only processes new data since the last run
 
 ## 📊 Achievement Types
 
 ### Kill Streak Achievements
 - **First Blood** (5 kills) - Bronze
-- **Double Digits** (10 kills) - Bronze  
+- **Double Digits** (10 kills) - Bronze
 - **Killing Spree** (15 kills) - Silver
 - **Rampage** (20 kills) - Silver
 - **Unstoppable** (25 kills) - Gold
@@ -100,9 +87,6 @@ GET /api/gamification/badges/social
 
 ### Admin Endpoints
 ```bash
-# Process historical data
-POST /api/gamification/admin/process-historical?fromDate=2024-01-01
-
 # Trigger incremental processing
 POST /api/gamification/admin/process-incremental
 
@@ -113,15 +97,15 @@ GET /api/gamification/stats
 ## ⚡ Performance Features
 
 ### Incremental Processing
-- Only processes new `player_rounds` data since last run
-- Uses `MAX(processed_at)` timestamp to track progress
-- No reprocessing of historical records
+- Only processes new session/observation data since last run
+- Uses last processed timestamp to track progress
+- Avoids reprocessing historical records
 
 ### Optimized Calculations
 - **Kill Streaks**: Single-round only (no cross-round complexity)
 - **Milestones**: Threshold detection on new rounds
 - **Performance Badges**: Calculated using recent round windows
-- **Batch Processing**: Multiple achievements stored in single ClickHouse operation
+- **Batch Inserts**: Multiple achievements stored in a single transaction
 
 ### Caching Strategy
 - Badge definitions cached in memory
@@ -135,7 +119,7 @@ GamificationService (main orchestrator)
 ├── KillStreakDetector (real-time single-round streaks)
 ├── MilestoneCalculator (threshold crossing detection)
 ├── PerformanceBadgeCalculator (KPM, KD badges)
-├── ClickHouseGamificationService (data operations)
+├── SqliteGamificationService (data operations)
 └── BadgeDefinitionsService (badge metadata)
 ```
 
@@ -145,13 +129,12 @@ The system provides comprehensive logging:
 - Achievement processing statistics
 - Performance metrics
 - Error handling and recovery
-- Historical processing progress
 
 Check application logs for gamification processing information.
 
 ## 🔧 Configuration
 
 Key environment variables:
-- `CLICKHOUSE_URL`: ClickHouse connection URL for gamification data
-
-The system uses the same ClickHouse instance as the main stats system and automatically configures itself based on existing settings. 
+- `ENABLE_GAMIFICATION_PROCESSING`
+- `GAMIFICATION_MAX_CONCURRENT_ROUNDS`
+- `DB_PATH`

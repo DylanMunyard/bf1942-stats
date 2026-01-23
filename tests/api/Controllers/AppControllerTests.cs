@@ -1,6 +1,4 @@
 using api.Caching;
-using api.ClickHouse;
-using api.ClickHouse.Interfaces;
 using api.Controllers;
 using api.Gamification.Models;
 using api.Gamification.Services;
@@ -15,7 +13,6 @@ namespace api.tests.Controllers;
 public class AppControllerTests
 {
     private readonly IBadgeDefinitionsService _badgeDefinitionsService;
-    private readonly IGameTrendsService _gameTrendsService;
     private readonly ICacheService _cacheService;
     private readonly AppController _controller;
 
@@ -23,12 +20,9 @@ public class AppControllerTests
     {
         // Mock interfaces
         _badgeDefinitionsService = Substitute.For<IBadgeDefinitionsService>();
-        _gameTrendsService = Substitute.For<IGameTrendsService>();
         _cacheService = Substitute.For<ICacheService>();
 
         var logger = Substitute.For<ILogger<AppController>>();
-        var clickHouseReader = Substitute.For<IClickHouseReader>();
-
         // Create a real DbContext using in-memory database for testing
         var options = new DbContextOptionsBuilder<PlayerTrackerDbContext>()
             .UseInMemoryDatabase("test-app-controller-db")
@@ -37,10 +31,8 @@ public class AppControllerTests
 
         _controller = new AppController(
             _badgeDefinitionsService,
-            _gameTrendsService,
             _cacheService,
             logger,
-            clickHouseReader,
             dbContext);
     }
 

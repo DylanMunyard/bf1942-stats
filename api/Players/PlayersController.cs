@@ -1,7 +1,7 @@
-using api.ClickHouse;
-using api.ClickHouse.Models;
+using api.Analytics.Models;
 using api.Constants;
 using api.Players.Models;
+using api.PlayerStats;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -12,12 +12,10 @@ namespace api.Players;
 [Route("stats/[controller]")]
 public class PlayersController(
     IPlayerStatsService playerStatsService,
-    IServerStatisticsService serverStatisticsService,
-    IPlayerComparisonService playerComparisonService,
-    PlayerRoundsReadService playerRoundsService,
+    ISqlitePlayerStatsService sqlitePlayerStatsService,
+    ISqlitePlayerComparisonService sqlitePlayerComparisonService,
     ILogger<PlayersController> logger) : ControllerBase
 {
-
     /// <summary>
     /// Retrieves a paginated list of all players with optional filtering and sorting.
     /// </summary>
@@ -176,7 +174,7 @@ public class PlayersController(
 
         try
         {
-            var stats = await serverStatisticsService.GetServerStats(playerName, period, serverGuid);
+            var stats = await sqlitePlayerStatsService.GetPlayerMapStatsAsync(playerName, period, serverGuid);
 
             if (!stats.Any())
                 return NotFound($"No statistics found for player '{playerName}' on server '{serverGuid}' for the specified period");
@@ -234,7 +232,7 @@ public class PlayersController(
 
         try
         {
-            var result = await playerComparisonService.ComparePlayersAsync(player1, player2, serverGuid);
+            var result = await sqlitePlayerComparisonService.ComparePlayersAsync(player1, player2, serverGuid);
             return Ok(result);
         }
         catch (Exception ex)
@@ -243,60 +241,6 @@ public class PlayersController(
             logger.LogError(ex, "Error comparing players {Player1} and {Player2}", player1, player2);
             // Return a generic 500 error
             return StatusCode(500, "An internal server error occurred while comparing players.");
-        }
-    }
-
-    [HttpGet("{playerName}/similar")]
-    public async Task<IActionResult> GetSimilarPlayers(string playerName, [FromQuery] int limit = ApiConstants.SimilaritySearch.DefaultLimit, [FromQuery] string mode = "default")
-    {
-        if (string.IsNullOrWhiteSpace(playerName))
-            return BadRequest(ApiConstants.ValidationMessages.PlayerNameEmpty);
-
-        // Use modern URL decoding that preserves + signs
-        playerName = Uri.UnescapeDataString(playerName);
-
-        if (limit < ApiConstants.SimilaritySearch.MinLimit || limit > ApiConstants.SimilaritySearch.MaxLimit)
-            return BadRequest(ApiConstants.ValidationMessages.LimitOutOfRange);
-
-        // Parse similarity mode
-        if (!Enum.TryParse<SimilarityMode>(mode, true, out var similarityMode))
-            return BadRequest($"Invalid mode. Valid options: {string.Join(", ", Enum.GetNames<SimilarityMode>())}");
-
-        try
-        {
-            var result = await playerComparisonService.FindSimilarPlayersAsync(playerName, limit, true, similarityMode);
-
-            if (result.TargetPlayerStats == null)
-                return NotFound($"Player '{playerName}' not found or has insufficient data");
-
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error finding similar players for {PlayerName} with mode {Mode}", playerName, mode);
-            return StatusCode(500, "An internal server error occurred while finding similar players.");
-        }
-    }
-
-    [HttpGet("compare/activity-hours")]
-    public async Task<IActionResult> ComparePlayersActivityHours([FromQuery] string player1, [FromQuery] string player2)
-    {
-        if (string.IsNullOrWhiteSpace(player1) || string.IsNullOrWhiteSpace(player2))
-            return BadRequest(ApiConstants.ValidationMessages.BothPlayersRequired);
-
-        // Use modern URL decoding that preserves + signs
-        player1 = Uri.UnescapeDataString(player1);
-        player2 = Uri.UnescapeDataString(player2);
-
-        try
-        {
-            var result = await playerComparisonService.ComparePlayersActivityHoursAsync(player1, player2);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error comparing activity hours for players {Player1} and {Player2}", player1, player2);
-            return StatusCode(500, "An internal server error occurred while comparing player activity hours.");
         }
     }
 

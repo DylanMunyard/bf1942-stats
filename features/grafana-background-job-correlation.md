@@ -25,7 +25,7 @@ rate(bg_job_executions_total[1m])
 bg_job_duration_seconds
 ```
 
-**Labels**: `job={stats_collection|clickhouse_sync|ranking_calc|gamification}`
+**Labels**: `job={stats_collection|ranking_calc|gamification}`
 
 ### 2. Volume Metrics (What was the job processing?)
 
@@ -36,11 +36,7 @@ bg_active_players
 # Servers processed (high count = more API calls, more memory)
 rate(bg_servers_processed_total[1m])
 
-# ClickHouse records synced (high volume = potential memory spike)
-rate(bg_clickhouse_records_synced_total[1m])
 ```
-
-**ClickHouse operation labels**: `operation={player_metrics|server_counts|rounds}`
 
 ### 3. Runtime Metrics (Already Available)
 
@@ -77,14 +73,11 @@ This shows **which job was running** at the time of the spike. Use bars or lines
 # Player count
 bg_active_players
 
-# ClickHouse records being synced
-rate(bg_clickhouse_records_synced_total{operation="player_metrics"}[1m])
-
 # Servers being processed
 rate(bg_servers_processed_total[1m])
 ```
 
-This shows **what the job was processing**. High player counts or record volumes correlate with memory usage.
+This shows **what the job was processing**. High player counts or server volumes correlate with memory usage.
 
 #### Panel 4: GC Activity
 ```promql
@@ -96,12 +89,12 @@ This shows if GC is struggling to keep up (indicates memory pressure).
 ### Example Analysis Workflow
 
 1. **See memory spike at 14:23**
-2. **Check Panel 2**: `rate(bg_job_executions_total{job="clickhouse_sync"}[1m])` shows activity
-3. **Check Panel 3**: `rate(bg_clickhouse_records_synced_total{operation="player_metrics"}[1m])` shows 50K records/min
-4. **Conclusion**: "ClickHouse sync was processing 50K player metrics when memory spiked"
+2. **Check Panel 2**: `rate(bg_job_executions_total{job="stats_collection"}[1m])` shows activity
+3. **Check Panel 3**: `rate(bg_servers_processed_total[1m])` shows a spike in servers processed
+4. **Conclusion**: "Stats collection processed a large batch when memory spiked"
 
 5. **Check Panel 3 again**: `bg_active_players` shows 200 players online
-6. **Conclusion**: "High player count (200) caused large metrics batch, which spiked memory during ClickHouse sync"
+6. **Conclusion**: "High player count (200) increased processing volume during stats collection"
 
 ## PromQL Queries for Alerts
 
@@ -109,22 +102,22 @@ This shows if GC is struggling to keep up (indicates memory pressure).
 
 ```yaml
 # Alert when memory is high AND a specific job is running
-- alert: HighMemoryDuringClickHouseSync
+- alert: HighMemoryDuringStatsCollection
   expr: |
     container_memory_working_set_bytes{pod=~"bf42-stats.*"} > 2e9
     and
-    rate(bg_job_executions_total{job="clickhouse_sync"}[1m]) > 0
+    rate(bg_job_executions_total{job="stats_collection"}[1m]) > 0
   annotations:
-    description: "Memory is {{humanize $value}} while ClickHouse sync is active"
+    description: "Memory is {{humanize $value}} while stats collection is active"
 ```
 
 ### Alert: High Volume Processing
 
 ```yaml
-- alert: HighVolumeClickHouseSync
-  expr: rate(bg_clickhouse_records_synced_total[5m]) > 10000
+- alert: HighVolumeStatsCollection
+  expr: rate(bg_servers_processed_total[5m]) > 1000
   annotations:
-    description: "ClickHouse syncing {{humanize $value}} records/sec - may cause memory spike"
+    description: "Stats collection processing {{humanize $value}} servers/sec - may cause memory spike"
 ```
 
 ## Query Examples
@@ -139,11 +132,6 @@ topk(4, sum by (job) (rate(bg_job_executions_total[5m])))
 histogram_quantile(0.95,
   sum by (job, le) (rate(bg_job_duration_seconds_bucket[5m]))
 )
-```
-
-### "What's the ClickHouse sync volume over time?"
-```promql
-sum by (operation) (rate(bg_clickhouse_records_synced_total[1m]))
 ```
 
 ### "Memory usage vs active players"
@@ -165,18 +153,12 @@ bg_active_players * 10000000  # Scale to match memory axis
    - Emits: `bg_servers_processed_total`
    - Emits: `bg_active_players` (gauge)
 
-2. **ClickHouseSyncBackgroundService** (every 1m)
-   - Emits: `bg_job_executions_total{job="clickhouse_sync"}`
-   - Emits: `bg_job_duration_seconds{job="clickhouse_sync"}`
-   - Emits: `bg_clickhouse_records_synced_total{operation="player_metrics|server_counts|rounds"}`
-   - Emits: `bg_clickhouse_sync_duration_seconds{operation=...}`
-
-3. **RankingCalculationService** (every 1h)
+2. **RankingCalculationService** (every 1h)
    - Emits: `bg_job_executions_total{job="ranking_calc"}`
    - Emits: `bg_job_duration_seconds{job="ranking_calc"}`
    - Emits: `bg_rankings_inserted_total`
 
-4. **GamificationBackgroundService** (every 5m, if enabled)
+3. **GamificationBackgroundService** (every 5m, if enabled)
    - Emits: `bg_job_executions_total{job="gamification"}`
    - Emits: `bg_job_duration_seconds{job="gamification"}`
 

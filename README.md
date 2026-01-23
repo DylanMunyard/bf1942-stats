@@ -8,7 +8,6 @@ API backend for [bfstats.io](https://bfstats.io) – Battlefield 1942 player and
 
 - .NET 8+ SDK
 - Docker & Docker Compose
-- kubectl (for Clickhouse access)
 
 ### Running Locally
 
@@ -17,13 +16,7 @@ API backend for [bfstats.io](https://bfstats.io) – Battlefield 1942 player and
    docker-compose -f docker-compose.dev.yml up -d
    ```
 
-2. **Port-forward Clickhouse** (analytics database in remote k3s cluster):
-   ```bash
-   kubectl port-forward clickhouse-staging-598945d9f5-8f79b 8123:8123 \
-     -n clickhouse-staging --context proxmox
-   ```
-
-3. **Run the API:**
+2. **Run the API:**
    ```bash
    dotnet run
    ```
@@ -32,36 +25,17 @@ The API will be available at `http://localhost:9222`.
 
 ### Backing Up the Database
 
-To create a ClickHouse backup:
+The SQLite database file lives at `./api/playertracker.db` in local dev (or `DB_PATH` in production).
 
-```sql
-BACKUP DATABASE default TO Disk('backups', 'back-it-up')
-```
-
-This creates a backup in the `./clickhouse-backups/` folder. The ClickHouse deployment will automatically back up these ZIP files to the Azure storage container.
+To back up locally:
+1. Stop the API (or ensure no writes are happening).
+2. Copy `playertracker.db` and any `playertracker.db-wal` / `playertracker.db-shm` files alongside it.
 
 ### Restoring Database from Backup
 
-1. **Create the ClickHouse data folders:**
-   ```bash
-   mkdir -p ./clickhouse-data
-   mkdir -p ./clickhouse-backups
-   ```
-
-2. **Extract the backup ZIP:**
-   ```bash
-   unzip -o back-it-up.zip -d ./clickhouse-backups/
-   ```
-
-3. **Restart ClickHouse to pick up the backup:**
-   ```bash
-   docker-compose -f docker-compose.dev.yml restart clickhouse
-   ```
-
-4. **Restore the database:**
-   ```sql
-   RESTORE DATABASE default FROM Disk('backups', 'back-it-up.zip')
-   ```
+1. Stop the API.
+2. Replace `playertracker.db` (and optional `-wal` / `-shm`) with your backup copy.
+3. Restart the API.
 
 ## Configuration
 
@@ -96,8 +70,8 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) for key generation instructions.
 ## Tech Stack
 
 - **Framework:** ASP.NET Core
-- **Databases:** SQLite (operational), Clickhouse (analytics)
-- **ORM:** Entity Framework (SQLite), Clickhouse ADO.NET
+- **Databases:** SQLite
+- **ORM:** Entity Framework Core
 - **Logging:** Seq with OTEL sinks to Loki and Tempo
 - **Real-time:** SignalR
 

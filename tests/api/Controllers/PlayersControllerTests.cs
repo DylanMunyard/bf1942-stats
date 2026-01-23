@@ -1,6 +1,6 @@
-using api.ClickHouse;
 using api.Players;
 using api.Players.Models;
+using api.PlayerStats;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -10,36 +10,22 @@ namespace api.tests.Controllers;
 public class PlayersControllerTests
 {
     private readonly IPlayerStatsService _playerStatsService;
-    private readonly IServerStatisticsService _serverStatisticsService;
-    private readonly IPlayerComparisonService _playerComparisonService;
-    private readonly PlayerRoundsReadService _playerRoundsService;
+    private readonly ISqlitePlayerStatsService _sqlitePlayerStatsService;
+    private readonly ISqlitePlayerComparisonService _sqlitePlayerComparisonService;
     private readonly PlayersController _controller;
 
     public PlayersControllerTests()
     {
         // Mock interfaces
         _playerStatsService = Substitute.For<IPlayerStatsService>();
-        _serverStatisticsService = Substitute.For<IServerStatisticsService>();
-        _playerComparisonService = Substitute.For<IPlayerComparisonService>();
-
-        // Create dependencies for PlayerRoundsReadService
-        var httpClient = new HttpClient();
-        var playerRoundsLogger = Substitute.For<ILogger<PlayerRoundsReadService>>();
-        var serviceProvider = Substitute.For<IServiceProvider>();
-
-        // Create PlayerRoundsReadService with mock dependencies
-        _playerRoundsService = new PlayerRoundsReadService(
-            httpClient,
-            "http://localhost:8123",
-            playerRoundsLogger,
-            serviceProvider);
+        _sqlitePlayerStatsService = Substitute.For<ISqlitePlayerStatsService>();
+        _sqlitePlayerComparisonService = Substitute.For<ISqlitePlayerComparisonService>();
 
         var logger = Substitute.For<ILogger<PlayersController>>();
         _controller = new PlayersController(
             _playerStatsService,
-            _serverStatisticsService,
-            _playerComparisonService,
-            _playerRoundsService,
+            _sqlitePlayerStatsService,
+            _sqlitePlayerComparisonService,
             logger);
     }
 

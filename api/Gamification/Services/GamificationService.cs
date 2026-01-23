@@ -1,11 +1,13 @@
 using api.Gamification.Models;
-using api.ClickHouse.Models;
+using api.Analytics.Models;
+using api.Telemetry;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using System.Diagnostics;
 
 namespace api.Gamification.Services;
 
-public class GamificationService(ClickHouseGamificationService gamificationService, KillStreakDetector killStreakDetector, MilestoneCalculator milestoneCalculator, PerformanceBadgeCalculator performanceBadgeCalculator, BadgeDefinitionsService badgeDefinitionsService, HistoricalProcessor historicalProcessor, AchievementLabelingService achievementLabelingService, PlacementProcessor placementProcessor, TeamVictoryProcessor teamVictoryProcessor, IConfiguration configuration, ILogger<GamificationService> logger) : IDisposable
+public class GamificationService(SqliteGamificationService gamificationService, KillStreakDetector killStreakDetector, MilestoneCalculator milestoneCalculator, BadgeDefinitionsService badgeDefinitionsService, AchievementLabelingService achievementLabelingService, PlacementProcessor placementProcessor, TeamVictoryProcessor teamVictoryProcessor, IConfiguration configuration, ILogger<GamificationService> logger) : IDisposable
 {
     private readonly ILogger<GamificationService> _logger = InitializeLogger(logger, configuration);
     private readonly int _maxConcurrentRounds = configuration.GetValue<int>("GAMIFICATION_MAX_CONCURRENT_ROUNDS", 10);
@@ -29,13 +31,15 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
     /// </summary>
     public async Task ProcessNewAchievementsAsync()
     {
+        using var activity = ActivitySources.Gamification.StartActivity("Gamification.ProcessNewAchievements");
+
         try
         {
             // Get the last time we processed achievements
             var lastProcessed = await gamificationService.GetLastProcessedTimestampAsync();
             var now = DateTime.UtcNow;
 
-            _logger.LogInformation("Completed gamification processing cycle {LastProcessed}", lastProcessed);
+            _logger.LogInformation("Processing new achievements from {LastProcessed}", lastProcessed);
 
             // Only process new player_rounds since last run
             var newRounds = await gamificationService.GetPlayerRoundsSinceAsync(lastProcessed);
@@ -80,13 +84,13 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
     }
 
     /// <summary>
-    /// Process achievements for a specific set of rounds using ClickHouse player_metrics
+    /// Process achievements for a specific set of rounds using player metrics
     /// </summary>
     public async Task<List<Achievement>> ProcessAchievementsForRounds(List<PlayerRound> rounds)
     {
         try
         {
-            _logger.LogInformation("Processing achievements for {RoundCount} rounds using ClickHouse player_metrics", rounds.Count);
+            _logger.LogInformation("Processing achievements for {RoundCount} rounds using player metrics", rounds.Count);
 
             // Use batch processing for better performance
             if (rounds.Count > 10)
@@ -114,17 +118,13 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
         {
             var roundAchievements = new List<Achievement>();
 
-            // 1. Kill Streak Achievements using ClickHouse player_metrics
+            // 1. Kill Streak Achievements using player metrics
             var streakAchievements = await killStreakDetector.CalculateKillStreaksForRoundAsync(round);
             roundAchievements.AddRange(streakAchievements);
 
-            // 2. Milestone Achievements 
+            // 2. Milestone Achievements
             var milestoneAchievements = await milestoneCalculator.CheckMilestoneCrossedAsync(round);
             roundAchievements.AddRange(milestoneAchievements);
-
-            // 3. Performance Badge Checks using ClickHouse player_metrics
-            var performanceAchievements = await performanceBadgeCalculator.CheckPerformanceBadgesAsync(round);
-            roundAchievements.AddRange(performanceAchievements);
 
             allAchievements.AddRange(roundAchievements);
 
@@ -146,7 +146,7 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
 
     /// <summary>
     /// Batch process achievements for better performance with large datasets
-    /// Uses ClickHouse player_metrics for more efficient calculations
+    /// Uses player metrics for more efficient calculations
     /// </summary>
     private async Task<List<Achievement>> ProcessAchievementsForRoundsBatchAsync(List<PlayerRound> rounds)
     {
@@ -201,23 +201,11 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
             var milestoneResults = await Task.WhenAll(milestoneTasks);
             allAchievements.AddRange(milestoneResults.SelectMany(r => r));
 
-            // 3. Process performance badges in batch (more efficient)
-            try
-            {
-                var performanceAchievements = await performanceBadgeCalculator.ProcessPerformanceBadgesBatchAsync(rounds);
-                allAchievements.AddRange(performanceAchievements);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error processing performance badges in batch");
-            }
-
             _logger.LogInformation("Batch processed {RoundCount} rounds, generated {AchievementCount} achievements " +
-                "({StreakCount} streaks, {MilestoneCount} milestones, {PerformanceCount} performance)",
+                "({StreakCount} streaks, {MilestoneCount} milestones)",
                 rounds.Count, allAchievements.Count,
                 streakResults.Sum(r => r.Count),
-                milestoneResults.Sum(r => r.Count),
-                allAchievements.Count - streakResults.Sum(r => r.Count) - milestoneResults.Sum(r => r.Count));
+                milestoneResults.Sum(r => r.Count));
         }
         catch (Exception ex)
         {
@@ -322,32 +310,6 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
     }
 
     /// <summary>
-    /// Historical processing for initial migration - uses ClickHouse-native approach
-    /// </summary>
-    public async Task ProcessHistoricalDataAsync(DateTime? fromDate = null, DateTime? toDate = null)
-    {
-        try
-        {
-            var startDate = fromDate ?? DateTime.UtcNow.AddMonths(-6); // Default: 6 months
-            var endDate = toDate ?? DateTime.UtcNow;
-
-            _logger.LogInformation("Starting historical gamification processing from {StartDate} to {EndDate}",
-                startDate, endDate);
-
-            // Use the injected historical processor that leverages ClickHouse native operations
-            // This reduces query count from ~100k individual queries to ~10-50 aggregate queries
-            await historicalProcessor.ProcessHistoricalDataAsync(startDate, endDate);
-
-            _logger.LogInformation("Historical gamification processing completed");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error during historical processing");
-            throw;
-        }
-    }
-
-    /// <summary>
     /// Get available badge definitions
     /// </summary>
     public List<BadgeDefinition> GetAllBadgeDefinitions()
@@ -369,6 +331,19 @@ public class GamificationService(ClickHouseGamificationService gamificationServi
     public async Task<bool> PlayerHasAchievementAsync(string playerName, string achievementId)
     {
         return await gamificationService.PlayerHasAchievementAsync(playerName, achievementId);
+    }
+
+    public Task<List<PlayerAchievementGroup>> GetPlayerAchievementGroupsAsync(string playerName)
+    {
+        return gamificationService.GetPlayerAchievementGroupsAsync(playerName);
+    }
+
+    /// <summary>
+    /// Get hero achievements for a player (latest milestone + 5 recent achievements with full details)
+    /// </summary>
+    public async Task<List<Achievement>> GetPlayerHeroAchievementsAsync(string playerName)
+    {
+        return await gamificationService.GetPlayerHeroAchievementsAsync(playerName);
     }
 
     /// <summary>

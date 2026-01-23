@@ -1,4 +1,3 @@
-using api.ClickHouse;
 using api.Players.Models;
 using api.PlayerTracking;
 using api.Servers.Models;
@@ -7,10 +6,8 @@ using Microsoft.Extensions.Logging;
 
 namespace api.Servers;
 
-public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsService> logger, PlayerRoundsReadService? clickHouseReader = null)
+public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsService> logger)
 {
-    private readonly PlayerRoundsReadService? _clickHouseReader = clickHouseReader;
-
     public async Task<List<RoundInfo>> GetRecentRoundsAsync(string serverGuid, int limit)
     {
         var rounds = await dbContext.Rounds
@@ -318,7 +315,7 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
         };
     }
 
-    public async Task<SessionRoundReport?> GetRoundReport(string roundId, Gamification.Services.ClickHouseGamificationService gamificationService)
+    public async Task<SessionRoundReport?> GetRoundReport(string roundId, Gamification.Services.SqliteGamificationService gamificationService)
     {
         // First, get just the round data we need
         var roundData = await dbContext.Rounds
@@ -341,36 +338,6 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
                 SessionIds = r.Sessions.Select(s => s.SessionId).ToList()
             })
             .FirstOrDefaultAsync();
-
-        if (roundData == null)
-        {
-            // Try to resolve ClickHouse RoundId to SQLite RoundId
-            var resolvedRoundId = await ResolveClickHouseRoundIdAsync(roundId);
-            if (!string.IsNullOrEmpty(resolvedRoundId) && resolvedRoundId != roundId)
-            {
-                // Retry with resolved RoundId
-                roundData = await dbContext.Rounds
-                    .AsNoTracking()
-                    .Where(r => r.RoundId == resolvedRoundId)
-                    .Select(r => new
-                    {
-                        r.RoundId,
-                        r.MapName,
-                        r.GameType,
-                        r.StartTime,
-                        r.EndTime,
-                        r.IsActive,
-                        r.ParticipantCount,
-                        r.ServerName,
-                        r.Tickets1,
-                        r.Tickets2,
-                        r.Team1Label,
-                        r.Team2Label,
-                        SessionIds = r.Sessions.Select(s => s.SessionId).ToList()
-                    })
-                    .FirstOrDefaultAsync();
-            }
-        }
 
         if (roundData == null)
             return null;
@@ -479,96 +446,6 @@ public class RoundsService(PlayerTrackerDbContext dbContext, ILogger<RoundsServi
             LeaderboardSnapshots = leaderboardSnapshots,
             Achievements = achievements
         };
-    }
-
-    /// <summary>
-    /// Attempts to resolve a ClickHouse RoundId to a SQLite RoundId by looking up round details from ClickHouse
-    /// and finding the corresponding SQLite Round
-    /// </summary>
-    private async Task<string?> ResolveClickHouseRoundIdAsync(string clickHouseRoundId)
-    {
-        if (_clickHouseReader == null)
-        {
-            logger.LogDebug("ClickHouse reader not available for RoundId resolution: {RoundId}", clickHouseRoundId);
-            return null;
-        }
-
-        try
-        {
-            // Query ClickHouse for round details
-            var query = $@"
-SELECT 
-    server_guid,
-    map_name,
-    round_start_time,
-    round_end_time
-FROM player_rounds
-WHERE round_id = '{clickHouseRoundId.Replace("'", "''")}'
-LIMIT 1
-FORMAT TabSeparated";
-
-            var result = await _clickHouseReader.ExecuteQueryAsync(query);
-            if (string.IsNullOrWhiteSpace(result) || result.Trim().Length == 0)
-            {
-                logger.LogDebug("No data found in ClickHouse for RoundId: {RoundId}", clickHouseRoundId);
-                return null;
-            }
-
-            var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            if (lines.Length == 0)
-            {
-                return null;
-            }
-
-            var parts = lines[0].Split('\t');
-            if (parts.Length < 4)
-            {
-                logger.LogWarning("Invalid data format from ClickHouse for RoundId: {RoundId}", clickHouseRoundId);
-                return null;
-            }
-
-            var serverGuid = parts[0];
-            var mapName = parts[1];
-            var roundStartTime = DateTime.TryParse(parts[2], out var startTime) ? startTime : DateTime.MinValue;
-            var roundEndTime = DateTime.TryParse(parts[3], out var endTime) ? endTime : DateTime.MinValue;
-
-            if (startTime == DateTime.MinValue)
-            {
-                logger.LogWarning("Invalid start time from ClickHouse for RoundId: {RoundId}", clickHouseRoundId);
-                return null;
-            }
-
-            // Find the corresponding SQLite Round by server, map, and time range
-            // Allow some tolerance for timing differences (±10 minutes)
-            var timeTolerance = TimeSpan.FromMinutes(10);
-            var searchStartTime = startTime - timeTolerance;
-            var searchEndTime = startTime + timeTolerance;
-
-            var sqliteRound = (await dbContext.Rounds
-                .AsNoTracking()
-                .Where(r => r.ServerGuid == serverGuid
-                           && r.MapName == mapName
-                           && r.StartTime >= searchStartTime
-                           && r.StartTime <= searchEndTime)
-                .ToListAsync()) // Load data from database first
-                .OrderBy(r => Math.Abs((r.StartTime - startTime).Ticks)) // Then sort in memory
-                .FirstOrDefault();
-
-            if (sqliteRound != null)
-            {
-                logger.LogDebug("Resolved ClickHouse RoundId {ClickHouseRoundId} to SQLite RoundId {SQLiteRoundId}",
-                    clickHouseRoundId, sqliteRound.RoundId);
-                return sqliteRound.RoundId;
-            }
-
-            logger.LogDebug("Could not resolve ClickHouse RoundId {ClickHouseRoundId} to SQLite RoundId", clickHouseRoundId);
-            return null;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error resolving ClickHouse RoundId {ClickHouseRoundId} to SQLite RoundId", clickHouseRoundId);
-            return null;
-        }
     }
 }
 

@@ -37,6 +37,18 @@ Log.Logger = new LoggerConfiguration()
         }
         return false; // Include this log
     })
+    // Suppress verbose HTTP client logs from the OTLP trace exporter and buddy services
+    .MinimumLevel.Override("System.Net.Http.HttpClient.IBuddyApiService.ClientHandler", Serilog.Events.LogEventLevel.Warning)
+    // Filter out OTLP trace export HTTP requests
+    .Filter.ByExcluding(logEvent =>
+    {
+        if (logEvent.MessageTemplate.Text?.Contains("Sending HTTP request") == true &&
+            logEvent.MessageTemplate.Text?.Contains("http://tempo.monitoring:4318/v1/traces") == true)
+        {
+            return true; // Exclude this log
+        }
+        return false; // Include this log
+    })
     // Keep controller logs at Information level
     .MinimumLevel.Override("junie_des_1942stats.Notifications", Serilog.Events.LogEventLevel.Information)
     .Enrich.WithProperty("service.name", serviceName)

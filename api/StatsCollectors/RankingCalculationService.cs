@@ -12,19 +12,25 @@ namespace api.StatsCollectors;
 
 public class RankingCalculationService(IServiceProvider services, ILogger<RankingCalculationService> logger) : BackgroundService
 {
+    private static readonly TimeSpan StartupDelay = TimeSpan.FromMinutes(1);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        logger.LogInformation("RankingCalculationService started, waiting {Delay} before first run", StartupDelay);
+
+        // Delay startup to avoid blocking Kestrel initialization
+        await Task.Delay(StartupDelay, stoppingToken);
+
         while (!stoppingToken.IsCancellationRequested)
         {
             using var activity = ActivitySources.RankingCalculation.StartActivity("RankingCalculation.Cycle");
             activity?.SetTag("bulk_operation", "true");
-            
+
             var cycleStopwatch = Stopwatch.StartNew();
             try
             {
                 logger.LogInformation("Starting ranking calculation for all servers");
-                
+
                 using (LogContext.PushProperty("operation_type", "ranking_calculation"))
                 using (LogContext.PushProperty("bulk_operation", true))
                 using (var scope = services.CreateScope())
@@ -32,7 +38,7 @@ public class RankingCalculationService(IServiceProvider services, ILogger<Rankin
                     var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
 
                     await CalculateRankingsForAllServers(dbContext);
-                    
+
                     cycleStopwatch.Stop();
                     activity?.SetTag("cycle_duration_ms", cycleStopwatch.ElapsedMilliseconds);
                     logger.LogInformation("Ranking calculation completed successfully in {DurationMs}ms", cycleStopwatch.ElapsedMilliseconds);
@@ -46,7 +52,7 @@ public class RankingCalculationService(IServiceProvider services, ILogger<Rankin
                 activity?.SetStatus(ActivityStatusCode.Error, $"Ranking calculation failed: {ex.Message}");
                 logger.LogError(ex, "Error calculating rankings");
             }
-            
+
             await Task.Delay(TimeSpan.FromHours(1), stoppingToken);
         }
     }
@@ -222,11 +228,11 @@ public class RankingCalculationService(IServiceProvider services, ILogger<Rankin
                 }
 
                 sql.Append(";");
-                
+
                 var insertStopwatch = Stopwatch.StartNew();
                 await dbContext.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
                 insertStopwatch.Stop();
-                
+
                 batchActivity?.SetTag("insert_duration_ms", insertStopwatch.ElapsedMilliseconds);
 
                 logger.LogDebug("Batch {CurrentBatch}/{TotalBatches} inserted ({RecordCount} rankings) for server {ServerGuid}",

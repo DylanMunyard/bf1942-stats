@@ -16,7 +16,6 @@ When completing coding tasks in this project:
 ## Configuration
 - Environment variables properly configured
 - Database connection strings set
-- ClickHouse read/write URLs configured
 - Redis connection working
 
 ## Logging and Monitoring

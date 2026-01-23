@@ -43,7 +43,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "{SourceContext=\"api.Gamification.Services.ClickHouseGamificationService\"}"
+              "options": "{SourceContext=\"api.Gamification.Services.SqliteGamificationService\"}"
             },
             "properties": []
           }

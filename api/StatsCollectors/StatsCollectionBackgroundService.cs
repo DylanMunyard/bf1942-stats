@@ -2,10 +2,13 @@ using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
+using Microsoft.EntityFrameworkCore;
 using api.PlayerTracking;
 using api.Bflist;
 using api.Bflist.Models;
 using api.Telemetry;
+using api.Data.Entities;
+using NodaTime;
 using Serilog.Context;
 
 namespace api.StatsCollectors;
@@ -93,17 +96,21 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
                 bfvietnamStopwatch.Stop();
                 Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] BFV stats: {bfvietnamStopwatch.ElapsedMilliseconds}ms (Servers: {bfvietnamServersStopwatch.ElapsedMilliseconds}ms)");
 
-                // 4. Batch store all player metrics to ClickHouse
+                // 4. Collect all servers
                 var allServers = new List<IGameServer>();
                 allServers.AddRange(bf1942Servers);
                 allServers.AddRange(fh2Servers);
                 allServers.AddRange(bfvietnamServers);
                 var timestamp = DateTime.UtcNow;
 
-                // Removed ClickHouse batch storage. Metrics syncing handled by ClickHouseSyncBackgroundService.
-
-                // 5. Store server online counts alongside detailed metrics
-                // Removed ClickHouse online counts storage. Online counts syncing handled by ClickHouseSyncBackgroundService.
+                // 5. Store server online counts to SQLite for analytics
+                var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
+                var onlineCountsStopwatch = Stopwatch.StartNew();
+                await UpsertServerOnlineCountsAsync(dbContext, bf1942Servers, "bf1942", timestamp);
+                await UpsertServerOnlineCountsAsync(dbContext, fh2Servers, "fh2", timestamp);
+                await UpsertServerOnlineCountsAsync(dbContext, bfvietnamServers, "bfvietnam", timestamp);
+                onlineCountsStopwatch.Stop();
+                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] SQLite online counts: {onlineCountsStopwatch.ElapsedMilliseconds}ms");
 
                 activity?.SetTag("total_servers_processed", allServers.Count);
                 activity?.SetTag("bf1942_servers_processed", bf1942Servers.Count);
@@ -118,7 +125,6 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
                 BackgroundJobMetrics.ServersProcessed.Add(allServers.Count,
                     new KeyValuePair<string, object?>("game", "all"));
 
-                // Removed PlayerRounds sync to ClickHouse. Rounds syncing handled by ClickHouseSyncBackgroundService.
             }
         }
         catch (Exception ex)
@@ -153,7 +159,7 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
 
         foreach (var server in allServers)
         {
-            // Create adapter for ClickHouse batching
+            // Create adapter for batching
             var adapter = new Bf1942ServerAdapter(server);
             gameServerAdapters.Add(adapter);
 
@@ -174,7 +180,7 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
 
         foreach (var server in allServers)
         {
-            // Create adapter for ClickHouse batching
+            // Create adapter for batching
             var adapter = new BfvietnamServerAdapter(server);
             gameServerAdapters.Add(adapter);
 
@@ -195,7 +201,7 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
 
         foreach (var server in allServers)
         {
-            // Create adapter for ClickHouse batching
+            // Create adapter for batching
             var adapter = new Fh2ServerAdapter(server);
             gameServerAdapters.Add(adapter);
 
@@ -216,5 +222,51 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
     public void Dispose()
     {
         _timer?.Dispose();
+    }
+
+    private static async Task UpsertServerOnlineCountsAsync(
+        PlayerTrackerDbContext dbContext,
+        List<IGameServer> servers,
+        string game,
+        DateTime timestamp)
+    {
+        // Truncate timestamp to hour
+        var hourTimestamp = Instant.FromDateTimeUtc(
+            new DateTime(timestamp.Year, timestamp.Month, timestamp.Day, timestamp.Hour, 0, 0, DateTimeKind.Utc));
+
+        foreach (var server in servers)
+        {
+            var playersOnline = server.Players.Count();
+
+            // Find existing record for this server + hour
+            var existing = await dbContext.ServerOnlineCounts
+                .FirstOrDefaultAsync(s =>
+                    s.ServerGuid == server.Guid &&
+                    s.HourTimestamp == hourTimestamp);
+
+            if (existing == null)
+            {
+                // Insert new record
+                var newRecord = new ServerOnlineCount
+                {
+                    ServerGuid = server.Guid,
+                    HourTimestamp = hourTimestamp,
+                    Game = game,
+                    AvgPlayers = playersOnline,
+                    PeakPlayers = playersOnline,
+                    SampleCount = 1
+                };
+                dbContext.ServerOnlineCounts.Add(newRecord);
+            }
+            else
+            {
+                // Update running average and peak
+                existing.AvgPlayers = (existing.AvgPlayers * existing.SampleCount + playersOnline) / (existing.SampleCount + 1);
+                existing.PeakPlayers = Math.Max(existing.PeakPlayers, playersOnline);
+                existing.SampleCount++;
+            }
+        }
+
+        await dbContext.SaveChangesAsync();
     }
 }

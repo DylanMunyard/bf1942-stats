@@ -17,6 +17,519 @@ namespace api.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.5");
 
+            modelBuilder.Entity("api.Data.Entities.HourlyActivityPattern", b =>
+                {
+                    b.Property<string>("Game")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("HourOfDay")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("AvgRoundDuration")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("PeriodType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("TotalRoundsAvg")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("UniquePlayersAvg")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("UpdatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Game", "DayOfWeek", "HourOfDay");
+
+                    b.ToTable("HourlyActivityPatterns");
+                });
+
+            modelBuilder.Entity("api.Data.Entities.HourlyPlayerPrediction", b =>
+                {
+                    b.Property<string>("Game")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("HourOfDay")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("DataPoints")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("PredictedPlayers")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("UpdatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Game", "DayOfWeek", "HourOfDay");
+
+                    b.ToTable("HourlyPlayerPredictions");
+                });
+
+            modelBuilder.Entity("api.Data.Entities.MapGlobalAverage", b =>
+                {
+                    b.Property<string>("MapName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ServerGuid")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("AvgKillRate")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("AvgScoreRate")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("SampleCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UpdatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("MapName", "ServerGuid");
+
+                    b.ToTable("MapGlobalAverages");
+                });
+
+            modelBuilder.Entity("api.Data.Entities.MapServerHourlyPattern", b =>
+                {
+                    b.Property<string>("ServerGuid")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MapName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Game")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("HourOfDay")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("AvgPlayers")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("DataPoints")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TimesPlayed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UpdatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("ServerGuid", "MapName", "Game", "DayOfWeek", "HourOfDay");
+
+                    b.HasIndex("MapName", "Game");
+
+                    b.ToTable("MapServerHourlyPatterns");
+                });
+
+            modelBuilder.Entity("api.Data.Entities.PlayerAchievement", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AchievedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AchievementId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AchievementName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AchievementType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Game")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MapName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PlayerName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProcessedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RoundId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ServerGuid")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Tier")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Value")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AchievedAt");
+
+                    b.HasIndex("AchievementId");
+
+                    b.HasIndex("AchievementType");
+
+                    b.HasIndex("MapName");
+
+                    b.HasIndex("ServerGuid");
+
+                    b.HasIndex("PlayerName", "AchievedAt");
+
+                    b.HasIndex("PlayerName", "AchievementId", "AchievedAt")
+                        .IsUnique();
+
+                    b.ToTable("PlayerAchievements");
+                });
+
+            modelBuilder.Entity("api.Data.Entities.PlayerBestScore", b =>
+                {
+                    b.Property<string>("PlayerName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Period")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Rank")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("FinalDeaths")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("FinalKills")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("FinalScore")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("MapName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RoundEndTime")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RoundId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ServerGuid")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("PlayerName", "Period", "Rank");
+
+                    b.ToTable("PlayerBestScores");
+                });
+
+            modelBuilder.Entity("api.Data.Entities.PlayerMapStats", b =>
+                {
+                    b.Property<string>("PlayerName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MapName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ServerGuid")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TotalDeaths")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TotalKills")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("TotalPlayTimeMinutes")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("TotalRounds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TotalScore")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UpdatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("PlayerName", "MapName", "ServerGuid", "Year", "Month");
+
+                    b.HasIndex("MapName");
+
+                    b.HasIndex("ServerGuid", "MapName");
+
+                    b.HasIndex("Year", "Month");
+
+                    b.ToTable("PlayerMapStats");
+                });
+
+            modelBuilder.Entity("api.Data.Entities.PlayerServerStats", b =>
+                {
+                    b.Property<string>("PlayerName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ServerGuid")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Week")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TotalDeaths")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TotalKills")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("TotalPlayTimeMinutes")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("TotalRounds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TotalScore")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UpdatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("PlayerName", "ServerGuid", "Year", "Week");
+
+                    b.HasIndex("ServerGuid");
+
+                    b.HasIndex("Year", "Week");
+
+                    b.HasIndex("ServerGuid", "Year", "Week");
+
+                    b.ToTable("PlayerServerStats");
+                });
+
+            modelBuilder.Entity("api.Data.Entities.PlayerStatsMonthly", b =>
+                {
+                    b.Property<string>("PlayerName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("AvgScorePerRound")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("FirstRoundTime")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("KdRatio")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("KillRate")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("LastRoundTime")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TotalDeaths")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TotalKills")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("TotalPlayTimeMinutes")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("TotalRounds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TotalScore")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UpdatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("PlayerName", "Year", "Month");
+
+                    b.HasIndex("Year", "Month");
+
+                    b.ToTable("PlayerStatsMonthly");
+                });
+
+            modelBuilder.Entity("api.Data.Entities.ServerHourlyPattern", b =>
+                {
+                    b.Property<string>("ServerGuid")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("HourOfDay")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("AvgPlayers")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("DataPoints")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("MaxPlayers")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("MedianPlayers")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("MinPlayers")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("Q25Players")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("Q75Players")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("Q90Players")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("UpdatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("ServerGuid", "DayOfWeek", "HourOfDay");
+
+                    b.ToTable("ServerHourlyPatterns");
+                });
+
+            modelBuilder.Entity("api.Data.Entities.ServerMapStats", b =>
+                {
+                    b.Property<string>("ServerGuid")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MapName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("AvgConcurrentPlayers")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("PeakConcurrentPlayers")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Team1Label")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Team1Victories")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Team2Label")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Team2Victories")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TotalPlayTimeMinutes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TotalRounds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UpdatedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("ServerGuid", "MapName", "Year", "Month");
+
+                    b.HasIndex("ServerGuid");
+
+                    b.HasIndex("ServerGuid", "Year", "Month");
+
+                    b.ToTable("ServerMapStats");
+                });
+
+            modelBuilder.Entity("api.Data.Entities.ServerOnlineCount", b =>
+                {
+                    b.Property<string>("ServerGuid")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("HourTimestamp")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("AvgPlayers")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Game")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("PeakPlayers")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SampleCount")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("ServerGuid", "HourTimestamp");
+
+                    b.HasIndex("HourTimestamp");
+
+                    b.HasIndex("Game", "HourTimestamp");
+
+                    b.ToTable("ServerOnlineCounts");
+                });
+
             modelBuilder.Entity("api.ImageStorage.Models.TournamentImageIndex", b =>
                 {
                     b.Property<int>("Id")
@@ -78,6 +591,9 @@ namespace api.Migrations
 
                     b.Property<string>("CurrentMap")
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("CurrentNumPlayers")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("DiscordUrl")
                         .HasColumnType("TEXT");
@@ -791,8 +1307,14 @@ namespace api.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("LeaderUserId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Tag")
                         .HasColumnType("TEXT");
 
                     b.Property<int>("TournamentId")
@@ -801,6 +1323,8 @@ namespace api.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedAt");
+
+                    b.HasIndex("LeaderUserId");
 
                     b.HasIndex("TournamentId");
 
@@ -813,11 +1337,27 @@ namespace api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("IsTeamLeader")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("JoinedAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("PlayerName")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("RulesAcknowledged")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RulesAcknowledgedAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("TournamentTeamId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("UserId")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
@@ -825,6 +1365,8 @@ namespace api.Migrations
                     b.HasIndex("PlayerName");
 
                     b.HasIndex("TournamentTeamId");
+
+                    b.HasIndex("UserId");
 
                     b.HasIndex("TournamentTeamId", "PlayerName")
                         .IsUnique();
@@ -1345,11 +1887,18 @@ namespace api.Migrations
 
             modelBuilder.Entity("api.PlayerTracking.TournamentTeam", b =>
                 {
+                    b.HasOne("api.PlayerTracking.User", "Leader")
+                        .WithMany()
+                        .HasForeignKey("LeaderUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("api.PlayerTracking.Tournament", "Tournament")
                         .WithMany("TournamentTeams")
                         .HasForeignKey("TournamentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Leader");
 
                     b.Navigation("Tournament");
                 });
@@ -1368,9 +1917,16 @@ namespace api.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("api.PlayerTracking.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Player");
 
                     b.Navigation("TournamentTeam");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("api.PlayerTracking.TournamentTeamRanking", b =>

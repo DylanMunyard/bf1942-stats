@@ -1,12 +1,15 @@
 using api.Gamification.Models;
-using api.ClickHouse.Models;
+using api.Analytics.Models;
+using api.PlayerTracking;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace api.Gamification.Services;
 
 public class KillStreakDetector(
-    ClickHouseGamificationService readService,
+    SqliteGamificationService readService,
     BadgeDefinitionsService badgeService,
+    PlayerTrackerDbContext dbContext,
     ILogger<KillStreakDetector> logger)
 {
 
@@ -83,8 +86,8 @@ public class KillStreakDetector(
     }
 
     /// <summary>
-    /// Calculate kill streaks using ClickHouse player_metrics data
-    /// This provides accurate and granular streak detection
+    /// Calculate kill streaks using player observation data.
+    /// This provides accurate and granular streak detection.
     /// </summary>
     private async Task<List<Achievement>> CalculateKillStreaksFromPlayerMetricsAsync(PlayerRound round)
     {
@@ -143,7 +146,7 @@ public class KillStreakDetector(
                             Version = streakInstance.AchievedAt  // Use achieved_at as deterministic version for idempotency
                         });
 
-                        logger.LogInformation("ClickHouse kill streak achievement: {PlayerName} achieved {AchievementName} with {Threshold} kills at {AchievementTime}",
+                        logger.LogInformation("Kill streak achievement: {PlayerName} achieved {AchievementName} with {Threshold} kills at {AchievementTime}",
                             round.PlayerName, badgeDefinition.Name, streakInstance.Threshold, streakInstance.AchievedAt);
                     }
                 }
@@ -159,8 +162,7 @@ public class KillStreakDetector(
     }
 
     /// <summary>
-    /// Get player metrics data for a round using the round start/end times and server/map context
-    /// Uses ADO.NET with proper parameterized queries for security
+    /// Get player metrics data for a round using SQLite PlayerObservations.
     /// </summary>
     private async Task<List<PlayerMetric>> GetPlayerMetricsForRoundAsync(PlayerRound round)
     {
@@ -174,33 +176,33 @@ public class KillStreakDetector(
             var searchStartTime = roundStartTime.AddMinutes(-bufferMinutes);
             var searchEndTime = roundEndTime.AddMinutes(bufferMinutes);
 
-            // Use the existing ClickHouseGamificationService to get the player metrics
-            // This ensures we use ADO.NET with proper parameterized queries
-            var playerMetricPoints = await readService.GetPlayerMetricsForRoundAsync(
-                round.PlayerName,
-                round.ServerGuid,
-                round.MapName,
-                searchStartTime,
-                searchEndTime);
+            // Query PlayerObservations from SQLite for this player's session
+            var observations = await dbContext.PlayerObservations
+                .Where(po => po.Session.PlayerName == round.PlayerName &&
+                            po.Session.ServerGuid == round.ServerGuid &&
+                            po.Session.MapName == round.MapName &&
+                            po.Timestamp >= searchStartTime &&
+                            po.Timestamp <= searchEndTime)
+                .OrderBy(po => po.Timestamp)
+                .Select(po => new PlayerMetric
+                {
+                    Timestamp = po.Timestamp,
+                    Kills = (ushort)po.Kills,
+                    Deaths = (ushort)po.Deaths,
+                    PlayerName = round.PlayerName
+                })
+                .ToListAsync();
 
-            var results = playerMetricPoints.Select(p => new PlayerMetric
-            {
-                Timestamp = p.Timestamp,
-                Kills = p.Kills,
-                Deaths = p.Deaths,
-                PlayerName = round.PlayerName
-            }).ToList();
+            logger.LogDebug("Retrieved {Count} player observations for {PlayerName} round {RoundId}",
+                observations.Count, round.PlayerName, round.RoundId);
 
-            logger.LogDebug("Retrieved {Count} player metrics for {PlayerName} round {RoundId}",
-                results.Count, round.PlayerName, round.RoundId);
-
-            return results;
+            return observations;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error fetching player metrics for round {RoundId}, player {PlayerName}",
+            logger.LogError(ex, "Error fetching player observations for round {RoundId}, player {PlayerName}",
                 round.RoundId, round.PlayerName);
-            return new List<PlayerMetric>();
+            return [];
         }
     }
 
@@ -260,7 +262,7 @@ public class KillStreakDetector(
     }
 
     /// <summary>
-    /// Simple PlayerMetric class for ClickHouse queries
+    /// Simple PlayerMetric class for streak calculations
     /// </summary>
     private class PlayerMetric
     {

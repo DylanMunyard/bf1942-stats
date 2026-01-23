@@ -101,7 +101,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=~\"bf42-stats|clickhouse\"}\n* on(namespace,pod)\n  group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"bf42-stats|clickhouse\", workload_type=~\"deployment\"}\n) by (workload, workload_type)",
+          "expr": "sum(\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_rate5m{namespace=~\"bf42-stats\"}\n* on(namespace,pod)\n  group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"bf42-stats\", workload_type=~\"deployment\"}\n) by (workload, workload_type)",
           "legendFormat": "{{workload}}",
           "range": true,
           "refId": "A"
@@ -194,7 +194,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(\n  container_memory_working_set_bytes{job=\"kubelet\", metrics_path=\"/metrics/cadvisor\", container!=\"\", image!=\"\", namespace=~\"bf42-stats|clickhouse\"}\n* on(namespace,pod)\n  group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"bf42-stats|clickhouse\"}\n) by (workload, namespace)",
+          "expr": "sum(\n  container_memory_working_set_bytes{job=\"kubelet\", metrics_path=\"/metrics/cadvisor\", container!=\"\", image!=\"\", namespace=~\"bf42-stats\"}\n* on(namespace,pod)\n  group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"bf42-stats\"}\n) by (workload, namespace)",
           "legendFormat": "{{workload}} ({{namespace}})",
           "range": true,
           "refId": "A"
@@ -695,7 +695,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(\n  container_memory_working_set_bytes{job=\"kubelet\", metrics_path=\"/metrics/cadvisor\", container!=\"\", image!=\"\", namespace=~\"bf42-stats|clickhouse\"}\n* on(namespace,pod)\n  group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"bf42-stats|clickhouse\"}\n) by (workload, namespace)",
+          "expr": "sum(\n  container_memory_working_set_bytes{job=\"kubelet\", metrics_path=\"/metrics/cadvisor\", container!=\"\", image!=\"\", namespace=~\"bf42-stats\"}\n* on(namespace,pod)\n  group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"bf42-stats\"}\n) by (workload, namespace)",
           "legendFormat": "Memory - {{workload}} ({{namespace}})",
           "range": true,
           "refId": "A"
@@ -713,96 +713,6 @@
         }
       ],
       "title": "Memory Usage vs Active Players",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "bars",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 40
-      },
-      "id": 8,
-      "options": {
-        "legend": {
-          "calcs": ["last", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum by (operation) (increase(bg_clickhouse_records_synced_total[2m]))",
-          "legendFormat": "{{operation}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "ClickHouse Records Synced per Execution",
-      "description": "Shows how many records were synced to ClickHouse each time the sync job ran. High volumes correlate with memory spikes.",
       "type": "timeseries"
     }
   ],

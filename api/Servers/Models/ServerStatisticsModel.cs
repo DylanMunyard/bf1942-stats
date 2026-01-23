@@ -276,3 +276,11 @@ public class ServerLeaderboards
     public List<PlacementLeaderboardEntry>? WeightedTopPlacements { get; set; } = null;
     public int? MinPlayersForWeighting { get; set; } // The minimum player count used for weighting
 }
+
+// Server ranking by total playtime (API response model)
+public class ServerRank
+{
+    public string ServerGuid { get; set; } = "";
+    public int Rank { get; set; }
+    public double TotalPlayTimeMinutes { get; set; }
+}

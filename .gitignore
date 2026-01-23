@@ -295,7 +295,4 @@ playertracker.db-wal
 # Tournament images uploaded via FileBrowser in local development
 tournament-images/
 
-# Clickhouse docker volumes
-clickhouse-backups
-clickhouse-data
 

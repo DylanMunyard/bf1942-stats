@@ -57,21 +57,9 @@ spec:
               value: "http://tempo.monitoring:3200"
             - name: OTLP_ENDPOINT
               value: "http://tempo.monitoring:4318/v1/traces"
-            - name: CLICKHOUSE_URL
-              value: "http://clickhouse-service.clickhouse:8123"
-            - name: CLICKHOUSE_WRITE_URL
-              value: "http://clickhouse-service.clickhouse:8123"
-            - name: PLAYER_ROUNDS_BATCH_SIZE
-              value: "100000"
             - name: REDIS_CONNECTION_STRING
               value: "redis-service.bf42-stats:6379"
-            - name: ENABLE_CLICKHOUSE_ROUND_SYNCING
-              value: "true"
             - name: ENABLE_GAMIFICATION_PROCESSING
-              value: "true"
-            - name: ENABLE_PLAYER_METRICS_SYNCING
-              value: "true"
-            - name: ENABLE_SERVER_ONLINE_COUNTS_SYNCING
               value: "true"
             - name: GAMIFICATION_MAX_CONCURRENT_ROUNDS
               value: "10"

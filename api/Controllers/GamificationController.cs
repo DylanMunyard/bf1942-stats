@@ -93,6 +93,48 @@ public class GamificationController(
     }
 
     /// <summary>
+    /// Get hero achievements for a player (latest milestone + 5 recent achievements with full details)
+    /// </summary>
+    [HttpGet("player/{playerName}/hero-achievements")]
+    public async Task<ActionResult<List<Achievement>>> GetPlayerHeroAchievements(string playerName)
+    {
+        if (string.IsNullOrWhiteSpace(playerName))
+            return BadRequest("Player name is required");
+
+        try
+        {
+            var heroAchievements = await gamificationService.GetPlayerHeroAchievementsAsync(playerName);
+            return Ok(heroAchievements);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error getting hero achievements for player {PlayerName}", playerName);
+            return StatusCode(500, "An internal server error occurred while retrieving player hero achievements.");
+        }
+    }
+
+    /// <summary>
+    /// Get grouped achievement counts for a player
+    /// </summary>
+    [HttpGet("player/{playerName}/achievement-groups")]
+    public async Task<ActionResult<List<PlayerAchievementGroup>>> GetPlayerAchievementGroups(string playerName)
+    {
+        if (string.IsNullOrWhiteSpace(playerName))
+            return BadRequest("Player name is required");
+
+        try
+        {
+            var groups = await gamificationService.GetPlayerAchievementGroupsAsync(playerName);
+            return Ok(groups);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error getting grouped achievements for player {PlayerName}", playerName);
+            return StatusCode(500, "An internal server error occurred while retrieving player achievements.");
+        }
+    }
+
+    /// <summary>
     /// Get leaderboard for specific category
     /// </summary>
     [HttpGet("leaderboard/{category}")]
@@ -199,39 +241,6 @@ public class GamificationController(
         }
     }
 
-
-    /// <summary>
-    /// Trigger historical data processing (admin only)
-    /// </summary>
-    [HttpPost("admin/process-historical")]
-    public Task<ActionResult> ProcessHistoricalData(
-        [FromQuery] DateTime? fromDate = null,
-        [FromQuery] DateTime? toDate = null)
-    {
-        try
-        {
-            // This is a long-running operation, so we'll run it in the background
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await gamificationService.ProcessHistoricalDataAsync(fromDate, toDate);
-                    logger.LogInformation("Historical gamification processing completed");
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Error during historical gamification processing");
-                }
-            });
-
-            return Task.FromResult<ActionResult>(Accepted("Historical processing started. Check logs for progress."));
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error starting historical processing");
-            return Task.FromResult<ActionResult>(StatusCode(500, "An internal server error occurred while starting historical processing."));
-        }
-    }
 
     /* 
         /// <summary>

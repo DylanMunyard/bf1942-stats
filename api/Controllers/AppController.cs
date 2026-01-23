@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using api.Gamification.Services;
 using api.Caching;
-using api.ClickHouse;
-using api.ClickHouse.Interfaces;
 using api.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -13,10 +11,8 @@ namespace api.Controllers;
 [Route("stats/[controller]")]
 public class AppController(
     IBadgeDefinitionsService badgeDefinitionsService,
-    IGameTrendsService gameTrendsService,
     ICacheService cacheService,
     ILogger<AppController> logger,
-    IClickHouseReader clickHouseReader,
     PlayerTrackerDbContext dbContext) : ControllerBase
 {
 
@@ -154,7 +150,7 @@ public class AppController(
     }
 
     /// <summary>
-    /// Get system statistics showing data volume metrics from ClickHouse and SQLite
+    /// Get system statistics showing data volume metrics
     /// </summary>
     [HttpGet("systemstats")]
     [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Any, VaryByHeader = "Accept")]
@@ -173,20 +169,13 @@ public class AppController(
             }
 
             // Execute all count queries in parallel for maximum performance
-            var roundsCountTask = GetClickHouseCountAsync("player_rounds", "Rounds Tracked");
-            var metricsCountTask = GetClickHouseCountAsync("player_metrics", "Player Metrics Tracked");
             var serversCountTask = dbContext.Servers.CountAsync();
             var playersCountTask = dbContext.Players.CountAsync();
 
-            await Task.WhenAll(roundsCountTask, metricsCountTask, serversCountTask, playersCountTask);
+            await Task.WhenAll(serversCountTask, playersCountTask);
 
             var stats = new SystemStats
             {
-                ClickHouseMetrics = new ClickHouseMetrics
-                {
-                    RoundsTracked = roundsCountTask.Result,
-                    PlayerMetricsTracked = metricsCountTask.Result
-                },
                 SqliteMetrics = new SqliteMetrics
                 {
                     ServersTracked = serversCountTask.Result,
@@ -199,9 +188,7 @@ public class AppController(
             await cacheService.SetAsync(cacheKey, stats, TimeSpan.FromMinutes(5));
 
             logger.LogInformation(
-                "Generated system stats: {RoundsCount} rounds, {MetricsCount} metrics, {ServersCount} servers, {PlayersCount} players",
-                stats.ClickHouseMetrics.RoundsTracked,
-                stats.ClickHouseMetrics.PlayerMetricsTracked,
+                "Generated system stats: {ServersCount} servers, {PlayersCount} players",
                 stats.SqliteMetrics.ServersTracked,
                 stats.SqliteMetrics.PlayersTracked);
 
@@ -214,31 +201,6 @@ public class AppController(
         }
     }
 
-    /// <summary>
-    /// Helper method to execute COUNT(*) queries against ClickHouse tables
-    /// </summary>
-    private async Task<long> GetClickHouseCountAsync(string tableName, string metricDescription)
-    {
-        try
-        {
-            var query = $"SELECT COUNT(*) FROM {tableName}";
-            var result = await clickHouseReader.ExecuteQueryAsync(query);
-
-            // ClickHouse returns the count as a plain number in the response
-            if (long.TryParse(result.Trim(), out var count))
-            {
-                return count;
-            }
-
-            logger.LogWarning("Failed to parse ClickHouse count for {Table}: {Result}", tableName, result);
-            return 0;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error getting count from ClickHouse table {Table}", tableName);
-            return 0;
-        }
-    }
 }
 
 /// <summary>
@@ -282,25 +244,8 @@ public class BadgeUIDefinition
 /// </summary>
 public class SystemStats
 {
-    public ClickHouseMetrics ClickHouseMetrics { get; set; } = new();
     public SqliteMetrics SqliteMetrics { get; set; } = new();
     public DateTime GeneratedAt { get; set; }
-}
-
-/// <summary>
-/// Metrics from ClickHouse analytical database
-/// </summary>
-public class ClickHouseMetrics
-{
-    /// <summary>
-    /// Total number of player rounds tracked in the player_rounds table
-    /// </summary>
-    public long RoundsTracked { get; set; }
-
-    /// <summary>
-    /// Total number of player metrics snapshots in the player_metrics table
-    /// </summary>
-    public long PlayerMetricsTracked { get; set; }
 }
 
 /// <summary>

@@ -87,4 +87,14 @@ public interface IServerStatsService
         string sortBy,
         string sortOrder,
         ServerFilters filters);
+
+    /// <summary>
+    /// Gets server rankings by total playtime for the last N days.
+    /// </summary>
+    /// <param name="serverGuids">List of server GUIDs to get rankings for.</param>
+    /// <param name="days">Number of days to look back (default: 30).</param>
+    /// <returns>List of server rankings with total playtime.</returns>
+    Task<List<ServerRank>> GetServerRankingsByPlaytimeAsync(
+        IEnumerable<string> serverGuids,
+        int days = 30);
 }

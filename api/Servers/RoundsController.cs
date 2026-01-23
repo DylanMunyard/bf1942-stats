@@ -106,9 +106,6 @@ public class RoundsController(
 
             var result = await roundsService.GetRounds(page, pageSize, sortBy, sortOrder, filters, includeTopPlayers, onlySpecifiedPlayers);
 
-            if (result.TotalItems == 0)
-                return NotFound("No rounds found with the specified filters");
-
             return Ok(result);
         }
         catch (ArgumentException ex)
@@ -126,7 +123,7 @@ public class RoundsController(
     [HttpGet("{roundId}/report")]
     public async Task<ActionResult<SessionRoundReport>> GetRoundReport(
         string roundId,
-        [FromServices] Gamification.Services.ClickHouseGamificationService gamificationService)
+        [FromServices] Gamification.Services.SqliteGamificationService gamificationService)
     {
         if (string.IsNullOrWhiteSpace(roundId))
             return BadRequest("Round ID is required");

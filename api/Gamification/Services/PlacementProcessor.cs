@@ -66,13 +66,11 @@ public class RoundWithTopPlayers
 public class PlacementProcessor
 {
     private readonly PlayerTrackerDbContext _dbContext;
-    private readonly ClickHouseGamificationService _clickHouseService;
     private readonly ILogger<PlacementProcessor> _logger;
 
-    public PlacementProcessor(PlayerTrackerDbContext dbContext, ClickHouseGamificationService clickHouseService, ILogger<PlacementProcessor> logger)
+    public PlacementProcessor(PlayerTrackerDbContext dbContext, ILogger<PlacementProcessor> logger)
     {
         _dbContext = dbContext;
-        _clickHouseService = clickHouseService;
         _logger = logger;
     }
 

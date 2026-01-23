@@ -84,9 +84,9 @@ The player details API (`GET /stats/players/{playerName}`) now returns enhanced 
    - `totalRounds` - Number of rounds played on that server
    - `daysToAchieve` - Days taken to reach each kill milestone
 
-## ClickHouse Integration:
+## SQLite Integration:
 
-The new insights use ClickHouse queries for efficient aggregation across large datasets:
+The new insights use SQLite queries with precomputed aggregates:
 - Milestone tracking uses window functions to calculate cumulative kills over time
-- Server insights aggregate data from the `player_rounds` table
+- Server insights aggregate data from the analytics tables
 - Minimum 10-hour threshold ensures meaningful statistics
