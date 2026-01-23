@@ -926,6 +926,12 @@ public class PlayerTrackerDbContext : DbContext
 
     private static Instant ParseInstant(string value)
     {
+        // Handle empty strings from database corruption - treat as epoch (1970-01-01)
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return Instant.FromUnixTimeSeconds(0);
+        }
+
         var extended = InstantExtendedIsoPattern.Parse(value);
         if (extended.Success)
         {
