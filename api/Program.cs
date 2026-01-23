@@ -401,11 +401,26 @@ try
         Log.Information("Using default database path: {DbPath}", dbPath);
     }
 
-    // Configure SQLite
-    builder.Services.AddDbContext<PlayerTrackerDbContext>(options =>
-        options.UseSqlite($"Data Source={dbPath}")
-               .EnableSensitiveDataLogging(false)  // Disable sensitive data logging
-               .LogTo(message => { }, LogLevel.Warning)); // Only log warnings and errors
+    // Configure SQLite with proper connection settings to prevent locking issues
+    // - busy_timeout: Wait up to 5 seconds for locks instead of failing immediately (via interceptor)
+    // - journal_mode: WAL provides better concurrent read/write performance
+    var connectionString = $"Data Source={dbPath}";
+
+    // Register the connection interceptor as a singleton so it can be injected into DbContext
+    builder.Services.AddSingleton<SqliteConnectionInterceptor>();
+
+    builder.Services.AddDbContext<PlayerTrackerDbContext>((serviceProvider, options) =>
+    {
+        var interceptor = serviceProvider.GetRequiredService<SqliteConnectionInterceptor>();
+        
+        options.UseSqlite(connectionString, sqliteOptions =>
+        {
+            sqliteOptions.CommandTimeout(60); // 60 second command timeout
+        })
+        .AddInterceptors(interceptor)
+        .EnableSensitiveDataLogging(false)
+        .LogTo(message => { }, LogLevel.Warning);
+    });
 
     // Register bot detection service
     builder.Services.AddSingleton<IBotDetectionService, BotDetectionService>();
@@ -609,10 +624,34 @@ try
             // Apply EF Core migrations for SQLite
             dbContext.Database.Migrate();
             logger.LogInformation("SQLite database migrations applied successfully");
+
+            // Configure SQLite PRAGMAs for optimal performance and to prevent locking issues
+            // These need to be set after the connection is established
+            var connection = dbContext.Database.GetDbConnection();
+            await connection.OpenAsync();
+            
+            using var command = connection.CreateCommand();
+            
+            // Set busy_timeout to 5 seconds - wait for locks instead of failing immediately
+            command.CommandText = "PRAGMA busy_timeout = 5000;";
+            await command.ExecuteNonQueryAsync();
+            logger.LogInformation("SQLite busy_timeout set to 5000ms");
+            
+            // Ensure WAL mode is enabled for better concurrent access
+            command.CommandText = "PRAGMA journal_mode = WAL;";
+            var journalMode = await command.ExecuteScalarAsync();
+            logger.LogInformation("SQLite journal_mode: {JournalMode}", journalMode);
+            
+            // Checkpoint WAL to ensure clean state (important after database restore)
+            command.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
+            await command.ExecuteNonQueryAsync();
+            logger.LogInformation("SQLite WAL checkpoint completed");
+            
+            await connection.CloseAsync();
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "An error occurred while applying SQLite migrations");
+            logger.LogError(ex, "An error occurred while applying SQLite migrations or configuring PRAGMAs");
         }
 
     }
