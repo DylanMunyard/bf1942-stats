@@ -9,6 +9,7 @@ namespace api.Controllers;
 
 [ApiController]
 [Route("stats/tournaments")]
+[Route("stats/t")]
 public class PublicTournamentController(
     PlayerTrackerDbContext context,
     ILogger<PublicTournamentController> logger) : ControllerBase
@@ -266,11 +267,20 @@ public class PublicTournamentController(
             }
             else
             {
-                // If not a number, search by name
+                // If not a number, try slug first (more specific), then fall back to name
                 tournament = await context.Tournaments
                     .Include(t => t.Server)
                     .Include(t => t.Theme)
-                    .FirstOrDefaultAsync(t => t.Name == idOrName);
+                    .FirstOrDefaultAsync(t => t.Slug == idOrName);
+
+                // If no slug match, search by name
+                if (tournament == null)
+                {
+                    tournament = await context.Tournaments
+                        .Include(t => t.Server)
+                        .Include(t => t.Theme)
+                        .FirstOrDefaultAsync(t => t.Name == idOrName);
+                }
             }
 
             if (tournament == null)
@@ -316,6 +326,7 @@ public class PublicTournamentController(
             {
                 Id = tournament.Id,
                 Name = tournament.Name,
+                Slug = tournament.Slug,
                 Organizer = tournament.Organizer,
                 Game = tournament.Game,
                 CreatedAt = tournament.CreatedAt,
@@ -570,6 +581,7 @@ public class PublicTournamentDetailResponse
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
+    public string? Slug { get; set; }
     public string Organizer { get; set; } = "";
     public string Game { get; set; } = "";
     public Instant CreatedAt { get; set; }

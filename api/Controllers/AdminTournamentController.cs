@@ -169,6 +169,7 @@ public class AdminTournamentController(
             {
                 Id = t.Id,
                 Name = t.Name,
+                Slug = t.Slug,
                 Organizer = t.Organizer,
                 Game = t.Game,
                 CreatedAt = t.CreatedAt,
@@ -346,6 +347,7 @@ public class AdminTournamentController(
             {
                 Id = tournament.Id,
                 Name = tournament.Name,
+                Slug = tournament.Slug,
                 Organizer = tournament.Organizer,
                 Game = tournament.Game,
                 CreatedAt = tournament.CreatedAt,
@@ -436,6 +438,22 @@ public class AdminTournamentController(
                     return BadRequest(new { message = themeError });
             }
 
+            // Validate and normalize slug if provided
+            string? normalizedSlug = null;
+            if (!string.IsNullOrWhiteSpace(request.Slug))
+            {
+                var (slug, slugError) = ValidateAndNormalizeSlug(request.Slug);
+                if (slugError != null)
+                    return BadRequest(new { message = slugError });
+
+                // Check uniqueness
+                var existingTournament = await context.Tournaments.FirstOrDefaultAsync(t => t.Slug == slug);
+                if (existingTournament != null)
+                    return BadRequest(new { message = "This slug is already in use by another tournament." });
+
+                normalizedSlug = slug;
+            }
+
             // Validate and store rules as markdown
             string? sanitizedRules = null;
             if (!string.IsNullOrWhiteSpace(request.Rules))
@@ -490,6 +508,7 @@ public class AdminTournamentController(
             var tournament = new Tournament
             {
                 Name = request.Name,
+                Slug = normalizedSlug,
                 Organizer = request.Organizer,
                 Game = request.Game.ToLower(),
                 CreatedAt = SystemClock.Instance.GetCurrentInstant(),
@@ -596,6 +615,30 @@ public class AdminTournamentController(
 
             if (!string.IsNullOrWhiteSpace(request.Name))
                 tournament.Name = request.Name;
+
+            // Handle slug updates
+            if (request.Slug != null)
+            {
+                if (string.IsNullOrWhiteSpace(request.Slug))
+                {
+                    // Allow clearing slug by setting to empty string
+                    tournament.Slug = null;
+                }
+                else
+                {
+                    var (slug, slugError) = ValidateAndNormalizeSlug(request.Slug);
+                    if (slugError != null)
+                        return BadRequest(new { message = slugError });
+
+                    // Check uniqueness excluding current tournament
+                    var existingTournament = await context.Tournaments
+                        .FirstOrDefaultAsync(t => t.Slug == slug && t.Id != id);
+                    if (existingTournament != null)
+                        return BadRequest(new { message = "This slug is already in use by another tournament." });
+
+                    tournament.Slug = slug;
+                }
+            }
 
             if (!string.IsNullOrWhiteSpace(request.Organizer))
             {
@@ -1297,6 +1340,35 @@ public class AdminTournamentController(
         return len == 4 || len == 5 || len == 7 || len == 9;
     }
 
+    private static readonly System.Text.RegularExpressions.Regex SlugPattern =
+        new(@"^[a-z0-9]+(-[a-z0-9]+)*$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// Validates and normalizes a tournament slug.
+    /// Returns normalized slug (lowercase, trimmed) and any error message.
+    /// </summary>
+    private (string? normalizedSlug, string? error) ValidateAndNormalizeSlug(string? slug)
+    {
+        if (string.IsNullOrWhiteSpace(slug))
+            return (null, null);
+
+        // Normalize: trim and lowercase
+        var normalized = slug.Trim().ToLowerInvariant();
+
+        // Check length
+        if (normalized.Length < 3)
+            return (null, "Slug must be at least 3 characters.");
+
+        if (normalized.Length > 100)
+            return (null, "Slug must be at most 100 characters.");
+
+        // Validate format
+        if (!SlugPattern.IsMatch(normalized))
+            return (null, "Slug must contain only lowercase letters, numbers, and hyphens. Cannot start or end with a hyphen.");
+
+        return (normalized, null);
+    }
+
     /// <summary>
     /// Helper method to trigger async ranking recalculation for a tournament.
     /// Encapsulates the common pattern used across multiple endpoints.
@@ -1409,6 +1481,7 @@ public class AdminTournamentController(
         {
             Id = tournament.Id,
             Name = tournament.Name,
+            Slug = tournament.Slug,
             Organizer = tournament.Organizer,
             Game = tournament.Game,
             CreatedAt = tournament.CreatedAt,
@@ -3447,6 +3520,7 @@ public class TournamentThemeResponse
 public class CreateTournamentRequest
 {
     public string Name { get; set; } = "";
+    public string? Slug { get; set; }
     public string Organizer { get; set; } = "";
     public string Game { get; set; } = "";
     public int? AnticipatedRoundCount { get; set; }
@@ -3469,6 +3543,7 @@ public class CreateTournamentRequest
 public class UpdateTournamentRequest
 {
     public string? Name { get; set; }
+    public string? Slug { get; set; }
     public string? Organizer { get; set; }
     public string? Game { get; set; }
     public int? AnticipatedRoundCount { get; set; }
@@ -3550,6 +3625,7 @@ public class TournamentListResponse
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
+    public string? Slug { get; set; }
     public string Organizer { get; set; } = "";
     public string Game { get; set; } = "";
     public Instant CreatedAt { get; set; }
@@ -3572,6 +3648,7 @@ public class TournamentDetailResponse
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
+    public string? Slug { get; set; }
     public string Organizer { get; set; } = "";
     public string Game { get; set; } = "";
     public Instant CreatedAt { get; set; }

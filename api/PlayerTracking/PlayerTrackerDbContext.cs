@@ -298,6 +298,15 @@ public class PlayerTrackerDbContext : DbContext
         modelBuilder.Entity<Tournament>()
             .HasIndex(t => t.Game);
 
+        // Unique index on Slug (allowing nulls)
+        modelBuilder.Entity<Tournament>()
+            .HasIndex(t => t.Slug)
+            .IsUnique();
+
+        modelBuilder.Entity<Tournament>()
+            .Property(t => t.Slug)
+            .HasMaxLength(100);
+
         // Configure relationship: Tournament -> User (CreatedBy)
         modelBuilder.Entity<Tournament>()
             .HasOne(t => t.CreatedByUser)
@@ -1182,6 +1191,7 @@ public class Tournament
 {
     public int Id { get; set; }
     public string Name { get; set; } = "";
+    public string? Slug { get; set; } // URL-friendly identifier, max 100 chars
     public string Organizer { get; set; } = ""; // References Player.Name
     public string Game { get; set; } = ""; // bf1942, fh2, bfvietnam
     public Instant CreatedAt { get; set; }
