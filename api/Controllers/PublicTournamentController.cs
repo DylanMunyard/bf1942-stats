@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using api.PlayerTracking;
@@ -27,32 +28,56 @@ public class PublicTournamentController(
     }
 
     /// <summary>
-    /// Load all teams and their players for a tournament
+    /// Load all teams and their players for a tournament.
+    /// If a userId is provided, pending members that match the user or are on the user's led team will be included.
     /// </summary>
-    private async Task<List<PublicTournamentTeamResponse>> GetTeamsAsync(int tournamentId)
+    private async Task<List<PublicTournamentTeamResponse>> GetTeamsAsync(int tournamentId, int? currentUserId = null)
     {
-        // Load teams for this tournament
+        // Load teams for this tournament (including LeaderUserId for visibility logic)
         var teams = await context.TournamentTeams
             .Where(tt => tt.TournamentId == tournamentId)
-            .Select(tt => new { tt.Id, tt.Name, tt.Tag, tt.CreatedAt, tt.RecruitmentStatus })
+            .Select(tt => new { tt.Id, tt.Name, tt.Tag, tt.CreatedAt, tt.RecruitmentStatus, tt.LeaderUserId })
             .ToListAsync();
 
         var teamIds = teams.Select(t => t.Id).ToList();
 
-        // Batch load all team players with leader info
-        var teamPlayers = teamIds.Count > 0
+        // Batch load all team players with full info for visibility filtering
+        var allTeamPlayers = teamIds.Count > 0
             ? await context.TournamentTeamPlayers
                 .Where(ttp => teamIds.Contains(ttp.TournamentTeamId))
-                .Select(ttp => new { ttp.TournamentTeamId, ttp.PlayerName, ttp.IsTeamLeader })
+                .Select(ttp => new { 
+                    ttp.TournamentTeamId, 
+                    ttp.PlayerName, 
+                    ttp.IsTeamLeader, 
+                    ttp.UserId, 
+                    ttp.MembershipStatus 
+                })
                 .ToListAsync()
             : [];
 
-        var teamPlayersLookup = teamPlayers
+        // Determine which team the current user leads (if any)
+        int? userLedTeamId = currentUserId.HasValue
+            ? teams.FirstOrDefault(t => t.LeaderUserId == currentUserId)?.Id
+            : null;
+
+        // Filter players based on visibility rules:
+        // - Always show approved members
+        // - Show pending member if it's the current user
+        // - Show all pending members if current user is the team leader
+        var visibleTeamPlayers = allTeamPlayers
+            .Where(ttp => 
+                ttp.MembershipStatus == TeamMembershipStatus.Approved ||
+                (currentUserId.HasValue && ttp.UserId == currentUserId) ||
+                (userLedTeamId.HasValue && ttp.TournamentTeamId == userLedTeamId))
+            .ToList();
+
+        var teamPlayersLookup = visibleTeamPlayers
             .GroupBy(tp => tp.TournamentTeamId)
             .ToDictionary(
                 g => g.Key,
                 g => g.OrderByDescending(x => x.IsTeamLeader)
-                      .Select(x => new { x.PlayerName, x.IsTeamLeader })
+                      .ThenBy(x => x.MembershipStatus) // Approved first, then Pending
+                      .Select(x => new { x.PlayerName, x.IsTeamLeader, x.MembershipStatus })
                       .ToList());
 
         // Build team responses
@@ -73,7 +98,8 @@ public class PublicTournamentController(
                     .Select(p => new PublicTournamentTeamPlayerResponse
                     {
                         PlayerName = p.PlayerName,
-                        IsLeader = p.IsTeamLeader
+                        IsLeader = p.IsTeamLeader,
+                        MembershipStatus = p.MembershipStatus
                     })
                     .ToList()
             };
@@ -221,7 +247,7 @@ public class PublicTournamentController(
     }
 
     /// <summary>
-    /// Get tournament details by ID or name (public, no auth required)
+    /// Get tournament details by ID or name (public, no auth required but auth is used for visibility of pending members)
     /// </summary>
     [HttpGet("{idOrName}")]
     public async Task<ActionResult<PublicTournamentDetailResponse>> GetTournament(string idOrName)
@@ -256,8 +282,17 @@ public class PublicTournamentController(
 
             var tournamentId = tournament.Id;
 
+            // Try to get current user ID for visibility of pending members (optional auth)
+            int? currentUserId = null;
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                var user = await context.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
+                currentUserId = user?.Id;
+            }
+
             // Parallelize independent DB operations: teams, matches, and files
-            var teamsTask = GetTeamsAsync(tournamentId);
+            var teamsTask = GetTeamsAsync(tournamentId, currentUserId);
             var matchesTask = GetMatchesAsync(tournamentId);
             var filesTask = GetFilesAsync(tournamentId);
 
@@ -573,6 +608,10 @@ public class PublicTournamentTeamPlayerResponse
 {
     public string PlayerName { get; set; } = "";
     public bool IsLeader { get; set; }
+    /// <summary>
+    /// Membership status: 0=Pending, 1=Approved. Pending members are only visible to themselves and their team leader.
+    /// </summary>
+    public TeamMembershipStatus MembershipStatus { get; set; } = TeamMembershipStatus.Approved;
 }
 
 public class PublicTournamentMatchResponse

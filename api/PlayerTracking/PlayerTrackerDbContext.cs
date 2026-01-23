@@ -1234,6 +1234,18 @@ public enum TeamRecruitmentStatus
     LookingForBTeam = 2
 }
 
+
+/// <summary>
+/// Membership status for team players - whether their membership is approved by the leader
+/// </summary>
+public enum TeamMembershipStatus
+{
+    /// <summary>Player has joined but awaiting leader approval</summary>
+    Pending = 0,
+    /// <summary>Player membership is approved</summary>
+    Approved = 1
+}
+
 public class TournamentTeam
 {
     public int Id { get; set; }
@@ -1313,6 +1325,11 @@ public class TournamentTeamPlayer
     public bool RulesAcknowledged { get; set; } = false;
     public Instant? RulesAcknowledgedAt { get; set; }
     public Instant JoinedAt { get; set; }
+
+    /// <summary>
+    /// Membership status - whether the player is pending approval or approved
+    /// </summary>
+    public TeamMembershipStatus MembershipStatus { get; set; } = TeamMembershipStatus.Approved;
 
     // Navigation properties
     public TournamentTeam TournamentTeam { get; set; } = null!;

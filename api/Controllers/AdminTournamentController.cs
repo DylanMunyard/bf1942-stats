@@ -1670,10 +1670,12 @@ public class AdminTournamentController(
             if (playerInOtherTeam)
                 return BadRequest(new { message = $"Player '{request.PlayerName}' is already in another team in this tournament" });
 
+            // Admin-added players are auto-approved
             var teamPlayer = new TournamentTeamPlayer
             {
                 TournamentTeamId = teamId,
-                PlayerName = request.PlayerName
+                PlayerName = request.PlayerName,
+                MembershipStatus = TeamMembershipStatus.Approved
             };
 
             context.TournamentTeamPlayers.Add(teamPlayer);

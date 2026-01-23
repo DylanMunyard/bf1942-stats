@@ -1,3 +1,4 @@
+using api.PlayerTracking;
 using NodaTime;
 
 namespace api.Gamification.Models;
@@ -23,4 +24,8 @@ public record TeamMembershipInfo
     public bool IsLeader { get; init; }
     public string PlayerName { get; init; } = "";
     public Instant JoinedAt { get; init; }
+    /// <summary>
+    /// Membership status: 0=Pending, 1=Approved
+    /// </summary>
+    public TeamMembershipStatus MembershipStatus { get; init; }
 }

@@ -46,7 +46,7 @@ public class TeamLeaderController(
 
             var team = membership.TournamentTeam;
 
-            // Get all team players
+            // Get all team players (including pending - leader sees all)
             var players = await context.TournamentTeamPlayers
                 .Where(ttp => ttp.TournamentTeamId == team.Id)
                 .OrderByDescending(ttp => ttp.IsTeamLeader)
@@ -57,7 +57,8 @@ public class TeamLeaderController(
                     IsLeader = ttp.IsTeamLeader,
                     RulesAcknowledged = ttp.RulesAcknowledged,
                     JoinedAt = ttp.JoinedAt,
-                    UserId = ttp.UserId
+                    UserId = ttp.UserId,
+                    MembershipStatus = ttp.MembershipStatus
                 })
                 .ToListAsync();
 
@@ -263,6 +264,7 @@ public class TeamLeaderController(
             var now = clock.GetCurrentInstant();
 
             // Add player to team (without user link - manually added by leader)
+            // Leaders adding players directly are auto-approved
             var teamPlayer = new TournamentTeamPlayer
             {
                 TournamentTeamId = team.Id,
@@ -271,7 +273,8 @@ public class TeamLeaderController(
                 IsTeamLeader = false,
                 RulesAcknowledged = false,  // Leader-added players haven't acknowledged rules
                 RulesAcknowledgedAt = null,
-                JoinedAt = now
+                JoinedAt = now,
+                MembershipStatus = TeamMembershipStatus.Approved  // Auto-approved when leader adds
             };
 
             context.TournamentTeamPlayers.Add(teamPlayer);
@@ -286,6 +289,78 @@ public class TeamLeaderController(
         {
             logger.LogError(ex, "Error adding player to team in tournament {TournamentId}", tournamentId);
             return StatusCode(500, new { message = "Error adding player" });
+        }
+    }
+
+
+    /// <summary>
+    /// Approve a pending player's membership on the team
+    /// </summary>
+    [HttpPost("players/{playerName}/approve")]
+    public async Task<IActionResult> ApprovePlayer(
+        int tournamentId,
+        string playerName)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found" });
+
+            var user = await context.Users
+                .FirstOrDefaultAsync(u => u.Email == userEmail);
+
+            if (user == null)
+                return Unauthorized(new { message = "User not found" });
+
+            // Validate tournament exists
+            var tournament = await context.Tournaments
+                .FirstOrDefaultAsync(t => t.Id == tournamentId);
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            // Find user's team membership and verify they are the leader
+            var membership = await context.TournamentTeamPlayers
+                .Include(ttp => ttp.TournamentTeam)
+                .Where(ttp => ttp.UserId == user.Id && ttp.TournamentTeam.TournamentId == tournamentId)
+                .FirstOrDefaultAsync();
+
+            if (membership == null)
+                return NotFound(new { message = "You are not on a team for this tournament" });
+
+            if (!membership.IsTeamLeader)
+                return Forbid();
+
+            var team = membership.TournamentTeam;
+
+            // URL decode the player name (it may contain special characters)
+            var decodedPlayerName = Uri.UnescapeDataString(playerName);
+
+            // Find the player to approve
+            var playerMembership = await context.TournamentTeamPlayers
+                .Where(ttp => ttp.TournamentTeamId == team.Id && ttp.PlayerName == decodedPlayerName)
+                .FirstOrDefaultAsync();
+
+            if (playerMembership == null)
+                return NotFound(new { message = "Player not found on your team" });
+
+            if (playerMembership.MembershipStatus == TeamMembershipStatus.Approved)
+                return BadRequest(new { message = "Player is already approved" });
+
+            // Approve the player
+            playerMembership.MembershipStatus = TeamMembershipStatus.Approved;
+            await context.SaveChangesAsync();
+
+            logger.LogInformation("User {UserEmail} approved player {PlayerName} on team {TeamId} in tournament {TournamentId}",
+                userEmail, decodedPlayerName, team.Id, tournamentId);
+
+            return Ok(new { message = "Player approved successfully" });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error approving player {PlayerName} in tournament {TournamentId}", playerName, tournamentId);
+            return StatusCode(500, new { message = "Error approving player" });
         }
     }
 

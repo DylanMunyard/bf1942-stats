@@ -67,7 +67,8 @@ public class TeamRegistrationController(
                     Tag = existingMembership.TournamentTeam.Tag,
                     IsLeader = existingMembership.IsTeamLeader,
                     PlayerName = existingMembership.PlayerName,
-                    JoinedAt = existingMembership.JoinedAt
+                    JoinedAt = existingMembership.JoinedAt,
+                    MembershipStatus = existingMembership.MembershipStatus
                 };
             }
 
@@ -224,7 +225,7 @@ public class TeamRegistrationController(
             context.TournamentTeams.Add(team);
             await context.SaveChangesAsync();
 
-            // Add creator as team player (leader)
+            // Add creator as team player (leader) - leaders are auto-approved
             var teamPlayer = new TournamentTeamPlayer
             {
                 TournamentTeamId = team.Id,
@@ -233,7 +234,8 @@ public class TeamRegistrationController(
                 IsTeamLeader = true,
                 RulesAcknowledged = true,
                 RulesAcknowledgedAt = now,
-                JoinedAt = now
+                JoinedAt = now,
+                MembershipStatus = TeamMembershipStatus.Approved
             };
 
             context.TournamentTeamPlayers.Add(teamPlayer);
@@ -341,6 +343,11 @@ public class TeamRegistrationController(
 
             var now = clock.GetCurrentInstant();
 
+            // Determine membership status: Pending if team has a leader, Approved if no leader
+            var membershipStatus = team.LeaderUserId.HasValue
+                ? TeamMembershipStatus.Pending
+                : TeamMembershipStatus.Approved;
+
             // Add player to team
             var teamPlayer = new TournamentTeamPlayer
             {
@@ -350,16 +357,21 @@ public class TeamRegistrationController(
                 IsTeamLeader = false,
                 RulesAcknowledged = true,
                 RulesAcknowledgedAt = now,
-                JoinedAt = now
+                JoinedAt = now,
+                MembershipStatus = membershipStatus
             };
 
             context.TournamentTeamPlayers.Add(teamPlayer);
             await context.SaveChangesAsync();
 
-            logger.LogInformation("User {UserEmail} joined team {TeamId} for tournament {TournamentId}",
-                userEmail, teamId, tournamentId);
+            var statusMessage = membershipStatus == TeamMembershipStatus.Pending
+                ? "Join request submitted. Awaiting team leader approval."
+                : "Successfully joined team";
 
-            return Ok(new { message = "Successfully joined team" });
+            logger.LogInformation("User {UserEmail} joined team {TeamId} for tournament {TournamentId} with status {Status}",
+                userEmail, teamId, tournamentId, membershipStatus);
+
+            return Ok(new { message = statusMessage, membershipStatus = (int)membershipStatus });
         }
         catch (Exception ex)
         {

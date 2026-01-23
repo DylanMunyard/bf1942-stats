@@ -26,4 +26,5 @@ public record TeamPlayerInfo
     public bool RulesAcknowledged { get; init; }
     public Instant JoinedAt { get; init; }
     public int? UserId { get; init; }
+    public TeamMembershipStatus MembershipStatus { get; init; }
 }
