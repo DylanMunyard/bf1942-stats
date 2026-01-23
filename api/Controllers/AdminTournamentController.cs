@@ -178,6 +178,7 @@ public class AdminTournamentController(
                 HasHeroImage = t.HeroImage != null,
                 HasCommunityLogo = t.CommunityLogo != null,
                 HasRules = !string.IsNullOrEmpty(t.Rules),
+                HasRegistrationRules = !string.IsNullOrEmpty(t.RegistrationRules),
                 ServerGuid = t.ServerGuid,
                 ServerName = t.Server?.Name,
                 DiscordUrl = t.DiscordUrl,
@@ -359,6 +360,7 @@ public class AdminTournamentController(
                 HasHeroImage = tournament.HeroImage != null,
                 HasCommunityLogo = tournament.CommunityLogo != null,
                 Rules = tournament.Rules,
+                RegistrationRules = tournament.RegistrationRules,
                 ServerGuid = tournament.ServerGuid,
                 ServerName = tournament.Server?.Name,
                 DiscordUrl = tournament.DiscordUrl,
@@ -448,6 +450,20 @@ public class AdminTournamentController(
                 sanitizedRules = request.Rules;
             }
 
+            // Validate and store registration rules as markdown
+            string? sanitizedRegistrationRules = null;
+            if (!string.IsNullOrWhiteSpace(request.RegistrationRules))
+            {
+                // Validate markdown for XSS risks
+                var validationResult = markdownSanitizer.ValidateMarkdown(request.RegistrationRules);
+                if (!validationResult.IsValid)
+                    return BadRequest(new { message = validationResult.Error });
+
+                // Store the raw markdown (safe to store due to validation)
+                // The UI will handle rendering the markdown
+                sanitizedRegistrationRules = request.RegistrationRules;
+            }
+
             // Validate week dates if provided
             if (request.WeekDates != null)
             {
@@ -485,6 +501,7 @@ public class AdminTournamentController(
                 CommunityLogo = communityLogoData,
                 CommunityLogoContentType = communityLogoData != null ? request.CommunityLogoContentType : null,
                 Rules = sanitizedRules,
+                RegistrationRules = sanitizedRegistrationRules,
                 ServerGuid = !string.IsNullOrWhiteSpace(request.ServerGuid) ? request.ServerGuid : null,
                 DiscordUrl = request.DiscordUrl,
                 ForumUrl = request.ForumUrl,
@@ -664,6 +681,25 @@ public class AdminTournamentController(
                 }
 
                 tournament.Rules = sanitizedRules;
+            }
+
+            if (request.RegistrationRules != null)
+            {
+                // Validate and store registration rules as markdown
+                string? sanitizedRegistrationRules = null;
+                if (!string.IsNullOrWhiteSpace(request.RegistrationRules))
+                {
+                    // Validate markdown for XSS risks
+                    var validationResult = markdownSanitizer.ValidateMarkdown(request.RegistrationRules);
+                    if (!validationResult.IsValid)
+                        return BadRequest(new { message = validationResult.Error });
+
+                    // Store the raw markdown (safe to store due to validation)
+                    // The UI will handle rendering the markdown
+                    sanitizedRegistrationRules = request.RegistrationRules;
+                }
+
+                tournament.RegistrationRules = sanitizedRegistrationRules;
             }
 
             if (request.DiscordUrl != null)
@@ -1382,6 +1418,7 @@ public class AdminTournamentController(
             HasHeroImage = tournament.HeroImage != null,
             HasCommunityLogo = tournament.CommunityLogo != null,
             Rules = tournament.Rules,
+            RegistrationRules = tournament.RegistrationRules,
             ServerGuid = tournament.ServerGuid,
             ServerName = tournament.Server?.Name,
             DiscordUrl = tournament.DiscordUrl,
@@ -3416,6 +3453,7 @@ public class CreateTournamentRequest
     public string? CommunityLogoBase64 { get; set; }
     public string? CommunityLogoContentType { get; set; }
     public string? Rules { get; set; }
+    public string? RegistrationRules { get; set; }
     public string? ServerGuid { get; set; }
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
@@ -3441,6 +3479,7 @@ public class UpdateTournamentRequest
     public string? CommunityLogoContentType { get; set; }
     public bool RemoveCommunityLogo { get; set; } = false;
     public string? Rules { get; set; }
+    public string? RegistrationRules { get; set; }
     public string? ServerGuid { get; set; }
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
@@ -3518,6 +3557,7 @@ public class TournamentListResponse
     public bool HasHeroImage { get; set; }
     public bool HasCommunityLogo { get; set; }
     public bool HasRules { get; set; }
+    public bool HasRegistrationRules { get; set; }
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
     public string? DiscordUrl { get; set; }
@@ -3544,6 +3584,7 @@ public class TournamentDetailResponse
     public bool HasHeroImage { get; set; }
     public bool HasCommunityLogo { get; set; }
     public string? Rules { get; set; }
+    public string? RegistrationRules { get; set; }
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
     public string? DiscordUrl { get; set; }

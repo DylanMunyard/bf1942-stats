@@ -293,6 +293,7 @@ public class PublicTournamentController(
                 HasHeroImage = tournament.HeroImage != null,
                 HasCommunityLogo = tournament.CommunityLogo != null,
                 Rules = tournament.Rules,
+                RegistrationRules = tournament.RegistrationRules,
                 ServerGuid = tournament.ServerGuid,
                 ServerName = tournament.Server?.Name,
                 DiscordUrl = tournament.DiscordUrl,
@@ -546,6 +547,7 @@ public class PublicTournamentDetailResponse
     public bool HasHeroImage { get; set; }
     public bool HasCommunityLogo { get; set; }
     public string? Rules { get; set; }
+    public string? RegistrationRules { get; set; }
     public string? ServerGuid { get; set; }
     public string? ServerName { get; set; }
     public string? DiscordUrl { get; set; }

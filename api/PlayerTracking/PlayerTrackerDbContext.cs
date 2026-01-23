@@ -1187,6 +1187,7 @@ public class Tournament
     public byte[]? CommunityLogo { get; set; }
     public string? CommunityLogoContentType { get; set; }
     public string? Rules { get; set; } // Markdown content for tournament rules
+    public string? RegistrationRules { get; set; } // Markdown content for tournament registration rules
     public string? ServerGuid { get; set; }
 
     // Tournament status and configuration
