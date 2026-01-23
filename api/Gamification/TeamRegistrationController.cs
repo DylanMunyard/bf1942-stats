@@ -44,6 +44,7 @@ public class TeamRegistrationController(
                 return NotFound(new { message = "Tournament not found" });
 
             var isRegistrationOpen = tournament.Status == "registration";
+            var isTournamentAdmin = tournament.CreatedByUserEmail == userEmail;
 
             // Get user's linked player names
             var linkedPlayerNames = await context.UserPlayerNames
@@ -76,7 +77,8 @@ public class TeamRegistrationController(
             {
                 IsRegistrationOpen = isRegistrationOpen,
                 LinkedPlayerNames = linkedPlayerNames,
-                TeamMembership = teamMembership
+                TeamMembership = teamMembership,
+                IsTournamentAdmin = isTournamentAdmin
             });
         }
         catch (Exception ex)

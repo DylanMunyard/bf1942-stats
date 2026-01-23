@@ -18,37 +18,72 @@ public class TeamLeaderController(
     ILogger<TeamLeaderController> logger) : ControllerBase
 {
     /// <summary>
-    /// Get current user's team details (must be team leader or member)
+    /// Helper to get the team to manage. Tournament admins can manage any team by providing teamId.
+    /// Returns (team, isLeaderOrAdmin, errorResult) - errorResult is non-null if access should be denied.
+    /// </summary>
+    private async Task<(TournamentTeam? team, bool isLeaderOrAdmin, ActionResult? errorResult)> GetTeamToManageAsync(
+        int tournamentId, 
+        int? teamId = null,
+        bool requireLeaderOrAdmin = false)
+    {
+        var userEmail = User.FindFirstValue(ClaimTypes.Email);
+        if (string.IsNullOrEmpty(userEmail))
+            return (null, false, Unauthorized(new { message = "User email not found" }));
+
+        var user = await context.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
+        if (user == null)
+            return (null, false, Unauthorized(new { message = "User not found" }));
+
+        // Check if user is tournament admin
+        var tournament = await context.Tournaments.FirstOrDefaultAsync(t => t.Id == tournamentId);
+        if (tournament == null)
+            return (null, false, NotFound(new { message = "Tournament not found" }));
+
+        var isTournamentAdmin = tournament.CreatedByUserEmail == userEmail;
+
+        // If teamId is provided and user is admin, get that specific team
+        if (teamId.HasValue && isTournamentAdmin)
+        {
+            var targetTeam = await context.TournamentTeams
+                .FirstOrDefaultAsync(t => t.Id == teamId.Value && t.TournamentId == tournamentId);
+            
+            if (targetTeam == null)
+                return (null, false, NotFound(new { message = "Team not found" }));
+
+            return (targetTeam, true, null); // Admin has leader-equivalent access
+        }
+
+        // Otherwise, find user's own team membership
+        var membership = await context.TournamentTeamPlayers
+            .Include(ttp => ttp.TournamentTeam)
+            .Where(ttp => ttp.UserId == user.Id && ttp.TournamentTeam.TournamentId == tournamentId)
+            .FirstOrDefaultAsync();
+
+        if (membership == null)
+            return (null, false, NotFound(new { message = "You are not on a team for this tournament" }));
+
+        var isLeaderOrAdmin = membership.IsTeamLeader || isTournamentAdmin;
+        
+        if (requireLeaderOrAdmin && !isLeaderOrAdmin)
+            return (null, false, Forbid());
+
+        return (membership.TournamentTeam, isLeaderOrAdmin, null);
+    }
+
+    /// <summary>
+    /// Get current user's team details (must be team member). Tournament admins can specify teamId to manage any team.
     /// </summary>
     [HttpGet]
-    public async Task<ActionResult<TeamDetailsResponse>> GetMyTeam(int tournamentId)
+    public async Task<ActionResult<TeamDetailsResponse>> GetMyTeam(int tournamentId, [FromQuery] int? teamId = null)
     {
         try
         {
-            var userEmail = User.FindFirstValue(ClaimTypes.Email);
-            if (string.IsNullOrEmpty(userEmail))
-                return Unauthorized(new { message = "User email not found" });
+            var (team, _, errorResult) = await GetTeamToManageAsync(tournamentId, teamId);
+            if (errorResult != null) return errorResult;
 
-            var user = await context.Users
-                .FirstOrDefaultAsync(u => u.Email == userEmail);
-
-            if (user == null)
-                return Unauthorized(new { message = "User not found" });
-
-            // Find user's team membership
-            var membership = await context.TournamentTeamPlayers
-                .Include(ttp => ttp.TournamentTeam)
-                .Where(ttp => ttp.UserId == user.Id && ttp.TournamentTeam.TournamentId == tournamentId)
-                .FirstOrDefaultAsync();
-
-            if (membership == null)
-                return NotFound(new { message = "You are not on a team for this tournament" });
-
-            var team = membership.TournamentTeam;
-
-            // Get all team players (including pending - leader sees all)
+            // Get all team players (including pending)
             var players = await context.TournamentTeamPlayers
-                .Where(ttp => ttp.TournamentTeamId == team.Id)
+                .Where(ttp => ttp.TournamentTeamId == team!.Id)
                 .OrderByDescending(ttp => ttp.IsTeamLeader)
                 .ThenBy(ttp => ttp.JoinedAt)
                 .Select(ttp => new TeamPlayerInfo
@@ -64,7 +99,7 @@ public class TeamLeaderController(
 
             return Ok(new TeamDetailsResponse
             {
-                TeamId = team.Id,
+                TeamId = team!.Id,
                 TeamName = team.Name,
                 Tag = team.Tag,
                 CreatedAt = team.CreatedAt,
@@ -80,51 +115,26 @@ public class TeamLeaderController(
     }
 
     /// <summary>
-    /// Update team name/tag (leader only)
+    /// Update team name/tag (leader or tournament admin)
     /// </summary>
     [HttpPut]
     public async Task<IActionResult> UpdateTeam(
         int tournamentId,
-        [FromBody] UpdateTeamRequest request)
+        [FromBody] UpdateTeamRequest request,
+        [FromQuery] int? teamId = null)
     {
         try
         {
-            var userEmail = User.FindFirstValue(ClaimTypes.Email);
-            if (string.IsNullOrEmpty(userEmail))
-                return Unauthorized(new { message = "User email not found" });
+            var (team, _, errorResult) = await GetTeamToManageAsync(tournamentId, teamId, requireLeaderOrAdmin: true);
+            if (errorResult != null) return errorResult;
 
-            var user = await context.Users
-                .FirstOrDefaultAsync(u => u.Email == userEmail);
-
-            if (user == null)
-                return Unauthorized(new { message = "User not found" });
-
-            // Validate tournament exists and is in registration status
-            var tournament = await context.Tournaments
-                .FirstOrDefaultAsync(t => t.Id == tournamentId);
-
-            if (tournament == null)
-                return NotFound(new { message = "Tournament not found" });
-
-            if (tournament.Status != "registration")
+            // Check tournament is in registration status
+            var tournament = await context.Tournaments.FirstOrDefaultAsync(t => t.Id == tournamentId);
+            if (tournament?.Status != "registration")
                 return BadRequest(new { message = "Tournament is not open for registration changes" });
 
-            // Find user's team membership and verify they are the leader
-            var membership = await context.TournamentTeamPlayers
-                .Include(ttp => ttp.TournamentTeam)
-                .Where(ttp => ttp.UserId == user.Id && ttp.TournamentTeam.TournamentId == tournamentId)
-                .FirstOrDefaultAsync();
-
-            if (membership == null)
-                return NotFound(new { message = "You are not on a team for this tournament" });
-
-            if (!membership.IsTeamLeader)
-                return Forbid();
-
-            var team = membership.TournamentTeam;
-
             // Check if new team name conflicts with existing teams
-            if (request.TeamName != team.Name)
+            if (request.TeamName != team!.Name)
             {
                 var nameExists = await context.TournamentTeams
                     .Where(tt => tt.TournamentId == tournamentId && tt.Name == request.TeamName && tt.Id != team.Id)
@@ -140,6 +150,7 @@ public class TeamLeaderController(
 
             await context.SaveChangesAsync();
 
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
             logger.LogInformation("User {UserEmail} updated team {TeamId} in tournament {TournamentId}",
                 userEmail, team.Id, tournamentId);
 
@@ -153,44 +164,25 @@ public class TeamLeaderController(
     }
 
     /// <summary>
-    /// Update team recruitment status (leader only)
+    /// Update team recruitment status (leader or tournament admin)
     /// </summary>
     [HttpPut("recruitment-status")]
     public async Task<IActionResult> UpdateRecruitmentStatus(
         int tournamentId,
-        [FromBody] UpdateRecruitmentStatusRequest request)
+        [FromBody] UpdateRecruitmentStatusRequest request,
+        [FromQuery] int? teamId = null)
     {
         try
         {
-            var userEmail = User.FindFirstValue(ClaimTypes.Email);
-            if (string.IsNullOrEmpty(userEmail))
-                return Unauthorized(new { message = "User email not found" });
-
-            var user = await context.Users
-                .FirstOrDefaultAsync(u => u.Email == userEmail);
-
-            if (user == null)
-                return Unauthorized(new { message = "User not found" });
-
-            // Find user's team membership and verify they are the leader
-            var membership = await context.TournamentTeamPlayers
-                .Include(ttp => ttp.TournamentTeam)
-                .Where(ttp => ttp.UserId == user.Id && ttp.TournamentTeam.TournamentId == tournamentId)
-                .FirstOrDefaultAsync();
-
-            if (membership == null)
-                return NotFound(new { message = "You are not on a team for this tournament" });
-
-            if (!membership.IsTeamLeader)
-                return Forbid();
-
-            var team = membership.TournamentTeam;
+            var (team, _, errorResult) = await GetTeamToManageAsync(tournamentId, teamId, requireLeaderOrAdmin: true);
+            if (errorResult != null) return errorResult;
 
             // Update recruitment status
-            team.RecruitmentStatus = request.RecruitmentStatus;
+            team!.RecruitmentStatus = request.RecruitmentStatus;
 
             await context.SaveChangesAsync();
 
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
             logger.LogInformation("User {UserEmail} updated recruitment status for team {TeamId} to {Status} in tournament {TournamentId}",
                 userEmail, team.Id, request.RecruitmentStatus, tournamentId);
 
@@ -204,48 +196,23 @@ public class TeamLeaderController(
     }
 
     /// <summary>
-    /// Add a player to the team (leader only)
+    /// Add a player to the team (leader or tournament admin)
     /// </summary>
     [HttpPost("players")]
     public async Task<IActionResult> AddPlayer(
         int tournamentId,
-        [FromBody] AddPlayerRequest request)
+        [FromBody] AddPlayerRequest request,
+        [FromQuery] int? teamId = null)
     {
         try
         {
-            var userEmail = User.FindFirstValue(ClaimTypes.Email);
-            if (string.IsNullOrEmpty(userEmail))
-                return Unauthorized(new { message = "User email not found" });
+            var (team, _, errorResult) = await GetTeamToManageAsync(tournamentId, teamId, requireLeaderOrAdmin: true);
+            if (errorResult != null) return errorResult;
 
-            var user = await context.Users
-                .FirstOrDefaultAsync(u => u.Email == userEmail);
-
-            if (user == null)
-                return Unauthorized(new { message = "User not found" });
-
-            // Validate tournament exists and is in registration status
-            var tournament = await context.Tournaments
-                .FirstOrDefaultAsync(t => t.Id == tournamentId);
-
-            if (tournament == null)
-                return NotFound(new { message = "Tournament not found" });
-
-            if (tournament.Status != "registration")
+            // Check tournament is in registration status
+            var tournament = await context.Tournaments.FirstOrDefaultAsync(t => t.Id == tournamentId);
+            if (tournament?.Status != "registration")
                 return BadRequest(new { message = "Tournament is not open for registration changes" });
-
-            // Find user's team membership and verify they are the leader
-            var membership = await context.TournamentTeamPlayers
-                .Include(ttp => ttp.TournamentTeam)
-                .Where(ttp => ttp.UserId == user.Id && ttp.TournamentTeam.TournamentId == tournamentId)
-                .FirstOrDefaultAsync();
-
-            if (membership == null)
-                return NotFound(new { message = "You are not on a team for this tournament" });
-
-            if (!membership.IsTeamLeader)
-                return Forbid();
-
-            var team = membership.TournamentTeam;
 
             // Verify player exists in Players table
             var playerExists = await context.Players.AnyAsync(p => p.Name == request.PlayerName);
@@ -263,23 +230,24 @@ public class TeamLeaderController(
 
             var now = clock.GetCurrentInstant();
 
-            // Add player to team (without user link - manually added by leader)
-            // Leaders adding players directly are auto-approved
+            // Add player to team (without user link - manually added by leader/admin)
+            // Players added directly are auto-approved
             var teamPlayer = new TournamentTeamPlayer
             {
-                TournamentTeamId = team.Id,
+                TournamentTeamId = team!.Id,
                 PlayerName = request.PlayerName,
                 UserId = null,  // No user link for manually added players
                 IsTeamLeader = false,
-                RulesAcknowledged = false,  // Leader-added players haven't acknowledged rules
+                RulesAcknowledged = false,  // Manually added players haven't acknowledged rules
                 RulesAcknowledgedAt = null,
                 JoinedAt = now,
-                MembershipStatus = TeamMembershipStatus.Approved  // Auto-approved when leader adds
+                MembershipStatus = TeamMembershipStatus.Approved  // Auto-approved when leader/admin adds
             };
 
             context.TournamentTeamPlayers.Add(teamPlayer);
             await context.SaveChangesAsync();
 
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
             logger.LogInformation("User {UserEmail} added player {PlayerName} to team {TeamId} in tournament {TournamentId}",
                 userEmail, request.PlayerName, team.Id, tournamentId);
 
@@ -294,56 +262,29 @@ public class TeamLeaderController(
 
 
     /// <summary>
-    /// Approve a pending player's membership on the team
+    /// Approve a pending player's membership on the team (leader or tournament admin)
     /// </summary>
     [HttpPost("players/{playerName}/approve")]
     public async Task<IActionResult> ApprovePlayer(
         int tournamentId,
-        string playerName)
+        string playerName,
+        [FromQuery] int? teamId = null)
     {
         try
         {
-            var userEmail = User.FindFirstValue(ClaimTypes.Email);
-            if (string.IsNullOrEmpty(userEmail))
-                return Unauthorized(new { message = "User email not found" });
-
-            var user = await context.Users
-                .FirstOrDefaultAsync(u => u.Email == userEmail);
-
-            if (user == null)
-                return Unauthorized(new { message = "User not found" });
-
-            // Validate tournament exists
-            var tournament = await context.Tournaments
-                .FirstOrDefaultAsync(t => t.Id == tournamentId);
-
-            if (tournament == null)
-                return NotFound(new { message = "Tournament not found" });
-
-            // Find user's team membership and verify they are the leader
-            var membership = await context.TournamentTeamPlayers
-                .Include(ttp => ttp.TournamentTeam)
-                .Where(ttp => ttp.UserId == user.Id && ttp.TournamentTeam.TournamentId == tournamentId)
-                .FirstOrDefaultAsync();
-
-            if (membership == null)
-                return NotFound(new { message = "You are not on a team for this tournament" });
-
-            if (!membership.IsTeamLeader)
-                return Forbid();
-
-            var team = membership.TournamentTeam;
+            var (team, isLeaderOrAdmin, errorResult) = await GetTeamToManageAsync(tournamentId, teamId, requireLeaderOrAdmin: true);
+            if (errorResult != null) return errorResult;
 
             // URL decode the player name (it may contain special characters)
             var decodedPlayerName = Uri.UnescapeDataString(playerName);
 
             // Find the player to approve
             var playerMembership = await context.TournamentTeamPlayers
-                .Where(ttp => ttp.TournamentTeamId == team.Id && ttp.PlayerName == decodedPlayerName)
+                .Where(ttp => ttp.TournamentTeamId == team!.Id && ttp.PlayerName == decodedPlayerName)
                 .FirstOrDefaultAsync();
 
             if (playerMembership == null)
-                return NotFound(new { message = "Player not found on your team" });
+                return NotFound(new { message = "Player not found on this team" });
 
             if (playerMembership.MembershipStatus == TeamMembershipStatus.Approved)
                 return BadRequest(new { message = "Player is already approved" });
@@ -352,8 +293,9 @@ public class TeamLeaderController(
             playerMembership.MembershipStatus = TeamMembershipStatus.Approved;
             await context.SaveChangesAsync();
 
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
             logger.LogInformation("User {UserEmail} approved player {PlayerName} on team {TeamId} in tournament {TournamentId}",
-                userEmail, decodedPlayerName, team.Id, tournamentId);
+                userEmail, decodedPlayerName, team!.Id, tournamentId);
 
             return Ok(new { message = "Player approved successfully" });
         }
@@ -365,46 +307,20 @@ public class TeamLeaderController(
     }
 
     /// <summary>
-    /// Remove a player from the team (leader only)
+    /// Remove a player from the team (leader or tournament admin)
     /// </summary>
     [HttpDelete("players/{playerName}")]
-    public async Task<IActionResult> RemovePlayer(int tournamentId, string playerName)
+    public async Task<IActionResult> RemovePlayer(int tournamentId, string playerName, [FromQuery] int? teamId = null)
     {
         try
         {
-            var userEmail = User.FindFirstValue(ClaimTypes.Email);
-            if (string.IsNullOrEmpty(userEmail))
-                return Unauthorized(new { message = "User email not found" });
+            var (team, isLeaderOrAdmin, errorResult) = await GetTeamToManageAsync(tournamentId, teamId, requireLeaderOrAdmin: true);
+            if (errorResult != null) return errorResult;
 
-            var user = await context.Users
-                .FirstOrDefaultAsync(u => u.Email == userEmail);
-
-            if (user == null)
-                return Unauthorized(new { message = "User not found" });
-
-            // Validate tournament exists and is in registration status
-            var tournament = await context.Tournaments
-                .FirstOrDefaultAsync(t => t.Id == tournamentId);
-
-            if (tournament == null)
-                return NotFound(new { message = "Tournament not found" });
-
-            if (tournament.Status != "registration")
+            // Check tournament is in registration status (admins can override this check)
+            var tournament = await context.Tournaments.FirstOrDefaultAsync(t => t.Id == tournamentId);
+            if (tournament?.Status != "registration")
                 return BadRequest(new { message = "Tournament is not open for registration changes" });
-
-            // Find user's team membership and verify they are the leader
-            var leaderMembership = await context.TournamentTeamPlayers
-                .Include(ttp => ttp.TournamentTeam)
-                .Where(ttp => ttp.UserId == user.Id && ttp.TournamentTeam.TournamentId == tournamentId)
-                .FirstOrDefaultAsync();
-
-            if (leaderMembership == null)
-                return NotFound(new { message = "You are not on a team for this tournament" });
-
-            if (!leaderMembership.IsTeamLeader)
-                return Forbid();
-
-            var team = leaderMembership.TournamentTeam;
 
             // Find the player to remove
             var playerMembership = await context.TournamentTeamPlayers
@@ -421,8 +337,9 @@ public class TeamLeaderController(
             context.TournamentTeamPlayers.Remove(playerMembership);
             await context.SaveChangesAsync();
 
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
             logger.LogInformation("User {UserEmail} removed player {PlayerName} from team {TeamId} in tournament {TournamentId}",
-                userEmail, playerName, team.Id, tournamentId);
+                userEmail, playerName, team!.Id, tournamentId);
 
             return Ok(new { message = "Player removed successfully" });
         }
@@ -435,40 +352,19 @@ public class TeamLeaderController(
 
 
     /// <summary>
-    /// Delete the team entirely (leader only). Team cannot have completed any matches.
+    /// Delete the team entirely (leader or tournament admin). Team cannot have completed any matches.
     /// </summary>
     [HttpDelete]
-    public async Task<IActionResult> DeleteTeam(int tournamentId)
+    public async Task<IActionResult> DeleteTeam(int tournamentId, [FromQuery] int? teamId = null)
     {
         try
         {
-            var userEmail = User.FindFirstValue(ClaimTypes.Email);
-            if (string.IsNullOrEmpty(userEmail))
-                return Unauthorized(new { message = "User email not found" });
-
-            var user = await context.Users
-                .FirstOrDefaultAsync(u => u.Email == userEmail);
-
-            if (user == null)
-                return Unauthorized(new { message = "User not found" });
-
-            // Find user's team membership and verify they are the leader
-            var membership = await context.TournamentTeamPlayers
-                .Include(ttp => ttp.TournamentTeam)
-                .Where(ttp => ttp.UserId == user.Id && ttp.TournamentTeam.TournamentId == tournamentId)
-                .FirstOrDefaultAsync();
-
-            if (membership == null)
-                return NotFound(new { message = "You are not on a team for this tournament" });
-
-            if (!membership.IsTeamLeader)
-                return Forbid();
-
-            var team = membership.TournamentTeam;
+            var (team, _, errorResult) = await GetTeamToManageAsync(tournamentId, teamId, requireLeaderOrAdmin: true);
+            if (errorResult != null) return errorResult;
 
             // Check if team has completed any matches
             var hasCompletedMatches = await context.TournamentMatchResults
-                .Where(tmr => tmr.Team1Id == team.Id || tmr.Team2Id == team.Id)
+                .Where(tmr => tmr.Team1Id == team!.Id || tmr.Team2Id == team.Id)
                 .AnyAsync();
 
             if (hasCompletedMatches)
@@ -476,7 +372,7 @@ public class TeamLeaderController(
 
             // Check if team has any scheduled matches
             var hasScheduledMatches = await context.TournamentMatches
-                .Where(tm => tm.Team1Id == team.Id || tm.Team2Id == team.Id)
+                .Where(tm => tm.Team1Id == team!.Id || tm.Team2Id == team.Id)
                 .AnyAsync();
 
             if (hasScheduledMatches)
@@ -484,16 +380,17 @@ public class TeamLeaderController(
 
             // Delete all team players first (cascade should handle this, but being explicit)
             var teamPlayers = await context.TournamentTeamPlayers
-                .Where(ttp => ttp.TournamentTeamId == team.Id)
+                .Where(ttp => ttp.TournamentTeamId == team!.Id)
                 .ToListAsync();
 
             context.TournamentTeamPlayers.RemoveRange(teamPlayers);
 
             // Delete the team
-            context.TournamentTeams.Remove(team);
+            context.TournamentTeams.Remove(team!);
 
             await context.SaveChangesAsync();
 
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
             logger.LogInformation("User {UserEmail} deleted team {TeamId} ({TeamName}) from tournament {TournamentId}",
                 userEmail, team.Id, team.Name, tournamentId);
 

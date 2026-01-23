@@ -11,6 +11,10 @@ public record RegistrationStatusResponse
     public bool IsRegistrationOpen { get; init; }
     public List<string> LinkedPlayerNames { get; init; } = [];
     public TeamMembershipInfo? TeamMembership { get; init; }
+    /// <summary>
+    /// True if the user is the tournament admin (creator)
+    /// </summary>
+    public bool IsTournamentAdmin { get; init; }
 }
 
 /// <summary>
