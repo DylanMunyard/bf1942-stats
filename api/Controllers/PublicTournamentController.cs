@@ -34,7 +34,7 @@ public class PublicTournamentController(
         // Load teams for this tournament
         var teams = await context.TournamentTeams
             .Where(tt => tt.TournamentId == tournamentId)
-            .Select(tt => new { tt.Id, tt.Name, tt.Tag, tt.CreatedAt })
+            .Select(tt => new { tt.Id, tt.Name, tt.Tag, tt.CreatedAt, tt.RecruitmentStatus })
             .ToListAsync();
 
         var teamIds = teams.Select(t => t.Id).ToList();
@@ -68,6 +68,7 @@ public class PublicTournamentController(
                 Tag = t.Tag,
                 CreatedAt = t.CreatedAt,
                 LeaderPlayerName = leaderPlayerName,
+                RecruitmentStatus = t.RecruitmentStatus,
                 Players = players
                     .Select(p => new PublicTournamentTeamPlayerResponse
                     {
@@ -564,6 +565,7 @@ public class PublicTournamentTeamResponse
     public string? Tag { get; set; }
     public Instant CreatedAt { get; set; }
     public string? LeaderPlayerName { get; set; }
+    public TeamRecruitmentStatus RecruitmentStatus { get; set; }
     public List<PublicTournamentTeamPlayerResponse> Players { get; set; } = [];
 }
 

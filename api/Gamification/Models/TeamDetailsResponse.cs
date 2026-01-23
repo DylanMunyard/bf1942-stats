@@ -1,3 +1,4 @@
+using api.PlayerTracking;
 using NodaTime;
 
 namespace api.Gamification.Models;
@@ -11,6 +12,7 @@ public record TeamDetailsResponse
     public string TeamName { get; init; } = "";
     public string? Tag { get; init; }
     public Instant CreatedAt { get; init; }
+    public TeamRecruitmentStatus RecruitmentStatus { get; init; }
     public List<TeamPlayerInfo> Players { get; init; } = [];
 }
 

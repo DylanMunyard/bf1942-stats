@@ -100,15 +100,31 @@ public class TeamRegistrationController(
             if (tournament == null)
                 return NotFound(new { message = "Tournament not found" });
 
-            // Get all teams for this tournament with player counts
-            var teams = await context.TournamentTeams
+            // Get all teams for this tournament with player counts and leader info
+            var teamsData = await context.TournamentTeams
                 .Where(tt => tt.TournamentId == tournamentId)
-                .Select(tt => new AvailableTeamResponse(
+                .Select(tt => new
+                {
                     tt.Id,
                     tt.Name,
                     tt.Tag,
-                    tt.TeamPlayers.Count))
+                    PlayerCount = tt.TeamPlayers.Count,
+                    tt.RecruitmentStatus,
+                    LeaderPlayerName = tt.TeamPlayers
+                        .Where(tp => tp.IsTeamLeader)
+                        .Select(tp => tp.PlayerName)
+                        .FirstOrDefault()
+                })
                 .ToListAsync();
+
+            var teams = teamsData.Select(tt => new AvailableTeamResponse(
+                tt.Id,
+                tt.Name,
+                tt.Tag,
+                tt.PlayerCount,
+                tt.RecruitmentStatus,
+                tt.LeaderPlayerName
+            )).ToList();
 
             return Ok(teams);
         }
@@ -283,6 +299,13 @@ public class TeamRegistrationController(
 
             if (team == null)
                 return NotFound(new { message = "Team not found" });
+
+            // Validate team is accepting new members
+            if (team.RecruitmentStatus == TeamRecruitmentStatus.Closed)
+                return BadRequest(new { message = "This team is not currently recruiting new members" });
+
+            if (team.RecruitmentStatus == TeamRecruitmentStatus.LookingForBTeam)
+                return BadRequest(new { message = "This team is looking to start a second team. Please contact the team leader on Discord to discuss." });
 
             // Validate player name is linked to user
             var linkedPlayerNames = await context.UserPlayerNames

@@ -1221,6 +1221,19 @@ public class Tournament
 }
 
 
+/// <summary>
+/// Team recruitment status - controls whether new members can join
+/// </summary>
+public enum TeamRecruitmentStatus
+{
+    /// <summary>Team is open and accepting new members (full-time, backup, etc.)</summary>
+    Open = 0,
+    /// <summary>Team is not currently recruiting new members</summary>
+    Closed = 1,
+    /// <summary>Team is looking to establish a second/B team</summary>
+    LookingForBTeam = 2
+}
+
 public class TournamentTeam
 {
     public int Id { get; set; }
@@ -1229,6 +1242,11 @@ public class TournamentTeam
     public string? Tag { get; set; } // Short clan tag e.g. "[GGE]"
     public int? LeaderUserId { get; set; } // User who created/leads team
     public Instant CreatedAt { get; set; }
+
+    /// <summary>
+    /// Recruitment status - whether the team is accepting new members
+    /// </summary>
+    public TeamRecruitmentStatus RecruitmentStatus { get; set; } = TeamRecruitmentStatus.Open;
 
     // Navigation properties
     public Tournament Tournament { get; set; } = null!;

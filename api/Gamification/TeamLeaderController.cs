@@ -67,6 +67,7 @@ public class TeamLeaderController(
                 TeamName = team.Name,
                 Tag = team.Tag,
                 CreatedAt = team.CreatedAt,
+                RecruitmentStatus = team.RecruitmentStatus,
                 Players = players
             });
         }
@@ -147,6 +148,57 @@ public class TeamLeaderController(
         {
             logger.LogError(ex, "Error updating team in tournament {TournamentId}", tournamentId);
             return StatusCode(500, new { message = "Error updating team" });
+        }
+    }
+
+    /// <summary>
+    /// Update team recruitment status (leader only)
+    /// </summary>
+    [HttpPut("recruitment-status")]
+    public async Task<IActionResult> UpdateRecruitmentStatus(
+        int tournamentId,
+        [FromBody] UpdateRecruitmentStatusRequest request)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found" });
+
+            var user = await context.Users
+                .FirstOrDefaultAsync(u => u.Email == userEmail);
+
+            if (user == null)
+                return Unauthorized(new { message = "User not found" });
+
+            // Find user's team membership and verify they are the leader
+            var membership = await context.TournamentTeamPlayers
+                .Include(ttp => ttp.TournamentTeam)
+                .Where(ttp => ttp.UserId == user.Id && ttp.TournamentTeam.TournamentId == tournamentId)
+                .FirstOrDefaultAsync();
+
+            if (membership == null)
+                return NotFound(new { message = "You are not on a team for this tournament" });
+
+            if (!membership.IsTeamLeader)
+                return Forbid();
+
+            var team = membership.TournamentTeam;
+
+            // Update recruitment status
+            team.RecruitmentStatus = request.RecruitmentStatus;
+
+            await context.SaveChangesAsync();
+
+            logger.LogInformation("User {UserEmail} updated recruitment status for team {TeamId} to {Status} in tournament {TournamentId}",
+                userEmail, team.Id, request.RecruitmentStatus, tournamentId);
+
+            return Ok(new { message = "Recruitment status updated successfully" });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error updating recruitment status for team in tournament {TournamentId}", tournamentId);
+            return StatusCode(500, new { message = "Error updating recruitment status" });
         }
     }
 
