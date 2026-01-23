@@ -114,166 +114,32 @@ spec:
           volumeMounts:
             - name: stats-data
               mountPath: /mnt/data
-            - name: backups
-              mountPath: /backups
 
-        - name: sqlite-backup
-          image: busybox:latest
-          command: ["/bin/sh"]
-          args:
-            - -c
-            - |
-              while true; do
-                # Create timestamped backup directory
-                TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-                BACKUP_DIR="/backups/playertracker_${TIMESTAMP}"
-                TEMP_DIR="${BACKUP_DIR}.tmp"
-
-                mkdir -p "$TEMP_DIR"
-
-                echo "Starting SQLite backup at $(date)..."
-
-                # Copy all database files for proper restoration
-                cp /mnt/data/playertracker.db "$TEMP_DIR/playertracker.db" 2>&1
-                DB_RESULT=$?
-
-                # Copy WAL and SHM files if they exist (needed for proper DB restoration)
-                [ -f /mnt/data/playertracker.db-wal ] && cp /mnt/data/playertracker.db-wal "$TEMP_DIR/playertracker.db-wal" 2>&1
-                [ -f /mnt/data/playertracker.db-shm ] && cp /mnt/data/playertracker.db-shm "$TEMP_DIR/playertracker.db-shm" 2>&1
-
-                # Check if main database copy succeeded
-                if [ $DB_RESULT -eq 0 ]; then
-                  # Verify the backup file exists and is not empty
-                  if [ -f "$TEMP_DIR/playertracker.db" ] && [ -s "$TEMP_DIR/playertracker.db" ]; then
-                    # Move staging directory to final location atomically
-                    mv "$TEMP_DIR" "$BACKUP_DIR"
-                    echo "Backup successful: $BACKUP_DIR"
-                  else
-                    echo "Backup file is empty or missing, removing temp directory"
-                    rm -rf "$TEMP_DIR"
-                  fi
-                else
-                  echo "Backup failed: cp returned $DB_RESULT, removing temp directory"
-                  rm -rf "$TEMP_DIR"
-                fi
-
-                # Run backup every 6 hours
-                sleep 21600
-              done
+        # SQLite tools sidecar for safe database operations
+        # Usage: kubectl exec -it -n bf42-stats deploy/bf42-stats -c sqlite-tools -- /bin/sh
+        # Then: cd /mnt/data && sqlite3 playertracker.db
+        # Safe backup: sqlite3 playertracker.db ".backup /mnt/data/backup.db"
+        - name: sqlite-tools
+          image: keinos/sqlite3:latest
+          command: ["/bin/sh", "-c", "sleep infinity"]
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
           volumeMounts:
             - name: stats-data
               mountPath: /mnt/data
-            - name: backups
-              mountPath: /backups
           resources:
             requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
               memory: "64Mi"
               cpu: "50m"
-            limits:
-                memory: "256Mi"
-                cpu: "200m"
-
-        - name: azure-uploader
-          image: mcr.microsoft.com/azure-cli:latest
-          command: ["/bin/sh"]
-          args:
-            - -c
-            - |
-              while true; do
-                # Check if there are any backup directories (excluding .tmp directories)
-                find /backups -maxdepth 1 -type d -name 'playertracker_*' ! -name '*.tmp' 2>/dev/null | while read backup_dir; do
-                  [ -z "$backup_dir" ] && continue
-
-                  BACKUP_NAME=$(basename "$backup_dir")
-                  FILE_COUNT=$(find "$backup_dir" -type f 2>/dev/null | wc -l)
-
-                  if [ "$FILE_COUNT" -eq 0 ]; then
-                    echo "Backup directory is empty, deleting: $BACKUP_NAME"
-                    rm -rf "$backup_dir"
-                    continue
-                  fi
-
-                  echo "Uploading backup: $BACKUP_NAME ($FILE_COUNT files)"
-
-                  # Upload each file in the backup directory
-                  UPLOAD_SUCCESS=true
-                  find "$backup_dir" -type f 2>/dev/null | while read file; do
-                    FILE_NAME=$(basename "$file")
-                    BLOB_NAME="${BACKUP_NAME}/${FILE_NAME}"
-
-                    echo "  Uploading $FILE_NAME..."
-                    az storage blob upload \
-                      --container-name sqlite \
-                      --name "$BLOB_NAME" \
-                      --file "$file" \
-                      --overwrite \
-                      --connection-string "$AZURE_STORAGE_CONNECTION_STRING" 2>&1
-
-                    if [ $? -ne 0 ]; then
-                      echo "  Upload failed for $FILE_NAME, will retry entire backup"
-                      exit 1
-                    fi
-                  done
-
-                  PIPE_STATUS=$?
-                  # Only delete if all uploads succeeded (exit code 0)
-                  if [ $PIPE_STATUS -eq 0 ]; then
-                    echo "Backup upload successful, deleting: $BACKUP_NAME"
-                    rm -rf "$backup_dir"
-                  else
-                    echo "Backup upload incomplete, keeping: $BACKUP_NAME"
-                  fi
-                done
-
-                # Clean up old backups in Azure blob storage, keeping only the 2 most recent
-                echo "Cleaning up old backups in Azure blob storage (keeping last 2)..."
-                BACKUP_LIST=$(az storage blob list \
-                  --container-name sqlite \
-                  --connection-string "$AZURE_STORAGE_CONNECTION_STRING" \
-                  --output tsv \
-                  --query "[].name" 2>/dev/null | grep -o '^[^/]*' | sort -u)
-
-                BACKUP_COUNT=$(echo "$BACKUP_LIST" | grep -c .)
-                if [ "$BACKUP_COUNT" -gt 2 ]; then
-                  # Get backups to delete (all except the last 2)
-                  BACKUPS_TO_DELETE=$(echo "$BACKUP_LIST" | sort -r | tail -n +3)
-
-                  for old_backup in $BACKUPS_TO_DELETE; do
-                    echo "Deleting old backup from Azure: $old_backup"
-                    az storage blob delete-batch \
-                      --source sqlite \
-                      --pattern "${old_backup}/*" \
-                      --connection-string "$AZURE_STORAGE_CONNECTION_STRING" 2>&1 || true
-                  done
-                fi
-
-                sleep 60
-              done
-          env:
-            - name: AZURE_CONFIG_DIR
-              value: "/tmp/.azure"
-            - name: AZURE_STORAGE_CONNECTION_STRING
-              valueFrom:
-                secretKeyRef:
-                  name: storage-secret
-                  key: connection-string
-          volumeMounts:
-            - name: backups
-              mountPath: /backups
-          resources:
-            requests:
-              memory: "64Mi"
-              cpu: "50m"
-            limits:
-              memory: "512Mi"
-              cpu: "500m"
 
       volumes:
         - name: stats-data
           persistentVolumeClaim:
             claimName: bf42-stats-pvc
-        - name: backups
-          emptyDir: {}
 
 ---
 apiVersion: v1
