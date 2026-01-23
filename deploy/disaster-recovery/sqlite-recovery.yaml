@@ -1,0 +1,32 @@
+# SQLite Recovery Pod
+# See SQLITE_RECOVERY_PLAYBOOK.md for full instructions
+#
+# Quick start:
+#   kubectl apply -f deploy/disaster-recovery/sqlite-recovery.yaml
+#   kubectl exec -it -n bf42-stats sqlite-recovery -- /bin/sh
+#   cd /mnt/data
+#   sqlite3 playertracker.db ".recover" > recovery.sql
+#   sqlite3 playertracker_new.db < recovery.sql
+#
+# Cleanup:
+#   kubectl delete pod sqlite-recovery -n bf42-stats
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sqlite-recovery
+  namespace: bf42-stats
+spec:
+  restartPolicy: Never
+  nodeSelector:
+    workload: core
+  containers:
+    - name: recovery
+      image: alpine:latest
+      command: ["/bin/sh", "-c", "apk add --no-cache sqlite && sleep infinity"]
+      volumeMounts:
+        - name: stats-data
+          mountPath: /mnt/data
+  volumes:
+    - name: stats-data
+      persistentVolumeClaim:
+        claimName: bf42-stats-pvc
