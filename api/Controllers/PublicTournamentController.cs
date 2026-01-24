@@ -2,8 +2,11 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using api.PlayerTracking;
+using api.Gamification.Services;
+using api.Gamification.Models;
 using Microsoft.Extensions.Logging;
 using NodaTime;
+using NodaTime.Text;
 
 namespace api.Controllers;
 
@@ -12,6 +15,7 @@ namespace api.Controllers;
 [Route("stats/t")]
 public class PublicTournamentController(
     PlayerTrackerDbContext context,
+    TournamentFeedService feedService,
     ILogger<PublicTournamentController> logger) : ControllerBase
 {
     /// <summary>
@@ -556,6 +560,70 @@ public class PublicTournamentController(
         {
             logger.LogError(ex, "Error getting files and comments for match {MatchId} in tournament {TournamentId}", matchId, tournamentId);
             return StatusCode(500, new { message = "Error retrieving match files and comments" });
+        }
+    }
+
+    /// <summary>
+    /// Get news feed for a tournament (public, no auth required)
+    /// Returns a chronological feed of blog posts, match results, team registrations, and match schedulings
+    /// </summary>
+    [HttpGet("{idOrName}/feed")]
+    public async Task<ActionResult<TournamentFeedResponse>> GetFeed(
+        string idOrName,
+        [FromQuery] string? cursor = null,
+        [FromQuery] int limit = 10)
+    {
+        try
+        {
+            Tournament? tournament;
+
+            // Try to parse as integer first (ID lookup)
+            if (int.TryParse(idOrName, out int id))
+            {
+                tournament = await context.Tournaments
+                    .Where(t => t.Id == id && t.Status != "draft")
+                    .FirstOrDefaultAsync();
+            }
+            else
+            {
+                // If not a number, try slug first (more specific), then fall back to name
+                tournament = await context.Tournaments
+                    .Where(t => t.Slug == idOrName && t.Status != "draft")
+                    .FirstOrDefaultAsync();
+
+                // If no slug match, search by name
+                if (tournament == null)
+                {
+                    tournament = await context.Tournaments
+                        .Where(t => t.Name == idOrName && t.Status != "draft")
+                        .FirstOrDefaultAsync();
+                }
+            }
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            // Parse cursor if provided (ISO 8601 instant)
+            Instant? cursorInstant = null;
+            if (!string.IsNullOrEmpty(cursor))
+            {
+                var parseResult = InstantPattern.ExtendedIso.Parse(cursor);
+                if (parseResult.Success)
+                {
+                    cursorInstant = parseResult.Value;
+                }
+            }
+
+            // Clamp limit to reasonable range
+            limit = Math.Clamp(limit, 1, 50);
+
+            var response = await feedService.GetFeedAsync(tournament.Id, cursorInstant, limit);
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error getting feed for tournament {TournamentId}", idOrName);
+            return StatusCode(500, new { message = "Error retrieving tournament feed" });
         }
     }
 }

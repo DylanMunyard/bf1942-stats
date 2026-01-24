@@ -1002,6 +1002,232 @@ public class AdminTournamentController(
         }
     }
 
+    // ==================== Tournament Posts ====================
+
+    /// <summary>
+    /// Get all posts for a tournament (including drafts, for admin)
+    /// </summary>
+    [HttpGet("{id}/posts")]
+    [Authorize]
+    public async Task<ActionResult<List<TournamentPostResponse>>> GetPosts(int id)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            var posts = await context.TournamentPosts
+                .Where(p => p.TournamentId == id)
+                .OrderByDescending(p => p.CreatedAt)
+                .Select(p => new TournamentPostResponse(
+                    p.Id,
+                    p.TournamentId,
+                    p.Title,
+                    p.Content,
+                    p.PublishAt,
+                    p.Status,
+                    p.CreatedAt,
+                    p.UpdatedAt))
+                .ToListAsync();
+
+            return Ok(posts);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error getting posts for tournament {TournamentId}", id);
+            return StatusCode(500, new { message = "Error retrieving posts" });
+        }
+    }
+
+    /// <summary>
+    /// Create a new blog post for a tournament
+    /// </summary>
+    [HttpPost("{id}/posts")]
+    [Authorize]
+    public async Task<ActionResult<TournamentPostResponse>> CreatePost(int id, [FromBody] CreateTournamentPostRequest request)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var user = await context.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
+            if (user == null)
+                return Unauthorized(new { message = "User not found" });
+
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            if (string.IsNullOrWhiteSpace(request.Title))
+                return BadRequest(new { message = "Post title is required" });
+
+            if (string.IsNullOrWhiteSpace(request.Content))
+                return BadRequest(new { message = "Post content is required" });
+
+            var status = request.Status ?? "draft";
+            if (status != "draft" && status != "published")
+                return BadRequest(new { message = "Status must be 'draft' or 'published'" });
+
+            var now = SystemClock.Instance.GetCurrentInstant();
+            var post = new TournamentPost
+            {
+                TournamentId = id,
+                Title = request.Title,
+                Content = request.Content,
+                CreatedByUserId = user.Id,
+                CreatedByUserEmail = userEmail,
+                PublishAt = request.PublishAt,
+                Status = status,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            context.TournamentPosts.Add(post);
+            await context.SaveChangesAsync();
+
+            var response = new TournamentPostResponse(
+                post.Id,
+                post.TournamentId,
+                post.Title,
+                post.Content,
+                post.PublishAt,
+                post.Status,
+                post.CreatedAt,
+                post.UpdatedAt);
+
+            return CreatedAtAction(
+                nameof(GetTournament),
+                new { id = tournament.Id },
+                response);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error creating post for tournament {TournamentId}", id);
+            return StatusCode(500, new { message = "Error creating post" });
+        }
+    }
+
+    /// <summary>
+    /// Update a blog post
+    /// </summary>
+    [HttpPut("{id}/posts/{postId}")]
+    [Authorize]
+    public async Task<ActionResult<TournamentPostResponse>> UpdatePost(
+        int id,
+        int postId,
+        [FromBody] UpdateTournamentPostRequest request)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            var post = await context.TournamentPosts
+                .Where(p => p.TournamentId == id && p.Id == postId)
+                .FirstOrDefaultAsync();
+
+            if (post == null)
+                return NotFound(new { message = "Post not found" });
+
+            if (!string.IsNullOrWhiteSpace(request.Title))
+                post.Title = request.Title;
+
+            if (!string.IsNullOrWhiteSpace(request.Content))
+                post.Content = request.Content;
+
+            if (request.PublishAt.HasValue)
+                post.PublishAt = request.PublishAt;
+
+            if (!string.IsNullOrEmpty(request.Status))
+            {
+                if (request.Status != "draft" && request.Status != "published")
+                    return BadRequest(new { message = "Status must be 'draft' or 'published'" });
+                post.Status = request.Status;
+            }
+
+            post.UpdatedAt = SystemClock.Instance.GetCurrentInstant();
+
+            await context.SaveChangesAsync();
+
+            var response = new TournamentPostResponse(
+                post.Id,
+                post.TournamentId,
+                post.Title,
+                post.Content,
+                post.PublishAt,
+                post.Status,
+                post.CreatedAt,
+                post.UpdatedAt);
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error updating post {PostId} for tournament {TournamentId}", postId, id);
+            return StatusCode(500, new { message = "Error updating post" });
+        }
+    }
+
+    /// <summary>
+    /// Delete a blog post
+    /// </summary>
+    [HttpDelete("{id}/posts/{postId}")]
+    [Authorize]
+    public async Task<IActionResult> DeletePost(int id, int postId)
+    {
+        try
+        {
+            var userEmail = User.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrEmpty(userEmail))
+                return Unauthorized(new { message = "User email not found in token" });
+
+            var tournament = await context.Tournaments
+                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == id)
+                .FirstOrDefaultAsync();
+
+            if (tournament == null)
+                return NotFound(new { message = "Tournament not found" });
+
+            var post = await context.TournamentPosts
+                .Where(p => p.TournamentId == id && p.Id == postId)
+                .FirstOrDefaultAsync();
+
+            if (post == null)
+                return NotFound(new { message = "Post not found" });
+
+            context.TournamentPosts.Remove(post);
+            await context.SaveChangesAsync();
+
+            return Ok(new { success = true, message = "Post deleted successfully" });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error deleting post {PostId} for tournament {TournamentId}", postId, id);
+            return StatusCode(500, new { message = "Error deleting post" });
+        }
+    }
+
     /// <summary>
     /// Create a tournament week date
     /// </summary>
@@ -3971,3 +4197,26 @@ public class MatchFilesAndCommentsResponse
     public List<TournamentMatchFileResponse> Files { get; set; } = [];
     public List<TournamentMatchCommentResponse> Comments { get; set; } = [];
 }
+
+// Tournament Post DTOs
+public record TournamentPostResponse(
+    int Id,
+    int TournamentId,
+    string Title,
+    string Content,
+    Instant? PublishAt,
+    string Status,
+    Instant CreatedAt,
+    Instant UpdatedAt);
+
+public record CreateTournamentPostRequest(
+    string Title,
+    string Content,
+    Instant? PublishAt,
+    string? Status);
+
+public record UpdateTournamentPostRequest(
+    string? Title,
+    string? Content,
+    Instant? PublishAt,
+    string? Status);

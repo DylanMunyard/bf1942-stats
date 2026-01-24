@@ -32,6 +32,7 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<TournamentFile> TournamentFiles { get; set; }
     public DbSet<TournamentMatchFile> TournamentMatchFiles { get; set; }
     public DbSet<TournamentMatchComment> TournamentMatchComments { get; set; }
+    public DbSet<TournamentPost> TournamentPosts { get; set; }
     public DbSet<TournamentImageIndex> TournamentImageIndices { get; set; }
 
     // Pre-computed aggregate tables
@@ -723,6 +724,53 @@ public class PlayerTrackerDbContext : DbContext
             .HasForeignKey(tmc => tmc.CreatedByUserId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // Configure TournamentPost entity
+        modelBuilder.Entity<TournamentPost>()
+            .HasKey(tp => tp.Id);
+
+        modelBuilder.Entity<TournamentPost>()
+            .HasIndex(tp => tp.TournamentId);
+
+        // Composite index for efficient feed queries (TournamentId, Status, PublishAt)
+        modelBuilder.Entity<TournamentPost>()
+            .HasIndex(tp => new { tp.TournamentId, tp.Status, tp.PublishAt });
+
+        modelBuilder.Entity<TournamentPost>()
+            .HasIndex(tp => tp.CreatedAt);
+
+        // Configure NodaTime Instant conversions for TournamentPost
+        modelBuilder.Entity<TournamentPost>()
+            .Property(tp => tp.PublishAt)
+            .HasConversion(
+                instant => instant.HasValue ? FormatInstant(instant.Value) : null,
+                str => str != null ? ParseInstant(str) : null);
+
+        modelBuilder.Entity<TournamentPost>()
+            .Property(tp => tp.CreatedAt)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        modelBuilder.Entity<TournamentPost>()
+            .Property(tp => tp.UpdatedAt)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        // Configure relationship: TournamentPost -> Tournament
+        modelBuilder.Entity<TournamentPost>()
+            .HasOne(tp => tp.Tournament)
+            .WithMany(t => t.Posts)
+            .HasForeignKey(tp => tp.TournamentId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Configure relationship: TournamentPost -> User (CreatedBy)
+        modelBuilder.Entity<TournamentPost>()
+            .HasOne(tp => tp.CreatedByUser)
+            .WithMany()
+            .HasForeignKey(tp => tp.CreatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         // ============================================================
         // Pre-computed aggregate tables
         // ============================================================
@@ -1228,6 +1276,7 @@ public class Tournament
     public List<TournamentMatch> TournamentMatches { get; set; } = [];
     public List<TournamentWeekDate> WeekDates { get; set; } = [];
     public List<TournamentFile> Files { get; set; } = [];
+    public List<TournamentPost> Posts { get; set; } = [];
 }
 
 
@@ -1465,5 +1514,23 @@ public class TournamentMatchComment
 
     // Navigation properties
     public TournamentMatch Match { get; set; } = null!;
+    public User CreatedByUser { get; set; } = null!;
+}
+
+public class TournamentPost
+{
+    public int Id { get; set; }
+    public int TournamentId { get; set; }
+    public string Title { get; set; } = "";
+    public string Content { get; set; } = ""; // Markdown content
+    public int CreatedByUserId { get; set; }
+    public string CreatedByUserEmail { get; set; } = "";
+    public Instant? PublishAt { get; set; } // null = immediate publish
+    public string Status { get; set; } = "draft"; // draft, published
+    public Instant CreatedAt { get; set; }
+    public Instant UpdatedAt { get; set; }
+
+    // Navigation properties
+    public Tournament Tournament { get; set; } = null!;
     public User CreatedByUser { get; set; } = null!;
 }

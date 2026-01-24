@@ -438,6 +438,7 @@ try
     builder.Services.AddScoped<ITeamMappingService, TeamMappingService>();
     builder.Services.AddScoped<ITeamRankingCalculator, TeamRankingCalculator>();
     builder.Services.AddScoped<ITournamentMatchResultService, TournamentMatchResultService>();
+    builder.Services.AddScoped<TournamentFeedService>();
 
     // Register the ServerStatsService and supporting services
     builder.Services.AddScoped<ServerStatsService>();
