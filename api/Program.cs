@@ -452,10 +452,14 @@ try
     // Register NodaTime clock for time-based services
     builder.Services.AddSingleton<IClock>(SystemClock.Instance);
 
+    // In-memory locks for aggregate recalculation (single-process; avoids conflicts between background jobs and delete/undelete recalc)
+    builder.Services.AddSingleton<api.Services.IAggregateConcurrencyService, api.Services.AggregateConcurrencyService>();
+
     // Register job runners (can be triggered on-demand via AdminJobsController)
     builder.Services.AddScoped<IDailyAggregateRefreshBackgroundService, DailyAggregateRefreshJob>();
     builder.Services.AddScoped<IWeeklyCleanupBackgroundService, WeeklyCleanupBackgroundService>();
     builder.Services.AddScoped<IAggregateBackfillBackgroundService, AggregateBackfillBackgroundService>();
+    builder.Services.AddScoped<api.StatsCollectors.IServerPlayerRankingsRecalculationService, api.StatsCollectors.ServerPlayerRankingsRecalculationService>();
 
     // Register background jobs for scheduled execution
     builder.Services.AddHostedService<DailyAggregateRefreshBackgroundService>();

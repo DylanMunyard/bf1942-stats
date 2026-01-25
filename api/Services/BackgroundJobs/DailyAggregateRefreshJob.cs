@@ -14,6 +14,7 @@ namespace api.Services.BackgroundJobs;
 /// </summary>
 public class DailyAggregateRefreshJob(
     IServiceScopeFactory scopeFactory,
+    api.Services.IAggregateConcurrencyService concurrency,
     ILogger<DailyAggregateRefreshJob> logger,
     IClock clock
 ) : IDailyAggregateRefreshBackgroundService
@@ -34,7 +35,7 @@ public class DailyAggregateRefreshJob(
             await RefreshHourlyPlayerPredictionsAsync(dbContext, ct);
             await RefreshHourlyActivityPatternsAsync(dbContext, ct);
             await RefreshMapGlobalAveragesAsync(dbContext, ct);
-            await RefreshServerMapStatsAsync(dbContext, ct);
+            await concurrency.ExecuteWithServerMapStatsLockAsync(async (c) => await RefreshServerMapStatsAsync(dbContext, c), ct);
             await RefreshMapServerHourlyPatternsAsync(dbContext, ct);
 
             stopwatch.Stop();
@@ -61,9 +62,11 @@ public class DailyAggregateRefreshJob(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
 
-        var nowIso = InstantPattern.ExtendedIso.Format(clock.GetCurrentInstant());
+        await concurrency.ExecuteWithServerMapStatsLockAsync(async (c) =>
+        {
+            var nowIso = InstantPattern.ExtendedIso.Format(clock.GetCurrentInstant());
 
-        var sql = @"
+            var sql = @"
             INSERT OR REPLACE INTO ServerMapStats
                 (ServerGuid, MapName, Year, Month, TotalRounds, TotalPlayTimeMinutes,
                  AvgConcurrentPlayers, PeakConcurrentPlayers, Team1Victories, Team2Victories,
@@ -92,15 +95,84 @@ public class DailyAggregateRefreshJob(
                 @p0 as UpdatedAt
             FROM Rounds
             WHERE IsActive = 0
+              AND (IsDeleted = 0 OR IsDeleted IS NULL)
               AND MapName IS NOT NULL
               AND MapName != ''
             GROUP BY ServerGuid, MapName, CAST(strftime('%Y', StartTime) AS INTEGER), CAST(strftime('%m', StartTime) AS INTEGER)";
 
-        var rowsAffected = await dbContext.Database.ExecuteSqlRawAsync(sql, [nowIso], ct);
+            var rowsAffected = await dbContext.Database.ExecuteSqlRawAsync(sql, [nowIso], c);
 
-        stopwatch.Stop();
-        logger.LogInformation("Backfilled {Count} server map stats from all historical data in {Duration}ms",
-            rowsAffected, stopwatch.ElapsedMilliseconds);
+            stopwatch.Stop();
+            logger.LogInformation("Backfilled {Count} server map stats from all historical data in {Duration}ms",
+                rowsAffected, stopwatch.ElapsedMilliseconds);
+        }, ct);
+    }
+
+    /// <summary>
+    /// Refreshes ServerMapStats for a single (ServerGuid, MapName, Year, Month) from Rounds,
+    /// excluding soft-deleted rounds. Used after round delete/undelete.
+    /// </summary>
+    public async Task RefreshServerMapStatsForServerMapPeriodAsync(string serverGuid, string mapName, int year, int month, CancellationToken ct = default)
+    {
+        using var scope = scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
+
+        await concurrency.ExecuteWithServerMapStatsLockAsync(async (c) =>
+        {
+            var nowIso = InstantPattern.ExtendedIso.Format(clock.GetCurrentInstant());
+            var yearString = year.ToString();
+            var monthString = month.ToString("00");
+
+            // Remove existing row so we can replace with recomputed value (or leave deleted if no non-deleted rounds)
+            await dbContext.Database.ExecuteSqlRawAsync(@"
+                DELETE FROM ServerMapStats
+                WHERE ServerGuid = {0} AND MapName = {1} AND Year = {2} AND Month = {3}",
+                [serverGuid, mapName, year, month], c);
+
+            // Re-insert from Rounds for this server+map+period, excluding deleted rounds
+            var insertSql = @"
+                INSERT INTO ServerMapStats
+                    (ServerGuid, MapName, Year, Month, TotalRounds, TotalPlayTimeMinutes,
+                     AvgConcurrentPlayers, PeakConcurrentPlayers, Team1Victories, Team2Victories,
+                     Team1Label, Team2Label, UpdatedAt)
+                SELECT
+                    ServerGuid,
+                    MapName,
+                    CAST(strftime('%Y', StartTime) AS INTEGER) as Year,
+                    CAST(strftime('%m', StartTime) AS INTEGER) as Month,
+                    COUNT(*) as TotalRounds,
+                    COALESCE(SUM(DurationMinutes), 0) as TotalPlayTimeMinutes,
+                    ROUND(AVG(COALESCE(ParticipantCount, 0)), 2) as AvgConcurrentPlayers,
+                    COALESCE(MAX(ParticipantCount), 0) as PeakConcurrentPlayers,
+                    SUM(CASE
+                        WHEN Tickets1 IS NOT NULL AND Tickets2 IS NOT NULL
+                             AND Tickets1 > Tickets2 THEN 1
+                        ELSE 0
+                    END) as Team1Victories,
+                    SUM(CASE
+                        WHEN Tickets1 IS NOT NULL AND Tickets2 IS NOT NULL
+                             AND Tickets2 > Tickets1 THEN 1
+                        ELSE 0
+                    END) as Team2Victories,
+                    MAX(Team1Label) as Team1Label,
+                    MAX(Team2Label) as Team2Label,
+                    {4} as UpdatedAt
+                FROM Rounds
+                WHERE IsActive = 0
+                  AND (IsDeleted = 0 OR IsDeleted IS NULL)
+                  AND MapName IS NOT NULL
+                  AND MapName != ''
+                  AND ServerGuid = {0}
+                  AND MapName = {1}
+                  AND strftime('%Y', StartTime) = {2}
+                  AND strftime('%m', StartTime) = {3}
+                GROUP BY ServerGuid, MapName, CAST(strftime('%Y', StartTime) AS INTEGER), CAST(strftime('%m', StartTime) AS INTEGER)";
+
+            var rowsInserted = await dbContext.Database.ExecuteSqlRawAsync(insertSql, [serverGuid, mapName, yearString, monthString, nowIso], c);
+
+            logger.LogDebug("Refreshed ServerMapStats for {ServerGuid} / {MapName} {Year}-{Month}: {Rows} rows",
+                serverGuid, mapName, year, monthString, rowsInserted);
+        }, ct);
     }
 
     /// <summary>
@@ -281,6 +353,7 @@ public class DailyAggregateRefreshJob(
                 INNER JOIN Servers s ON ps.ServerGuid = s.Guid
                 WHERE ps.StartTime >= @p0
                   AND s.Game IN ('bf1942', 'fh2', 'bfvietnam')
+                  AND (ps.IsDeleted = 0 OR ps.IsDeleted IS NULL)
                 GROUP BY s.Game, date(ps.StartTime), CAST(strftime('%w', ps.StartTime) AS INTEGER), CAST(strftime('%H', ps.StartTime) AS INTEGER)
             ) daily_stats
             GROUP BY Game, DayOfWeek, HourOfDay";
@@ -368,6 +441,7 @@ public class DailyAggregateRefreshJob(
                 @p0 as UpdatedAt
             FROM Rounds
             WHERE IsActive = 0
+              AND (IsDeleted = 0 OR IsDeleted IS NULL)
               AND MapName IS NOT NULL
               AND MapName != ''
               AND StartTime >= @p1
@@ -414,6 +488,7 @@ public class DailyAggregateRefreshJob(
             INNER JOIN Servers s ON r.ServerGuid = s.Guid
             WHERE r.StartTime >= @p1
               AND r.IsActive = 0
+              AND (r.IsDeleted = 0 OR r.IsDeleted IS NULL)
               AND r.MapName IS NOT NULL
               AND r.MapName != ''
               AND s.Game IN ('bf1942', 'fh2', 'bfvietnam')
@@ -458,6 +533,7 @@ public class DailyAggregateRefreshJob(
             FROM Rounds r
             INNER JOIN Servers s ON r.ServerGuid = s.Guid
             WHERE r.IsActive = 0
+              AND (r.IsDeleted = 0 OR r.IsDeleted IS NULL)
               AND r.MapName IS NOT NULL
               AND r.MapName != ''
               AND s.Game IN ('bf1942', 'fh2', 'bfvietnam')

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using api.PlayerTracking;
 
@@ -10,9 +11,11 @@ using api.PlayerTracking;
 namespace api.Migrations
 {
     [DbContext(typeof(PlayerTrackerDbContext))]
-    partial class PlayerTrackerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260125133121_AddIsDeletedToRoundAndPlayerSession")]
+    partial class AddIsDeletedToRoundAndPlayerSession
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.5");
@@ -845,10 +848,6 @@ namespace api.Migrations
                         .HasColumnType("INTEGER");
 
                     b.HasKey("SessionId");
-
-                    b.HasIndex("LastSeenTime")
-                        .HasDatabaseName("IX_PlayerSessions_LastSeenTime_WhereNotDeleted")
-                        .HasFilter("IsDeleted = 0");
 
                     b.HasIndex("RoundId");
 

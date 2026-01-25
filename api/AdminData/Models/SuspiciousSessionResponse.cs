@@ -8,5 +8,6 @@ public record SuspiciousSessionResponse(
     int TotalDeaths,
     double KdRatio,
     string RoundId,
-    DateTime RoundStartTime
+    DateTime RoundStartTime,
+    bool RoundIsDeleted = false
 );

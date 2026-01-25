@@ -18,6 +18,7 @@ namespace api.StatsCollectors;
 /// </summary>
 public class AggregateCalculationService(
     IServiceProvider services,
+    api.Services.IAggregateConcurrencyService concurrency,
     ILogger<AggregateCalculationService> logger,
     IClock clock) : BackgroundService
 {
@@ -52,9 +53,12 @@ public class AggregateCalculationService(
                     var currentWeek = System.Globalization.ISOWeek.GetWeekOfYear(now);
                     var isoYear = System.Globalization.ISOWeek.GetYear(now);
 
-                    await CalculatePlayerStatsMonthly(dbContext, currentYear, currentMonth);
-                    await CalculatePlayerServerStats(dbContext, isoYear, currentWeek);
-                    await CalculatePlayerMapStats(dbContext, currentYear, currentMonth);
+                    await concurrency.ExecuteWithPlayerAggregatesLockAsync(async (_) =>
+                    {
+                        await CalculatePlayerStatsMonthly(dbContext, currentYear, currentMonth);
+                        await CalculatePlayerServerStats(dbContext, isoYear, currentWeek);
+                        await CalculatePlayerMapStats(dbContext, currentYear, currentMonth);
+                    }, stoppingToken);
 
                     cycleStopwatch.Stop();
                     activity?.SetTag("cycle_duration_ms", cycleStopwatch.ElapsedMilliseconds);
@@ -119,6 +123,7 @@ public class AggregateCalculationService(
                 WHERE strftime('%Y', ps.StartTime) = {0}
                   AND strftime('%m', ps.StartTime) = {1}
                   AND p.AiBot = 0
+                  AND (ps.IsDeleted = 0 OR ps.IsDeleted IS NULL)
                 GROUP BY ps.PlayerName",
                 yearString, monthString).ToListAsync();
             queryStopwatch.Stop();
@@ -222,6 +227,7 @@ public class AggregateCalculationService(
                 WHERE ps.StartTime >= {0}
                   AND ps.StartTime < {1}
                   AND p.AiBot = 0
+                  AND (ps.IsDeleted = 0 OR ps.IsDeleted IS NULL)
                 GROUP BY ps.PlayerName, ps.ServerGuid",
                 weekStart.ToString("yyyy-MM-dd HH:mm:ss"),
                 weekEnd.ToString("yyyy-MM-dd HH:mm:ss")).ToListAsync();
@@ -318,6 +324,7 @@ public class AggregateCalculationService(
                 WHERE strftime('%Y', ps.StartTime) = {0}
                   AND strftime('%m', ps.StartTime) = {1}
                   AND p.AiBot = 0
+                  AND (ps.IsDeleted = 0 OR ps.IsDeleted IS NULL)
                 GROUP BY ps.PlayerName, ps.MapName, ps.ServerGuid",
                 yearString, monthString).ToListAsync();
             queryStopwatch.Stop();
@@ -341,6 +348,7 @@ public class AggregateCalculationService(
                 WHERE strftime('%Y', ps.StartTime) = {0}
                   AND strftime('%m', ps.StartTime) = {1}
                   AND p.AiBot = 0
+                  AND (ps.IsDeleted = 0 OR ps.IsDeleted IS NULL)
                 GROUP BY ps.PlayerName, ps.MapName",
                 yearString, monthString).ToListAsync();
             globalQueryStopwatch.Stop();

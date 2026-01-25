@@ -103,6 +103,14 @@ public class PlayerTrackerDbContext : DbContext
             .HasIndex(ps => new { ps.PlayerName, ps.IsActive })
             .HasDatabaseName("IX_PlayerSessions_PlayerName_IsActive");
 
+        // Partial index: aggregates (tier/backfill) scan by LastSeenTime and exclude IsDeleted.
+        // Omitting deleted rows from the index reduces size and helps those queries.
+        // No standalone index on IsDeleted: IsDeleted=0 matches almost all rows (low selectivity).
+        modelBuilder.Entity<PlayerSession>()
+            .HasIndex(ps => ps.LastSeenTime)
+            .HasFilter("IsDeleted = 0")
+            .HasDatabaseName("IX_PlayerSessions_LastSeenTime_WhereNotDeleted");
+
         // Configure PlayerObservation entity
         modelBuilder.Entity<PlayerObservation>()
             .HasKey(po => po.ObservationId);
@@ -1126,6 +1134,9 @@ public class PlayerSession
     public string GameType { get; set; } = "";
     public string? RoundId { get; set; }
 
+    /// <summary>True when an admin has soft-deleted this session (round marked deleted). Excluded from aggregates.</summary>
+    public bool IsDeleted { get; set; }
+
     // Current live state - updated with each observation for performance
     public int CurrentPing { get; set; } = 0;
     public int CurrentTeam { get; set; } = 1;
@@ -1157,6 +1168,9 @@ public class Round
     public string? Team1Label { get; set; }
     public string? Team2Label { get; set; }
     public int? RoundTimeRemain { get; set; }
+
+    /// <summary>True when an admin has soft-deleted this round. Excluded from aggregates; achievements are removed.</summary>
+    public bool IsDeleted { get; set; }
 
     // Navigation properties
     public List<PlayerSession> Sessions { get; set; } = new();

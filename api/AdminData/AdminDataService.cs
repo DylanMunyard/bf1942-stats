@@ -3,7 +3,9 @@ using api.AdminData.Models;
 using api.Data.Entities;
 using api.PlayerTracking;
 using api.Services.BackgroundJobs;
+using api.StatsCollectors;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NodaTime;
 
@@ -11,7 +13,7 @@ namespace api.AdminData;
 
 public class AdminDataService(
     PlayerTrackerDbContext dbContext,
-    IAggregateBackfillBackgroundService aggregateBackfillService,
+    IServiceScopeFactory scopeFactory,
     IClock clock,
     ILogger<AdminDataService> logger
 ) : IAdminDataService
@@ -21,6 +23,11 @@ public class AdminDataService(
         var query = from ps in dbContext.PlayerSessions
                     join r in dbContext.Rounds on ps.RoundId equals r.RoundId
                     select new { ps, r };
+
+        if (!request.IncludeDeletedRounds)
+        {
+            query = query.Where(x => !x.r.IsDeleted && !x.ps.IsDeleted);
+        }
 
         // Apply filters (empty string / null from UI are treated as not provided)
         if (!string.IsNullOrEmpty(request.ServerGuid))
@@ -68,7 +75,8 @@ public class AdminDataService(
                 x.ps.TotalDeaths,
                 x.ps.TotalDeaths > 0 ? Math.Round((double)x.ps.TotalKills / x.ps.TotalDeaths, 2) : x.ps.TotalKills,
                 x.ps.RoundId ?? "",
-                x.r.StartTime
+                x.r.StartTime,
+                x.r.IsDeleted
             ))
             .ToListAsync();
 
@@ -114,7 +122,8 @@ public class AdminDataService(
                 : null,
             round.MapName,
             players,
-            achievementCount
+            achievementCount,
+            round.IsDeleted
         );
     }
 
@@ -128,9 +137,9 @@ public class AdminDataService(
             throw new InvalidOperationException($"Round {roundId} not found");
         }
 
-        logger.LogInformation("Starting cascade delete for round {RoundId} requested by {AdminEmail}", roundId, adminEmail);
+        logger.LogInformation("Starting soft-delete for round {RoundId} (delete achievements, mark round+sessions deleted) requested by {AdminEmail}", roundId, adminEmail);
 
-        // Step 1: Collect affected player names for aggregate recalculation
+        // Step 1: Collect affected player names for aggregate recalculation (count for audit/response from .Count)
         var affectedPlayerNames = await dbContext.PlayerSessions
             .Where(ps => ps.RoundId == roundId)
             .Select(ps => ps.PlayerName)
@@ -139,46 +148,30 @@ public class AdminDataService(
 
         logger.LogInformation("Round {RoundId} affects {PlayerCount} players", roundId, affectedPlayerNames.Count);
 
-        // Step 2: Get session IDs for this round (needed for observations deletion)
-        var sessionIds = await dbContext.PlayerSessions
-            .Where(ps => ps.RoundId == roundId)
-            .Select(ps => ps.SessionId)
-            .ToListAsync();
-
-        // Step 3: Delete PlayerAchievements where RoundId = roundId
+        // Step 2: Delete PlayerAchievements where RoundId = roundId (achievements can be rebuilt)
         var deletedAchievements = await dbContext.PlayerAchievements
             .Where(pa => pa.RoundId == roundId)
             .ExecuteDeleteAsync();
         logger.LogInformation("Deleted {Count} achievements for round {RoundId}", deletedAchievements, roundId);
 
-        // Step 4: Delete PlayerObservations where SessionId in sessions of round
-        var deletedObservations = 0;
-        if (sessionIds.Count > 0)
-        {
-            deletedObservations = await dbContext.PlayerObservations
-                .Where(po => sessionIds.Contains(po.SessionId))
-                .ExecuteDeleteAsync();
-            logger.LogInformation("Deleted {Count} observations for round {RoundId}", deletedObservations, roundId);
-        }
-
-        // Step 5: Delete PlayerSessions where RoundId = roundId
-        var deletedSessions = await dbContext.PlayerSessions
+        // Step 3: Mark all PlayerSessions for this round as IsDeleted (soft-delete; observations kept)
+        var sessionsMarked = await dbContext.PlayerSessions
             .Where(ps => ps.RoundId == roundId)
-            .ExecuteDeleteAsync();
-        logger.LogInformation("Deleted {Count} sessions for round {RoundId}", deletedSessions, roundId);
+            .ExecuteUpdateAsync(s => s.SetProperty(ps => ps.IsDeleted, true));
+        logger.LogInformation("Marked {Count} sessions as deleted for round {RoundId}", sessionsMarked, roundId);
 
-        // Step 6: Delete the Round
-        var deletedRounds = await dbContext.Rounds
+        // Step 4: Mark the Round as IsDeleted (soft-delete; round and sessions remain for potential recovery)
+        await dbContext.Rounds
             .Where(r => r.RoundId == roundId)
-            .ExecuteDeleteAsync();
-        logger.LogInformation("Deleted round {RoundId}", roundId);
+            .ExecuteUpdateAsync(r => r.SetProperty(ro => ro.IsDeleted, true));
+        logger.LogInformation("Marked round {RoundId} as deleted", roundId);
 
-        // Step 7: Create audit log entry
+        // Step 5: Create audit log entry (player count only; players are soft-deleted and recoverable)
         var details = JsonSerializer.Serialize(new
         {
             DeletedAchievements = deletedAchievements,
-            DeletedObservations = deletedObservations,
-            DeletedSessions = deletedSessions,
+            SessionsMarkedDeleted = sessionsMarked,
+            RoundMarkedDeleted = 1,
             AffectedPlayers = affectedPlayerNames.Count,
             ServerGuid = round.ServerGuid,
             MapName = round.MapName,
@@ -196,33 +189,129 @@ public class AdminDataService(
         });
         await dbContext.SaveChangesAsync();
 
-        // Step 8: Queue aggregate recalculation for affected players
-        if (affectedPlayerNames.Count > 0)
+        // Step 6: Queue aggregate recalculation (player aggregates, ServerMapStats, ServerPlayerRankings)
+        var serverGuid = round.ServerGuid;
+        var mapName = round.MapName ?? "";
+        var year = round.StartTime.Year;
+        var month = round.StartTime.Month;
+
+        _ = Task.Run(async () =>
         {
-            logger.LogInformation("Queueing aggregate recalculation for {PlayerCount} affected players", affectedPlayerNames.Count);
-            _ = Task.Run(async () =>
+            try
             {
-                try
+                using var scope = scopeFactory.CreateScope();
+                var aggregateBackfill = scope.ServiceProvider.GetRequiredService<IAggregateBackfillBackgroundService>();
+                var dailyRefresh = scope.ServiceProvider.GetRequiredService<IDailyAggregateRefreshBackgroundService>();
+                var rankingsRecalc = scope.ServiceProvider.GetRequiredService<IServerPlayerRankingsRecalculationService>();
+
+                if (affectedPlayerNames.Count > 0)
                 {
-                    await aggregateBackfillService.RunForPlayersAsync(affectedPlayerNames);
-                    logger.LogInformation("Aggregate recalculation completed for {PlayerCount} players after deleting round {RoundId}",
+                    await aggregateBackfill.RunForPlayersAsync(affectedPlayerNames);
+                    logger.LogInformation("Aggregate recalculation completed for {PlayerCount} players after soft-deleting round {RoundId}",
                         affectedPlayerNames.Count, roundId);
                 }
-                catch (Exception ex)
+                if (!string.IsNullOrEmpty(mapName))
                 {
-                    logger.LogError(ex, "Failed to recalculate aggregates for players after deleting round {RoundId}", roundId);
+                    await dailyRefresh.RefreshServerMapStatsForServerMapPeriodAsync(serverGuid, mapName, year, month);
                 }
-            });
-        }
+                await rankingsRecalc.RecalculateForServerAndPeriodAsync(serverGuid, year, month);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to recalculate aggregates after soft-deleting round {RoundId}", roundId);
+            }
+        });
 
+        // DeletedObservations=0 (we keep observations); DeletedSessions/DeletedRounds = marked count for API shape
         return new DeleteRoundResponse(
             roundId,
             deletedAchievements,
-            deletedObservations,
-            deletedSessions,
-            deletedRounds,
+            0,
+            sessionsMarked,
+            1,
             affectedPlayerNames.Count
         );
+    }
+
+    public async Task<UndeleteRoundResponse> UndeleteRoundAsync(string roundId, string adminEmail)
+    {
+        var round = await dbContext.Rounds
+            .FirstOrDefaultAsync(r => r.RoundId == roundId);
+
+        if (round == null)
+        {
+            throw new InvalidOperationException($"Round {roundId} not found");
+        }
+
+        logger.LogInformation("Undelete (restore) round {RoundId} requested by {AdminEmail}", roundId, adminEmail);
+
+        var affectedPlayerNames = await dbContext.PlayerSessions
+            .Where(ps => ps.RoundId == roundId)
+            .Select(ps => ps.PlayerName)
+            .Distinct()
+            .ToListAsync();
+
+        var sessionsRestored = await dbContext.PlayerSessions
+            .Where(ps => ps.RoundId == roundId)
+            .ExecuteUpdateAsync(s => s.SetProperty(ps => ps.IsDeleted, false));
+
+        await dbContext.Rounds
+            .Where(r => r.RoundId == roundId)
+            .ExecuteUpdateAsync(r => r.SetProperty(ro => ro.IsDeleted, false));
+
+        var details = JsonSerializer.Serialize(new
+        {
+            SessionsRestored = sessionsRestored,
+            RoundRestored = 1,
+            AffectedPlayers = affectedPlayerNames.Count,
+            ServerGuid = round.ServerGuid,
+            MapName = round.MapName,
+            RoundStartTime = round.StartTime
+        });
+
+        dbContext.AdminAuditLogs.Add(new AdminAuditLog
+        {
+            Action = "undelete_round",
+            TargetType = "Round",
+            TargetId = roundId,
+            Details = details,
+            AdminEmail = adminEmail,
+            Timestamp = clock.GetCurrentInstant()
+        });
+        await dbContext.SaveChangesAsync();
+
+        var serverGuid = round.ServerGuid;
+        var mapName = round.MapName ?? "";
+        var year = round.StartTime.Year;
+        var month = round.StartTime.Month;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = scopeFactory.CreateScope();
+                var aggregateBackfill = scope.ServiceProvider.GetRequiredService<IAggregateBackfillBackgroundService>();
+                var dailyRefresh = scope.ServiceProvider.GetRequiredService<IDailyAggregateRefreshBackgroundService>();
+                var rankingsRecalc = scope.ServiceProvider.GetRequiredService<IServerPlayerRankingsRecalculationService>();
+
+                if (affectedPlayerNames.Count > 0)
+                {
+                    await aggregateBackfill.RunForPlayersAsync(affectedPlayerNames);
+                    logger.LogInformation("Aggregate recalculation completed for {PlayerCount} players after restoring round {RoundId}", affectedPlayerNames.Count, roundId);
+                }
+                if (!string.IsNullOrEmpty(mapName))
+                {
+                    await dailyRefresh.RefreshServerMapStatsForServerMapPeriodAsync(serverGuid, mapName, year, month);
+                }
+                await rankingsRecalc.RecalculateForServerAndPeriodAsync(serverGuid, year, month);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to recalculate aggregates after restoring round {RoundId}", roundId);
+            }
+        });
+
+        return new UndeleteRoundResponse(roundId, sessionsRestored, 1, affectedPlayerNames.Count);
     }
 
     public async Task<List<AdminAuditLog>> GetAuditLogAsync(int limit = 100)

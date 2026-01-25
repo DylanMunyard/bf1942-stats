@@ -31,7 +31,6 @@ public class AdminDataController(IAdminDataService adminDataService) : Controlle
     [HttpDelete("rounds/{roundId}")]
     public async Task<ActionResult<DeleteRoundResponse>> DeleteRound(string roundId)
     {
-        // Get admin email from claims
         var adminEmail = User.Claims
             .FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email)?.Value;
 
@@ -43,6 +42,28 @@ public class AdminDataController(IAdminDataService adminDataService) : Controlle
         try
         {
             var result = await adminDataService.DeleteRoundAsync(roundId, adminEmail);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(ex.Message);
+        }
+    }
+
+    [HttpPost("rounds/{roundId}/undelete")]
+    public async Task<ActionResult<UndeleteRoundResponse>> UndeleteRound(string roundId)
+    {
+        var adminEmail = User.Claims
+            .FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email)?.Value;
+
+        if (string.IsNullOrEmpty(adminEmail))
+        {
+            return Unauthorized("Admin email not found in token");
+        }
+
+        try
+        {
+            var result = await adminDataService.UndeleteRoundAsync(roundId, adminEmail);
             return Ok(result);
         }
         catch (InvalidOperationException ex)

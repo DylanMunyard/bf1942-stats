@@ -9,7 +9,8 @@ public record RoundDetailResponse(
     Instant? EndTime,
     string MapName,
     List<RoundPlayerInfo> Players,
-    int AchievementCount
+    int AchievementCount,
+    bool IsDeleted = false
 );
 
 public record RoundPlayerInfo(

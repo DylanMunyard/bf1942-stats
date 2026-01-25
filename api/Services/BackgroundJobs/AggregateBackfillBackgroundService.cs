@@ -17,6 +17,7 @@ namespace api.Services.BackgroundJobs;
 /// </summary>
 public class AggregateBackfillBackgroundService(
     IServiceScopeFactory scopeFactory,
+    api.Services.IAggregateConcurrencyService concurrency,
     ILogger<AggregateBackfillBackgroundService> logger,
     IClock clock
 ) : IAggregateBackfillBackgroundService
@@ -66,103 +67,106 @@ public class AggregateBackfillBackgroundService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
 
-        try
+        await concurrency.ExecuteWithPlayerAggregatesLockAsync(async (c) =>
         {
-            var now = clock.GetCurrentInstant();
-            var nowUtc = now.ToDateTimeUtc();
-            var nowIso = InstantPattern.ExtendedIso.Format(now);
-
-            // First, get all player names for this tier
-            var playerNames = await GetPlayerNamesForTierAsync(dbContext, tier, nowUtc, ct);
-            logger.LogInformation("Tier {Tier}: Found {Count} players to process", tier, playerNames.Count);
-
-            if (playerNames.Count == 0)
+            try
             {
-                logger.LogInformation("Tier {Tier}: No players to process", tier);
-                return;
-            }
+                var now = clock.GetCurrentInstant();
+                var nowUtc = now.ToDateTimeUtc();
+                var nowIso = InstantPattern.ExtendedIso.Format(now);
 
-            // Process players in batches
-            var totalBatches = (playerNames.Count + PlayerBatchSize - 1) / PlayerBatchSize;
-            var lifetimeCount = 0;
-            var serverStatsCount = 0;
-            var mapStatsCount = 0;
-            var bestScoresCount = 0;
-            var processedPlayers = 0;
-            var batchStopwatch = new Stopwatch();
+                // First, get all player names for this tier
+                var playerNames = await GetPlayerNamesForTierAsync(dbContext, tier, nowUtc, c);
+                logger.LogInformation("Tier {Tier}: Found {Count} players to process", tier, playerNames.Count);
 
-            logger.LogInformation(
-                "Tier {Tier}: Starting backfill of {TotalPlayers} players in {TotalBatches} batches (batch size: {BatchSize})",
-                tier, playerNames.Count, totalBatches, PlayerBatchSize);
+                if (playerNames.Count == 0)
+                {
+                    logger.LogInformation("Tier {Tier}: No players to process", tier);
+                    return;
+                }
 
-            for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++)
-            {
-                if (ct.IsCancellationRequested) break;
-
-                var batchPlayers = playerNames
-                    .Skip(batchIndex * PlayerBatchSize)
-                    .Take(PlayerBatchSize)
-                    .ToList();
-
-                batchStopwatch.Restart();
-
-                var batchLifetime = await BackfillMonthlyStatsAsync(dbContext, batchPlayers, nowIso, ct);
-                var batchServerStats = await BackfillServerStatsAsync(dbContext, batchPlayers, nowIso, ct);
-                var batchMapStats = await BackfillMapStatsAsync(dbContext, batchPlayers, nowIso, ct);
-                var batchBestScores = await BackfillBestScoresAsync(dbContext, batchPlayers, nowUtc, ct);
-
-                batchStopwatch.Stop();
-
-                lifetimeCount += batchLifetime;
-                serverStatsCount += batchServerStats;
-                mapStatsCount += batchMapStats;
-                bestScoresCount += batchBestScores;
-                processedPlayers += batchPlayers.Count;
-
-                var percentComplete = (processedPlayers * 100.0) / playerNames.Count;
-                var batchRecordsCreated = batchLifetime + batchServerStats + batchMapStats + batchBestScores;
+                // Process players in batches
+                var totalBatches = (playerNames.Count + PlayerBatchSize - 1) / PlayerBatchSize;
+                var lifetimeCount = 0;
+                var serverStatsCount = 0;
+                var mapStatsCount = 0;
+                var bestScoresCount = 0;
+                var processedPlayers = 0;
+                var batchStopwatch = new Stopwatch();
 
                 logger.LogInformation(
-                    "Tier {Tier}: Batch {Batch}/{Total} completed in {BatchMs}ms - {PlayersProcessed}/{TotalPlayers} players ({Percent:F1}%) - {BatchRecords} records this batch",
-                    tier, batchIndex + 1, totalBatches, batchStopwatch.ElapsedMilliseconds,
-                    processedPlayers, playerNames.Count, percentComplete, batchRecordsCreated);
+                    "Tier {Tier}: Starting backfill of {TotalPlayers} players in {TotalBatches} batches (batch size: {BatchSize})",
+                    tier, playerNames.Count, totalBatches, PlayerBatchSize);
+
+                for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++)
+                {
+                    if (c.IsCancellationRequested) break;
+
+                    var batchPlayers = playerNames
+                        .Skip(batchIndex * PlayerBatchSize)
+                        .Take(PlayerBatchSize)
+                        .ToList();
+
+                    batchStopwatch.Restart();
+
+                    var batchLifetime = await BackfillMonthlyStatsAsync(dbContext, batchPlayers, nowIso, c);
+                    var batchServerStats = await BackfillServerStatsAsync(dbContext, batchPlayers, nowIso, c);
+                    var batchMapStats = await BackfillMapStatsAsync(dbContext, batchPlayers, nowIso, c);
+                    var batchBestScores = await BackfillBestScoresAsync(dbContext, batchPlayers, nowUtc, c);
+
+                    batchStopwatch.Stop();
+
+                    lifetimeCount += batchLifetime;
+                    serverStatsCount += batchServerStats;
+                    mapStatsCount += batchMapStats;
+                    bestScoresCount += batchBestScores;
+                    processedPlayers += batchPlayers.Count;
+
+                    var percentComplete = (processedPlayers * 100.0) / playerNames.Count;
+                    var batchRecordsCreated = batchLifetime + batchServerStats + batchMapStats + batchBestScores;
+
+                    logger.LogInformation(
+                        "Tier {Tier}: Batch {Batch}/{Total} completed in {BatchMs}ms - {PlayersProcessed}/{TotalPlayers} players ({Percent:F1}%) - {BatchRecords} records this batch",
+                        tier, batchIndex + 1, totalBatches, batchStopwatch.ElapsedMilliseconds,
+                        processedPlayers, playerNames.Count, percentComplete, batchRecordsCreated);
+                }
+
+                stopwatch.Stop();
+
+                var totalRecords = lifetimeCount + serverStatsCount + mapStatsCount + bestScoresCount;
+                var playersPerSecond = stopwatch.ElapsedMilliseconds > 0 ? (playerNames.Count * 1000.0) / stopwatch.ElapsedMilliseconds : 0;
+                var recordsPerSecond = stopwatch.ElapsedMilliseconds > 0 ? (totalRecords * 1000.0) / stopwatch.ElapsedMilliseconds : 0;
+
+                logger.LogInformation(
+                    "Tier {Tier} summary: {TotalPlayers} players, {TotalRecords} total records created",
+                    tier, playerNames.Count, totalRecords);
+                logger.LogInformation(
+                    "Tier {Tier} breakdown: Lifetime={Lifetime}, ServerStats={ServerStats}, MapStats={MapStats}, BestScores={BestScores}",
+                    tier, lifetimeCount, serverStatsCount, mapStatsCount, bestScoresCount);
+                logger.LogInformation(
+                    "Tier {Tier} throughput: {PlayersPerSec:F1} players/sec, {RecordsPerSec:F1} records/sec",
+                    tier, playersPerSecond, recordsPerSecond);
+                activity?.SetTag("result.players_processed", playerNames.Count);
+                activity?.SetTag("result.total_records", totalRecords);
+                activity?.SetTag("result.lifetime_stats", lifetimeCount);
+                activity?.SetTag("result.server_stats", serverStatsCount);
+                activity?.SetTag("result.map_stats", mapStatsCount);
+                activity?.SetTag("result.best_scores", bestScoresCount);
+                activity?.SetTag("result.duration_ms", stopwatch.ElapsedMilliseconds);
+                activity?.SetTag("result.players_per_sec", playersPerSecond);
+                activity?.SetTag("result.records_per_sec", recordsPerSecond);
+
+                logger.LogInformation(
+                    "Tier {Tier} backfill completed in {Duration}ms",
+                    tier, stopwatch.ElapsedMilliseconds);
             }
-
-            stopwatch.Stop();
-
-            var totalRecords = lifetimeCount + serverStatsCount + mapStatsCount + bestScoresCount;
-            var playersPerSecond = stopwatch.ElapsedMilliseconds > 0 ? (playerNames.Count * 1000.0) / stopwatch.ElapsedMilliseconds : 0;
-            var recordsPerSecond = stopwatch.ElapsedMilliseconds > 0 ? (totalRecords * 1000.0) / stopwatch.ElapsedMilliseconds : 0;
-
-            logger.LogInformation(
-                "Tier {Tier} summary: {TotalPlayers} players, {TotalRecords} total records created",
-                tier, playerNames.Count, totalRecords);
-            logger.LogInformation(
-                "Tier {Tier} breakdown: Lifetime={Lifetime}, ServerStats={ServerStats}, MapStats={MapStats}, BestScores={BestScores}",
-                tier, lifetimeCount, serverStatsCount, mapStatsCount, bestScoresCount);
-            logger.LogInformation(
-                "Tier {Tier} throughput: {PlayersPerSec:F1} players/sec, {RecordsPerSec:F1} records/sec",
-                tier, playersPerSecond, recordsPerSecond);
-            activity?.SetTag("result.players_processed", playerNames.Count);
-            activity?.SetTag("result.total_records", totalRecords);
-            activity?.SetTag("result.lifetime_stats", lifetimeCount);
-            activity?.SetTag("result.server_stats", serverStatsCount);
-            activity?.SetTag("result.map_stats", mapStatsCount);
-            activity?.SetTag("result.best_scores", bestScoresCount);
-            activity?.SetTag("result.duration_ms", stopwatch.ElapsedMilliseconds);
-            activity?.SetTag("result.players_per_sec", playersPerSecond);
-            activity?.SetTag("result.records_per_sec", recordsPerSecond);
-
-            logger.LogInformation(
-                "Tier {Tier} backfill completed in {Duration}ms",
-                tier, stopwatch.ElapsedMilliseconds);
-        }
-        catch (Exception ex)
-        {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            logger.LogError(ex, "Failed to complete tier {Tier} backfill", tier);
-            throw;
-        }
+            catch (Exception ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                logger.LogError(ex, "Failed to complete tier {Tier} backfill", tier);
+                throw;
+            }
+        }, ct);
     }
 
     public async Task RunForPlayersAsync(IEnumerable<string> playerNames, CancellationToken ct = default)
@@ -182,51 +186,54 @@ public class AggregateBackfillBackgroundService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
 
-        try
+        await concurrency.ExecuteWithPlayerAggregatesLockAsync(async (c) =>
         {
-            var now = clock.GetCurrentInstant();
-            var nowUtc = now.ToDateTimeUtc();
-            var nowIso = InstantPattern.ExtendedIso.Format(now);
-
-            // Process players in batches
-            var totalBatches = (playerList.Count + PlayerBatchSize - 1) / PlayerBatchSize;
-            var lifetimeCount = 0;
-            var serverStatsCount = 0;
-            var mapStatsCount = 0;
-            var bestScoresCount = 0;
-
-            for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++)
+            try
             {
-                if (ct.IsCancellationRequested) break;
+                var now = clock.GetCurrentInstant();
+                var nowUtc = now.ToDateTimeUtc();
+                var nowIso = InstantPattern.ExtendedIso.Format(now);
 
-                var batchPlayers = playerList
-                    .Skip(batchIndex * PlayerBatchSize)
-                    .Take(PlayerBatchSize)
-                    .ToList();
+                // Process players in batches
+                var totalBatches = (playerList.Count + PlayerBatchSize - 1) / PlayerBatchSize;
+                var lifetimeCount = 0;
+                var serverStatsCount = 0;
+                var mapStatsCount = 0;
+                var bestScoresCount = 0;
 
-                lifetimeCount += await BackfillMonthlyStatsAsync(dbContext, batchPlayers, nowIso, ct);
-                serverStatsCount += await BackfillServerStatsAsync(dbContext, batchPlayers, nowIso, ct);
-                mapStatsCount += await BackfillMapStatsAsync(dbContext, batchPlayers, nowIso, ct);
-                bestScoresCount += await BackfillBestScoresAsync(dbContext, batchPlayers, nowUtc, ct);
+                for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++)
+                {
+                    if (c.IsCancellationRequested) break;
+
+                    var batchPlayers = playerList
+                        .Skip(batchIndex * PlayerBatchSize)
+                        .Take(PlayerBatchSize)
+                        .ToList();
+
+                    lifetimeCount += await BackfillMonthlyStatsAsync(dbContext, batchPlayers, nowIso, c);
+                    serverStatsCount += await BackfillServerStatsAsync(dbContext, batchPlayers, nowIso, c);
+                    mapStatsCount += await BackfillMapStatsAsync(dbContext, batchPlayers, nowIso, c);
+                    bestScoresCount += await BackfillBestScoresAsync(dbContext, batchPlayers, nowUtc, c);
+                }
+
+                stopwatch.Stop();
+
+                var totalRecords = lifetimeCount + serverStatsCount + mapStatsCount + bestScoresCount;
+                logger.LogInformation(
+                    "Completed aggregate backfill for {PlayerCount} players: {TotalRecords} records in {Duration}ms",
+                    playerList.Count, totalRecords, stopwatch.ElapsedMilliseconds);
+
+                activity?.SetTag("result.players_processed", playerList.Count);
+                activity?.SetTag("result.total_records", totalRecords);
+                activity?.SetTag("result.duration_ms", stopwatch.ElapsedMilliseconds);
             }
-
-            stopwatch.Stop();
-
-            var totalRecords = lifetimeCount + serverStatsCount + mapStatsCount + bestScoresCount;
-            logger.LogInformation(
-                "Completed aggregate backfill for {PlayerCount} players: {TotalRecords} records in {Duration}ms",
-                playerList.Count, totalRecords, stopwatch.ElapsedMilliseconds);
-
-            activity?.SetTag("result.players_processed", playerList.Count);
-            activity?.SetTag("result.total_records", totalRecords);
-            activity?.SetTag("result.duration_ms", stopwatch.ElapsedMilliseconds);
-        }
-        catch (Exception ex)
-        {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            logger.LogError(ex, "Failed to complete backfill for {PlayerCount} players", playerList.Count);
-            throw;
-        }
+            catch (Exception ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                logger.LogError(ex, "Failed to complete backfill for {PlayerCount} players", playerList.Count);
+                throw;
+            }
+        }, ct);
     }
 
     private async Task<List<string>> GetPlayerNamesForTierAsync(
@@ -245,6 +252,7 @@ public class AggregateBackfillBackgroundService(
             INNER JOIN Players p ON ps.PlayerName = p.Name
             WHERE {tierWhereClause}
               AND p.AiBot = 0
+              AND (ps.IsDeleted = 0 OR ps.IsDeleted IS NULL)
             ORDER BY ps.PlayerName";
 
         return await dbContext.Database
@@ -311,6 +319,14 @@ public class AggregateBackfillBackgroundService(
         CancellationToken ct)
     {
         var (playerNamesFilter, playerParams) = BuildPlayerNamesFilter(batchPlayers);
+        var (playerNamesFilterNoAlias, _) = BuildPlayerNamesFilterNoAlias(batchPlayers);
+
+        // Delete existing rows for these players so that periods with no remaining (non-deleted)
+        // sessions are removed rather than left as stale data (e.g. after round delete).
+        await dbContext.Database.ExecuteSqlRawAsync(
+            $"DELETE FROM PlayerStatsMonthly WHERE {playerNamesFilterNoAlias}",
+            playerParams,
+            ct);
 
         // Use INSERT OR REPLACE to upsert aggregated stats per month
         // Filter directly on PlayerName for index utilization (parameterized)
@@ -344,6 +360,7 @@ public class AggregateBackfillBackgroundService(
                 @pNowIso as UpdatedAt
             FROM PlayerSessions ps
             WHERE {playerNamesFilter}
+              AND (ps.IsDeleted = 0 OR ps.IsDeleted IS NULL)
             GROUP BY ps.PlayerName, strftime('%Y', ps.StartTime), strftime('%m', ps.StartTime)";
 
         var allParams = playerParams.Append(nowIso).ToArray();
@@ -360,7 +377,15 @@ public class AggregateBackfillBackgroundService(
         CancellationToken ct)
     {
         var (playerNamesFilter, playerParams) = BuildPlayerNamesFilter(batchPlayers);
+        var (playerNamesFilterNoAlias, _) = BuildPlayerNamesFilterNoAlias(batchPlayers);
         var nowIsoParamIndex = batchPlayers.Count;
+
+        // Delete existing rows for these players so that (server,year,week) with no remaining
+        // (non-deleted) sessions are removed (e.g. after round delete).
+        await dbContext.Database.ExecuteSqlRawAsync(
+            $"DELETE FROM PlayerServerStats WHERE {playerNamesFilterNoAlias}",
+            playerParams,
+            ct);
 
         // Filter directly on PlayerName for index utilization (parameterized)
         // Group by Year/Week for weekly aggregation using ISO week calculation
@@ -383,6 +408,7 @@ public class AggregateBackfillBackgroundService(
                 @p{nowIsoParamIndex} as UpdatedAt
             FROM PlayerSessions ps
             WHERE {playerNamesFilter}
+              AND (ps.IsDeleted = 0 OR ps.IsDeleted IS NULL)
             GROUP BY ps.PlayerName, ps.ServerGuid,
                 strftime('%Y', datetime(ps.StartTime, '+3 days', 'weekday 4', '-3 days')),
                 (strftime('%j', datetime(ps.StartTime, '+3 days', 'weekday 4', '-3 days')) + 6) / 7";
@@ -398,8 +424,16 @@ public class AggregateBackfillBackgroundService(
         CancellationToken ct)
     {
         var (playerNamesFilter, playerParams) = BuildPlayerNamesFilter(batchPlayers);
+        var (playerNamesFilterNoAlias, _) = BuildPlayerNamesFilterNoAlias(batchPlayers);
         var nowIsoParamIndex = batchPlayers.Count;
         var allParams = playerParams.Append(nowIso).ToArray();
+
+        // Delete existing rows for these players so that (map,server,year,month) with no
+        // remaining (non-deleted) sessions are removed (e.g. after round delete).
+        await dbContext.Database.ExecuteSqlRawAsync(
+            $"DELETE FROM PlayerMapStats WHERE {playerNamesFilterNoAlias}",
+            playerParams,
+            ct);
 
         // Server-specific map stats - filter directly on PlayerName (parameterized)
         // Group by Year/Month for monthly aggregation
@@ -422,6 +456,7 @@ public class AggregateBackfillBackgroundService(
                 @p{nowIsoParamIndex} as UpdatedAt
             FROM PlayerSessions ps
             WHERE {playerNamesFilter}
+              AND (ps.IsDeleted = 0 OR ps.IsDeleted IS NULL)
             GROUP BY ps.PlayerName, ps.MapName, ps.ServerGuid, strftime('%Y', ps.StartTime), strftime('%m', ps.StartTime)";
 
         var serverMapCount = await dbContext.Database.ExecuteSqlRawAsync(serverMapSql, allParams, ct);
@@ -447,6 +482,7 @@ public class AggregateBackfillBackgroundService(
                 @p{nowIsoParamIndex} as UpdatedAt
             FROM PlayerSessions ps
             WHERE {playerNamesFilter}
+              AND (ps.IsDeleted = 0 OR ps.IsDeleted IS NULL)
             GROUP BY ps.PlayerName, ps.MapName, strftime('%Y', ps.StartTime), strftime('%m', ps.StartTime)";
 
         var globalMapCount = await dbContext.Database.ExecuteSqlRawAsync(globalMapSql, allParams, ct);
@@ -522,6 +558,7 @@ public class AggregateBackfillBackgroundService(
                     FROM PlayerSessions ps
                     WHERE {playerNamesFilter}
                       AND ps.TotalScore > 0
+                      AND (ps.IsDeleted = 0 OR ps.IsDeleted IS NULL)
                       {cutoffFilter}
                 ) ranked
                 WHERE Rank <= 3";

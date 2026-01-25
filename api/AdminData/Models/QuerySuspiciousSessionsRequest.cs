@@ -10,6 +10,7 @@ public record QuerySuspiciousSessionsRequest(
     [property: JsonConverter(typeof(NullableDoubleEmptyAsNullJsonConverter))] double? MinKdRatio = null,
     [property: JsonConverter(typeof(NullableInstantEmptyAsNullJsonConverter))] Instant? StartDate = null,
     [property: JsonConverter(typeof(NullableInstantEmptyAsNullJsonConverter))] Instant? EndDate = null,
+    bool IncludeDeletedRounds = false,
     int Page = 1,
     int PageSize = 50
 );
