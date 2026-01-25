@@ -84,6 +84,24 @@ public class GamificationService(SqliteGamificationService gamificationService, 
     }
 
     /// <summary>
+    /// Process achievements for a specific round by Id. Used after round undelete to recreate
+    /// milestones (and kill streaks) that were lost when the round was deleted. Run after
+    /// aggregate backfill so PlayerStatsMonthly is up to date for milestone logic.
+    /// </summary>
+    public async Task ProcessAchievementsForRoundIdAsync(string roundId)
+    {
+        var rounds = await gamificationService.GetPlayerRoundsForRoundAsync(roundId);
+        if (rounds.Count == 0) return;
+
+        var achievements = await ProcessAchievementsForRounds(rounds);
+        if (achievements.Count > 0)
+        {
+            await gamificationService.InsertAchievementsBatchAsync(achievements);
+            _logger.LogInformation("Recreated {AchievementCount} achievements for undeleted round {RoundId}", achievements.Count, roundId);
+        }
+    }
+
+    /// <summary>
     /// Process achievements for a specific set of rounds using player metrics
     /// </summary>
     public async Task<List<Achievement>> ProcessAchievementsForRounds(List<PlayerRound> rounds)

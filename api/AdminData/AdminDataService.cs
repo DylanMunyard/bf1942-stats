@@ -1,6 +1,7 @@
 using System.Text.Json;
 using api.AdminData.Models;
 using api.Data.Entities;
+using api.Gamification.Services;
 using api.PlayerTracking;
 using api.Services.BackgroundJobs;
 using api.StatsCollectors;
@@ -215,6 +216,12 @@ public class AdminDataService(
                     await dailyRefresh.RefreshServerMapStatsForServerMapPeriodAsync(serverGuid, mapName, year, month);
                 }
                 await rankingsRecalc.RecalculateForServerAndPeriodAsync(serverGuid, year, month);
+
+                if (affectedPlayerNames.Count > 0)
+                {
+                    var milestoneCalculator = scope.ServiceProvider.GetRequiredService<MilestoneCalculator>();
+                    await milestoneCalculator.RemoveInvalidMilestoneAchievementsForPlayersAsync(affectedPlayerNames);
+                }
             }
             catch (Exception ex)
             {
@@ -304,6 +311,9 @@ public class AdminDataService(
                     await dailyRefresh.RefreshServerMapStatsForServerMapPeriodAsync(serverGuid, mapName, year, month);
                 }
                 await rankingsRecalc.RecalculateForServerAndPeriodAsync(serverGuid, year, month);
+
+                var gamificationService = scope.ServiceProvider.GetRequiredService<GamificationService>();
+                await gamificationService.ProcessAchievementsForRoundIdAsync(roundId);
             }
             catch (Exception ex)
             {

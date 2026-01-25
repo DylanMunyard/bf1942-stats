@@ -573,6 +573,29 @@ public class SqliteGamificationService(
         }
     }
 
+    /// <summary>
+    /// Get PlayerRounds for a specific round. Used when reprocessing achievements after round undelete.
+    /// Excludes soft-deleted sessions.
+    /// </summary>
+    public async Task<List<PlayerRound>> GetPlayerRoundsForRoundAsync(string roundId)
+    {
+        try
+        {
+            var sessions = await dbContext.PlayerSessions
+                .Include(ps => ps.Player)
+                .Where(ps => ps.RoundId == roundId && !ps.IsDeleted)
+                .OrderBy(ps => ps.PlayerName)
+                .ToListAsync();
+
+            return sessions.Select(MapPlayerSessionToPlayerRound).ToList();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to get player rounds for round {RoundId}", roundId);
+            return [];
+        }
+    }
+
     public async Task<List<LeaderboardEntry>> GetKillStreakLeaderboardAsync(int limit = 100)
     {
         try

@@ -1,3 +1,4 @@
+using api.Data.Entities;
 using api.Gamification.Models;
 using api.Analytics.Models;
 using api.PlayerTracking;
@@ -205,6 +206,61 @@ public class MilestoneCalculator(
             logger.LogError(ex, "Error getting milestones for player {PlayerName}", playerName);
             return new List<Achievement>();
         }
+    }
+
+    /// <summary>
+    /// Remove milestone achievements that are no longer valid: the player's current totals
+    /// (from PlayerStatsMonthly) have dropped below the milestone threshold. Used after
+    /// round delete when aggregates have been recalculated without the deleted round.
+    /// </summary>
+    public async Task<int> RemoveInvalidMilestoneAchievementsForPlayersAsync(IEnumerable<string> playerNames)
+    {
+        var playerList = playerNames.ToList();
+        if (playerList.Count == 0) return 0;
+
+        var totals = await dbContext.PlayerStatsMonthly
+            .Where(psm => playerList.Contains(psm.PlayerName))
+            .GroupBy(psm => psm.PlayerName)
+            .Select(g => new
+            {
+                PlayerName = g.Key,
+                TotalKills = g.Sum(x => x.TotalKills),
+                TotalScore = g.Sum(x => x.TotalScore),
+                TotalPlayTimeMinutes = g.Sum(x => x.TotalPlayTimeMinutes)
+            })
+            .ToListAsync();
+
+        var totalsMap = totals.ToDictionary(t => t.PlayerName, t => (t.TotalKills, t.TotalScore, t.TotalPlayTimeMinutes));
+
+        var milestones = await dbContext.PlayerAchievements
+            .Where(pa => playerList.Contains(pa.PlayerName) && pa.AchievementType == AchievementTypes.Milestone)
+            .ToListAsync();
+
+        var toRemove = new List<PlayerAchievement>();
+        foreach (var pa in milestones)
+        {
+            var (totalKills, totalScore, totalPlayTimeMinutes) = totalsMap.GetValueOrDefault(pa.PlayerName, (0, 0, 0.0));
+
+            var invalid = pa.AchievementId switch
+            {
+                { } id when id.StartsWith("total_kills_") && int.TryParse(id.AsSpan("total_kills_".Length), out var k) => totalKills < k,
+                { } id when id.StartsWith("milestone_playtime_") && id.EndsWith("h") && int.TryParse(id.AsSpan("milestone_playtime_".Length, id.Length - "milestone_playtime_".Length - 1), out var h) => totalPlayTimeMinutes < h * 60,
+                { } id when id.StartsWith("total_score_") && int.TryParse(id.AsSpan("total_score_".Length), out var s) => totalScore < s,
+                _ => false
+            };
+
+            if (invalid)
+                toRemove.Add(pa);
+        }
+
+        if (toRemove.Count > 0)
+        {
+            dbContext.PlayerAchievements.RemoveRange(toRemove);
+            await dbContext.SaveChangesAsync();
+            logger.LogInformation("Removed {Count} invalid milestone achievements for {PlayerCount} players after round delete", toRemove.Count, playerList.Count);
+        }
+
+        return toRemove.Count;
     }
 
     /// <summary>
