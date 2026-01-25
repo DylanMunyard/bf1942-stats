@@ -129,11 +129,13 @@ services:
         # Install Python and sqlite-web
         apk add --no-cache python3 py3-pip sqlite
         pip3 install sqlite-web --break-system-packages
-        # Start the web interface - database is mounted as a single file
+        # Start the web interface - database at /data/playertracker.db (from mounted api dir)
         sqlite_web /data/playertracker.db --host 0.0.0.0 --port 8080
     volumes:
-      # SECURITY: Mount ONLY the database file, not the entire api directory
-      - ./api/playertracker.db:/data/playertracker.db
+      # Mount api dir (not the file): bind-mounting a non-existent file makes Docker create
+      # a directory, which causes "mount a directory onto a file" on start. The DB is at
+      # ./api/playertracker.db; run the API first if it doesn't exist yet.
+      - ./api:/data
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080 || exit 1"]
       interval: 30s

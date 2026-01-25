@@ -46,4 +46,12 @@ public interface IAggregateBackfillBackgroundService : IJobBackgroundService
     /// <param name="tier">Tier number (1=7 days, 2=30 days, 3=90 days, 4=all)</param>
     /// <param name="ct">Cancellation token</param>
     Task RunTierAsync(int tier, CancellationToken ct = default);
+
+    /// <summary>
+    /// Run backfill for specific player names only.
+    /// Used after round deletion to recalculate aggregates for affected players.
+    /// </summary>
+    /// <param name="playerNames">Collection of player names to recalculate</param>
+    /// <param name="ct">Cancellation token</param>
+    Task RunForPlayersAsync(IEnumerable<string> playerNames, CancellationToken ct = default);
 }

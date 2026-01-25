@@ -165,6 +165,70 @@ public class AggregateBackfillBackgroundService(
         }
     }
 
+    public async Task RunForPlayersAsync(IEnumerable<string> playerNames, CancellationToken ct = default)
+    {
+        var playerList = playerNames.ToList();
+        if (playerList.Count == 0)
+        {
+            logger.LogInformation("RunForPlayersAsync: No players to process");
+            return;
+        }
+
+        using var activity = ActivitySources.SqliteAnalytics.StartActivity("AggregateBackfill.ForPlayers");
+        var stopwatch = Stopwatch.StartNew();
+
+        logger.LogInformation("Starting aggregate backfill for {PlayerCount} specific players", playerList.Count);
+
+        using var scope = scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
+
+        try
+        {
+            var now = clock.GetCurrentInstant();
+            var nowUtc = now.ToDateTimeUtc();
+            var nowIso = InstantPattern.ExtendedIso.Format(now);
+
+            // Process players in batches
+            var totalBatches = (playerList.Count + PlayerBatchSize - 1) / PlayerBatchSize;
+            var lifetimeCount = 0;
+            var serverStatsCount = 0;
+            var mapStatsCount = 0;
+            var bestScoresCount = 0;
+
+            for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++)
+            {
+                if (ct.IsCancellationRequested) break;
+
+                var batchPlayers = playerList
+                    .Skip(batchIndex * PlayerBatchSize)
+                    .Take(PlayerBatchSize)
+                    .ToList();
+
+                lifetimeCount += await BackfillMonthlyStatsAsync(dbContext, batchPlayers, nowIso, ct);
+                serverStatsCount += await BackfillServerStatsAsync(dbContext, batchPlayers, nowIso, ct);
+                mapStatsCount += await BackfillMapStatsAsync(dbContext, batchPlayers, nowIso, ct);
+                bestScoresCount += await BackfillBestScoresAsync(dbContext, batchPlayers, nowUtc, ct);
+            }
+
+            stopwatch.Stop();
+
+            var totalRecords = lifetimeCount + serverStatsCount + mapStatsCount + bestScoresCount;
+            logger.LogInformation(
+                "Completed aggregate backfill for {PlayerCount} players: {TotalRecords} records in {Duration}ms",
+                playerList.Count, totalRecords, stopwatch.ElapsedMilliseconds);
+
+            activity?.SetTag("result.players_processed", playerList.Count);
+            activity?.SetTag("result.total_records", totalRecords);
+            activity?.SetTag("result.duration_ms", stopwatch.ElapsedMilliseconds);
+        }
+        catch (Exception ex)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            logger.LogError(ex, "Failed to complete backfill for {PlayerCount} players", playerList.Count);
+            throw;
+        }
+    }
+
     private async Task<List<string>> GetPlayerNamesForTierAsync(
         PlayerTrackerDbContext dbContext,
         int tier,

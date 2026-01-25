@@ -49,6 +49,10 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<MapServerHourlyPattern> MapServerHourlyPatterns { get; set; }
     public DbSet<PlayerAchievement> PlayerAchievements { get; set; }
 
+    // Admin data management
+    public DbSet<AdminPin> AdminPins { get; set; }
+    public DbSet<AdminAuditLog> AdminAuditLogs { get; set; }
+
     private static readonly InstantPattern InstantExtendedIsoPattern = InstantPattern.ExtendedIso;
     private static readonly LocalDateTimePattern LegacySqliteInstantPattern =
         LocalDateTimePattern.CreateWithInvariantCulture("yyyy-MM-dd HH:mm:ss.FFFFFFF");
@@ -974,6 +978,42 @@ public class PlayerTrackerDbContext : DbContext
 
         modelBuilder.Entity<PlayerAchievement>()
             .Property(pa => pa.Version)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        // ============================================================
+        // Admin data management entities
+        // ============================================================
+
+        // Configure AdminPin entity
+        modelBuilder.Entity<AdminPin>()
+            .HasKey(ap => ap.Id);
+
+        modelBuilder.Entity<AdminPin>()
+            .Property(ap => ap.CreatedAt)
+            .HasConversion(
+                instant => FormatInstant(instant),
+                str => ParseInstant(str));
+
+        modelBuilder.Entity<AdminPin>()
+            .Property(ap => ap.LastUsedAt)
+            .HasConversion(
+                instant => instant.HasValue ? FormatInstant(instant.Value) : null,
+                str => str != null ? ParseInstant(str) : null);
+
+        // Configure AdminAuditLog entity
+        modelBuilder.Entity<AdminAuditLog>()
+            .HasKey(al => al.Id);
+
+        modelBuilder.Entity<AdminAuditLog>()
+            .HasIndex(al => new { al.AdminEmail, al.Timestamp });
+
+        modelBuilder.Entity<AdminAuditLog>()
+            .HasIndex(al => al.Timestamp);
+
+        modelBuilder.Entity<AdminAuditLog>()
+            .Property(al => al.Timestamp)
             .HasConversion(
                 instant => FormatInstant(instant),
                 str => ParseInstant(str));

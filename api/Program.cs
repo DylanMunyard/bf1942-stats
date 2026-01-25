@@ -557,6 +557,10 @@ try
     // Register Data Explorer service
     builder.Services.AddScoped<api.DataExplorer.IDataExplorerService, api.DataExplorer.DataExplorerService>();
 
+    // Register Admin Data Management service
+    builder.Services.AddScoped<api.AdminData.AdminDataService>();
+    builder.Services.AddScoped<api.AdminData.IAdminDataService>(sp => sp.GetRequiredService<api.AdminData.AdminDataService>());
+
     var host = builder.Build();
 
     // Configure the HTTP request pipeline
