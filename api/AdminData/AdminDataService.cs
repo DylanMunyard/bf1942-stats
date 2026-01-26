@@ -23,11 +23,19 @@ public class AdminDataService(
     {
         var query = from ps in dbContext.PlayerSessions
                     join r in dbContext.Rounds on ps.RoundId equals r.RoundId
-                    select new { ps, r };
+                    join s in dbContext.Servers on r.ServerGuid equals s.Guid
+                    select new { ps, r, s };
 
         if (!request.IncludeDeletedRounds)
         {
             query = query.Where(x => !x.r.IsDeleted && !x.ps.IsDeleted);
+        }
+
+        // Filter by game type (from server record: bf1942, fh2, bfvietnam)
+        if (!string.IsNullOrWhiteSpace(request.Game))
+        {
+            var game = request.Game.Trim().ToLowerInvariant();
+            query = query.Where(x => x.s.Game == game);
         }
 
         // Apply filters (empty string / null from UI are treated as not provided)

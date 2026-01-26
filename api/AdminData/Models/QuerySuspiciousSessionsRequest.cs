@@ -11,6 +11,7 @@ public record QuerySuspiciousSessionsRequest(
     [property: JsonConverter(typeof(NullableInstantEmptyAsNullJsonConverter))] Instant? StartDate = null,
     [property: JsonConverter(typeof(NullableInstantEmptyAsNullJsonConverter))] Instant? EndDate = null,
     bool IncludeDeletedRounds = false,
+    string? Game = null,
     int Page = 1,
     int PageSize = 50
 );
