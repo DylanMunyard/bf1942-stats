@@ -293,8 +293,17 @@ try
     });
     builder.Services.AddAuthorization(options =>
     {
+        // Admin: role "Admin" in JWT, or escape hatch — dmunyard@gmail.com is always admin
         options.AddPolicy("Admin", policy =>
-            policy.RequireClaim(System.Security.Claims.ClaimTypes.Email, "dmunyard@gmail.com"));
+            policy.RequireAssertion(c =>
+                c.User.IsInRole(api.Authorization.AppRoles.Admin) ||
+                c.User.HasClaim(System.Security.Claims.ClaimTypes.Email, api.Authorization.AppRoles.AdminEmail)));
+        // Support: role Admin/Support in JWT, or admin email escape hatch
+        options.AddPolicy("Support", policy =>
+            policy.RequireAssertion(c =>
+                c.User.IsInRole(api.Authorization.AppRoles.Admin) ||
+                c.User.IsInRole(api.Authorization.AppRoles.Support) ||
+                c.User.HasClaim(System.Security.Claims.ClaimTypes.Email, api.Authorization.AppRoles.AdminEmail)));
     });
 
     // DI for auth services

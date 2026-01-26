@@ -1,13 +1,16 @@
 using api.AdminData.Models;
+using api.Authorization;
+using api.PlayerTracking;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace api.AdminData;
 
 [ApiController]
 [Route("stats/admin/data")]
-[Authorize(Policy = "Admin")]
-public class AdminDataController(IAdminDataService adminDataService) : ControllerBase
+[Authorize(Policy = "Support")]
+public class AdminDataController(IAdminDataService adminDataService, PlayerTrackerDbContext dbContext) : ControllerBase
 {
     [HttpPost("sessions/query")]
     public async Task<ActionResult<PagedResult<SuspiciousSessionResponse>>> QuerySuspiciousSessions(
@@ -29,6 +32,7 @@ public class AdminDataController(IAdminDataService adminDataService) : Controlle
     }
 
     [HttpDelete("rounds/{roundId}")]
+    [Authorize(Policy = "Admin")]
     public async Task<ActionResult<DeleteRoundResponse>> DeleteRound(string roundId)
     {
         var adminEmail = User.Claims
@@ -51,6 +55,7 @@ public class AdminDataController(IAdminDataService adminDataService) : Controlle
     }
 
     [HttpPost("rounds/bulk-delete")]
+    [Authorize(Policy = "Admin")]
     public async Task<ActionResult<BulkDeleteRoundsResponse>> BulkDeleteRounds([FromBody] BulkDeleteRoundsRequest? request)
     {
         var adminEmail = User.Claims
@@ -82,6 +87,7 @@ public class AdminDataController(IAdminDataService adminDataService) : Controlle
     }
 
     [HttpPost("rounds/{roundId}/undelete")]
+    [Authorize(Policy = "Admin")]
     public async Task<ActionResult<UndeleteRoundResponse>> UndeleteRound(string roundId)
     {
         var adminEmail = User.Claims
@@ -117,6 +123,40 @@ public class AdminDataController(IAdminDataService adminDataService) : Controlle
             l.Timestamp
         )).ToList();
         return Ok(entries);
+    }
+
+    [HttpGet("users")]
+    [Authorize(Policy = "Admin")]
+    public async Task<ActionResult<List<UserWithRoleResponse>>> GetUsers()
+    {
+        var users = await dbContext.Users
+            .OrderBy(u => u.Email)
+            .Select(u => new UserWithRoleResponse(
+                u.Id,
+                u.Email,
+                string.Equals(u.Email, AppRoles.AdminEmail, StringComparison.OrdinalIgnoreCase) ? AppRoles.Admin : (u.Role ?? AppRoles.User)))
+            .ToListAsync();
+        return Ok(users);
+    }
+
+    [HttpPut("users/{userId:int}/role")]
+    [Authorize(Policy = "Admin")]
+    public async Task<IActionResult> SetUserRole(int userId, [FromBody] SetUserRoleRequest? request)
+    {
+        if (string.IsNullOrEmpty(request?.Role))
+            return BadRequest("role is required");
+        if (request.Role != AppRoles.User && request.Role != AppRoles.Support)
+            return BadRequest("role must be User or Support");
+
+        var user = await dbContext.Users.FindAsync(userId);
+        if (user == null)
+            return NotFound("User not found");
+        if (string.Equals(user.Email, AppRoles.AdminEmail, StringComparison.OrdinalIgnoreCase))
+            return BadRequest("Cannot change the admin user's role");
+
+        user.Role = request.Role;
+        await dbContext.SaveChangesAsync();
+        return NoContent();
     }
 }
 

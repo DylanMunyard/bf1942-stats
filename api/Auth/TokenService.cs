@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
+using api.Authorization;
 using api.PlayerTracking;
 
 namespace api.Auth;
@@ -43,12 +44,17 @@ public class TokenService(IConfiguration configuration) : ITokenService
         var now = DateTime.UtcNow;
         var expires = now.AddMinutes(_accessMinutes);
 
+        var effectiveRole = string.Equals(user.Email, AppRoles.AdminEmail, StringComparison.OrdinalIgnoreCase)
+            ? AppRoles.Admin
+            : (user.Role ?? AppRoles.User);
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new(JwtRegisteredClaimNames.Email, user.Email),
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Email, user.Email),
+            new(ClaimTypes.Role, effectiveRole),
+            new("role", effectiveRole),
             new(JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64)
         };
 

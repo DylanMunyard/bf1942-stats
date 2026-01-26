@@ -1217,6 +1217,8 @@ public class User
 {
     public int Id { get; set; }
     public string Email { get; set; } = "";
+    /// <summary>Assigned role: User (default) or Support. Admin is determined by email only, not stored here.</summary>
+    public string? Role { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime LastLoggedIn { get; set; }
     public bool IsActive { get; set; } = true;
