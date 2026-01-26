@@ -19,9 +19,6 @@ public class ServerStatistics
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
 
-    // Recent rounds (typically last 20) with session links
-    public List<RoundInfo> RecentRounds { get; set; } = new List<RoundInfo>();
-
     // Current map being played (null if server has no active players)
     public string? CurrentMap { get; set; }
 

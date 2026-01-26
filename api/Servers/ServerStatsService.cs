@@ -15,7 +15,6 @@ public class ServerStatsService(
     ILogger<ServerStatsService> logger,
     ICacheService cacheService,
     ICacheKeyService cacheKeyService,
-    RoundsService roundsService,
     ISqliteGameTrendsService sqliteGameTrendsService,
     ISqliteLeaderboardService sqliteLeaderboardService) : IServerStatsService
 {
@@ -68,9 +67,6 @@ public class ServerStatsService(
             CurrentMap = server.CurrentMap
         };
 
-        // Execute only recent rounds and busy indicator queries (no leaderboards)
-        var recentRoundsTask = roundsService.GetRecentRoundsAsync(server.Guid, 8);
-
         // Get busy indicator data for this server
         try
         {
@@ -82,8 +78,6 @@ public class ServerStatsService(
             logger.LogError(ex, "Failed to get busy indicator for server {ServerName} ({ServerGuid})", serverName, server.Guid);
             // Continue without busy indicator data rather than failing the entire request
         }
-
-        statistics.RecentRounds = await recentRoundsTask;
 
         // Cache the result for 10 minutes
         await cacheService.SetAsync(cacheKey, statistics, TimeSpan.FromMinutes(10));
