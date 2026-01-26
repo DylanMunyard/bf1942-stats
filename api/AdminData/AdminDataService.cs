@@ -248,6 +248,125 @@ public class AdminDataService(
         );
     }
 
+    public async Task<BulkDeleteRoundsResponse> BulkDeleteRoundsAsync(IReadOnlyList<string> roundIds, string adminEmail)
+    {
+        if (roundIds == null || roundIds.Count == 0)
+        {
+            throw new ArgumentException("At least one round ID is required", nameof(roundIds));
+        }
+
+        var distinctIds = roundIds.Distinct().ToList();
+        var rounds = await dbContext.Rounds
+            .Where(r => distinctIds.Contains(r.RoundId))
+            .ToListAsync();
+
+        var foundIds = new HashSet<string>(rounds.Select(r => r.RoundId));
+        var missing = distinctIds.FirstOrDefault(id => !foundIds.Contains(id));
+        if (missing != null)
+        {
+            throw new InvalidOperationException($"Round {missing} not found");
+        }
+
+        logger.LogInformation(
+            "Starting bulk soft-delete for {Count} rounds (delete achievements, mark rounds+sessions deleted) requested by {AdminEmail}",
+            distinctIds.Count, adminEmail);
+
+        // Collect affected player names (union across all rounds)
+        var affectedPlayerNames = await dbContext.PlayerSessions
+            .Where(ps => distinctIds.Contains(ps.RoundId ?? ""))
+            .Select(ps => ps.PlayerName)
+            .Distinct()
+            .ToListAsync();
+
+        // Bulk delete achievements for all rounds
+        var deletedAchievements = await dbContext.PlayerAchievements
+            .Where(pa => distinctIds.Contains(pa.RoundId ?? ""))
+            .ExecuteDeleteAsync();
+        logger.LogInformation("Deleted {Count} achievements for {RoundCount} rounds", deletedAchievements, distinctIds.Count);
+
+        // Bulk mark sessions as deleted
+        var sessionsMarked = await dbContext.PlayerSessions
+            .Where(ps => distinctIds.Contains(ps.RoundId ?? ""))
+            .ExecuteUpdateAsync(s => s.SetProperty(ps => ps.IsDeleted, true));
+        logger.LogInformation("Marked {Count} sessions as deleted for {RoundCount} rounds", sessionsMarked, distinctIds.Count);
+
+        // Bulk mark rounds as deleted
+        await dbContext.Rounds
+            .Where(r => distinctIds.Contains(r.RoundId))
+            .ExecuteUpdateAsync(r => r.SetProperty(ro => ro.IsDeleted, true));
+        logger.LogInformation("Marked {Count} rounds as deleted", distinctIds.Count);
+
+        var details = JsonSerializer.Serialize(new
+        {
+            RoundIds = distinctIds,
+            DeletedAchievements = deletedAchievements,
+            SessionsMarkedDeleted = sessionsMarked,
+            RoundsMarkedDeleted = distinctIds.Count,
+            AffectedPlayers = affectedPlayerNames.Count,
+        });
+
+        dbContext.AdminAuditLogs.Add(new AdminAuditLog
+        {
+            Action = "bulk_delete_rounds",
+            TargetType = "Round",
+            TargetId = "bulk",
+            Details = details,
+            AdminEmail = adminEmail,
+            Timestamp = clock.GetCurrentInstant()
+        });
+        await dbContext.SaveChangesAsync();
+
+        // Distinct (ServerGuid, MapName, Year, Month) for RefreshServerMapStats
+        var serverMapPeriods = rounds
+            .Where(r => !string.IsNullOrEmpty(r.MapName))
+            .Select(r => (r.ServerGuid, MapName: r.MapName ?? "", r.StartTime.Year, r.StartTime.Month))
+            .Distinct()
+            .ToList();
+        // Distinct (ServerGuid, Year, Month) for RecalculateForServerAndPeriod
+        var serverPeriods = rounds
+            .Select(r => (r.ServerGuid, r.StartTime.Year, r.StartTime.Month))
+            .Distinct()
+            .ToList();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = scopeFactory.CreateScope();
+                var aggregateBackfill = scope.ServiceProvider.GetRequiredService<IAggregateBackfillBackgroundService>();
+                var dailyRefresh = scope.ServiceProvider.GetRequiredService<IDailyAggregateRefreshBackgroundService>();
+                var rankingsRecalc = scope.ServiceProvider.GetRequiredService<IServerPlayerRankingsRecalculationService>();
+
+                if (affectedPlayerNames.Count > 0)
+                {
+                    await aggregateBackfill.RunForPlayersAsync(affectedPlayerNames);
+                    logger.LogInformation(
+                        "Aggregate recalculation completed for {PlayerCount} players after bulk soft-deleting {RoundCount} rounds",
+                        affectedPlayerNames.Count, distinctIds.Count);
+                }
+                foreach (var (serverGuid, mapName, year, month) in serverMapPeriods)
+                {
+                    await dailyRefresh.RefreshServerMapStatsForServerMapPeriodAsync(serverGuid, mapName, year, month);
+                }
+                foreach (var (serverGuid, year, month) in serverPeriods)
+                {
+                    await rankingsRecalc.RecalculateForServerAndPeriodAsync(serverGuid, year, month);
+                }
+                if (affectedPlayerNames.Count > 0)
+                {
+                    var milestoneCalculator = scope.ServiceProvider.GetRequiredService<MilestoneCalculator>();
+                    await milestoneCalculator.RemoveInvalidMilestoneAchievementsForPlayersAsync(affectedPlayerNames);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to recalculate aggregates after bulk soft-deleting {RoundCount} rounds", distinctIds.Count);
+            }
+        });
+
+        return new BulkDeleteRoundsResponse(distinctIds.Count, deletedAchievements, sessionsMarked, affectedPlayerNames.Count);
+    }
+
     public async Task<UndeleteRoundResponse> UndeleteRoundAsync(string roundId, string adminEmail)
     {
         var round = await dbContext.Rounds

@@ -50,6 +50,37 @@ public class AdminDataController(IAdminDataService adminDataService) : Controlle
         }
     }
 
+    [HttpPost("rounds/bulk-delete")]
+    public async Task<ActionResult<BulkDeleteRoundsResponse>> BulkDeleteRounds([FromBody] BulkDeleteRoundsRequest? request)
+    {
+        var adminEmail = User.Claims
+            .FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email)?.Value;
+
+        if (string.IsNullOrEmpty(adminEmail))
+        {
+            return Unauthorized("Admin email not found in token");
+        }
+
+        if (request?.RoundIds == null || request.RoundIds.Count == 0)
+        {
+            return BadRequest("roundIds is required and must contain at least one round ID");
+        }
+
+        try
+        {
+            var result = await adminDataService.BulkDeleteRoundsAsync(request.RoundIds, adminEmail);
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(ex.Message);
+        }
+    }
+
     [HttpPost("rounds/{roundId}/undelete")]
     public async Task<ActionResult<UndeleteRoundResponse>> UndeleteRound(string roundId)
     {
