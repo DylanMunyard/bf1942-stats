@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using api.Analytics.Models;
 using api.Caching;
 using api.GameTrends;
+using api.GameTrends.Models;
 using Microsoft.Extensions.Logging;
 
 namespace api.Controllers;

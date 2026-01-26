@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using api.Gamification.Services;
 using api.Caching;
+using api.GameTrends.Models;
 using api.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
