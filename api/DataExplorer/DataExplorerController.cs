@@ -27,8 +27,8 @@ public class DataExplorerController(
         // Clamp page and page size
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
-        
-        logger.LogInformation("Getting servers for data explorer with game filter: {Game}, page: {Page}, pageSize: {PageSize}", 
+
+        logger.LogInformation("Getting servers for data explorer with game filter: {Game}, page: {Page}, pageSize: {PageSize}",
             game, page, pageSize);
         var result = await dataExplorerService.GetServersAsync(game, page, pageSize);
         return Ok(result);
@@ -102,14 +102,14 @@ public class DataExplorerController(
     [ProducesResponseType(typeof(ServerMapDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ServerMapDetailDto>> GetServerMapDetail(
-        string serverGuid, 
+        string serverGuid,
         string mapName,
         [FromQuery] int days = 60)
     {
         // URL decode the map name
         mapName = Uri.UnescapeDataString(mapName);
 
-        logger.LogInformation("Getting server-map detail for {ServerGuid}/{MapName} with days={Days}", 
+        logger.LogInformation("Getting server-map detail for {ServerGuid}/{MapName} with days={Days}",
             serverGuid, mapName, days);
 
         var result = await dataExplorerService.GetServerMapDetailAsync(serverGuid, mapName, days);

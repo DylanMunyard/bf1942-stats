@@ -22,7 +22,7 @@ public class TeamLeaderController(
     /// Returns (team, isLeaderOrAdmin, errorResult) - errorResult is non-null if access should be denied.
     /// </summary>
     private async Task<(TournamentTeam? team, bool isLeaderOrAdmin, ActionResult? errorResult)> GetTeamToManageAsync(
-        int tournamentId, 
+        int tournamentId,
         int? teamId = null,
         bool requireLeaderOrAdmin = false)
     {
@@ -46,7 +46,7 @@ public class TeamLeaderController(
         {
             var targetTeam = await context.TournamentTeams
                 .FirstOrDefaultAsync(t => t.Id == teamId.Value && t.TournamentId == tournamentId);
-            
+
             if (targetTeam == null)
                 return (null, false, NotFound(new { message = "Team not found" }));
 
@@ -63,7 +63,7 @@ public class TeamLeaderController(
             return (null, false, NotFound(new { message = "You are not on a team for this tournament" }));
 
         var isLeaderOrAdmin = membership.IsTeamLeader || isTournamentAdmin;
-        
+
         if (requireLeaderOrAdmin && !isLeaderOrAdmin)
             return (null, false, Forbid());
 

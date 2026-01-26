@@ -20,17 +20,17 @@ public class DataExplorerService(
     /// <summary>
     /// Valid game types for filtering.
     /// </summary>
-    private static readonly HashSet<string> ValidGames = new(StringComparer.OrdinalIgnoreCase) 
-    { 
-        "bf1942", "fh2", "bfvietnam" 
+    private static readonly HashSet<string> ValidGames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "bf1942", "fh2", "bfvietnam"
     };
 
     /// <summary>
     /// Normalize game parameter to lowercase, defaulting to bf1942 if invalid.
     /// </summary>
     private static string NormalizeGame(string? game) =>
-        !string.IsNullOrWhiteSpace(game) && ValidGames.Contains(game) 
-            ? game.ToLowerInvariant() 
+        !string.IsNullOrWhiteSpace(game) && ValidGames.Contains(game)
+            ? game.ToLowerInvariant()
             : "bf1942";
 
     public async Task<ServerListResponse> GetServersAsync(string game = "bf1942", int page = 1, int pageSize = 50)
@@ -57,7 +57,7 @@ public class DataExplorerService(
         var cutoffMonth = cutoffDate.Month;
 
         var serverGuids = servers.Select(s => s.Guid).ToList();
-        
+
         // Build parameterized IN clause for server GUIDs
         var guidParams = string.Join(", ", serverGuids.Select((_, i) => $"@p{i + 2}"));
         var serverStatsSql = $@"
@@ -107,7 +107,7 @@ public class DataExplorerService(
             .Skip(skip)
             .Take(pageSize)
             .ToList();
-        
+
         var hasMore = skip + paginatedServers.Count < totalCount;
 
         return new ServerListResponse(paginatedServers, totalCount, page, pageSize, hasMore);
@@ -204,7 +204,7 @@ public class DataExplorerService(
         // Get top 5 players per map using a single query with window function (ROW_NUMBER)
         // This replaces the N+1 query pattern - queries PlayerMapStats directly
         var topMapNames = mapRotationData.Take(10).Select(m => m.MapName).ToList();
-        
+
         // Build parameterized IN clause
         var mapParams = string.Join(", ", topMapNames.Select((_, i) => $"@p{i + 1}"));
         var topPlayersSql = $@"
@@ -1001,7 +1001,8 @@ public class DataExplorerService(
         var patterns = await dbContext.MapServerHourlyPatterns
             .Where(p => p.MapName == mapName && p.Game == normalizedGame)
             .GroupBy(p => new { p.DayOfWeek, p.HourOfDay })
-            .Select(g => new {
+            .Select(g => new
+            {
                 g.Key.DayOfWeek,
                 g.Key.HourOfDay,
                 AvgPlayers = g.Sum(p => p.AvgPlayers),

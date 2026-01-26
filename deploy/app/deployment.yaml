@@ -65,6 +65,7 @@ spec:
               value: "10"
             - name: PLAYER_INSIGHTS_MAX_CONCURRENT_QUERIES
               value: "10"
+            # discord-secrets: create manually. See deploy/app/DISCORD_SECRETS.md
             - name: DiscordOAuth__ClientId
               valueFrom:
                 secretKeyRef:
@@ -111,6 +112,15 @@ spec:
                 secretKeyRef:
                   name: bf42-stats-secrets
                   key: refresh-token-secret
+            # Discord suspicious round alerts. Webhook in discord-secrets (optional). See deploy/app/DISCORD_SECRETS.md
+            - name: DiscordSuspicious__RoundWebhookUrl
+              valueFrom:
+                secretKeyRef:
+                  name: discord-secrets
+                  key: suspicious-round-webhook
+                  optional: true
+            - name: DiscordSuspicious__ScoreThreshold
+              value: "150"
           volumeMounts:
             - name: stats-data
               mountPath: /mnt/data

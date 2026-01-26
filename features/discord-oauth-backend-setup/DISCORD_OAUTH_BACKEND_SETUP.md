@@ -66,50 +66,12 @@ Update `Properties/launchSettings.json` with your Discord OAuth credentials:
 
 ### Production Deployment
 
-For production, Discord OAuth credentials are stored in Kubernetes secrets.
+For production, Discord OAuth credentials are stored in the `discord-secrets` Kubernetes secret. Create and patch it via kubectl — see **deploy/app/DISCORD_SECRETS.md** for the exact `kubectl create secret generic` and `kubectl patch` commands.
 
-#### Create or Update the Kubernetes Secret
+The deployment (`deploy/app/deployment.yaml`) reads:
 
-Add the Discord OAuth credentials to your `bf42-stats-secrets` secret:
-
-```bash
-kubectl create secret generic discord-secrets \
-  --namespace=bf42-stats \
-  --from-literal=discord-client-id='YOUR_DISCORD_CLIENT_ID' \
-  --from-literal=discord-client-secret='YOUR_DISCORD_CLIENT_SECRET'
-  --dry-run=client -o yaml | kubectl apply -f -
-```
-
-Or if the secret already exists, update it:
-
-```bash
-# Update Discord Client ID
-kubectl patch secret bf42-stats-secrets \
-  --namespace=bf42-stats \
-  --type='json' \
-  -p='[{"op": "add", "path": "/data/discord-client-id", "value": "'$(echo -n 'YOUR_DISCORD_CLIENT_ID' | base64)'"}]'
-
-# Update Discord Client Secret
-kubectl patch secret bf42-stats-secrets \
-  --namespace=bf42-stats \
-  --type='json' \
-  -p='[{"op": "add", "path": "/data/discord-client-secret", "value": "'$(echo -n 'YOUR_DISCORD_CLIENT_SECRET' | base64)'"}]'
-```
-
-The deployment configuration (`deploy/app/deployment.yaml`) has been updated to reference these secrets:
-
-```yaml
-- name: DiscordOAuth__ClientId
-  valueFrom:
-    secretKeyRef:
-      name: bf42-stats-secrets
-      key: discord-client-id
-- name: DiscordOAuth__ClientSecret
-  valueFrom:
-    secretKeyRef:
-      name: bf42-stats-secrets
-      key: discord-client-secret
-```
+- `DiscordOAuth__ClientId` from `discord-secrets.discord-client-id`
+- `DiscordOAuth__ClientSecret` from `discord-secrets.discord-client-secret`
 
 ## Discord Application Setup
 

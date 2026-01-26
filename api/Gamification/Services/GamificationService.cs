@@ -3,7 +3,6 @@ using api.Analytics.Models;
 using api.Telemetry;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
-using System.Diagnostics;
 
 namespace api.Gamification.Services;
 

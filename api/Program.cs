@@ -412,7 +412,7 @@ try
     builder.Services.AddDbContext<PlayerTrackerDbContext>((serviceProvider, options) =>
     {
         var interceptor = serviceProvider.GetRequiredService<SqliteConnectionInterceptor>();
-        
+
         options.UseSqlite(connectionString, sqliteOptions =>
         {
             sqliteOptions.CommandTimeout(60); // 60 second command timeout
@@ -532,6 +532,16 @@ try
 
     builder.Services.AddScoped<api.Bflist.IBfListApiService, api.Bflist.BfListApiService>();
 
+    // Register Discord webhook service for suspicious round alerts
+    builder.Services.Configure<api.DiscordNotifications.DiscordSuspiciousOptions>(
+        builder.Configuration.GetSection("DiscordSuspicious"));
+    builder.Services.AddHttpClient("DiscordWebhook", client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(10);
+        client.DefaultRequestHeaders.Add("User-Agent", "bf1942-stats/1.0");
+    });
+    builder.Services.AddScoped<api.DiscordNotifications.IDiscordWebhookService, api.DiscordNotifications.DiscordWebhookService>();
+
     // Register Gamification Services
     builder.Services.AddScoped<api.Gamification.Services.BadgeDefinitionsService>();
     builder.Services.AddScoped<api.Gamification.Services.IBadgeDefinitionsService, api.Gamification.Services.BadgeDefinitionsService>();
@@ -638,24 +648,24 @@ try
             // These need to be set after the connection is established
             var connection = dbContext.Database.GetDbConnection();
             await connection.OpenAsync();
-            
+
             using var command = connection.CreateCommand();
-            
+
             // Set busy_timeout to 5 seconds - wait for locks instead of failing immediately
             command.CommandText = "PRAGMA busy_timeout = 5000;";
             await command.ExecuteNonQueryAsync();
             logger.LogInformation("SQLite busy_timeout set to 5000ms");
-            
+
             // Ensure WAL mode is enabled for better concurrent access
             command.CommandText = "PRAGMA journal_mode = WAL;";
             var journalMode = await command.ExecuteScalarAsync();
             logger.LogInformation("SQLite journal_mode: {JournalMode}", journalMode);
-            
+
             // Checkpoint WAL to ensure clean state (important after database restore)
             command.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
             await command.ExecuteNonQueryAsync();
             logger.LogInformation("SQLite WAL checkpoint completed");
-            
+
             await connection.CloseAsync();
         }
         catch (Exception ex)

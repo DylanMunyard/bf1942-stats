@@ -6,7 +6,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NodaTime;
 using System.Diagnostics;
-using System;
 
 namespace api.Gamification.Services;
 

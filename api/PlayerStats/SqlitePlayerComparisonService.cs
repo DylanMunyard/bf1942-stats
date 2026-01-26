@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
 using api.Analytics.Models;
-using api.Players.Models;
 using api.PlayerTracking;
 using api.Telemetry;
 using Microsoft.EntityFrameworkCore;

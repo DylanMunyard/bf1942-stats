@@ -50,12 +50,13 @@ public class PublicTournamentController(
         var allTeamPlayers = teamIds.Count > 0
             ? await context.TournamentTeamPlayers
                 .Where(ttp => teamIds.Contains(ttp.TournamentTeamId))
-                .Select(ttp => new { 
-                    ttp.TournamentTeamId, 
-                    ttp.PlayerName, 
-                    ttp.IsTeamLeader, 
-                    ttp.UserId, 
-                    ttp.MembershipStatus 
+                .Select(ttp => new
+                {
+                    ttp.TournamentTeamId,
+                    ttp.PlayerName,
+                    ttp.IsTeamLeader,
+                    ttp.UserId,
+                    ttp.MembershipStatus
                 })
                 .ToListAsync()
             : [];
@@ -70,7 +71,7 @@ public class PublicTournamentController(
         // - Show pending member if it's the current user
         // - Show all pending members if current user is the team leader
         var visibleTeamPlayers = allTeamPlayers
-            .Where(ttp => 
+            .Where(ttp =>
                 ttp.MembershipStatus == TeamMembershipStatus.Approved ||
                 (currentUserId.HasValue && ttp.UserId == currentUserId) ||
                 (userLedTeamId.HasValue && ttp.TournamentTeamId == userLedTeamId))
