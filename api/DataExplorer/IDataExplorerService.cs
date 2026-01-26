@@ -18,6 +18,14 @@ public interface IDataExplorerService
     Task<ServerDetailDto?> GetServerDetailAsync(string serverGuid);
 
     /// <summary>
+    /// Get paginated map rotation for a specific server.
+    /// </summary>
+    /// <param name="serverGuid">The server GUID</param>
+    /// <param name="page">Page number (1-based)</param>
+    /// <param name="pageSize">Number of results per page</param>
+    Task<MapRotationResponse?> GetServerMapRotationAsync(string serverGuid, int page = 1, int pageSize = 10);
+
+    /// <summary>
     /// Get all maps with summary information, filtered by game.
     /// </summary>
     /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>

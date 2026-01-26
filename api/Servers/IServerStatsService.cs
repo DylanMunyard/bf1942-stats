@@ -26,36 +26,6 @@ public interface IServerStatsService
     Task<ServerLeaderboards> GetServerLeaderboards(string serverName, int days, int? minPlayersForWeighting = null);
 
     /// <summary>
-    /// Gets server rankings with pagination and filtering.
-    /// </summary>
-    /// <param name="serverName">The name of the server.</param>
-    /// <param name="year">Optional year to filter by.</param>
-    /// <param name="page">Page number (1-based).</param>
-    /// <param name="pageSize">Number of items per page.</param>
-    /// <param name="playerName">Optional player name filter.</param>
-    /// <param name="minScore">Optional minimum score filter.</param>
-    /// <param name="minKills">Optional minimum kills filter.</param>
-    /// <param name="minDeaths">Optional minimum deaths filter.</param>
-    /// <param name="minKdRatio">Optional minimum K/D ratio filter.</param>
-    /// <param name="minPlayTimeMinutes">Optional minimum play time filter.</param>
-    /// <param name="orderBy">Field to order by.</param>
-    /// <param name="orderDirection">Order direction ('asc' or 'desc').</param>
-    /// <returns>Paginated server rankings.</returns>
-    Task<PagedResult<ServerRanking>> GetServerRankings(
-        string serverName,
-        int? year = null,
-        int page = 1,
-        int pageSize = 100,
-        string? playerName = null,
-        int? minScore = null,
-        int? minKills = null,
-        int? minDeaths = null,
-        double? minKdRatio = null,
-        int? minPlayTimeMinutes = null,
-        string? orderBy = null,
-        string? orderDirection = null);
-
-    /// <summary>
     /// Gets insights about server activity and trends.
     /// </summary>
     /// <param name="serverName">The name of the server.</param>

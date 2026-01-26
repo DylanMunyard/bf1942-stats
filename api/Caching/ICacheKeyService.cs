@@ -9,7 +9,6 @@ public interface ICacheKeyService
     string GetPlayerComparisonKey(string player1, string player2, string? serverGuid = null);
     string GetServerStatisticsKey(string serverName, int daysToAnalyze);
     string GetServerLeaderboardsKey(string serverName, int days);
-    string GetServerRankingsKey(string serverName, int? year, int page, int pageSize, string? playerName, int? minScore, int? minKills, int? minDeaths, double? minKdRatio, int? minPlayTimeMinutes, string? orderBy, string? orderDirection);
     string GetServerPlaytimeRankingsKey(IEnumerable<string> serverGuids, int days);
     string GetServerInsightsKey(string serverName, int daysToAnalyze, int? rollingWindowDays = null);
     string GetServerMapsInsightsKey(string serverName, int daysToAnalyze);
@@ -33,27 +32,6 @@ public class CacheKeyService : ICacheKeyService
     public string GetServerLeaderboardsKey(string serverName, int days)
     {
         return $"server_leaderboards:{serverName}:{days}";
-    }
-
-    public string GetServerRankingsKey(string serverName, int? year, int page, int pageSize, string? playerName, int? minScore, int? minKills, int? minDeaths, double? minKdRatio, int? minPlayTimeMinutes, string? orderBy, string? orderDirection)
-    {
-        var parameters = new[]
-        {
-            year?.ToString() ?? "null",
-            page.ToString(),
-            pageSize.ToString(),
-            playerName ?? "null",
-            minScore?.ToString() ?? "null",
-            minKills?.ToString() ?? "null",
-            minDeaths?.ToString() ?? "null",
-            minKdRatio?.ToString() ?? "null",
-            minPlayTimeMinutes?.ToString() ?? "null",
-            orderBy ?? "null",
-            orderDirection ?? "null"
-        };
-
-        var parametersHash = ComputeHash(string.Join("|", parameters));
-        return $"server_rankings:{serverName}:{parametersHash}";
     }
 
     public string GetServerPlaytimeRankingsKey(IEnumerable<string> serverGuids, int days)

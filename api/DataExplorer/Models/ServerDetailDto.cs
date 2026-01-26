@@ -54,3 +54,14 @@ public record ActivityPatternDto(
     double AvgPlayers,
     double MedianPlayers
 );
+
+/// <summary>
+/// Response containing paginated map rotation with pagination info.
+/// </summary>
+public record MapRotationResponse(
+    List<MapRotationItemDto> Maps,
+    int TotalCount,
+    int Page,
+    int PageSize,
+    bool HasMore
+);

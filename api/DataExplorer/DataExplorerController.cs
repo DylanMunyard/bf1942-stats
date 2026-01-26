@@ -56,6 +56,34 @@ public class DataExplorerController(
     }
 
     /// <summary>
+    /// Get paginated map rotation for a specific server.
+    /// </summary>
+    /// <param name="serverGuid">The server GUID</param>
+    /// <param name="page">Page number (1-based, default 1)</param>
+    /// <param name="pageSize">Number of results per page (default 10, max 100)</param>
+    [HttpGet("servers/{serverGuid}/map-rotation")]
+    [ProducesResponseType(typeof(MapRotationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<MapRotationResponse>> GetServerMapRotation(
+        string serverGuid,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10)
+    {
+        logger.LogInformation("Getting map rotation for server {ServerGuid}, page: {Page}, pageSize: {PageSize}",
+            serverGuid, page, pageSize);
+
+        var result = await dataExplorerService.GetServerMapRotationAsync(serverGuid, page, pageSize);
+
+        if (result == null)
+        {
+            logger.LogWarning("Server not found: {ServerGuid}", serverGuid);
+            return NotFound($"Server '{serverGuid}' not found");
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Get all maps with summary information, filtered by game.
     /// </summary>
     /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>

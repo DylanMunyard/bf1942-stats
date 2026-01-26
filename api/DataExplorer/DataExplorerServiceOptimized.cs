@@ -285,6 +285,89 @@ public class DataExplorerService(
         );
     }
 
+    public async Task<MapRotationResponse?> GetServerMapRotationAsync(string serverGuid, int page = 1, int pageSize = 10)
+    {
+        // Verify server exists
+        var server = await dbContext.Servers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Guid == serverGuid);
+
+        if (server == null)
+            return null;
+
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        // Use raw SQL to aggregate map rotation data with window function for percentage
+        // All computation happens in SQLite - no in-memory grouping
+        var mapRotationSql = @"
+            SELECT
+                MapName,
+                TotalRounds,
+                TotalPlayTimeMinutes,
+                CASE WHEN ServerTotalPlayTime > 0 
+                     THEN ROUND(100.0 * TotalPlayTimeMinutes / ServerTotalPlayTime, 1) 
+                     ELSE 0 END as PlayTimePercentage,
+                ROUND(AvgConcurrentPlayers, 1) as AvgConcurrentPlayers,
+                Team1Victories,
+                Team2Victories,
+                CASE WHEN (Team1Victories + Team2Victories) > 0 
+                     THEN ROUND(100.0 * Team1Victories / (Team1Victories + Team2Victories), 1) 
+                     ELSE 0 END as Team1WinPercentage,
+                CASE WHEN (Team1Victories + Team2Victories) > 0 
+                     THEN ROUND(100.0 * Team2Victories / (Team1Victories + Team2Victories), 1) 
+                     ELSE 0 END as Team2WinPercentage,
+                Team1Label,
+                Team2Label
+            FROM (
+                SELECT
+                    MapName,
+                    SUM(TotalRounds) as TotalRounds,
+                    SUM(TotalPlayTimeMinutes) as TotalPlayTimeMinutes,
+                    AVG(AvgConcurrentPlayers) as AvgConcurrentPlayers,
+                    SUM(Team1Victories) as Team1Victories,
+                    SUM(Team2Victories) as Team2Victories,
+                    MAX(Team1Label) as Team1Label,
+                    MAX(Team2Label) as Team2Label,
+                    SUM(SUM(TotalPlayTimeMinutes)) OVER () as ServerTotalPlayTime
+                FROM ServerMapStats
+                WHERE ServerGuid = @p0
+                GROUP BY MapName
+            )
+            ORDER BY PlayTimePercentage DESC";
+
+        var mapRotationData = await dbContext.Database
+            .SqlQueryRaw<MapRotationQueryResult>(mapRotationSql, serverGuid)
+            .ToListAsync();
+
+        var totalCount = mapRotationData.Count;
+        var skip = (page - 1) * pageSize;
+        var paginatedData = mapRotationData
+            .Skip(skip)
+            .Take(pageSize)
+            .ToList();
+
+        var mapRotation = paginatedData.Select(m => new MapRotationItemDto(
+            MapName: m.MapName,
+            TotalRounds: m.TotalRounds,
+            PlayTimePercentage: m.PlayTimePercentage,
+            AvgConcurrentPlayers: m.AvgConcurrentPlayers,
+            WinStats: new WinStatsDto(
+                Team1Label: m.Team1Label ?? "Team 1",
+                Team2Label: m.Team2Label ?? "Team 2",
+                Team1Victories: m.Team1Victories,
+                Team2Victories: m.Team2Victories,
+                Team1WinPercentage: m.Team1WinPercentage,
+                Team2WinPercentage: m.Team2WinPercentage,
+                TotalRounds: m.TotalRounds
+            )
+        )).ToList();
+
+        var hasMore = skip + paginatedData.Count < totalCount;
+
+        return new MapRotationResponse(mapRotation, totalCount, page, pageSize, hasMore);
+    }
+
     public async Task<MapListResponse> GetMapsAsync(string game = "bf1942")
     {
         var normalizedGame = NormalizeGame(game);

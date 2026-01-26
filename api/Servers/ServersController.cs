@@ -87,40 +87,6 @@ public class ServersController(
         }
     }
 
-    // Get server rankings with pagination
-    [HttpGet("{serverName}/rankings")]
-    public async Task<ActionResult<PagedResult<ServerRanking>>> GetServerRankings(
-        string serverName,
-        [FromQuery] int? year = null,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 100,
-        [FromQuery] string? playerName = null,
-        [FromQuery] int? minScore = null,
-        [FromQuery] int? minKills = null,
-        [FromQuery] int? minDeaths = null,
-        [FromQuery] double? minKdRatio = null,
-        [FromQuery] int? minPlayTimeMinutes = null,
-        [FromQuery] string? orderBy = "TotalScore",
-        [FromQuery] string? orderDirection = "desc")
-    {
-        try
-        {
-            // Use modern URL decoding that preserves + signs
-            serverName = Uri.UnescapeDataString(serverName);
-
-            var result = await serverStatsService.GetServerRankings(
-                serverName, year, page, pageSize, playerName,
-                minScore, minKills, minDeaths, minKdRatio, minPlayTimeMinutes,
-                orderBy, orderDirection);
-            return Ok(result);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-    }
-
-
     [HttpGet("{serverName}/insights")]
     public async Task<ActionResult<ServerInsights>> GetServerInsights(
         string serverName,
