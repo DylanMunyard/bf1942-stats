@@ -745,7 +745,7 @@ public class DataExplorerService(
         return new PlayerSearchResponse(results, results.Count, query);
     }
 
-    public async Task<PlayerMapRankingsResponse?> GetPlayerMapRankingsAsync(string playerName, string game = "bf1942", int days = 60)
+    public async Task<PlayerMapRankingsResponse?> GetPlayerMapRankingsAsync(string playerName, string game = "bf1942", int days = 60, string? serverGuid = null)
     {
         var normalizedGame = NormalizeGame(game);
 
@@ -756,9 +756,17 @@ public class DataExplorerService(
         var cutoffMonth = fromDate.Month;
 
         // Get server GUIDs and names for the specified game
-        var servers = await dbContext.Servers
+        var serversQuery = dbContext.Servers
             .AsNoTracking()
-            .Where(s => s.Game == normalizedGame)
+            .Where(s => s.Game == normalizedGame);
+
+        // Filter to specific server if provided
+        if (!string.IsNullOrEmpty(serverGuid))
+        {
+            serversQuery = serversQuery.Where(s => s.Guid == serverGuid);
+        }
+
+        var servers = await serversQuery
             .Select(s => new { s.Guid, s.Name })
             .ToListAsync();
 

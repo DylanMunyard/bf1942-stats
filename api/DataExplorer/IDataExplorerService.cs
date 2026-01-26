@@ -57,7 +57,7 @@ public interface IDataExplorerService
     /// <param name="playerName">The player name</param>
     /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
     /// <param name="days">Number of days to look back (default 60)</param>
-    Task<PlayerMapRankingsResponse?> GetPlayerMapRankingsAsync(string playerName, string game = "bf1942", int days = 60);
+    Task<PlayerMapRankingsResponse?> GetPlayerMapRankingsAsync(string playerName, string game = "bf1942", int days = 60, string? serverGuid = null);
 
     /// <summary>
     /// Get paginated player rankings for a specific map (aggregated across all servers).

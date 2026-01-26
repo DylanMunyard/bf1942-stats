@@ -174,21 +174,23 @@ public class DataExplorerController(
     /// <param name="playerName">The player name</param>
     /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
     /// <param name="days">Number of days to look back (default 60)</param>
+    /// <param name="serverGuid">Optional server GUID to filter results to a specific server</param>
     [HttpGet("players/{playerName}/maps")]
     [ProducesResponseType(typeof(PlayerMapRankingsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<PlayerMapRankingsResponse>> GetPlayerMapRankings(
         string playerName,
         [FromQuery] string game = "bf1942",
-        [FromQuery] int days = 60)
+        [FromQuery] int days = 60,
+        [FromQuery] string? serverGuid = null)
     {
         // URL decode the player name
         playerName = Uri.UnescapeDataString(playerName);
 
-        logger.LogInformation("Getting player map rankings for {PlayerName} with game: {Game}, days: {Days}",
-            playerName, game, days);
+        logger.LogInformation("Getting player map rankings for {PlayerName} with game: {Game}, days: {Days}, serverGuid: {ServerGuid}",
+            playerName, game, days, serverGuid ?? "all");
 
-        var result = await dataExplorerService.GetPlayerMapRankingsAsync(playerName, game, days);
+        var result = await dataExplorerService.GetPlayerMapRankingsAsync(playerName, game, days, serverGuid);
 
         if (result == null)
         {
