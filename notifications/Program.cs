@@ -68,6 +68,7 @@ Log.Logger = new LoggerConfiguration()
             new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "environment", Value = environment },
             new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "host", Value = Environment.MachineName }
         },
+        propertiesAsLabels: new[] { "request_path", "http_method", "ElapsedMs", "ElapsedMilliseconds", "RequestPath", "TraceId" },
         textFormatter: new Serilog.Formatting.Compact.RenderedCompactJsonFormatter())
     .CreateLogger();
 

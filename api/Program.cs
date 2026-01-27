@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -81,6 +82,7 @@ var loggerConfig = new LoggerConfiguration()
     .Enrich.WithEnvironmentUserName()
     .Enrich.WithSpan()
     .Enrich.With<UserAgentEnricher>()
+    .Enrich.With<RequestEnricher>()
     .WriteTo.Console(
         outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj} {Properties:j}{NewLine}{Exception}")
     .WriteTo.GrafanaLoki(lokiUrl,
@@ -90,6 +92,7 @@ var loggerConfig = new LoggerConfiguration()
             new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "environment", Value = environment },
             new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "host", Value = Environment.MachineName }
         },
+        propertiesAsLabels: new[] { "request_path", "http_method", "ElapsedMs", "ElapsedMilliseconds", "RequestPath", "TraceId" },
         textFormatter: new Serilog.Formatting.Compact.RenderedCompactJsonFormatter());
 
 if (!string.IsNullOrEmpty(seqUrl))
@@ -205,6 +208,9 @@ try
                 // tracing.AddSource(ActivitySources.Gamification.Name);
             }
         );
+
+    // Add HttpContextAccessor for request enricher
+    builder.Services.AddHttpContextAccessor();
 
     // Add services to the container
     builder.Services.AddControllers().AddJsonOptions(o =>
@@ -586,6 +592,10 @@ try
 
     var host = builder.Build();
 
+    // Initialize RequestEnricher with HttpContextAccessor
+    var httpContextAccessor = host.Services.GetRequiredService<IHttpContextAccessor>();
+    RequestEnricher.SetHttpContextAccessor(httpContextAccessor);
+
     // Configure the HTTP request pipeline
     if (host.Environment.IsDevelopment())
     {
@@ -602,6 +612,10 @@ try
 
     // Enable routing and controllers
     host.UseRouting();
+    
+    // Add request telemetry middleware to enrich traces with request metadata
+    host.UseMiddleware<RequestTelemetryMiddleware>();
+    
     host.UseCors("default");
     host.UseAuthentication();
     host.UseAuthorization();
