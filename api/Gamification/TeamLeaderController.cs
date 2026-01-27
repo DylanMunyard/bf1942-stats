@@ -324,7 +324,7 @@ public class TeamLeaderController(
 
             // Find the player to remove
             var playerMembership = await context.TournamentTeamPlayers
-                .Where(ttp => ttp.TournamentTeamId == team.Id && ttp.PlayerName == playerName)
+                .Where(ttp => ttp.TournamentTeamId == team!.Id && ttp.PlayerName == playerName)
                 .FirstOrDefaultAsync();
 
             if (playerMembership == null)
@@ -392,7 +392,7 @@ public class TeamLeaderController(
 
             var userEmail = User.FindFirstValue(ClaimTypes.Email);
             logger.LogInformation("User {UserEmail} deleted team {TeamId} ({TeamName}) from tournament {TournamentId}",
-                userEmail, team.Id, team.Name, tournamentId);
+                userEmail, team!.Id, team.Name, tournamentId);
 
             return Ok(new { message = "Team deleted successfully" });
         }

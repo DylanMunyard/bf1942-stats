@@ -299,7 +299,7 @@ public class SqliteGamificationService(
                     ServerGuid = pa.ServerGuid,
                     MapName = pa.MapName,
                     RoundId = pa.RoundId,
-                    Metadata = pa.Metadata,
+                    Metadata = pa.Metadata ?? "",
                     Game = pa.Game,
                     Version = pa.AchievedAt.ToDateTimeUtc()
                 })
@@ -767,7 +767,7 @@ public class SqliteGamificationService(
             ServerGuid = entity.ServerGuid,
             MapName = entity.MapName,
             RoundId = entity.RoundId,
-            Metadata = entity.Metadata,
+            Metadata = entity.Metadata ?? "",
             Game = entity.Game,
             Version = entity.Version.ToDateTimeUtc()
         };

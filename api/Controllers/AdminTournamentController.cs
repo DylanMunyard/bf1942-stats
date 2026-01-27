@@ -2105,7 +2105,7 @@ public class AdminTournamentController(
             }
 
             // Validate TeamIds in maps if provided
-            var mapTeamIds = request.Maps.Where(m => m.TeamId.HasValue).Select(m => m.TeamId.Value).Distinct().ToList();
+            var mapTeamIds = request.Maps.Where(m => m.TeamId.HasValue).Select(m => m.TeamId!.Value).Distinct().ToList();
             if (mapTeamIds.Any())
             {
                 var validTeamIds = new[] { request.Team1Id, request.Team2Id };
@@ -2338,7 +2338,7 @@ public class AdminTournamentController(
                     return BadRequest(new { message = "All map names must be non-empty" });
 
                 // Validate TeamIds in maps if provided
-                var mapTeamIds = request.Maps.Where(m => m.TeamId.HasValue).Select(m => m.TeamId.Value).Distinct().ToList();
+                var mapTeamIds = request.Maps.Where(m => m.TeamId.HasValue).Select(m => m.TeamId!.Value).Distinct().ToList();
                 if (mapTeamIds.Any())
                 {
                     var validTeamIds = new[] { match.Team1Id, match.Team2Id };

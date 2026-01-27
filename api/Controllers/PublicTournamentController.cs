@@ -212,8 +212,8 @@ public class PublicTournamentController(
             {
                 Id = match.Id,
                 ScheduledDate = match.ScheduledDate,
-                Team1Name = match.Team1Name,
-                Team2Name = match.Team2Name,
+                Team1Name = match.Team1Name ?? "",
+                Team2Name = match.Team2Name ?? "",
                 ServerGuid = match.ServerGuid,
                 ServerName = match.ServerName,
                 Week = match.Week,

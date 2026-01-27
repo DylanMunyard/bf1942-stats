@@ -51,6 +51,6 @@ public class AssetsController(IAssetServingService assetServingService) : Contro
             };
         }
 
-        return File(result.FileStream, result.ContentType, result.FileName, enableRangeProcessing: true);
+        return File(result.FileStream!, result.ContentType!, result.FileName, enableRangeProcessing: true);
     }
 }
