@@ -109,8 +109,54 @@ try
     Log.Information("Starting up junie-des-1942stats application");
     var loggingBackend = useAzureMonitor ? "Azure Application Insights (OTEL)" : (!string.IsNullOrEmpty(seqUrl) ? "Seq" : "Console only");
     Log.Information("Telemetry backend: {Backend}", loggingBackend);
+    if (useAzureMonitor)
+    {
+        Log.Information("APPLICATIONINSIGHTS_CONNECTION_STRING is set: {IsSet}, length: {Length}", 
+            !string.IsNullOrEmpty(appInsightsConnectionString), 
+            appInsightsConnectionString?.Length ?? 0);
+    }
 
     var builder = WebApplication.CreateBuilder(args);
+
+    // Configure OTEL logging for Azure Monitor FIRST (before Serilog) to ensure provider is registered
+    // This is important because Serilog's writeToProviders: true forwards logs to registered ILogger providers
+    if (useAzureMonitor)
+    {
+        // Read connection string from builder.Configuration as well (may have additional sources)
+        var azureMonitorConnectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"] 
+            ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING")
+            ?? appInsightsConnectionString;
+        
+        if (string.IsNullOrEmpty(azureMonitorConnectionString))
+        {
+            Log.Warning("APPLICATIONINSIGHTS_CONNECTION_STRING is not set. Azure Monitor logging will not work.");
+        }
+        else
+        {
+            Log.Information("Configuring Azure Monitor logging with connection string (length: {Length}, starts with: {Prefix})", 
+                azureMonitorConnectionString.Length, 
+                azureMonitorConnectionString.Substring(0, Math.Min(50, azureMonitorConnectionString.Length)));
+        }
+        
+        builder.Logging.AddOpenTelemetry(logging =>
+        {
+            logging.IncludeScopes = true;
+            logging.IncludeFormattedMessage = true;
+            logging.AddAzureMonitorLogExporter(options =>
+            {
+                // Explicitly set connection string - Azure Monitor exporter will also read from env var if not set
+                if (!string.IsNullOrEmpty(azureMonitorConnectionString))
+                {
+                    options.ConnectionString = azureMonitorConnectionString;
+                    Log.Information("Azure Monitor log exporter configured with explicit connection string");
+                }
+                else
+                {
+                    Log.Warning("Azure Monitor log exporter will attempt to read connection string from APPLICATIONINSIGHTS_CONNECTION_STRING environment variable");
+                }
+            });
+        });
+    }
 
     // Add Serilog to the application
     // writeToProviders: true forwards logs to other configured providers (e.g., OTEL logging for Azure Monitor)
@@ -136,20 +182,6 @@ try
     {
         // Local dev: use the static Log.Logger configured earlier (with Loki + Seq)
         builder.Host.UseSerilog();
-    }
-
-    // Configure OTEL logging for Azure Monitor (when enabled)
-    if (useAzureMonitor)
-    {
-        builder.Logging.AddOpenTelemetry(logging =>
-        {
-            logging.IncludeScopes = true;
-            logging.IncludeFormattedMessage = true;
-            logging.AddAzureMonitorLogExporter(options =>
-            {
-                options.ConnectionString = appInsightsConnectionString;
-            });
-        });
     }
 
     // Configure OpenTelemetry
@@ -236,9 +268,17 @@ try
                 // Configure trace exporter: Azure Monitor for production, OTLP for local dev
                 if (useAzureMonitor)
                 {
+                    // Read connection string from builder.Configuration as well (may have additional sources)
+                    var azureMonitorTraceConnectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"] 
+                        ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING")
+                        ?? appInsightsConnectionString;
+                    
                     tracing.AddAzureMonitorTraceExporter(options =>
                     {
-                        options.ConnectionString = appInsightsConnectionString;
+                        if (!string.IsNullOrEmpty(azureMonitorTraceConnectionString))
+                        {
+                            options.ConnectionString = azureMonitorTraceConnectionString;
+                        }
                     });
                 }
                 else
