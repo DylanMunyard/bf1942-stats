@@ -42,11 +42,12 @@ public class PlayerEventPublisher : IPlayerEventPublisher
             var subscriber = _connectionMultiplexer.GetSubscriber();
             var receivers = await subscriber.PublishAsync(RedisChannel.Literal(ChannelName), payload);
 
-            _logger.LogInformation("PUBLISHER: Publishing player online for {ServerGuid} / {ServerName}: {PlayerName} (SessionId: {SessionId}) to {Receivers} subscribers",
+            _logger.LogTrace("PUBLISHER: Publishing player online for {ServerGuid} / {ServerName}: {PlayerName} (SessionId: {SessionId}) to {Receivers} subscribers",
                 serverGuid, serverName, playerName, sessionId, receivers);
             if (receivers == 0)
             {
-                Console.WriteLine($"WARNING: Published player online event for {playerName} but no subscribers are listening to channel '{ChannelName}'");
+                _logger.LogTrace("WARNING: Published player online event for {PlayerName} but no subscribers are listening to channel '{ChannelName}'",
+                    playerName, ChannelName);
             }
             _logger.LogDebug("Published player online event for {PlayerName} on {ServerName} to {Receivers} subscribers",
                 playerName, serverName, receivers);
@@ -84,7 +85,7 @@ public class PlayerEventPublisher : IPlayerEventPublisher
             var subscriber = _connectionMultiplexer.GetSubscriber();
             var receivers = await subscriber.PublishAsync(RedisChannel.Literal(ChannelName), payload);
 
-            _logger.LogInformation("PUBLISHER: Publishing server map change for {ServerGuid} / {ServerName}: {OldMap} -> {NewMap} to {Receivers} subscribers",
+            _logger.LogDebug("PUBLISHER: Publishing server map change for {ServerGuid} / {ServerName}: {OldMap} -> {NewMap} to {Receivers} subscribers",
                 serverGuid, serverName, oldMapName, newMapName, receivers);
             _logger.LogDebug("Published server map change event for {ServerName}: {OldMap} -> {NewMap} to {Receivers} subscribers",
                 serverName, oldMapName, newMapName, receivers);

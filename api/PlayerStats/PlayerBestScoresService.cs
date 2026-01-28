@@ -189,7 +189,7 @@ public class PlayerBestScoresService(
 
         await dbContext.SaveChangesAsync(ct);
 
-        logger.LogInformation(
+        logger.LogDebug(
             "Player {PlayerName} period {Period}: updated top {Count} scores [{Scores}]",
             playerName, period, allCandidates.Count,
             string.Join(", ", allCandidates.Select(c => c.Score)));

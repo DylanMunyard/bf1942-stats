@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using api.PlayerTracking;
@@ -24,19 +25,27 @@ using NodaTime.Serialization.SystemTextJson;
 using OpenTelemetry.Trace;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Metrics;
+using OpenTelemetry.Logs;
 using api.Telemetry;
 using OpenTelemetry.Exporter;
-using Serilog.Sinks.Grafana.Loki;
+using Azure.Monitor.OpenTelemetry.Exporter;
 using Microsoft.AspNetCore.ResponseCompression;
 using System.IO.Compression;
 using api.Data.Migrations;
 using api.Players;
 using api.Servers;
 
-// Configure Serilog
-var lokiUrl = Environment.GetEnvironmentVariable("LOKI_URL") ?? "http://localhost:3100";
-var seqUrl = Environment.GetEnvironmentVariable("SEQ_URL");
-var otlpEndpoint = Environment.GetEnvironmentVariable("OTLP_ENDPOINT") ?? "http://localhost:4318/v1/traces";
+// Configure telemetry endpoints
+// Build a minimal config to read user-secrets before the full builder is created
+var earlyConfig = new ConfigurationBuilder()
+    .AddEnvironmentVariables()
+    .AddUserSecrets<Program>(optional: true)
+    .Build();
+
+var seqUrl = earlyConfig["SEQ_URL"] ?? Environment.GetEnvironmentVariable("SEQ_URL");
+var otlpEndpoint = earlyConfig["OTLP_ENDPOINT"] ?? Environment.GetEnvironmentVariable("OTLP_ENDPOINT") ?? "http://localhost:4318/v1/traces";
+var appInsightsConnectionString = earlyConfig["APPLICATIONINSIGHTS_CONNECTION_STRING"] ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
+var useAzureMonitor = !string.IsNullOrEmpty(appInsightsConnectionString);
 var serviceName = "junie-des-1942stats";
 var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development";
 
@@ -47,7 +56,7 @@ var loggerConfig = new LoggerConfiguration()
     {
         // Suppress EF Core SQL logs when they're part of bulk operations
         if (logEvent.Properties.ContainsKey("bulk_operation") &&
-            logEvent.Properties["bulk_operation"].ToString() == "True" &&
+                logEvent.Properties["bulk_operation"].ToString() == "True" &&
             logEvent.Properties.ContainsKey("SourceContext") &&
             (logEvent.Properties["SourceContext"].ToString().Contains("Microsoft.EntityFrameworkCore.Database.Command") ||
              logEvent.Properties["SourceContext"].ToString().Contains("Microsoft.EntityFrameworkCore.Infrastructure")))
@@ -84,18 +93,11 @@ var loggerConfig = new LoggerConfiguration()
     .Enrich.With<UserAgentEnricher>()
     .Enrich.With<RequestEnricher>()
     .WriteTo.Console(
-        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj} {Properties:j}{NewLine}{Exception}")
-    .WriteTo.GrafanaLoki(lokiUrl,
-        labels: new[]
-        {
-            new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "service", Value = serviceName },
-            new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "environment", Value = environment },
-            new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "host", Value = Environment.MachineName }
-        },
-        propertiesAsLabels: new[] { "request_path", "http_method", "ElapsedMs", "ElapsedMilliseconds", "RequestPath", "TraceId" },
-        textFormatter: new Serilog.Formatting.Compact.RenderedCompactJsonFormatter());
+        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj} {Properties:j}{NewLine}{Exception}");
 
-if (!string.IsNullOrEmpty(seqUrl))
+// Local development: use Seq only
+// Production with Azure Monitor: logs go via OTEL to App Insights
+if (!useAzureMonitor && !string.IsNullOrEmpty(seqUrl))
 {
     loggerConfig.WriteTo.Seq(seqUrl);
 }
@@ -105,11 +107,50 @@ Log.Logger = loggerConfig.CreateLogger();
 try
 {
     Log.Information("Starting up junie-des-1942stats application");
+    var loggingBackend = useAzureMonitor ? "Azure Application Insights (OTEL)" : (!string.IsNullOrEmpty(seqUrl) ? "Seq" : "Console only");
+    Log.Information("Telemetry backend: {Backend}", loggingBackend);
 
     var builder = WebApplication.CreateBuilder(args);
 
     // Add Serilog to the application
-    builder.Host.UseSerilog();
+    // writeToProviders: true forwards logs to other configured providers (e.g., OTEL logging for Azure Monitor)
+    if (useAzureMonitor)
+    {
+        // When using Azure Monitor, forward logs to both Serilog and OTEL logging provider
+        builder.Host.UseSerilog((context, services, configuration) =>
+        {
+            configuration
+                .MinimumLevel.Information()
+                .Enrich.WithProperty("service.name", serviceName)
+                .Enrich.WithProperty("deployment.environment", environment)
+                .Enrich.FromLogContext()
+                .Enrich.WithMachineName()
+                .Enrich.WithSpan()
+                .Enrich.With<UserAgentEnricher>()
+                .Enrich.With<RequestEnricher>()
+                .WriteTo.Console(
+                    outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj} {Properties:j}{NewLine}{Exception}");
+        }, writeToProviders: true);
+    }
+    else
+    {
+        // Local dev: use the static Log.Logger configured earlier (with Loki + Seq)
+        builder.Host.UseSerilog();
+    }
+
+    // Configure OTEL logging for Azure Monitor (when enabled)
+    if (useAzureMonitor)
+    {
+        builder.Logging.AddOpenTelemetry(logging =>
+        {
+            logging.IncludeScopes = true;
+            logging.IncludeFormattedMessage = true;
+            logging.AddAzureMonitorLogExporter(options =>
+            {
+                options.ConnectionString = appInsightsConnectionString;
+            });
+        });
+    }
 
     // Configure OpenTelemetry
     builder.Services.AddOpenTelemetry()
@@ -191,11 +232,24 @@ try
                 });
                 // SqlClient instrumentation removed to reduce telemetry overhead
                 // EF Core instrumentation above already covers most database operations
-                tracing.AddOtlpExporter(opt =>
+
+                // Configure trace exporter: Azure Monitor for production, OTLP for local dev
+                if (useAzureMonitor)
                 {
-                    opt.Endpoint = new Uri(otlpEndpoint);
-                    opt.Protocol = OtlpExportProtocol.HttpProtobuf;
-                });
+                    tracing.AddAzureMonitorTraceExporter(options =>
+                    {
+                        options.ConnectionString = appInsightsConnectionString;
+                    });
+                }
+                else
+                {
+                    tracing.AddOtlpExporter(opt =>
+                    {
+                        opt.Endpoint = new Uri(otlpEndpoint);
+                        opt.Protocol = OtlpExportProtocol.HttpProtobuf;
+                    });
+                }
+
                 // Only trace API-related activity sources, exclude background service sources
                 tracing.AddSource("junie-des-1942stats.*");
                 tracing.AddSource(ActivitySources.PlayerStats.Name);
@@ -612,10 +666,10 @@ try
 
     // Enable routing and controllers
     host.UseRouting();
-    
+
     // Add request telemetry middleware to enrich traces with request metadata
     host.UseMiddleware<RequestTelemetryMiddleware>();
-    
+
     host.UseCors("default");
     host.UseAuthentication();
     host.UseAuthorization();

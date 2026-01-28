@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NodaTime;
 using NodaTime.Text;
+using Serilog.Context;
 
 namespace api.Services.BackgroundJobs;
 
@@ -21,6 +22,7 @@ public class WeeklyCleanupBackgroundService(
     public async Task RunAsync(CancellationToken ct = default)
     {
         using var activity = ActivitySources.SqliteAnalytics.StartActivity("WeeklyCleanup");
+        activity?.SetTag("bulk_operation", "true");
         var stopwatch = Stopwatch.StartNew();
 
         logger.LogInformation("Starting weekly cleanup");
@@ -28,26 +30,34 @@ public class WeeklyCleanupBackgroundService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
 
-        try
+        // Suppress EF SQL logging during bulk operations
+        using (LogContext.PushProperty("bulk_operation", true))
         {
-            await CleanupThisWeekBestScoresAsync(dbContext, ct);
-            await PruneOldServerOnlineCountsAsync(dbContext, ct);
+            try
+            {
+                var bestScoresDeleted = await CleanupThisWeekBestScoresAsync(dbContext, ct);
+                var onlineCountsDeleted = await PruneOldServerOnlineCountsAsync(dbContext, ct);
 
-            stopwatch.Stop();
-            activity?.SetTag("result.duration_ms", stopwatch.ElapsedMilliseconds);
-            logger.LogInformation("Weekly cleanup completed in {Duration}ms", stopwatch.ElapsedMilliseconds);
-        }
-        catch (Exception ex)
-        {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            logger.LogError(ex, "Failed to complete weekly cleanup");
-            throw;
+                stopwatch.Stop();
+                activity?.SetTag("result.duration_ms", stopwatch.ElapsedMilliseconds);
+                activity?.SetTag("result.best_scores_deleted", bestScoresDeleted);
+                activity?.SetTag("result.online_counts_deleted", onlineCountsDeleted);
+
+                logger.LogInformation(
+                    "Weekly cleanup completed: deleted {BestScores} stale best scores, pruned {OnlineCounts} old server counts in {Duration}ms",
+                    bestScoresDeleted, onlineCountsDeleted, stopwatch.ElapsedMilliseconds);
+            }
+            catch (Exception ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                logger.LogError(ex, "Failed to complete weekly cleanup");
+                throw;
+            }
         }
     }
 
-    private async Task CleanupThisWeekBestScoresAsync(PlayerTrackerDbContext dbContext, CancellationToken ct)
+    private async Task<int> CleanupThisWeekBestScoresAsync(PlayerTrackerDbContext dbContext, CancellationToken ct)
     {
-        var stopwatch = Stopwatch.StartNew();
         var now = clock.GetCurrentInstant();
 
         // Calculate the start of the current week (Monday 00:00 UTC)
@@ -57,18 +67,13 @@ public class WeeklyCleanupBackgroundService(
         var weekStartInstant = weekStart.AtStartOfDayInZone(DateTimeZone.Utc).ToInstant();
 
         // Use ExecuteDeleteAsync - no need to load entries just to delete them
-        var deletedCount = await dbContext.PlayerBestScores
+        return await dbContext.PlayerBestScores
             .Where(b => b.Period == "this_week" && b.RoundEndTime < weekStartInstant)
             .ExecuteDeleteAsync(ct);
-
-        stopwatch.Stop();
-        logger.LogInformation("Removed {Count} stale 'this_week' best score entries in {Duration}ms",
-            deletedCount, stopwatch.ElapsedMilliseconds);
     }
 
-    private async Task PruneOldServerOnlineCountsAsync(PlayerTrackerDbContext dbContext, CancellationToken ct)
+    private async Task<int> PruneOldServerOnlineCountsAsync(PlayerTrackerDbContext dbContext, CancellationToken ct)
     {
-        var stopwatch = Stopwatch.StartNew();
         var now = clock.GetCurrentInstant();
         var retentionDays = 180;
         var cutoffTime = now.Minus(Duration.FromDays(retentionDays));
@@ -83,10 +88,10 @@ public class WeeklyCleanupBackgroundService(
         {
             // SQLite-compatible batched delete using rowid
             var deletedInBatch = await dbContext.Database.ExecuteSqlRawAsync(
-                @"DELETE FROM ServerOnlineCounts 
+                @"DELETE FROM ServerOnlineCounts
                   WHERE rowid IN (
-                      SELECT rowid FROM ServerOnlineCounts 
-                      WHERE HourTimestamp < @p0 
+                      SELECT rowid FROM ServerOnlineCounts
+                      WHERE HourTimestamp < @p0
                       LIMIT @p1
                   )",
                 [cutoffString, batchSize],
@@ -98,7 +103,6 @@ public class WeeklyCleanupBackgroundService(
             }
 
             totalDeleted += deletedInBatch;
-            logger.LogDebug("Deleted batch of {Count} old server online counts", deletedInBatch);
 
             // Small delay between batches to reduce lock contention
             if (deletedInBatch == batchSize)
@@ -107,8 +111,6 @@ public class WeeklyCleanupBackgroundService(
             }
         }
 
-        stopwatch.Stop();
-        logger.LogInformation("Pruned {Count} server online counts older than {Days} days in {Duration}ms",
-            totalDeleted, retentionDays, stopwatch.ElapsedMilliseconds);
+        return totalDeleted;
     }
 }

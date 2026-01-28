@@ -1,8 +1,6 @@
-using System.Diagnostics;
 using System.Text.Json;
 using api.Gamification.Models;
 using api.PlayerTracking;
-using api.Telemetry;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -79,9 +77,6 @@ public class TeamVictoryProcessor
     /// </summary>
     public async Task<List<Achievement>> ProcessTeamVictoriesSinceAsync(DateTime sinceUtc, CancellationToken cancellationToken = default)
     {
-        using var activity = ActivitySources.Gamification.StartActivity("TeamVictoryProcessor.ProcessTeamVictoriesSinceAsync");
-        activity?.SetTag("since_utc", sinceUtc.ToString("O"));
-
         var now = DateTime.UtcNow;
         var allAchievements = new List<Achievement>();
         const int batchSize = 1_000;
@@ -92,10 +87,6 @@ public class TeamVictoryProcessor
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                using var batchActivity = ActivitySources.Gamification.StartActivity("TeamVictoryProcessor.ProcessBatch");
-                batchActivity?.SetTag("batch_size", batchSize);
-                batchActivity?.SetTag("skip", skip);
-
                 // Get batch of completed rounds with team victory conditions
                 var rounds = await _dbContext.Rounds.AsNoTracking()
                     .Include(r => r.GameServer)
@@ -114,11 +105,8 @@ public class TeamVictoryProcessor
 
                 if (rounds.Count == 0)
                 {
-                    batchActivity?.SetTag("rounds_found", 0);
                     break; // No more rounds to process
                 }
-
-                batchActivity?.SetTag("rounds_found", rounds.Count);
 
                 // Get all round IDs for this batch
                 var roundIds = rounds.Select(r => r.RoundId).ToList();
@@ -184,14 +172,9 @@ public class TeamVictoryProcessor
 
                 var parameters = roundIds.Select((id, i) => new Microsoft.Data.Sqlite.SqliteParameter($"@p{i}", id)).ToArray();
 
-                using var sqlActivity = ActivitySources.Gamification.StartActivity("TeamVictoryProcessor.GetPlayerObservations");
-                sqlActivity?.SetTag("round_count", rounds.Count);
-
                 var playersInRounds = await _dbContext.Database
                     .SqlQueryRaw<PlayerObservationAnalysis>(fullSql, parameters)
                     .ToListAsync(cancellationToken);
-
-                sqlActivity?.SetTag("players_found", playersInRounds.Count);
 
                 // Group players by round
                 var playersByRound = playersInRounds
@@ -205,14 +188,7 @@ public class TeamVictoryProcessor
                     .ToDictionaryAsync(s => s.Guid, s => s.Name, cancellationToken);
 
                 // Process achievements for this batch
-                using var processingActivity = ActivitySources.Gamification.StartActivity("TeamVictoryProcessor.ProcessRoundBatch");
-                processingActivity?.SetTag("rounds_to_process", rounds.Count);
-                processingActivity?.SetTag("total_players", playersInRounds.Count);
-
                 var batchAchievements = ProcessRoundBatch(rounds, playersByRound, serverNamesByGuid, now);
-
-                processingActivity?.SetTag("achievements_generated", batchAchievements.Count);
-                batchActivity?.SetTag("achievements_generated", batchAchievements.Count);
                 allAchievements.AddRange(batchAchievements);
 
                 totalProcessed += rounds.Count;
@@ -228,17 +204,12 @@ public class TeamVictoryProcessor
                 }
             }
 
-            activity?.SetTag("total_achievements_generated", allAchievements.Count);
-            activity?.SetTag("total_rounds_processed", totalProcessed);
-
             _logger.LogInformation("Generated {Count} team victory achievements from {TotalRounds} rounds since {Since}",
                 allAchievements.Count, totalProcessed, sinceUtc);
             return allAchievements;
         }
         catch (Exception ex)
         {
-            activity?.SetTag("error", ex.Message);
-            activity?.SetStatus(ActivityStatusCode.Error, $"Team victory processing failed: {ex.Message}");
             _logger.LogError(ex, "Error processing team victories since {Since}", sinceUtc);
             throw;
         }
@@ -253,34 +224,22 @@ public class TeamVictoryProcessor
         Dictionary<string, string> serverNamesByGuid,
         DateTime processedAt)
     {
-        using var activity = ActivitySources.Gamification.StartActivity("TeamVictoryProcessor.ProcessRoundBatch");
-        activity?.SetTag("rounds_count", rounds.Count);
-
         var achievements = new List<Achievement>();
         int roundsProcessed = 0;
         int roundsSkipped = 0;
 
         foreach (var round in rounds)
         {
-            using var roundActivity = ActivitySources.Gamification.StartActivity("TeamVictoryProcessor.ProcessRound");
-            roundActivity?.SetTag("round_id", round.RoundId);
-            roundActivity?.SetTag("server_guid", round.ServerGuid);
-            roundActivity?.SetTag("map_name", round.MapName);
-
             if (!playersByRound.TryGetValue(round.RoundId, out var playersInRound))
             {
                 roundsSkipped++;
-                roundActivity?.SetTag("skipped_reason", "no_players");
                 continue; // No players found for this round
             }
-
-            roundActivity?.SetTag("players_in_round", playersInRound.Count);
 
             // Determine winning team based on tickets
             if (!round.Tickets1.HasValue || !round.Tickets2.HasValue)
             {
                 roundsSkipped++;
-                roundActivity?.SetTag("skipped_reason", "missing_tickets");
                 continue; // This shouldn't happen due to our query filter, but be safe
             }
 
@@ -310,9 +269,6 @@ public class TeamVictoryProcessor
             {
                 // Draw - no team victory achievements
                 roundsSkipped++;
-                roundActivity?.SetTag("skipped_reason", "draw");
-                roundActivity?.SetTag("tickets1", round.Tickets1.Value);
-                roundActivity?.SetTag("tickets2", round.Tickets2.Value);
                 _logger.LogDebug("Round {RoundId} ended in a draw ({Tickets1} - {Tickets2}), no team victory achievements awarded",
                     round.RoundId, round.Tickets1.Value, round.Tickets2.Value);
                 continue;
@@ -327,15 +283,9 @@ public class TeamVictoryProcessor
             if (eligiblePlayers.Count == 0)
             {
                 roundsSkipped++;
-                roundActivity?.SetTag("skipped_reason", "no_eligible_players");
                 _logger.LogWarning("No eligible players found for round {RoundId} (none active within 2 minutes of end)", round.RoundId);
                 continue;
             }
-
-            roundActivity?.SetTag("eligible_players", eligiblePlayers.Count);
-            roundActivity?.SetTag("winning_team", winningTeam);
-            roundActivity?.SetTag("winning_tickets", winningTickets);
-            roundActivity?.SetTag("losing_tickets", losingTickets);
 
             var serverName = serverNamesByGuid.GetValueOrDefault(round.ServerGuid, "");
 
@@ -347,13 +297,9 @@ public class TeamVictoryProcessor
             // Process both regular and team-switched achievements if we have winning team players
             if (winningTeamPlayers.Count > 0)
             {
-                roundActivity?.SetTag("winning_team_players", winningTeamPlayers.Count);
-
                 var medianTeamObservations = CalculateMedianTeamObservations(winningTeamPlayers, winningTeam);
-                roundActivity?.SetTag("median_team_observations", medianTeamObservations);
 
                 // Process regular team victory achievements
-                var regularAchievements = 0;
                 foreach (var player in winningTeamPlayers.Where(p => p.TotalObservations > 0))
                 {
                     var achievement = CreateTeamVictoryAchievement(
@@ -362,16 +308,13 @@ public class TeamVictoryProcessor
                         AchievementTypes.TeamVictory, "Team Victory", isTeamSwitched: false);
 
                     achievements.Add(achievement);
-                    regularAchievements++;
                 }
-                roundActivity?.SetTag("regular_achievements", regularAchievements);
 
                 // Process team-switched victory achievements
                 var teamSwitchedPlayers = eligiblePlayers
                     .Where(p => p.WasTeamSwitched && p.MajorityTeam == winningTeam && p.FinalTeam != winningTeam)
                     .ToList();
 
-                var teamSwitchedAchievements = 0;
                 foreach (var player in teamSwitchedPlayers)
                 {
                     var achievement = CreateTeamVictoryAchievement(
@@ -380,16 +323,12 @@ public class TeamVictoryProcessor
                         AchievementTypes.TeamVictorySwitched, "Team Victory (Team Switched)", isTeamSwitched: true);
 
                     achievements.Add(achievement);
-                    teamSwitchedAchievements++;
                 }
-                roundActivity?.SetTag("team_switched_players", teamSwitchedPlayers.Count);
-                roundActivity?.SetTag("team_switched_achievements", teamSwitchedAchievements);
             }
 
             if (winningTeamPlayers.Count == 0)
             {
                 roundsSkipped++;
-                roundActivity?.SetTag("skipped_reason", "no_winning_team_players");
                 _logger.LogWarning("No achievements generated for round {RoundId} on team {WinningTeam}", round.RoundId, winningTeam);
             }
             else
@@ -397,10 +336,6 @@ public class TeamVictoryProcessor
                 roundsProcessed++;
             }
         }
-
-        activity?.SetTag("rounds_processed", roundsProcessed);
-        activity?.SetTag("rounds_skipped", roundsSkipped);
-        activity?.SetTag("total_achievements", achievements.Count);
 
         return achievements;
     }

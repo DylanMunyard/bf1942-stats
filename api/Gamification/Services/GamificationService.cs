@@ -3,6 +3,7 @@ using api.Analytics.Models;
 using api.Telemetry;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using Serilog.Context;
 
 namespace api.Gamification.Services;
 
@@ -30,49 +31,47 @@ public class GamificationService(SqliteGamificationService gamificationService, 
     /// </summary>
     public async Task ProcessNewAchievementsAsync()
     {
-        using var activity = ActivitySources.Gamification.StartActivity("Gamification.ProcessNewAchievements");
-
         try
         {
-            // Get the last time we processed achievements
-            var lastProcessed = await gamificationService.GetLastProcessedTimestampAsync();
-            var now = DateTime.UtcNow;
-
-            _logger.LogInformation("Processing new achievements from {LastProcessed}", lastProcessed);
-
-            // Only process new player_rounds since last run
-            var newRounds = await gamificationService.GetPlayerRoundsSinceAsync(lastProcessed);
-
-            List<Achievement> allAchievements = [];
-            if (newRounds.Any())
+            using (LogContext.PushProperty("bulk_operation", true))
             {
-                _logger.LogInformation("Processing {RoundCount} new rounds for gamification", newRounds.Count);
+                // Get the last time we processed achievements
+                var lastProcessed = await gamificationService.GetLastProcessedTimestampAsync();
+                var now = DateTime.UtcNow;
 
-                // Calculate all achievements for these new rounds
-                allAchievements = await ProcessAchievementsForRounds(newRounds);
-            }
+                // Only process new player_rounds since last run
+                var newRounds = await gamificationService.GetPlayerRoundsSinceAsync(lastProcessed);
 
-            // Additionally, calculate placements for rounds since last placement processed
-            var lastPlacementProcessed = await gamificationService.GetLastPlacementProcessedTimestampAsync();
-            var placementAchievements = await placementProcessor.ProcessPlacementsSinceAsync(lastPlacementProcessed);
-            if (placementAchievements.Any())
-            {
-                allAchievements.AddRange(placementAchievements);
-            }
+                List<Achievement> allAchievements = [];
+                if (newRounds.Any())
+                {
+                    // Calculate all achievements for these new rounds
+                    allAchievements = await ProcessAchievementsForRounds(newRounds);
+                }
 
-            // Process team victory achievements for rounds since last team victory processed
-            var lastTeamVictoryProcessed = await gamificationService.GetLastTeamVictoryProcessedTimestampAsync();
-            var teamVictoryAchievements = await teamVictoryProcessor.ProcessTeamVictoriesSinceAsync(lastTeamVictoryProcessed);
-            if (teamVictoryAchievements.Any())
-            {
-                allAchievements.AddRange(teamVictoryAchievements);
-            }
+                // Additionally, calculate placements for rounds since last placement processed
+                var lastPlacementProcessed = await gamificationService.GetLastPlacementProcessedTimestampAsync();
+                var placementAchievements = await placementProcessor.ProcessPlacementsSinceAsync(lastPlacementProcessed);
+                if (placementAchievements.Any())
+                {
+                    allAchievements.AddRange(placementAchievements);
+                }
 
-            // Store achievements in batch for efficiency
-            if (allAchievements.Any())
-            {
-                await gamificationService.InsertAchievementsBatchAsync(allAchievements);
-                _logger.LogInformation("Stored {AchievementCount} new achievements", allAchievements.Count);
+                // Process team victory achievements for rounds since last team victory processed
+                var lastTeamVictoryProcessed = await gamificationService.GetLastTeamVictoryProcessedTimestampAsync();
+                var teamVictoryAchievements = await teamVictoryProcessor.ProcessTeamVictoriesSinceAsync(lastTeamVictoryProcessed);
+                if (teamVictoryAchievements.Any())
+                {
+                    allAchievements.AddRange(teamVictoryAchievements);
+                }
+
+                // Store achievements in batch for efficiency
+                if (allAchievements.Any())
+                {
+                    await gamificationService.InsertAchievementsBatchAsync(allAchievements);
+                    _logger.LogInformation("Processed gamification: {TotalAchievements} achievements ({NewRounds} rounds, {PlacementAchievements} placements, {TeamVictoryAchievements} team victories)",
+                        allAchievements.Count, newRounds.Count, placementAchievements.Count, teamVictoryAchievements.Count);
+                }
             }
         }
         catch (Exception ex)
@@ -89,14 +88,16 @@ public class GamificationService(SqliteGamificationService gamificationService, 
     /// </summary>
     public async Task ProcessAchievementsForRoundIdAsync(string roundId)
     {
-        var rounds = await gamificationService.GetPlayerRoundsForRoundAsync(roundId);
-        if (rounds.Count == 0) return;
-
-        var achievements = await ProcessAchievementsForRounds(rounds);
-        if (achievements.Count > 0)
+        using (LogContext.PushProperty("bulk_operation", true))
         {
-            await gamificationService.InsertAchievementsBatchAsync(achievements);
-            _logger.LogInformation("Recreated {AchievementCount} achievements for undeleted round {RoundId}", achievements.Count, roundId);
+            var rounds = await gamificationService.GetPlayerRoundsForRoundAsync(roundId);
+            if (rounds.Count == 0) return;
+
+            var achievements = await ProcessAchievementsForRounds(rounds);
+            if (achievements.Count > 0)
+            {
+                await gamificationService.InsertAchievementsBatchAsync(achievements);
+            }
         }
     }
 
@@ -107,8 +108,6 @@ public class GamificationService(SqliteGamificationService gamificationService, 
     {
         try
         {
-            _logger.LogInformation("Processing achievements for {RoundCount} rounds using player metrics", rounds.Count);
-
             // Use batch processing for better performance
             if (rounds.Count > 10)
             {
@@ -144,19 +143,10 @@ public class GamificationService(SqliteGamificationService gamificationService, 
             roundAchievements.AddRange(milestoneAchievements);
 
             allAchievements.AddRange(roundAchievements);
-
-            if (roundAchievements.Any())
-            {
-                _logger.LogDebug("Round {RoundId} for {PlayerName}: {AchievementCount} achievements",
-                    round.RoundId, round.PlayerName, roundAchievements.Count);
-            }
         }
 
         // Deduplicate achievements generated in this batch (same player + id + achieved_at)
         var distinctAchievements = DeduplicateAchievements(allAchievements);
-
-        _logger.LogInformation("Processed {RoundCount} rounds individually, generated {AchievementCount} achievements (after dedup: {DistinctCount})",
-            rounds.Count, allAchievements.Count, distinctAchievements.Count);
 
         return distinctAchievements;
     }
@@ -171,9 +161,6 @@ public class GamificationService(SqliteGamificationService gamificationService, 
 
         try
         {
-            _logger.LogInformation("Using batch processing for {RoundCount} rounds with max concurrency: {MaxConcurrency}",
-                rounds.Count, _maxConcurrentRounds);
-
             // 1. Process kill streaks individually (they're round-specific) with throttling
             var streakTasks = rounds.Select(async round =>
             {
@@ -217,12 +204,6 @@ public class GamificationService(SqliteGamificationService gamificationService, 
 
             var milestoneResults = await Task.WhenAll(milestoneTasks);
             allAchievements.AddRange(milestoneResults.SelectMany(r => r));
-
-            _logger.LogInformation("Batch processed {RoundCount} rounds, generated {AchievementCount} achievements " +
-                "({StreakCount} streaks, {MilestoneCount} milestones)",
-                rounds.Count, allAchievements.Count,
-                streakResults.Sum(r => r.Count),
-                milestoneResults.Sum(r => r.Count));
         }
         catch (Exception ex)
         {

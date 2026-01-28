@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using api.PlayerTracking;
 using api.Bflist;
 using api.Bflist.Models;
@@ -13,10 +14,12 @@ using Serilog.Context;
 
 namespace api.StatsCollectors;
 
-public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory, IConfiguration configuration) : IHostedService, IDisposable
+public class StatsCollectionBackgroundService(
+    IServiceScopeFactory scopeFactory,
+    IConfiguration configuration,
+    ILogger<StatsCollectionBackgroundService> logger)
+    : IHostedService, IDisposable
 {
-
-    // Read interval from config, default to 30 seconds
     private readonly TimeSpan _collectionInterval = TimeSpan.FromSeconds(configuration.GetValue<int?>("STATS_COLLECTION_INTERVAL_SECONDS") ?? 30);
     private Timer? _timer;
     private int _isRunning = 0;
@@ -24,7 +27,7 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Stats collection service starting ({_collectionInterval.TotalSeconds}s intervals)...");
+        logger.LogInformation("Stats collection service starting ({IntervalSeconds}s intervals)", _collectionInterval.TotalSeconds);
 
         // Initialize timer to run immediately (dueTime: 0) and then every 30 seconds
         _timer = new Timer(
@@ -40,8 +43,7 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
     {
         if (Interlocked.CompareExchange(ref _isRunning, 1, 0) != 0)
         {
-            Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Previous collection still running, skipping...");
-            return;
+            return; // Previous collection still running
         }
 
         var currentCycle = Interlocked.Increment(ref _cycleCount);
@@ -52,65 +54,36 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
         activity?.SetTag("bulk_operation", "true");
 
         var cycleStopwatch = Stopwatch.StartNew();
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Starting stats collection cycle #{currentCycle}...");
 
         try
         {
-            // Add context properties to mark all logs in this scope as coming from stats collection
-            using (LogContext.PushProperty("operation_type", "stats_collection"))
             using (LogContext.PushProperty("bulk_operation", true))
-            using (LogContext.PushProperty("cycle_number", currentCycle))
             using (var scope = scopeFactory.CreateScope())
             {
                 var playerTrackingService = scope.ServiceProvider.GetRequiredService<PlayerTrackingService>();
                 var bfListApiService = scope.ServiceProvider.GetRequiredService<IBfListApiService>();
 
                 // 1. Global timeout cleanup
-                var timeoutStopwatch = Stopwatch.StartNew();
                 await playerTrackingService.CloseAllTimedOutSessionsAsync(DateTime.UtcNow);
                 await playerTrackingService.MarkOfflineServersAsync(DateTime.UtcNow);
-                timeoutStopwatch.Stop();
-                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Session & server cleanup: {timeoutStopwatch.ElapsedMilliseconds}ms");
 
-                // 2. BF1942 stats
-                var bf1942Stopwatch = Stopwatch.StartNew();
-                var bf1942ServersStopwatch = Stopwatch.StartNew();
+                // 2. Collect stats from all games
                 var bf1942Servers = await CollectBf1942ServerStatsAsync(bfListApiService, playerTrackingService, "bf1942", CancellationToken.None);
-                bf1942ServersStopwatch.Stop();
-                bf1942Stopwatch.Stop();
-                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] BF1942 stats: {bf1942Stopwatch.ElapsedMilliseconds}ms (Servers: {bf1942ServersStopwatch.ElapsedMilliseconds}ms)");
-
-                // 3. FH2 stats
-                var fh2Stopwatch = Stopwatch.StartNew();
-                var fh2ServersStopwatch = Stopwatch.StartNew();
                 var fh2Servers = await CollectFh2ServerStatsAsync(bfListApiService, playerTrackingService, CancellationToken.None);
-                fh2ServersStopwatch.Stop();
-                fh2Stopwatch.Stop();
-                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] FH2 stats: {fh2Stopwatch.ElapsedMilliseconds}ms (Servers: {fh2ServersStopwatch.ElapsedMilliseconds}ms)");
-
-                // BFV stats
-                var bfvietnamStopwatch = Stopwatch.StartNew();
-                var bfvietnamServersStopwatch = Stopwatch.StartNew();
                 var bfvietnamServers = await CollectBfvietnamServerStatsAsync(bfListApiService, playerTrackingService, CancellationToken.None);
-                bfvietnamServersStopwatch.Stop();
-                bfvietnamStopwatch.Stop();
-                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] BFV stats: {bfvietnamStopwatch.ElapsedMilliseconds}ms (Servers: {bfvietnamServersStopwatch.ElapsedMilliseconds}ms)");
 
-                // 4. Collect all servers
+                // 3. Collect all servers
                 var allServers = new List<IGameServer>();
                 allServers.AddRange(bf1942Servers);
                 allServers.AddRange(fh2Servers);
                 allServers.AddRange(bfvietnamServers);
                 var timestamp = DateTime.UtcNow;
 
-                // 5. Store server online counts to SQLite for analytics
+                // 4. Store server online counts to SQLite for analytics
                 var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
-                var onlineCountsStopwatch = Stopwatch.StartNew();
                 await UpsertServerOnlineCountsAsync(dbContext, bf1942Servers, "bf1942", timestamp);
                 await UpsertServerOnlineCountsAsync(dbContext, fh2Servers, "fh2", timestamp);
                 await UpsertServerOnlineCountsAsync(dbContext, bfvietnamServers, "bfvietnam", timestamp);
-                onlineCountsStopwatch.Stop();
-                Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] SQLite online counts: {onlineCountsStopwatch.ElapsedMilliseconds}ms");
 
                 activity?.SetTag("total_servers_processed", allServers.Count);
                 activity?.SetTag("bf1942_servers_processed", bf1942Servers.Count);
@@ -125,17 +98,28 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
                 BackgroundJobMetrics.ServersProcessed.Add(allServers.Count,
                     new KeyValuePair<string, object?>("game", "all"));
 
+                cycleStopwatch.Stop();
+                activity?.SetTag("cycle_duration_ms", cycleStopwatch.ElapsedMilliseconds);
+
+                // Log summary every 10th cycle to reduce noise (every ~5 minutes at 30s intervals)
+                if (currentCycle % 10 == 0)
+                {
+                    logger.LogInformation(
+                        "Stats collection cycle #{Cycle}: {TotalServers} servers (BF1942={Bf1942}, FH2={Fh2}, BFV={Bfv}), {Players} players in {Duration}ms",
+                        currentCycle, allServers.Count, bf1942Servers.Count, fh2Servers.Count, bfvietnamServers.Count,
+                        activePlayers, cycleStopwatch.ElapsedMilliseconds);
+                }
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Error in collection cycle: {ex}");
+            logger.LogError(ex, "Error in stats collection cycle #{Cycle}", currentCycle);
             activity?.SetTag("error", ex.Message);
             activity?.SetStatus(ActivityStatusCode.Error, $"Collection cycle failed: {ex.Message}");
         }
         finally
         {
-            cycleStopwatch.Stop();
+            if (cycleStopwatch.IsRunning) cycleStopwatch.Stop();
 
             // Emit job execution metrics for correlation with memory/CPU spikes
             BackgroundJobMetrics.JobExecutions.Add(1,
@@ -143,8 +127,6 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
             BackgroundJobMetrics.JobDuration.Record(cycleStopwatch.Elapsed.TotalSeconds,
                 new KeyValuePair<string, object?>("job", "stats_collection"));
 
-            Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Cycle #{currentCycle} completed in {cycleStopwatch.ElapsedMilliseconds}ms");
-            activity?.SetTag("cycle_duration_ms", cycleStopwatch.ElapsedMilliseconds);
             Interlocked.Exchange(ref _isRunning, 0);
         }
     }
@@ -214,7 +196,7 @@ public class StatsCollectionBackgroundService(IServiceScopeFactory scopeFactory,
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        Console.WriteLine($"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] Stats collection service stopping...");
+        logger.LogInformation("Stats collection service stopping");
         _timer?.Change(Timeout.Infinite, 0);
         return Task.CompletedTask;
     }

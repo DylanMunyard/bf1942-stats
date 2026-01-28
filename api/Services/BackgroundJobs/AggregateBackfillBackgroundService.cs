@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NodaTime;
 using NodaTime.Text;
+using Serilog.Context;
 
 namespace api.Services.BackgroundJobs;
 
@@ -58,6 +59,7 @@ public class AggregateBackfillBackgroundService(
         }
 
         using var activity = ActivitySources.SqliteAnalytics.StartActivity($"AggregateBackfill.Tier{tier}");
+        activity?.SetTag("bulk_operation", "true");
         var stopwatch = Stopwatch.StartNew();
 
         var tierInfo = Tiers[tier - 1];
@@ -66,106 +68,80 @@ public class AggregateBackfillBackgroundService(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
 
-        await concurrency.ExecuteWithPlayerAggregatesLockAsync(async (c) =>
+        // Suppress EF SQL logging during bulk operations
+        using (LogContext.PushProperty("bulk_operation", true))
         {
-            try
+            await concurrency.ExecuteWithPlayerAggregatesLockAsync(async (c) =>
             {
-                var now = clock.GetCurrentInstant();
-                var nowUtc = now.ToDateTimeUtc();
-                var nowIso = InstantPattern.ExtendedIso.Format(now);
-
-                // First, get all player names for this tier
-                var playerNames = await GetPlayerNamesForTierAsync(dbContext, tier, nowUtc, c);
-                logger.LogInformation("Tier {Tier}: Found {Count} players to process", tier, playerNames.Count);
-
-                if (playerNames.Count == 0)
+                try
                 {
-                    logger.LogInformation("Tier {Tier}: No players to process", tier);
-                    return;
-                }
+                    var now = clock.GetCurrentInstant();
+                    var nowUtc = now.ToDateTimeUtc();
+                    var nowIso = InstantPattern.ExtendedIso.Format(now);
 
-                // Process players in batches
-                var totalBatches = (playerNames.Count + PlayerBatchSize - 1) / PlayerBatchSize;
-                var lifetimeCount = 0;
-                var serverStatsCount = 0;
-                var mapStatsCount = 0;
-                var bestScoresCount = 0;
-                var processedPlayers = 0;
-                var batchStopwatch = new Stopwatch();
+                    // First, get all player names for this tier
+                    var playerNames = await GetPlayerNamesForTierAsync(dbContext, tier, nowUtc, c);
 
-                logger.LogInformation(
-                    "Tier {Tier}: Starting backfill of {TotalPlayers} players in {TotalBatches} batches (batch size: {BatchSize})",
-                    tier, playerNames.Count, totalBatches, PlayerBatchSize);
+                    if (playerNames.Count == 0)
+                    {
+                        logger.LogInformation("Tier {Tier}: No players to process", tier);
+                        return;
+                    }
 
-                for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++)
-                {
-                    if (c.IsCancellationRequested) break;
+                    // Process players in batches
+                    var totalBatches = (playerNames.Count + PlayerBatchSize - 1) / PlayerBatchSize;
+                    var lifetimeCount = 0;
+                    var serverStatsCount = 0;
+                    var mapStatsCount = 0;
+                    var bestScoresCount = 0;
+                    var processedPlayers = 0;
 
-                    var batchPlayers = playerNames
-                        .Skip(batchIndex * PlayerBatchSize)
-                        .Take(PlayerBatchSize)
-                        .ToList();
+                    for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++)
+                    {
+                        if (c.IsCancellationRequested) break;
 
-                    batchStopwatch.Restart();
+                        var batchPlayers = playerNames
+                            .Skip(batchIndex * PlayerBatchSize)
+                            .Take(PlayerBatchSize)
+                            .ToList();
 
-                    var batchLifetime = await BackfillMonthlyStatsAsync(dbContext, batchPlayers, nowIso, c);
-                    var batchServerStats = await BackfillServerStatsAsync(dbContext, batchPlayers, nowIso, c);
-                    var batchMapStats = await BackfillMapStatsAsync(dbContext, batchPlayers, nowIso, c);
-                    var batchBestScores = await BackfillBestScoresAsync(dbContext, batchPlayers, nowUtc, c);
+                        lifetimeCount += await BackfillMonthlyStatsAsync(dbContext, batchPlayers, nowIso, c);
+                        serverStatsCount += await BackfillServerStatsAsync(dbContext, batchPlayers, nowIso, c);
+                        mapStatsCount += await BackfillMapStatsAsync(dbContext, batchPlayers, nowIso, c);
+                        bestScoresCount += await BackfillBestScoresAsync(dbContext, batchPlayers, nowUtc, c);
 
-                    batchStopwatch.Stop();
+                        processedPlayers += batchPlayers.Count;
+                    }
 
-                    lifetimeCount += batchLifetime;
-                    serverStatsCount += batchServerStats;
-                    mapStatsCount += batchMapStats;
-                    bestScoresCount += batchBestScores;
-                    processedPlayers += batchPlayers.Count;
+                    stopwatch.Stop();
 
-                    var percentComplete = (processedPlayers * 100.0) / playerNames.Count;
-                    var batchRecordsCreated = batchLifetime + batchServerStats + batchMapStats + batchBestScores;
+                    var totalRecords = lifetimeCount + serverStatsCount + mapStatsCount + bestScoresCount;
+                    var playersPerSecond = stopwatch.ElapsedMilliseconds > 0 ? (playerNames.Count * 1000.0) / stopwatch.ElapsedMilliseconds : 0;
+                    var recordsPerSecond = stopwatch.ElapsedMilliseconds > 0 ? (totalRecords * 1000.0) / stopwatch.ElapsedMilliseconds : 0;
 
                     logger.LogInformation(
-                        "Tier {Tier}: Batch {Batch}/{Total} completed in {BatchMs}ms - {PlayersProcessed}/{TotalPlayers} players ({Percent:F1}%) - {BatchRecords} records this batch",
-                        tier, batchIndex + 1, totalBatches, batchStopwatch.ElapsedMilliseconds,
-                        processedPlayers, playerNames.Count, percentComplete, batchRecordsCreated);
+                        "Tier {Tier} backfill completed: {TotalPlayers} players, {TotalRecords} records (Lifetime={Lifetime}, ServerStats={ServerStats}, MapStats={MapStats}, BestScores={BestScores}) in {Duration}ms ({PlayersPerSec:F1} players/sec)",
+                        tier, playerNames.Count, totalRecords, lifetimeCount, serverStatsCount, mapStatsCount, bestScoresCount,
+                        stopwatch.ElapsedMilliseconds, playersPerSecond);
+
+                    activity?.SetTag("result.players_processed", playerNames.Count);
+                    activity?.SetTag("result.total_records", totalRecords);
+                    activity?.SetTag("result.lifetime_stats", lifetimeCount);
+                    activity?.SetTag("result.server_stats", serverStatsCount);
+                    activity?.SetTag("result.map_stats", mapStatsCount);
+                    activity?.SetTag("result.best_scores", bestScoresCount);
+                    activity?.SetTag("result.duration_ms", stopwatch.ElapsedMilliseconds);
+                    activity?.SetTag("result.players_per_sec", playersPerSecond);
+                    activity?.SetTag("result.records_per_sec", recordsPerSecond);
                 }
-
-                stopwatch.Stop();
-
-                var totalRecords = lifetimeCount + serverStatsCount + mapStatsCount + bestScoresCount;
-                var playersPerSecond = stopwatch.ElapsedMilliseconds > 0 ? (playerNames.Count * 1000.0) / stopwatch.ElapsedMilliseconds : 0;
-                var recordsPerSecond = stopwatch.ElapsedMilliseconds > 0 ? (totalRecords * 1000.0) / stopwatch.ElapsedMilliseconds : 0;
-
-                logger.LogInformation(
-                    "Tier {Tier} summary: {TotalPlayers} players, {TotalRecords} total records created",
-                    tier, playerNames.Count, totalRecords);
-                logger.LogInformation(
-                    "Tier {Tier} breakdown: Lifetime={Lifetime}, ServerStats={ServerStats}, MapStats={MapStats}, BestScores={BestScores}",
-                    tier, lifetimeCount, serverStatsCount, mapStatsCount, bestScoresCount);
-                logger.LogInformation(
-                    "Tier {Tier} throughput: {PlayersPerSec:F1} players/sec, {RecordsPerSec:F1} records/sec",
-                    tier, playersPerSecond, recordsPerSecond);
-                activity?.SetTag("result.players_processed", playerNames.Count);
-                activity?.SetTag("result.total_records", totalRecords);
-                activity?.SetTag("result.lifetime_stats", lifetimeCount);
-                activity?.SetTag("result.server_stats", serverStatsCount);
-                activity?.SetTag("result.map_stats", mapStatsCount);
-                activity?.SetTag("result.best_scores", bestScoresCount);
-                activity?.SetTag("result.duration_ms", stopwatch.ElapsedMilliseconds);
-                activity?.SetTag("result.players_per_sec", playersPerSecond);
-                activity?.SetTag("result.records_per_sec", recordsPerSecond);
-
-                logger.LogInformation(
-                    "Tier {Tier} backfill completed in {Duration}ms",
-                    tier, stopwatch.ElapsedMilliseconds);
-            }
-            catch (Exception ex)
-            {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                logger.LogError(ex, "Failed to complete tier {Tier} backfill", tier);
-                throw;
-            }
-        }, ct);
+                catch (Exception ex)
+                {
+                    activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                    logger.LogError(ex, "Failed to complete tier {Tier} backfill", tier);
+                    throw;
+                }
+            }, ct);
+        }
     }
 
     public async Task RunForPlayersAsync(IEnumerable<string> playerNames, CancellationToken ct = default)
@@ -173,66 +149,68 @@ public class AggregateBackfillBackgroundService(
         var playerList = playerNames.ToList();
         if (playerList.Count == 0)
         {
-            logger.LogInformation("RunForPlayersAsync: No players to process");
             return;
         }
 
         using var activity = ActivitySources.SqliteAnalytics.StartActivity("AggregateBackfill.ForPlayers");
+        activity?.SetTag("bulk_operation", "true");
         var stopwatch = Stopwatch.StartNew();
-
-        logger.LogInformation("Starting aggregate backfill for {PlayerCount} specific players", playerList.Count);
 
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
 
-        await concurrency.ExecuteWithPlayerAggregatesLockAsync(async (c) =>
+        // Suppress EF SQL logging during bulk operations
+        using (LogContext.PushProperty("bulk_operation", true))
         {
-            try
+            await concurrency.ExecuteWithPlayerAggregatesLockAsync(async (c) =>
             {
-                var now = clock.GetCurrentInstant();
-                var nowUtc = now.ToDateTimeUtc();
-                var nowIso = InstantPattern.ExtendedIso.Format(now);
-
-                // Process players in batches
-                var totalBatches = (playerList.Count + PlayerBatchSize - 1) / PlayerBatchSize;
-                var lifetimeCount = 0;
-                var serverStatsCount = 0;
-                var mapStatsCount = 0;
-                var bestScoresCount = 0;
-
-                for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++)
+                try
                 {
-                    if (c.IsCancellationRequested) break;
+                    var now = clock.GetCurrentInstant();
+                    var nowUtc = now.ToDateTimeUtc();
+                    var nowIso = InstantPattern.ExtendedIso.Format(now);
 
-                    var batchPlayers = playerList
-                        .Skip(batchIndex * PlayerBatchSize)
-                        .Take(PlayerBatchSize)
-                        .ToList();
+                    // Process players in batches
+                    var totalBatches = (playerList.Count + PlayerBatchSize - 1) / PlayerBatchSize;
+                    var lifetimeCount = 0;
+                    var serverStatsCount = 0;
+                    var mapStatsCount = 0;
+                    var bestScoresCount = 0;
 
-                    lifetimeCount += await BackfillMonthlyStatsAsync(dbContext, batchPlayers, nowIso, c);
-                    serverStatsCount += await BackfillServerStatsAsync(dbContext, batchPlayers, nowIso, c);
-                    mapStatsCount += await BackfillMapStatsAsync(dbContext, batchPlayers, nowIso, c);
-                    bestScoresCount += await BackfillBestScoresAsync(dbContext, batchPlayers, nowUtc, c);
+                    for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++)
+                    {
+                        if (c.IsCancellationRequested) break;
+
+                        var batchPlayers = playerList
+                            .Skip(batchIndex * PlayerBatchSize)
+                            .Take(PlayerBatchSize)
+                            .ToList();
+
+                        lifetimeCount += await BackfillMonthlyStatsAsync(dbContext, batchPlayers, nowIso, c);
+                        serverStatsCount += await BackfillServerStatsAsync(dbContext, batchPlayers, nowIso, c);
+                        mapStatsCount += await BackfillMapStatsAsync(dbContext, batchPlayers, nowIso, c);
+                        bestScoresCount += await BackfillBestScoresAsync(dbContext, batchPlayers, nowUtc, c);
+                    }
+
+                    stopwatch.Stop();
+
+                    var totalRecords = lifetimeCount + serverStatsCount + mapStatsCount + bestScoresCount;
+                    logger.LogInformation(
+                        "Aggregate backfill for {PlayerCount} players: {TotalRecords} records in {Duration}ms",
+                        playerList.Count, totalRecords, stopwatch.ElapsedMilliseconds);
+
+                    activity?.SetTag("result.players_processed", playerList.Count);
+                    activity?.SetTag("result.total_records", totalRecords);
+                    activity?.SetTag("result.duration_ms", stopwatch.ElapsedMilliseconds);
                 }
-
-                stopwatch.Stop();
-
-                var totalRecords = lifetimeCount + serverStatsCount + mapStatsCount + bestScoresCount;
-                logger.LogInformation(
-                    "Completed aggregate backfill for {PlayerCount} players: {TotalRecords} records in {Duration}ms",
-                    playerList.Count, totalRecords, stopwatch.ElapsedMilliseconds);
-
-                activity?.SetTag("result.players_processed", playerList.Count);
-                activity?.SetTag("result.total_records", totalRecords);
-                activity?.SetTag("result.duration_ms", stopwatch.ElapsedMilliseconds);
-            }
-            catch (Exception ex)
-            {
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                logger.LogError(ex, "Failed to complete backfill for {PlayerCount} players", playerList.Count);
-                throw;
-            }
-        }, ct);
+                catch (Exception ex)
+                {
+                    activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                    logger.LogError(ex, "Failed to complete backfill for {PlayerCount} players", playerList.Count);
+                    throw;
+                }
+            }, ct);
+        }
     }
 
     private async Task<List<string>> GetPlayerNamesForTierAsync(

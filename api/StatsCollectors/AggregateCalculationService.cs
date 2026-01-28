@@ -39,9 +39,6 @@ public class AggregateCalculationService(
             var cycleStopwatch = Stopwatch.StartNew();
             try
             {
-                logger.LogInformation("Starting aggregate calculation cycle");
-
-                using (LogContext.PushProperty("operation_type", "aggregate_calculation"))
                 using (LogContext.PushProperty("bulk_operation", true))
                 using (var scope = services.CreateScope())
                 {
@@ -53,17 +50,26 @@ public class AggregateCalculationService(
                     var currentWeek = System.Globalization.ISOWeek.GetWeekOfYear(now);
                     var isoYear = System.Globalization.ISOWeek.GetYear(now);
 
+                    var results = new Dictionary<string, int>();
+
                     await concurrency.ExecuteWithPlayerAggregatesLockAsync(async (_) =>
                     {
-                        await CalculatePlayerStatsMonthly(dbContext, currentYear, currentMonth);
-                        await CalculatePlayerServerStats(dbContext, isoYear, currentWeek);
-                        await CalculatePlayerMapStats(dbContext, currentYear, currentMonth);
+                        results["monthly"] = await CalculatePlayerStatsMonthly(dbContext, currentYear, currentMonth);
+                        results["server"] = await CalculatePlayerServerStats(dbContext, isoYear, currentWeek);
+                        results["map"] = await CalculatePlayerMapStats(dbContext, currentYear, currentMonth);
                     }, stoppingToken);
 
                     cycleStopwatch.Stop();
                     activity?.SetTag("cycle_duration_ms", cycleStopwatch.ElapsedMilliseconds);
-                    logger.LogInformation("Aggregate calculation completed successfully in {DurationMs}ms",
-                        cycleStopwatch.ElapsedMilliseconds);
+                    activity?.SetTag("monthly_records", results.GetValueOrDefault("monthly"));
+                    activity?.SetTag("server_records", results.GetValueOrDefault("server"));
+                    activity?.SetTag("map_records", results.GetValueOrDefault("map"));
+
+                    var totalRecords = results.Values.Sum();
+                    logger.LogInformation(
+                        "Aggregate calculation: {TotalRecords} records (monthly={Monthly}, server={Server}, map={Map}) for {Year}-{Month:00} in {Duration}ms",
+                        totalRecords, results.GetValueOrDefault("monthly"), results.GetValueOrDefault("server"),
+                        results.GetValueOrDefault("map"), currentYear, currentMonth, cycleStopwatch.ElapsedMilliseconds);
                 }
             }
             catch (Exception ex)
@@ -82,7 +88,7 @@ public class AggregateCalculationService(
     /// <summary>
     /// Calculate PlayerStatsMonthly for all players active in the current month.
     /// </summary>
-    private async Task CalculatePlayerStatsMonthly(PlayerTrackerDbContext dbContext, int year, int month)
+    private async Task<int> CalculatePlayerStatsMonthly(PlayerTrackerDbContext dbContext, int year, int month)
     {
         using var activity = ActivitySources.AggregateCalculation.StartActivity("AggregateCalculation.PlayerStatsMonthly");
         activity?.SetTag("year", year);
@@ -91,23 +97,16 @@ public class AggregateCalculationService(
         var yearString = year.ToString();
         var monthString = month.ToString("00");
 
-        logger.LogInformation("Calculating PlayerStatsMonthly for {Year}-{Month}", year, monthString);
-
         await using var transaction = await dbContext.Database.BeginTransactionAsync();
         try
         {
             // Delete existing records for this month
-            var deleteStopwatch = Stopwatch.StartNew();
-            var deletedCount = await dbContext.Database.ExecuteSqlRawAsync(@"
+            await dbContext.Database.ExecuteSqlRawAsync(@"
                 DELETE FROM ""PlayerStatsMonthly""
                 WHERE ""Year"" = {0} AND ""Month"" = {1}",
                 year, month);
-            deleteStopwatch.Stop();
-            activity?.SetTag("deleted_count", deletedCount);
-            logger.LogDebug("Deleted {DeletedCount} existing PlayerStatsMonthly records", deletedCount);
 
             // Query aggregated data from PlayerSessions
-            var queryStopwatch = Stopwatch.StartNew();
             var playerData = await dbContext.Database.SqlQueryRaw<PlayerStatsAggregateData>(@"
                 SELECT
                     ps.PlayerName,
@@ -126,18 +125,14 @@ public class AggregateCalculationService(
                   AND (ps.IsDeleted = 0 OR ps.IsDeleted IS NULL)
                 GROUP BY ps.PlayerName",
                 yearString, monthString).ToListAsync();
-            queryStopwatch.Stop();
-            activity?.SetTag("query_duration_ms", queryStopwatch.ElapsedMilliseconds);
+
             activity?.SetTag("player_count", playerData.Count);
 
             if (playerData.Count == 0)
             {
                 await transaction.CommitAsync();
-                logger.LogDebug("No player data found for {Year}-{Month}", year, monthString);
-                return;
+                return 0;
             }
-
-            logger.LogDebug("Retrieved {PlayerCount} players for monthly stats", playerData.Count);
 
             // Build and insert records
             var now = clock.GetCurrentInstant();
@@ -159,15 +154,11 @@ public class AggregateCalculationService(
                 UpdatedAt = now
             }).ToList();
 
-            var insertStopwatch = Stopwatch.StartNew();
             await BulkInsertPlayerStatsMonthly(dbContext, records);
-            insertStopwatch.Stop();
-            activity?.SetTag("insert_duration_ms", insertStopwatch.ElapsedMilliseconds);
             activity?.SetTag("records_inserted", records.Count);
 
             await transaction.CommitAsync();
-            logger.LogInformation("Successfully calculated {RecordCount} PlayerStatsMonthly records for {Year}-{Month}",
-                records.Count, year, monthString);
+            return records.Count;
         }
         catch (Exception ex)
         {
@@ -183,7 +174,7 @@ public class AggregateCalculationService(
     /// Calculate PlayerServerStats for all player-server combinations active in the current ISO week.
     /// Uses weekly buckets for finer granularity in leaderboard queries.
     /// </summary>
-    private async Task CalculatePlayerServerStats(PlayerTrackerDbContext dbContext, int year, int week)
+    private async Task<int> CalculatePlayerServerStats(PlayerTrackerDbContext dbContext, int year, int week)
     {
         using var activity = ActivitySources.AggregateCalculation.StartActivity("AggregateCalculation.PlayerServerStats");
         activity?.SetTag("year", year);
@@ -191,28 +182,19 @@ public class AggregateCalculationService(
 
         var weekString = week.ToString("00");
 
-        logger.LogInformation("Calculating PlayerServerStats for {Year}-W{Week}", year, weekString);
-
         await using var transaction = await dbContext.Database.BeginTransactionAsync();
         try
         {
             // Delete existing records for this week
-            var deleteStopwatch = Stopwatch.StartNew();
-            var deletedCount = await dbContext.Database.ExecuteSqlRawAsync(@"
+            await dbContext.Database.ExecuteSqlRawAsync(@"
                 DELETE FROM ""PlayerServerStats""
                 WHERE ""Year"" = {0} AND ""Week"" = {1}",
                 year, week);
-            deleteStopwatch.Stop();
-            activity?.SetTag("deleted_count", deletedCount);
-            logger.LogDebug("Deleted {DeletedCount} existing PlayerServerStats records", deletedCount);
 
             // Query aggregated data from PlayerSessions for this ISO week
-            // strftime('%W') returns 00-53 but is 0-indexed, ISO weeks are 1-indexed
-            // We use a date range approach instead for accuracy
             var weekStart = System.Globalization.ISOWeek.ToDateTime(year, week, DayOfWeek.Monday);
             var weekEnd = weekStart.AddDays(7);
 
-            var queryStopwatch = Stopwatch.StartNew();
             var serverData = await dbContext.Database.SqlQueryRaw<PlayerServerStatsAggregateData>(@"
                 SELECT
                     ps.PlayerName,
@@ -231,18 +213,14 @@ public class AggregateCalculationService(
                 GROUP BY ps.PlayerName, ps.ServerGuid",
                 weekStart.ToString("yyyy-MM-dd HH:mm:ss"),
                 weekEnd.ToString("yyyy-MM-dd HH:mm:ss")).ToListAsync();
-            queryStopwatch.Stop();
-            activity?.SetTag("query_duration_ms", queryStopwatch.ElapsedMilliseconds);
+
             activity?.SetTag("record_count", serverData.Count);
 
             if (serverData.Count == 0)
             {
                 await transaction.CommitAsync();
-                logger.LogDebug("No player-server data found for {Year}-W{Week}", year, weekString);
-                return;
+                return 0;
             }
-
-            logger.LogDebug("Retrieved {RecordCount} player-server combinations", serverData.Count);
 
             var now = clock.GetCurrentInstant();
             var records = serverData.Select(p => new PlayerServerStats
@@ -259,15 +237,11 @@ public class AggregateCalculationService(
                 UpdatedAt = now
             }).ToList();
 
-            var insertStopwatch = Stopwatch.StartNew();
             await BulkInsertPlayerServerStats(dbContext, records);
-            insertStopwatch.Stop();
-            activity?.SetTag("insert_duration_ms", insertStopwatch.ElapsedMilliseconds);
             activity?.SetTag("records_inserted", records.Count);
 
             await transaction.CommitAsync();
-            logger.LogInformation("Successfully calculated {RecordCount} PlayerServerStats records for {Year}-W{Week}",
-                records.Count, year, weekString);
+            return records.Count;
         }
         catch (Exception ex)
         {
@@ -283,7 +257,7 @@ public class AggregateCalculationService(
     /// Calculate PlayerMapStats for all player-map-server combinations active in the current month.
     /// Also calculates global (cross-server) map stats.
     /// </summary>
-    private async Task CalculatePlayerMapStats(PlayerTrackerDbContext dbContext, int year, int month)
+    private async Task<int> CalculatePlayerMapStats(PlayerTrackerDbContext dbContext, int year, int month)
     {
         using var activity = ActivitySources.AggregateCalculation.StartActivity("AggregateCalculation.PlayerMapStats");
         activity?.SetTag("year", year);
@@ -292,23 +266,16 @@ public class AggregateCalculationService(
         var yearString = year.ToString();
         var monthString = month.ToString("00");
 
-        logger.LogInformation("Calculating PlayerMapStats for {Year}-{Month}", year, monthString);
-
         await using var transaction = await dbContext.Database.BeginTransactionAsync();
         try
         {
             // Delete existing records for this month
-            var deleteStopwatch = Stopwatch.StartNew();
-            var deletedCount = await dbContext.Database.ExecuteSqlRawAsync(@"
+            await dbContext.Database.ExecuteSqlRawAsync(@"
                 DELETE FROM ""PlayerMapStats""
                 WHERE ""Year"" = {0} AND ""Month"" = {1}",
                 year, month);
-            deleteStopwatch.Stop();
-            activity?.SetTag("deleted_count", deletedCount);
-            logger.LogDebug("Deleted {DeletedCount} existing PlayerMapStats records", deletedCount);
 
             // Query aggregated data from PlayerSessions - per server
-            var queryStopwatch = Stopwatch.StartNew();
             var mapData = await dbContext.Database.SqlQueryRaw<PlayerMapStatsAggregateData>(@"
                 SELECT
                     ps.PlayerName,
@@ -327,12 +294,10 @@ public class AggregateCalculationService(
                   AND (ps.IsDeleted = 0 OR ps.IsDeleted IS NULL)
                 GROUP BY ps.PlayerName, ps.MapName, ps.ServerGuid",
                 yearString, monthString).ToListAsync();
-            queryStopwatch.Stop();
-            activity?.SetTag("query_duration_ms", queryStopwatch.ElapsedMilliseconds);
+
             activity?.SetTag("per_server_record_count", mapData.Count);
 
             // Also query global (cross-server) map stats
-            var globalQueryStopwatch = Stopwatch.StartNew();
             var globalMapData = await dbContext.Database.SqlQueryRaw<PlayerMapStatsAggregateData>(@"
                 SELECT
                     ps.PlayerName,
@@ -351,8 +316,7 @@ public class AggregateCalculationService(
                   AND (ps.IsDeleted = 0 OR ps.IsDeleted IS NULL)
                 GROUP BY ps.PlayerName, ps.MapName",
                 yearString, monthString).ToListAsync();
-            globalQueryStopwatch.Stop();
-            activity?.SetTag("global_query_duration_ms", globalQueryStopwatch.ElapsedMilliseconds);
+
             activity?.SetTag("global_record_count", globalMapData.Count);
 
             var allMapData = mapData.Concat(globalMapData).ToList();
@@ -360,11 +324,8 @@ public class AggregateCalculationService(
             if (allMapData.Count == 0)
             {
                 await transaction.CommitAsync();
-                logger.LogDebug("No player-map data found for {Year}-{Month}", year, monthString);
-                return;
+                return 0;
             }
-
-            logger.LogDebug("Retrieved {RecordCount} player-map combinations (including global)", allMapData.Count);
 
             var now = clock.GetCurrentInstant();
             var records = allMapData.Select(p => new PlayerMapStats
@@ -382,15 +343,11 @@ public class AggregateCalculationService(
                 UpdatedAt = now
             }).ToList();
 
-            var insertStopwatch = Stopwatch.StartNew();
             await BulkInsertPlayerMapStats(dbContext, records);
-            insertStopwatch.Stop();
-            activity?.SetTag("insert_duration_ms", insertStopwatch.ElapsedMilliseconds);
             activity?.SetTag("records_inserted", records.Count);
 
             await transaction.CommitAsync();
-            logger.LogInformation("Successfully calculated {RecordCount} PlayerMapStats records for {Year}-{Month}",
-                records.Count, year, monthString);
+            return records.Count;
         }
         catch (Exception ex)
         {

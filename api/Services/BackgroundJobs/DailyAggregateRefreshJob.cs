@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NodaTime;
 using NodaTime.Text;
+using Serilog.Context;
 
 namespace api.Services.BackgroundJobs;
 
@@ -22,6 +23,7 @@ public class DailyAggregateRefreshJob(
     public async Task RunAsync(CancellationToken ct = default)
     {
         using var activity = ActivitySources.SqliteAnalytics.StartActivity("DailyAggregateRefresh");
+        activity?.SetTag("bulk_operation", "true");
         var stopwatch = Stopwatch.StartNew();
 
         logger.LogInformation("Starting daily aggregate refresh");
@@ -29,24 +31,38 @@ public class DailyAggregateRefreshJob(
         using var scope = scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<PlayerTrackerDbContext>();
 
-        try
+        // Suppress EF SQL logging during bulk operations
+        using (LogContext.PushProperty("bulk_operation", true))
         {
-            await RefreshServerHourlyPatternsAsync(dbContext, ct);
-            await RefreshHourlyPlayerPredictionsAsync(dbContext, ct);
-            await RefreshHourlyActivityPatternsAsync(dbContext, ct);
-            await RefreshMapGlobalAveragesAsync(dbContext, ct);
-            await concurrency.ExecuteWithServerMapStatsLockAsync(async (c) => await RefreshServerMapStatsAsync(dbContext, c), ct);
-            await RefreshMapServerHourlyPatternsAsync(dbContext, ct);
+            try
+            {
+                var results = new Dictionary<string, int>();
 
-            stopwatch.Stop();
-            activity?.SetTag("result.duration_ms", stopwatch.ElapsedMilliseconds);
-            logger.LogInformation("Daily aggregate refresh completed in {Duration}ms", stopwatch.ElapsedMilliseconds);
-        }
-        catch (Exception ex)
-        {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            logger.LogError(ex, "Failed to complete daily aggregate refresh");
-            throw;
+                results["serverHourlyPatterns"] = await RefreshServerHourlyPatternsAsync(dbContext, ct);
+                results["hourlyPlayerPredictions"] = await RefreshHourlyPlayerPredictionsAsync(dbContext, ct);
+                results["hourlyActivityPatterns"] = await RefreshHourlyActivityPatternsAsync(dbContext, ct);
+                results["mapGlobalAverages"] = await RefreshMapGlobalAveragesAsync(dbContext, ct);
+                results["serverMapStats"] = await concurrency.ExecuteWithServerMapStatsLockAsync(async (c) => await RefreshServerMapStatsAsync(dbContext, c), ct);
+                results["mapServerHourlyPatterns"] = await RefreshMapServerHourlyPatternsAsync(dbContext, ct);
+
+                stopwatch.Stop();
+
+                var totalRecords = results.Values.Sum();
+                activity?.SetTag("result.duration_ms", stopwatch.ElapsedMilliseconds);
+                activity?.SetTag("result.total_records", totalRecords);
+
+                logger.LogInformation(
+                    "Daily aggregate refresh completed: {TotalRecords} records in {Duration}ms (patterns={Patterns}, predictions={Predictions}, activity={Activity}, mapAvg={MapAvg}, serverMap={ServerMap}, mapHourly={MapHourly})",
+                    totalRecords, stopwatch.ElapsedMilliseconds,
+                    results["serverHourlyPatterns"], results["hourlyPlayerPredictions"], results["hourlyActivityPatterns"],
+                    results["mapGlobalAverages"], results["serverMapStats"], results["mapServerHourlyPatterns"]);
+            }
+            catch (Exception ex)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                logger.LogError(ex, "Failed to complete daily aggregate refresh");
+                throw;
+            }
         }
     }
 
@@ -179,9 +195,8 @@ public class DailyAggregateRefreshJob(
     /// Refreshes server hourly patterns using SQL grouping with GROUP_CONCAT for percentile calculation.
     /// Much more efficient than loading all raw data - we load only pre-grouped results.
     /// </summary>
-    private async Task RefreshServerHourlyPatternsAsync(PlayerTrackerDbContext dbContext, CancellationToken ct)
+    private async Task<int> RefreshServerHourlyPatternsAsync(PlayerTrackerDbContext dbContext, CancellationToken ct)
     {
-        var stopwatch = Stopwatch.StartNew();
         var now = clock.GetCurrentInstant();
         var lookbackDays = 60;
         var cutoffTimeIso = InstantPattern.ExtendedIso.Format(now.Minus(Duration.FromDays(lookbackDays)));
@@ -190,7 +205,7 @@ public class DailyAggregateRefreshJob(
         // Use SQL to group and aggregate, collecting all values via GROUP_CONCAT for percentile calculation
         // This reduces data transfer from ~1.4M rows to ~N_servers × 168 rows
         var sql = $@"
-            SELECT 
+            SELECT
                 ServerGuid,
                 CAST(strftime('%w', HourTimestamp) AS INTEGER) as DayOfWeek,
                 CAST(strftime('%H', HourTimestamp) AS INTEGER) as HourOfDay,
@@ -209,12 +224,11 @@ public class DailyAggregateRefreshJob(
 
         if (groupedData.Count == 0)
         {
-            logger.LogInformation("No server online count data found for hourly patterns");
-            return;
+            return 0;
         }
 
         // Calculate percentiles from the grouped values and build INSERT statement
-        var insertSql = @"INSERT OR REPLACE INTO ServerHourlyPatterns 
+        var insertSql = @"INSERT OR REPLACE INTO ServerHourlyPatterns
             (ServerGuid, DayOfWeek, HourOfDay, AvgPlayers, MinPlayers, Q25Players, MedianPlayers, Q75Players, Q90Players, MaxPlayers, DataPoints, UpdatedAt)
             VALUES ";
 
@@ -264,17 +278,14 @@ public class DailyAggregateRefreshJob(
             totalInserted += await dbContext.Database.ExecuteSqlRawAsync(batchSql, batchParams, ct);
         }
 
-        stopwatch.Stop();
-        logger.LogInformation("Refreshed {Count} server hourly patterns in {Duration}ms (from {Groups} grouped records)",
-            totalInserted, stopwatch.ElapsedMilliseconds, groupedData.Count);
+        return totalInserted;
     }
 
     /// <summary>
     /// Refreshes hourly player predictions using a single SQL INSERT OR REPLACE with aggregation.
     /// </summary>
-    private async Task RefreshHourlyPlayerPredictionsAsync(PlayerTrackerDbContext dbContext, CancellationToken ct)
+    private async Task<int> RefreshHourlyPlayerPredictionsAsync(PlayerTrackerDbContext dbContext, CancellationToken ct)
     {
-        var stopwatch = Stopwatch.StartNew();
         var now = clock.GetCurrentInstant();
         var lookbackDays = 60;
         var cutoffTimeIso = InstantPattern.ExtendedIso.Format(now.Minus(Duration.FromDays(lookbackDays)));
@@ -285,7 +296,7 @@ public class DailyAggregateRefreshJob(
         // Step 2: Average those sums across dates to get prediction
         var sql = @"
             INSERT OR REPLACE INTO HourlyPlayerPredictions (Game, DayOfWeek, HourOfDay, PredictedPlayers, DataPoints, UpdatedAt)
-            SELECT 
+            SELECT
                 Game,
                 DayOfWeek,
                 HourOfDay,
@@ -293,7 +304,7 @@ public class DailyAggregateRefreshJob(
                 COUNT(*) as DataPoints,
                 @p1 as UpdatedAt
             FROM (
-                SELECT 
+                SELECT
                     Game,
                     CAST(strftime('%w', HourTimestamp) AS INTEGER) as DayOfWeek,
                     CAST(strftime('%H', HourTimestamp) AS INTEGER) as HourOfDay,
@@ -306,11 +317,7 @@ public class DailyAggregateRefreshJob(
             ) hourly_totals
             GROUP BY Game, DayOfWeek, HourOfDay";
 
-        var rowsAffected = await dbContext.Database.ExecuteSqlRawAsync(sql, [cutoffTimeIso, nowIso], ct);
-
-        stopwatch.Stop();
-        logger.LogInformation("Refreshed {Count} hourly player predictions in {Duration}ms",
-            rowsAffected, stopwatch.ElapsedMilliseconds);
+        return await dbContext.Database.ExecuteSqlRawAsync(sql, [cutoffTimeIso, nowIso], ct);
     }
 
     /// <summary>
@@ -318,9 +325,8 @@ public class DailyAggregateRefreshJob(
     /// Calculates unique players, total rounds, and average round duration per game/day/hour.
     /// Used by GetWeeklyActivityPatternsAsync in SqliteGameTrendsService.
     /// </summary>
-    private async Task RefreshHourlyActivityPatternsAsync(PlayerTrackerDbContext dbContext, CancellationToken ct)
+    private async Task<int> RefreshHourlyActivityPatternsAsync(PlayerTrackerDbContext dbContext, CancellationToken ct)
     {
-        var stopwatch = Stopwatch.StartNew();
         var now = clock.GetCurrentInstant();
         var lookbackDays = 30;
         var cutoffTime = now.Minus(Duration.FromDays(lookbackDays)).ToDateTimeUtc().ToString("yyyy-MM-dd HH:mm:ss");
@@ -358,25 +364,20 @@ public class DailyAggregateRefreshJob(
             ) daily_stats
             GROUP BY Game, DayOfWeek, HourOfDay";
 
-        var rowsAffected = await dbContext.Database.ExecuteSqlRawAsync(sql, [cutoffTime, nowIso], ct);
-
-        stopwatch.Stop();
-        logger.LogInformation("Refreshed {Count} hourly activity patterns in {Duration}ms",
-            rowsAffected, stopwatch.ElapsedMilliseconds);
+        return await dbContext.Database.ExecuteSqlRawAsync(sql, [cutoffTime, nowIso], ct);
     }
 
     /// <summary>
     /// Refreshes map global averages using a single SQL INSERT OR REPLACE.
     /// </summary>
-    private async Task RefreshMapGlobalAveragesAsync(PlayerTrackerDbContext dbContext, CancellationToken ct)
+    private async Task<int> RefreshMapGlobalAveragesAsync(PlayerTrackerDbContext dbContext, CancellationToken ct)
     {
-        var stopwatch = Stopwatch.StartNew();
         var nowIso = InstantPattern.ExtendedIso.Format(clock.GetCurrentInstant());
 
         // Single SQL statement to aggregate and upsert all map averages
         var sql = @"
             INSERT OR REPLACE INTO MapGlobalAverages (MapName, ServerGuid, AvgKillRate, AvgScoreRate, SampleCount, UpdatedAt)
-            SELECT 
+            SELECT
                 MapName,
                 '' as ServerGuid,
                 ROUND(CAST(SUM(TotalKills) AS REAL) / SUM(TotalPlayTimeMinutes), 3) as AvgKillRate,
@@ -387,11 +388,7 @@ public class DailyAggregateRefreshJob(
             WHERE ServerGuid = '' AND TotalPlayTimeMinutes > 0
             GROUP BY MapName";
 
-        var rowsAffected = await dbContext.Database.ExecuteSqlRawAsync(sql, [nowIso], ct);
-
-        stopwatch.Stop();
-        logger.LogInformation("Refreshed {Count} map global averages in {Duration}ms",
-            rowsAffected, stopwatch.ElapsedMilliseconds);
+        return await dbContext.Database.ExecuteSqlRawAsync(sql, [nowIso], ct);
     }
 
     /// <summary>
@@ -400,9 +397,8 @@ public class DailyAggregateRefreshJob(
     /// Only refreshes current and previous month (recent data that may have changed).
     /// Used by /stats/servers/{name}/insights/maps endpoint.
     /// </summary>
-    private async Task RefreshServerMapStatsAsync(PlayerTrackerDbContext dbContext, CancellationToken ct)
+    private async Task<int> RefreshServerMapStatsAsync(PlayerTrackerDbContext dbContext, CancellationToken ct)
     {
-        var stopwatch = Stopwatch.StartNew();
         var now = clock.GetCurrentInstant();
         var nowIso = InstantPattern.ExtendedIso.Format(now);
 
@@ -447,11 +443,7 @@ public class DailyAggregateRefreshJob(
               AND StartTime >= @p1
             GROUP BY ServerGuid, MapName, CAST(strftime('%Y', StartTime) AS INTEGER), CAST(strftime('%m', StartTime) AS INTEGER)";
 
-        var rowsAffected = await dbContext.Database.ExecuteSqlRawAsync(sql, [nowIso, cutoffTime], ct);
-
-        stopwatch.Stop();
-        logger.LogInformation("Refreshed {Count} server map stats (last 2 months) in {Duration}ms",
-            rowsAffected, stopwatch.ElapsedMilliseconds);
+        return await dbContext.Database.ExecuteSqlRawAsync(sql, [nowIso, cutoffTime], ct);
     }
 
     /// <summary>
@@ -459,9 +451,8 @@ public class DailyAggregateRefreshJob(
     /// Used for "When is this map played?" heatmaps in Data Explorer.
     /// Groups by server guid, map name, game, day of week, and hour to show server-specific activity patterns.
     /// </summary>
-    private async Task RefreshMapServerHourlyPatternsAsync(PlayerTrackerDbContext dbContext, CancellationToken ct)
+    private async Task<int> RefreshMapServerHourlyPatternsAsync(PlayerTrackerDbContext dbContext, CancellationToken ct)
     {
-        var stopwatch = Stopwatch.StartNew();
         var now = clock.GetCurrentInstant();
         var lookbackDays = 60;
         var cutoffTime = now.Minus(Duration.FromDays(lookbackDays)).ToDateTimeUtc().ToString("yyyy-MM-dd HH:mm:ss");
@@ -496,11 +487,7 @@ public class DailyAggregateRefreshJob(
                      CAST(strftime('%w', r.StartTime) AS INTEGER),
                      CAST(strftime('%H', r.StartTime) AS INTEGER)";
 
-        var rowsAffected = await dbContext.Database.ExecuteSqlRawAsync(sql, [nowIso, cutoffTime], ct);
-
-        stopwatch.Stop();
-        logger.LogInformation("Refreshed {Count} map-server hourly patterns in {Duration}ms",
-            rowsAffected, stopwatch.ElapsedMilliseconds);
+        return await dbContext.Database.ExecuteSqlRawAsync(sql, [nowIso, cutoffTime], ct);
     }
 
     /// <summary>

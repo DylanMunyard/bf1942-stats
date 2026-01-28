@@ -28,9 +28,6 @@ public class RankingCalculationService(IServiceProvider services, ILogger<Rankin
             var cycleStopwatch = Stopwatch.StartNew();
             try
             {
-                logger.LogInformation("Starting ranking calculation for all servers");
-
-                using (LogContext.PushProperty("operation_type", "ranking_calculation"))
                 using (LogContext.PushProperty("bulk_operation", true))
                 using (var scope = services.CreateScope())
                 {
@@ -41,7 +38,6 @@ public class RankingCalculationService(IServiceProvider services, ILogger<Rankin
 
                     cycleStopwatch.Stop();
                     activity?.SetTag("cycle_duration_ms", cycleStopwatch.ElapsedMilliseconds);
-                    logger.LogInformation("Ranking calculation completed successfully in {DurationMs}ms", cycleStopwatch.ElapsedMilliseconds);
                 }
             }
             catch (Exception ex)
@@ -65,52 +61,32 @@ public class RankingCalculationService(IServiceProvider services, ILogger<Rankin
         var now = DateTime.UtcNow;
         var currentYear = now.Year;
         var currentMonth = now.Month;
-        var currentMonthString = currentMonth.ToString("00");
-
-        using var calculateActivity = ActivitySources.RankingCalculation.StartActivity("RankingCalculation.CalculateRankingsForAllServers");
-        calculateActivity?.SetTag("year", currentYear);
-        calculateActivity?.SetTag("month", currentMonth);
 
         var servers = await dbContext.Servers.Select(s => s.Guid).ToListAsync(ct);
-        logger.LogInformation("Retrieved {ServerCount} active servers for ranking calculation", servers.Count);
-        calculateActivity?.SetTag("server_count", servers.Count);
 
         var totalRankingsInserted = 0;
         var serversProcessed = 0;
+        var serversWithData = 0;
         var serversWithErrors = 0;
 
         foreach (var serverGuid in servers)
         {
-            using var serverActivity = ActivitySources.RankingCalculation.StartActivity("RankingCalculation.ProcessServer");
-            serverActivity?.SetTag("server_guid", serverGuid);
-
-            logger.LogDebug("Processing rankings for server {ServerGuid} for {Year}-{Month}",
-                serverGuid, currentYear, currentMonthString);
-
             try
             {
                 var count = await recalculationService.RecalculateForServerAndPeriodAsync(serverGuid, currentYear, currentMonth, ct);
                 totalRankingsInserted += count;
                 serversProcessed++;
-                serverActivity?.SetTag("rankings_inserted", count);
-
-                if (count > 0)
-                {
-                    logger.LogInformation("Successfully calculated and inserted {RankingCount} rankings for server {ServerGuid}",
-                        count, serverGuid);
-                }
+                if (count > 0) serversWithData++;
             }
             catch (Exception ex)
             {
                 serversWithErrors++;
-                serverActivity?.SetTag("error", ex.Message);
-                serverActivity?.SetStatus(ActivityStatusCode.Error, $"Error processing server {serverGuid}: {ex.Message}");
                 logger.LogError(ex, "Error calculating rankings for server {ServerGuid}", serverGuid);
             }
         }
 
-        calculateActivity?.SetTag("total_rankings_inserted", totalRankingsInserted);
-        calculateActivity?.SetTag("servers_processed", serversProcessed);
-        calculateActivity?.SetTag("servers_with_errors", serversWithErrors);
+        logger.LogInformation(
+            "Ranking calculation: {TotalRankings} rankings across {ServersWithData}/{TotalServers} servers for {Year}-{Month:00}",
+            totalRankingsInserted, serversWithData, servers.Count, currentYear, currentMonth);
     }
 }
