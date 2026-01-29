@@ -43,7 +43,7 @@ public class PlayerBestScoresService(
             return;
         }
 
-        logger.LogInformation(
+        logger.LogDebug(
             "Found {QualifyingCount} sessions with positive scores out of {TotalCount} total",
             qualifyingSessions.Count, sessions.Count);
 

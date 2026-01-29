@@ -9,18 +9,10 @@ public interface IBuddyApiService
     Task<IEnumerable<string>> GetUsersWithFavouriteServer(string serverGuid);
 }
 
-public class BuddyApiService : IBuddyApiService
+public class BuddyApiService(HttpClient httpClient, ILogger<BuddyApiService> logger, IConfiguration configuration)
+    : IBuddyApiService
 {
-    private readonly HttpClient _httpClient;
-    private readonly ILogger<BuddyApiService> _logger;
-    private readonly string _apiBaseUrl;
-
-    public BuddyApiService(HttpClient httpClient, ILogger<BuddyApiService> logger, IConfiguration configuration)
-    {
-        _httpClient = httpClient;
-        _logger = logger;
-        _apiBaseUrl = configuration["ApiBaseUrl"] ?? throw new InvalidOperationException("ApiBaseUrl configuration is required");
-    }
+    private readonly string _apiBaseUrl = configuration["ApiBaseUrl"] ?? throw new InvalidOperationException("ApiBaseUrl configuration is required");
 
     public async Task<IEnumerable<string>> GetUsersWithBuddy(string buddyPlayerName)
     {
@@ -29,9 +21,9 @@ public class BuddyApiService : IBuddyApiService
 
         try
         {
-            _logger.LogInformation("Getting users with buddy {BuddyName} from API", buddyPlayerName);
+            logger.LogInformation("Getting users with buddy {BuddyName} from API", buddyPlayerName);
 
-            var response = await _httpClient.GetAsync($"{_apiBaseUrl}/stats/notification/users-with-buddy?buddyPlayerName={Uri.EscapeDataString(buddyPlayerName)}");
+            var response = await httpClient.GetAsync($"{_apiBaseUrl}/stats/notification/users-with-buddy?buddyPlayerName={Uri.EscapeDataString(buddyPlayerName)}");
             activity?.SetTag("http.status_code", (int)response.StatusCode);
 
             if (response.IsSuccessStatusCode)
@@ -39,20 +31,20 @@ public class BuddyApiService : IBuddyApiService
                 var userEmails = await response.Content.ReadFromJsonAsync<string[]>();
                 var count = userEmails?.Length ?? 0;
                 activity?.SetTag("users.count", count);
-                _logger.LogInformation("Found {Count} users with buddy {BuddyName}", count, buddyPlayerName);
+                logger.LogInformation("Found {Count} users with buddy {BuddyName}", count, buddyPlayerName);
                 return userEmails ?? Enumerable.Empty<string>();
             }
             else
             {
                 activity?.SetStatus(ActivityStatusCode.Error, $"API call failed with status {response.StatusCode}");
-                _logger.LogWarning("API call failed with status {StatusCode} for buddy {BuddyName}", response.StatusCode, buddyPlayerName);
+                logger.LogWarning("API call failed with status {StatusCode} for buddy {BuddyName}", response.StatusCode, buddyPlayerName);
                 return Enumerable.Empty<string>();
             }
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            _logger.LogError(ex, "Error getting users with buddy {BuddyName}", buddyPlayerName);
+            logger.LogError(ex, "Error getting users with buddy {BuddyName}", buddyPlayerName);
             return Enumerable.Empty<string>();
         }
     }
@@ -64,9 +56,9 @@ public class BuddyApiService : IBuddyApiService
 
         try
         {
-            _logger.LogInformation("Getting users with favourite server {ServerGuid} from API", serverGuid);
+            logger.LogDebug("Getting users with favourite server {ServerGuid} from API", serverGuid);
 
-            var response = await _httpClient.GetAsync($"{_apiBaseUrl}/stats/notification/users-with-favourite-server?serverGuid={Uri.EscapeDataString(serverGuid)}");
+            var response = await httpClient.GetAsync($"{_apiBaseUrl}/stats/notification/users-with-favourite-server?serverGuid={Uri.EscapeDataString(serverGuid)}");
             activity?.SetTag("http.status_code", (int)response.StatusCode);
 
             if (response.IsSuccessStatusCode)
@@ -74,21 +66,21 @@ public class BuddyApiService : IBuddyApiService
                 var userEmails = await response.Content.ReadFromJsonAsync<string[]>();
                 var count = userEmails?.Length ?? 0;
                 activity?.SetTag("users.count", count);
-                _logger.LogInformation("Found {Count} users with favourite server {ServerGuid}", count, serverGuid);
+                logger.LogDebug("Found {Count} users with favourite server {ServerGuid}", count, serverGuid);
                 return userEmails ?? Enumerable.Empty<string>();
             }
             else
             {
                 activity?.SetStatus(ActivityStatusCode.Error, $"API call failed with status {response.StatusCode}");
-                _logger.LogWarning("API call failed with status {StatusCode} for favourite server {ServerGuid}", response.StatusCode, serverGuid);
-                return Enumerable.Empty<string>();
+                logger.LogWarning("API call failed with status {StatusCode} for favourite server {ServerGuid}", response.StatusCode, serverGuid);
+                return [];
             }
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            _logger.LogError(ex, "Error getting users with favourite server {ServerGuid}", serverGuid);
-            return Enumerable.Empty<string>();
+            logger.LogError(ex, "Error getting users with favourite server {ServerGuid}", serverGuid);
+            return [];
         }
     }
 }

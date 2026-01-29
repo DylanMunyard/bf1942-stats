@@ -22,7 +22,7 @@ public class NotificationController(
                 return BadRequest("buddyPlayerName is required");
             }
 
-            logger.LogInformation("Getting users who have {BuddyName} as a buddy", buddyPlayerName);
+            logger.LogDebug("Getting users who have {BuddyName} as a buddy", buddyPlayerName);
 
             var userEmails = await dbContext.UserBuddies
                 .Where(ub => ub.BuddyPlayerName == buddyPlayerName)
@@ -50,7 +50,7 @@ public class NotificationController(
                 return BadRequest("serverGuid is required");
             }
 
-            logger.LogInformation("Getting users who have server {ServerGuid} as a favourite", serverGuid);
+            logger.LogDebug("Getting users who have server {ServerGuid} as a favourite", serverGuid);
 
             var userEmails = await dbContext.UserFavoriteServers
                 .Where(ufs => ufs.ServerGuid == serverGuid)
