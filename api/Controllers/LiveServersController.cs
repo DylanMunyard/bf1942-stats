@@ -139,7 +139,7 @@ public class LiveServersController(
 
         var servers = await serverQuery.ToListAsync();
         stepStopwatch.Stop();
-        logger.LogInformation("Step 1 - Servers query completed in {ElapsedMs}ms. Found {ServerCount} servers",
+        logger.LogDebug("Step 1 - Servers query completed in {ElapsedMs}ms. Found {ServerCount} servers",
             stepStopwatch.ElapsedMilliseconds, servers.Count);
 
         if (servers.Count == 0)
@@ -163,11 +163,11 @@ public class LiveServersController(
             .Include(ps => ps.Player)
             .ToListAsync();
         stepStopwatch.Stop();
-        logger.LogInformation("Step 2 - Active player sessions query completed in {ElapsedMs}ms. Found {SessionCount} sessions WITH ALL DATA",
+        logger.LogDebug("Step 2 - Active player sessions query completed in {ElapsedMs}ms. Found {SessionCount} sessions WITH ALL DATA",
             stepStopwatch.ElapsedMilliseconds, activeSessions.Count);
 
         // ELIMINATED: PlayerObservations query - no longer needed!
-        logger.LogInformation("Step 3 - SKIPPED PlayerObservations query - using denormalized data from PlayerSession!");
+        logger.LogDebug("Step 3 - SKIPPED PlayerObservations query - using denormalized data from PlayerSession!");
 
         // Get current rounds efficiently
         stepStopwatch.Restart();
@@ -175,7 +175,7 @@ public class LiveServersController(
             .Where(r => serverGuids.Contains(r.ServerGuid) && r.IsActive)
             .ToDictionaryAsync(r => r.ServerGuid, r => r);
         stepStopwatch.Stop();
-        logger.LogInformation("Step 4 - Current rounds query completed in {ElapsedMs}ms. Found {RoundCount} active rounds",
+        logger.LogDebug("Step 4 - Current rounds query completed in {ElapsedMs}ms. Found {RoundCount} active rounds",
             stepStopwatch.ElapsedMilliseconds, currentRounds.Count);
 
         // Build response by combining the data - NOW MUCH SIMPLER!
@@ -227,15 +227,15 @@ public class LiveServersController(
             };
         }).ToList();
         stepStopwatch.Stop();
-        logger.LogInformation("Step 5 - Response building completed in {ElapsedMs}ms (MUCH FASTER - no observation lookups!)", stepStopwatch.ElapsedMilliseconds);
+        logger.LogDebug("Step 5 - Response building completed in {ElapsedMs}ms", stepStopwatch.ElapsedMilliseconds);
 
         stepStopwatch.Restart();
         var sortedSummaries = serverSummaries.OrderByDescending(s => s.NumPlayers).ToArray();
         stepStopwatch.Stop();
         totalStopwatch.Stop();
 
-        logger.LogInformation("Step 6 - Sorting completed in {ElapsedMs}ms", stepStopwatch.ElapsedMilliseconds);
-        logger.LogInformation("OPTIMIZED GetServersFromDatabaseAsync completed. Total time: {TotalMs}ms, returning {ServerCount} servers - ELIMINATED 7+ SECOND QUERY!",
+        logger.LogDebug("Step 6 - Sorting completed in {ElapsedMs}ms", stepStopwatch.ElapsedMilliseconds);
+        logger.LogDebug("GetServersFromDatabaseAsync completed in {TotalMs}ms, returning {ServerCount} servers",
             totalStopwatch.ElapsedMilliseconds, sortedSummaries.Length);
 
         return sortedSummaries;
