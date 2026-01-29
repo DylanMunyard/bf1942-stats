@@ -13,16 +13,26 @@ using System.Security.Cryptography;
 using OpenTelemetry.Trace;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Exporter;
+using OpenTelemetry.Logs;
 using Serilog.Sinks.Grafana.Loki;
+using Microsoft.Extensions.Configuration;
+using Azure.Monitor.OpenTelemetry.Exporter;
 
-// Configure Serilog
+// Early configuration for Application Insights connection string
+var earlyConfig = new ConfigurationBuilder()
+    .AddEnvironmentVariables()
+    .AddUserSecrets<Program>(optional: true)
+    .Build();
+
 var lokiUrl = Environment.GetEnvironmentVariable("LOKI_URL") ?? "http://localhost:3100";
 var otlpEndpoint = Environment.GetEnvironmentVariable("OTLP_ENDPOINT") ?? "http://localhost:4318/v1/traces";
+var appInsightsConnectionString = earlyConfig["APPLICATIONINSIGHTS_CONNECTION_STRING"] ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
+var useAzureMonitor = !string.IsNullOrEmpty(appInsightsConnectionString);
 var serviceName = "junie-des-1942stats.Notifications";
 var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development";
 
-Log.Logger = new LoggerConfiguration()
-    .MinimumLevel.Information()
+var loggerConfig = new LoggerConfiguration()
+    .MinimumLevel.Warning()
     // Filter to suppress EF Core SQL logs only during bulk operations
     .Filter.ByExcluding(logEvent =>
     {
@@ -49,8 +59,6 @@ Log.Logger = new LoggerConfiguration()
         }
         return false; // Include this log
     })
-    // Keep controller logs at Information level
-    .MinimumLevel.Override("junie_des_1942stats.Notifications", Serilog.Events.LogEventLevel.Information)
     .Enrich.WithProperty("service.name", serviceName)
     .Enrich.WithProperty("service.version", "1.0.0")
     .Enrich.WithProperty("deployment.environment", environment)
@@ -60,8 +68,13 @@ Log.Logger = new LoggerConfiguration()
     .Enrich.WithEnvironmentUserName()
     .Enrich.WithSpan()
     .WriteTo.Console(
-        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj} {Properties:j}{NewLine}{Exception}")
-    .WriteTo.GrafanaLoki(lokiUrl,
+        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj} {Properties:j}{NewLine}{Exception}");
+
+// Local development: use Loki only
+// Production with Azure Monitor: logs go via OTEL to App Insights
+if (!useAzureMonitor)
+{
+    loggerConfig.WriteTo.GrafanaLoki(lokiUrl,
         labels: new[]
         {
             new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "service", Value = serviceName },
@@ -69,17 +82,88 @@ Log.Logger = new LoggerConfiguration()
             new Serilog.Sinks.Grafana.Loki.LokiLabel { Key = "host", Value = Environment.MachineName }
         },
         propertiesAsLabels: new[] { "request_path", "http_method", "ElapsedMs", "ElapsedMilliseconds", "RequestPath", "TraceId" },
-        textFormatter: new Serilog.Formatting.Compact.RenderedCompactJsonFormatter())
-    .CreateLogger();
+        textFormatter: new Serilog.Formatting.Compact.RenderedCompactJsonFormatter());
+}
+
+Log.Logger = loggerConfig.CreateLogger();
 
 try
 {
     Log.Information("Starting up junie-des-1942stats.Notifications application");
+    var loggingBackend = useAzureMonitor ? "Azure Application Insights (OTEL)" : "Loki";
+    Log.Information("Telemetry backend: {Backend}", loggingBackend);
+    if (useAzureMonitor)
+    {
+        Log.Information("APPLICATIONINSIGHTS_CONNECTION_STRING is set: {IsSet}, length: {Length}", 
+            !string.IsNullOrEmpty(appInsightsConnectionString), 
+            appInsightsConnectionString?.Length ?? 0);
+    }
 
     var builder = WebApplication.CreateBuilder(args);
 
+    // Configure OTEL logging for Azure Monitor FIRST (before Serilog) to ensure provider is registered
+    // This is important because Serilog's writeToProviders: true forwards logs to registered ILogger providers
+    if (useAzureMonitor)
+    {
+        // Read connection string from builder.Configuration as well (may have additional sources)
+        var azureMonitorConnectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"] 
+            ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING")
+            ?? appInsightsConnectionString;
+        
+        if (string.IsNullOrEmpty(azureMonitorConnectionString))
+        {
+            Log.Warning("APPLICATIONINSIGHTS_CONNECTION_STRING is not set. Azure Monitor logging will not work.");
+        }
+        else
+        {
+            Log.Information("Configuring Azure Monitor logging with connection string (length: {Length}, starts with: {Prefix})", 
+                azureMonitorConnectionString.Length, 
+                azureMonitorConnectionString.Substring(0, Math.Min(50, azureMonitorConnectionString.Length)));
+        }
+        
+        builder.Logging.AddOpenTelemetry(logging =>
+        {
+            logging.IncludeScopes = true;
+            logging.IncludeFormattedMessage = true;
+            logging.AddAzureMonitorLogExporter(options =>
+            {
+                // Explicitly set connection string - Azure Monitor exporter will also read from env var if not set
+                if (!string.IsNullOrEmpty(azureMonitorConnectionString))
+                {
+                    options.ConnectionString = azureMonitorConnectionString;
+                    Log.Information("Azure Monitor log exporter configured with explicit connection string");
+                }
+                else
+                {
+                    Log.Warning("Azure Monitor log exporter will attempt to read connection string from APPLICATIONINSIGHTS_CONNECTION_STRING environment variable");
+                }
+            });
+        });
+    }
+
     // Add Serilog to the application
-    builder.Host.UseSerilog();
+    // writeToProviders: true forwards logs to other configured providers (e.g., OTEL logging for Azure Monitor)
+    if (useAzureMonitor)
+    {
+        // When using Azure Monitor, forward logs to both Serilog and OTEL logging provider
+        builder.Host.UseSerilog((context, services, configuration) =>
+        {
+            configuration
+                .MinimumLevel.Warning()
+                .Enrich.WithProperty("service.name", serviceName)
+                .Enrich.WithProperty("deployment.environment", environment)
+                .Enrich.FromLogContext()
+                .Enrich.WithMachineName()
+                .Enrich.WithSpan()
+                .WriteTo.Console(
+                    outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj} {Properties:j}{NewLine}{Exception}");
+        }, writeToProviders: true);
+    }
+    else
+    {
+        // Local dev: use the static Log.Logger configured earlier (with Loki)
+        builder.Host.UseSerilog();
+    }
 
     // Configure OpenTelemetry
     builder.Services.AddOpenTelemetry()
@@ -104,11 +188,32 @@ try
                     options.RecordException = true;
                 });
                 tracing.AddHttpClientInstrumentation();
-                tracing.AddOtlpExporter(opt =>
+                
+                // Configure trace exporter: Azure Monitor for production, OTLP for local dev
+                if (useAzureMonitor)
                 {
-                    opt.Endpoint = new Uri(otlpEndpoint);
-                    opt.Protocol = OtlpExportProtocol.HttpProtobuf;
-                });
+                    // Read connection string from builder.Configuration as well (may have additional sources)
+                    var azureMonitorTraceConnectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"] 
+                        ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING")
+                        ?? appInsightsConnectionString;
+                    
+                    tracing.AddAzureMonitorTraceExporter(options =>
+                    {
+                        if (!string.IsNullOrEmpty(azureMonitorTraceConnectionString))
+                        {
+                            options.ConnectionString = azureMonitorTraceConnectionString;
+                        }
+                    });
+                }
+                else
+                {
+                    tracing.AddOtlpExporter(opt =>
+                    {
+                        opt.Endpoint = new Uri(otlpEndpoint);
+                        opt.Protocol = OtlpExportProtocol.HttpProtobuf;
+                    });
+                }
+                
                 tracing.AddSource("junie-des-1942stats.Notifications.*");
                 tracing.AddSource(ActivitySources.Redis.Name);
                 tracing.AddSource(ActivitySources.Http.Name);
