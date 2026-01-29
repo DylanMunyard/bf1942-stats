@@ -72,7 +72,7 @@ public class PlayerBestScoresService(
 
         if (updatedCount > 0)
         {
-            logger.LogInformation(
+            logger.LogDebug(
                 "Updated best scores: {UpdatedCount} period updates for {PlayerCount} players from {SessionCount} sessions in {Duration}ms",
                 updatedCount, playerNames.Count, qualifyingSessions.Count, stopwatch.ElapsedMilliseconds);
         }
