@@ -31,38 +31,22 @@ public class LiveServersController(
             return BadRequest($"Invalid game type. Valid types: {string.Join(", ", ValidGames)}");
         }
 
-        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var stepStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         try
         {
-            logger.LogInformation("API REQUEST - Starting GetServers for game {Game}, showAll: {ShowAll}", game, showAll);
-
-            stepStopwatch.Restart();
             var servers = await GetServersFromDatabaseAsync(game, showAll);
-            stepStopwatch.Stop();
-            logger.LogInformation("API TIMING - Database operations completed in {DatabaseMs}ms. Retrieved {ServerCount} servers",
-                stepStopwatch.ElapsedMilliseconds, servers?.Length ?? 0);
-
-            stepStopwatch.Restart();
             var response = new ServerListResponse
             {
                 Servers = servers ?? [],
                 LastUpdated = DateTime.UtcNow.ToString("O")
             };
-            stepStopwatch.Stop();
-
-            totalStopwatch.Stop();
-            logger.LogInformation("API TIMING - Response object creation took {ResponseMs}ms", stepStopwatch.ElapsedMilliseconds);
-            logger.LogInformation("API COMPLETE - Total GetServers time: {TotalMs}ms for game {Game}",
-                totalStopwatch.ElapsedMilliseconds, game);
 
             return Ok(response);
         }
         catch (Exception ex)
         {
-            totalStopwatch.Stop();
-            logger.LogError(ex, "API ERROR - Unexpected error fetching all servers for game {Game} after {ElapsedMs}ms", game, totalStopwatch.ElapsedMilliseconds);
+            logger.LogError(ex, "Error fetching servers for game {Game} after {ElapsedMs}ms", game, stopwatch.ElapsedMilliseconds);
             return StatusCode(500, "Internal server error");
         }
     }
@@ -122,8 +106,6 @@ public class LiveServersController(
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
         var stepStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        logger.LogInformation("Starting GetServersFromDatabaseAsync for game {Game}, showAll: {ShowAll}", game, showAll);
-
         var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
 
         // Get servers filtering only by online status
@@ -144,9 +126,7 @@ public class LiveServersController(
 
         if (servers.Count == 0)
         {
-            totalStopwatch.Stop();
-            logger.LogInformation("No servers found, returning empty array. Total time: {TotalMs}ms", totalStopwatch.ElapsedMilliseconds);
-            return Array.Empty<ServerSummary>();
+            return [];
         }
 
         var serverGuids = servers.Select(s => s.Guid).ToList();
