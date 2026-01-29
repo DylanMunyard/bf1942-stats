@@ -28,7 +28,7 @@ public class DataExplorerController(
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
-        logger.LogInformation("Getting servers for data explorer with game filter: {Game}, page: {Page}, pageSize: {PageSize}",
+        logger.LogDebug("Getting servers for data explorer with game filter: {Game}, page: {Page}, pageSize: {PageSize}",
             game, page, pageSize);
         var result = await dataExplorerService.GetServersAsync(game, page, pageSize);
         return Ok(result);
@@ -42,7 +42,7 @@ public class DataExplorerController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ServerDetailDto>> GetServerDetail(string serverGuid)
     {
-        logger.LogInformation("Getting server detail for {ServerGuid}", serverGuid);
+        logger.LogDebug("Getting server detail for {ServerGuid}", serverGuid);
 
         var result = await dataExplorerService.GetServerDetailAsync(serverGuid);
 
@@ -69,7 +69,7 @@ public class DataExplorerController(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10)
     {
-        logger.LogInformation("Getting map rotation for server {ServerGuid}, page: {Page}, pageSize: {PageSize}",
+        logger.LogDebug("Getting map rotation for server {ServerGuid}, page: {Page}, pageSize: {PageSize}",
             serverGuid, page, pageSize);
 
         var result = await dataExplorerService.GetServerMapRotationAsync(serverGuid, page, pageSize);
@@ -91,7 +91,7 @@ public class DataExplorerController(
     [ProducesResponseType(typeof(MapListResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<MapListResponse>> GetMaps([FromQuery] string game = "bf1942")
     {
-        logger.LogInformation("Getting maps for data explorer with game filter: {Game}", game);
+        logger.LogDebug("Getting maps for data explorer with game filter: {Game}", game);
         var result = await dataExplorerService.GetMapsAsync(game);
         return Ok(result);
     }
@@ -109,7 +109,7 @@ public class DataExplorerController(
         // URL decode the map name
         mapName = Uri.UnescapeDataString(mapName);
 
-        logger.LogInformation("Getting map detail for {MapName} with game filter: {Game}", mapName, game);
+        logger.LogDebug("Getting map detail for {MapName} with game filter: {Game}", mapName, game);
 
         var result = await dataExplorerService.GetMapDetailAsync(mapName, game);
 
@@ -137,7 +137,7 @@ public class DataExplorerController(
         // URL decode the map name
         mapName = Uri.UnescapeDataString(mapName);
 
-        logger.LogInformation("Getting server-map detail for {ServerGuid}/{MapName} with days={Days}",
+        logger.LogDebug("Getting server-map detail for {ServerGuid}/{MapName} with days={Days}",
             serverGuid, mapName, days);
 
         var result = await dataExplorerService.GetServerMapDetailAsync(serverGuid, mapName, days);
@@ -163,7 +163,7 @@ public class DataExplorerController(
         [FromQuery] string query,
         [FromQuery] string game = "bf1942")
     {
-        logger.LogInformation("Searching players with query: {Query} for game: {Game}", query, game);
+        logger.LogDebug("Searching players with query: {Query} for game: {Game}", query, game);
         var result = await dataExplorerService.SearchPlayersAsync(query, game);
         return Ok(result);
     }
@@ -187,7 +187,7 @@ public class DataExplorerController(
         // URL decode the player name
         playerName = Uri.UnescapeDataString(playerName);
 
-        logger.LogInformation("Getting player map rankings for {PlayerName} with game: {Game}, days: {Days}, serverGuid: {ServerGuid}",
+        logger.LogDebug("Getting player map rankings for {PlayerName} with game: {Game}, days: {Days}, serverGuid: {ServerGuid}",
             playerName, game, days, serverGuid ?? "all");
 
         var result = await dataExplorerService.GetPlayerMapRankingsAsync(playerName, game, days, serverGuid);
@@ -217,7 +217,7 @@ public class DataExplorerController(
         // URL decode the map name
         mapName = Uri.UnescapeDataString(mapName);
 
-        logger.LogInformation("Getting map activity patterns for {MapName} with game filter: {Game}", mapName, game);
+        logger.LogDebug("Getting map activity patterns for {MapName} with game filter: {Game}", mapName, game);
 
         var result = await dataExplorerService.GetMapActivityPatternsAsync(mapName, game);
 
@@ -266,7 +266,7 @@ public class DataExplorerController(
         if (!validSortFields.Contains(sortBy.ToLowerInvariant()))
             sortBy = "score";
 
-        logger.LogInformation(
+        logger.LogDebug(
             "Getting map player rankings for {MapName} with game: {Game}, page: {Page}, pageSize: {PageSize}, search: {Search}, serverGuid: {ServerGuid}, sortBy: {SortBy}",
             mapName, game, page, pageSize, search, serverGuid, sortBy);
 
@@ -291,7 +291,7 @@ public class DataExplorerController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ServerEngagementStatsDto>> GetServerEngagementStats(string serverGuid)
     {
-        logger.LogInformation("Getting randomized engagement stats for server: {ServerGuid}", serverGuid);
+        logger.LogDebug("Getting randomized engagement stats for server: {ServerGuid}", serverGuid);
 
         var result = await dataExplorerService.GetServerEngagementStatsAsync(serverGuid);
         return Ok(result);
@@ -313,7 +313,7 @@ public class DataExplorerController(
         // URL decode the player name
         playerName = Uri.UnescapeDataString(playerName);
 
-        logger.LogInformation("Getting randomized engagement stats for player: {PlayerName} in game: {Game}", playerName, game);
+        logger.LogDebug("Getting randomized engagement stats for player: {PlayerName} in game: {Game}", playerName, game);
 
         var result = await dataExplorerService.GetPlayerEngagementStatsAsync(playerName, game);
         return Ok(result);

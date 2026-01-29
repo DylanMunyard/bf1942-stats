@@ -36,7 +36,7 @@ public class ServersController(
         // Use modern URL decoding that preserves + signs
         serverName = Uri.UnescapeDataString(serverName);
 
-        logger.LogInformation("Looking up server statistics for server name: '{ServerName}'", serverName);
+        logger.LogDebug("Looking up server statistics for server name: '{ServerName}'", serverName);
 
         var stats = await serverStatsService.GetServerStatistics(
             serverName,
@@ -64,7 +64,7 @@ public class ServersController(
         // Use modern URL decoding that preserves + signs
         serverName = Uri.UnescapeDataString(serverName);
 
-        logger.LogInformation("Getting server leaderboards for '{ServerName}' with {Days} days", serverName, days);
+        logger.LogDebug("Getting server leaderboards for '{ServerName}' with {Days} days", serverName, days);
 
         try
         {
@@ -99,7 +99,7 @@ public class ServersController(
         // Use modern URL decoding that preserves + signs
         serverName = Uri.UnescapeDataString(serverName);
 
-        logger.LogInformation("Looking up server insights for server name: '{ServerName}' with days: {Days} and rollingWindowDays: {RollingWindowDays}", serverName, days, rollingWindowDays);
+        logger.LogDebug("Looking up server insights for server name: '{ServerName}' with days: {Days} and rollingWindowDays: {RollingWindowDays}", serverName, days, rollingWindowDays);
 
         try
         {
