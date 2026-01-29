@@ -47,7 +47,7 @@ public class GameTrendsV2Controller(
             // Cache for 5 minutes - busy indicator should be current
             await cacheService.SetAsync(cacheKey, busyIndicator, TimeSpan.FromMinutes(5));
 
-            logger.LogInformation("Generated v2 server busy indicator for {ServerCount} servers",
+            logger.LogDebug("Generated v2 server busy indicator for {ServerCount} servers",
                 serverGuids.Length);
 
             return Ok(busyIndicator);
@@ -92,7 +92,7 @@ public class GameTrendsV2Controller(
             // Cache for 10 minutes - landing page data should be fresh but not too frequent
             await cacheService.SetAsync(cacheKey, summary, TimeSpan.FromMinutes(10));
 
-            logger.LogInformation("Generated v2 landing page trend summary for game {GameId}", game ?? "all");
+            logger.LogDebug("Generated v2 landing page trend summary for game {GameId}", game ?? "all");
 
             return Ok(summary);
         }
