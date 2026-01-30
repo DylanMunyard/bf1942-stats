@@ -1,8 +1,8 @@
 pipeline {
   agent none
   parameters {
-    string(name: 'AKS_RESOURCE_GROUP', defaultValue: '', description: 'Azure resource group containing the AKS cluster')
-    string(name: 'AKS_CLUSTER_NAME', defaultValue: '', description: 'AKS cluster name')
+    string(name: 'AKS_RESOURCE_GROUP', defaultValue: 'bfstats-io', description: 'Azure resource group containing the AKS cluster')
+    string(name: 'AKS_CLUSTER_NAME', defaultValue: 'bfstats-aks', description: 'AKS cluster name')
   }
   stages {
     stage('Build and Deploy') {
@@ -23,11 +23,11 @@ pipeline {
                     sh '''
                       # Login to Docker Hub
                       echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-                      
+
                       # Setup Docker buildx for cross-platform builds with DinD optimizations
                       docker buildx create --name multiarch-builder --driver docker-container --use || true
                       docker buildx use multiarch-builder
-                      
+
                       # Build and push ARM64 image for API with DinD optimizations
                       DOCKER_BUILDKIT=1 docker buildx build -f deploy/Dockerfile . \
                         --platform linux/arm64 \
@@ -36,7 +36,7 @@ pipeline {
                         --build-arg BUILDKIT_PROGRESS=plain \
                         --load \
                         -t dylanmunyard/bf42-stats:latest
-                      
+
                       # Push the built image
                       docker push dylanmunyard/bf42-stats:latest
                     '''
@@ -97,11 +97,11 @@ pipeline {
                     sh '''
                       # Login to Docker Hub
                       echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-                      
+
                       # Setup Docker buildx for cross-platform builds with DinD optimizations
                       docker buildx create --name multiarch-builder-notif --driver docker-container --use || true
                       docker buildx use multiarch-builder-notif
-                      
+
                       # Build and push ARM64 image for Notifications with DinD optimizations
                       DOCKER_BUILDKIT=1 docker buildx build -f deploy/Dockerfile . \
                         --platform linux/arm64 \
@@ -110,7 +110,7 @@ pipeline {
                         --build-arg BUILDKIT_PROGRESS=plain \
                         --load \
                         -t dylanmunyard/bf42-notifications:latest
-                      
+
                       # Push the built image
                       docker push dylanmunyard/bf42-notifications:latest
                     '''
