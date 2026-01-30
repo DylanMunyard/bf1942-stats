@@ -397,25 +397,6 @@ public class SqliteGamificationService(
     }
 
     /// <summary>
-    /// Check if player has a specific achievement
-    /// </summary>
-    public async Task<bool> PlayerHasAchievementAsync(string playerName, string achievementId)
-    {
-        try
-        {
-            return await dbContext.PlayerAchievements
-                .AnyAsync(pa => pa.PlayerName == playerName && pa.AchievementId == achievementId);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex,
-                "Failed to check if player {PlayerName} has achievement {AchievementId}",
-                playerName, achievementId);
-            return false;
-        }
-    }
-
-    /// <summary>
     /// Get all achievement IDs for a player
     /// </summary>
     public async Task<List<string>> GetPlayerAchievementIdsAsync(string playerName)
@@ -631,97 +612,6 @@ public class SqliteGamificationService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to get kill streak leaderboard");
-            return [];
-        }
-    }
-
-    public async Task<PlayerPlacementSummary> GetPlayerPlacementSummaryAsync(string playerName, string? serverGuid = null, string? mapName = null)
-    {
-        try
-        {
-            var query = dbContext.PlayerAchievements
-                .Where(pa => pa.PlayerName == playerName && pa.AchievementType == AchievementTypes.Placement);
-
-            if (!string.IsNullOrWhiteSpace(serverGuid))
-            {
-                query = query.Where(pa => pa.ServerGuid == serverGuid);
-            }
-
-            if (!string.IsNullOrWhiteSpace(mapName))
-            {
-                query = query.Where(pa => pa.MapName.Contains(mapName));
-            }
-
-            var placements = await query.ToListAsync();
-
-            var summary = new PlayerPlacementSummary
-            {
-                PlayerName = playerName,
-                ServerGuid = serverGuid,
-                MapName = mapName,
-                FirstPlaces = placements.Count(p => p.AchievementId.Contains("1st") || p.Value == 1),
-                SecondPlaces = placements.Count(p => p.AchievementId.Contains("2nd") || p.Value == 2),
-                ThirdPlaces = placements.Count(p => p.AchievementId.Contains("3rd") || p.Value == 3)
-            };
-
-            logger.LogDebug("Got placement summary for {PlayerName}: {First}/{Second}/{Third}",
-                playerName, summary.FirstPlaces, summary.SecondPlaces, summary.ThirdPlaces);
-
-            return summary;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to get placement summary for player {PlayerName}", playerName);
-            return new PlayerPlacementSummary { PlayerName = playerName };
-        }
-    }
-
-    public async Task<List<PlacementLeaderboardEntry>> GetPlacementLeaderboardAsync(string? serverGuid = null, string? mapName = null, int limit = 100)
-    {
-        try
-        {
-            var query = dbContext.PlayerAchievements
-                .Where(pa => pa.AchievementType == AchievementTypes.Placement);
-
-            if (!string.IsNullOrWhiteSpace(serverGuid))
-            {
-                query = query.Where(pa => pa.ServerGuid == serverGuid);
-            }
-
-            if (!string.IsNullOrWhiteSpace(mapName))
-            {
-                query = query.Where(pa => pa.MapName.Contains(mapName));
-            }
-
-            var leaderboard = await query
-                .GroupBy(pa => pa.PlayerName)
-                .Select(g => new
-                {
-                    PlayerName = g.Key,
-                    FirstPlaces = g.Count(pa => pa.AchievementId.Contains("1st") || pa.Value == 1),
-                    SecondPlaces = g.Count(pa => pa.AchievementId.Contains("2nd") || pa.Value == 2),
-                    ThirdPlaces = g.Count(pa => pa.AchievementId.Contains("3rd") || pa.Value == 3)
-                })
-                .OrderByDescending(x => (x.FirstPlaces * 3) + (x.SecondPlaces * 2) + x.ThirdPlaces)
-                .Take(limit)
-                .ToListAsync();
-
-            var entries = leaderboard.Select((entry, index) => new PlacementLeaderboardEntry
-            {
-                Rank = index + 1,
-                PlayerName = entry.PlayerName,
-                FirstPlaces = entry.FirstPlaces,
-                SecondPlaces = entry.SecondPlaces,
-                ThirdPlaces = entry.ThirdPlaces
-            }).ToList();
-
-            logger.LogDebug("Generated placement leaderboard with {EntryCount} entries", entries.Count);
-
-            return entries;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to get placement leaderboard");
             return [];
         }
     }

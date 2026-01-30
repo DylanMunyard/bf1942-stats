@@ -14,7 +14,6 @@ namespace api.PlayerTracking;
 public class PlayerTrackingService(
     PlayerTrackerDbContext dbContext,
     IBotDetectionService botDetectionService,
-    PlayerStats.IPlayerBestScoresService bestScoresService,
     IDiscordWebhookService discordWebhookService,
     IPlayerEventPublisher? eventPublisher = null,
     ILogger<PlayerTrackingService>? logger = null)
@@ -77,7 +76,6 @@ public class PlayerTrackingService(
         var newPlayers = new List<Player>();
         var sessionsToUpdate = new List<PlayerSession>();
         var sessionsToCreate = new List<PlayerSession>();
-        var sessionsClosedForBestScores = new List<PlayerSession>();
         var pendingObservations = new List<(PlayerInfo Info, PlayerSession Session)>();
 
         // Track events to publish after successful database operations
@@ -143,7 +141,6 @@ public class PlayerTrackingService(
                     {
                         session.IsActive = false;
                         sessionsToUpdate.Add(session);
-                        sessionsClosedForBestScores.Add(session);
                     }
 
                     // Create new session for new map
@@ -222,19 +219,6 @@ public class PlayerTrackingService(
                 {
                     await dbContext.PlayerObservations.AddRangeAsync(observations);
                     await dbContext.SaveChangesAsync();
-                }
-
-                // Update best scores for sessions that ended due to map change
-                if (sessionsClosedForBestScores.Any())
-                {
-                    try
-                    {
-                        await bestScoresService.UpdateBestScoresForCompletedSessionsAsync(sessionsClosedForBestScores);
-                    }
-                    catch (Exception bestScoresEx)
-                    {
-                        _logger.LogError(bestScoresEx, "Error updating best scores for {SessionCount} sessions closed on map change", sessionsClosedForBestScores.Count);
-                    }
                 }
 
                 // Update participant count for the round (all players since bots are no longer stored)
@@ -394,16 +378,6 @@ public class PlayerTrackingService(
             if (timedOutSessions.Any())
             {
                 await dbContext.SaveChangesAsync();
-
-                // Update best scores for completed sessions
-                try
-                {
-                    await bestScoresService.UpdateBestScoresForCompletedSessionsAsync(timedOutSessions);
-                }
-                catch (Exception bestScoresEx)
-                {
-                    _logger.LogError(bestScoresEx, "Error updating best scores for {SessionCount} completed sessions", timedOutSessions.Count);
-                }
             }
         }
         catch (Exception ex)

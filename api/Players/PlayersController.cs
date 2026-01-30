@@ -153,40 +153,6 @@ public class PlayersController(
         return Ok(stats);
     }
 
-    // Get server-specific map statistics for a player
-    [HttpGet("{playerName}/server/{serverGuid}/mapstats")]
-    public async Task<ActionResult<List<ServerStatistics>>> GetPlayerServerMapStats(
-        string playerName,
-        string serverGuid,
-        [FromQuery] string range = "ThisYear")
-    {
-        if (string.IsNullOrWhiteSpace(playerName))
-            return BadRequest(ApiConstants.ValidationMessages.PlayerNameEmpty);
-
-        if (string.IsNullOrWhiteSpace(serverGuid))
-            return BadRequest(ApiConstants.ValidationMessages.ServerGuidEmpty);
-
-        // Use modern URL decoding that preserves + signs
-        playerName = Uri.UnescapeDataString(playerName);
-
-        if (!Enum.TryParse<TimePeriod>(range, true, out var period))
-            return BadRequest($"Invalid range. Valid options: {string.Join(", ", Enum.GetNames<TimePeriod>())}");
-
-        try
-        {
-            var stats = await sqlitePlayerStatsService.GetPlayerMapStatsAsync(playerName, period, serverGuid);
-
-            if (!stats.Any())
-                return NotFound($"No statistics found for player '{playerName}' on server '{serverGuid}' for the specified period");
-
-            return Ok(stats);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, $"An error occurred while retrieving server statistics: {ex.Message}");
-        }
-    }
-
     [HttpGet("search")]
     public async Task<ActionResult<PagedResult<PlayerBasicInfo>>> SearchPlayers(
         [FromQuery] string query,

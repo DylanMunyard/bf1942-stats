@@ -14,30 +14,6 @@ namespace api.ImageStorage;
 public class ImageStorageController(IImageIndexingService imageIndexingService, ILogger<ImageStorageController> logger) : ControllerBase
 {
     /// <summary>
-    /// Scans the tournament-images directory and indexes all images
-    /// This triggers image discovery and thumbnail generation
-    /// Limited concurrent processing to manage CPU usage
-    /// </summary>
-    /// <remarks>
-    /// Admin only operation. Can take several seconds to complete depending on number of images
-    /// </remarks>
-    [HttpPost("scan")]
-    public async Task<ActionResult<ScanResultResponse>> ScanAndIndexImages(CancellationToken cancellationToken)
-    {
-        try
-        {
-            logger.LogInformation("Starting image scan and indexing");
-            var result = await imageIndexingService.ScanAndIndexImagesAsync(cancellationToken);
-            return Ok(result);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error scanning images");
-            return StatusCode(500, new { error = "Failed to scan images", message = ex.Message });
-        }
-    }
-
-    /// <summary>
     /// Gets list of available folders containing tournament images
     /// </summary>
     [HttpGet("folders")]

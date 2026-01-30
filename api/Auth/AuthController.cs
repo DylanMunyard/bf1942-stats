@@ -118,19 +118,6 @@ public class AuthController(
         }
     }
 
-    [HttpGet("me")]
-    [Authorize]
-    public IActionResult Me()
-    {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-        var email = User.FindFirstValue(ClaimTypes.Email);
-        if (string.IsNullOrEmpty(userId)) return Unauthorized();
-        var id = int.Parse(userId);
-        var user = context.Users.FirstOrDefault(u => u.Id == id);
-        if (user == null) return NotFound();
-        return Ok(new { user = new UserDto { Id = user.Id, Email = user.Email, Name = email ?? user.Email } });
-    }
-
     // Helper method to get current user from JWT claims
     private async Task<User?> GetCurrentUserAsync()
     {
@@ -328,34 +315,6 @@ public class AuthController(
         }
     }
 
-    [HttpGet("favorite-servers")]
-    [Authorize]
-    public async Task<IActionResult> GetFavoriteServers()
-    {
-        try
-        {
-            var user = await GetCurrentUserAsync();
-            if (user == null)
-                return StatusCode(500, new { message = "User not found" });
-
-            var favoriteServers = await context.UserFavoriteServers
-                .Include(ufs => ufs.Server)
-                .Where(ufs => ufs.UserId == user.Id)
-                .OrderBy(ufs => ufs.CreatedAt)
-                .ToListAsync();
-
-            var enrichedFavoriteServers = await Task.WhenAll(favoriteServers
-                .Select(async fs => await EnrichFavoriteServerInfoAsync(fs)));
-
-            return Ok(enrichedFavoriteServers.ToList());
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error retrieving favorite servers");
-            return StatusCode(500, new { message = "Error retrieving favorite servers" });
-        }
-    }
-
     [HttpPost("favorite-servers")]
     [Authorize]
     public async Task<IActionResult> AddFavoriteServer([FromBody] AddFavoriteServerRequest request)
@@ -394,7 +353,7 @@ public class AuthController(
 
             userFavoriteServer.Server = server;
 
-            return CreatedAtAction(nameof(GetFavoriteServers), await EnrichFavoriteServerInfoAsync(userFavoriteServer));
+            return Ok(await EnrichFavoriteServerInfoAsync(userFavoriteServer));
         }
         catch (Exception ex)
         {
@@ -428,39 +387,6 @@ public class AuthController(
         {
             logger.LogError(ex, "Error removing favorite server");
             return StatusCode(500, new { message = "Error removing favorite server" });
-        }
-    }
-
-    [HttpGet("buddies")]
-    [Authorize]
-    public async Task<IActionResult> GetBuddies()
-    {
-        try
-        {
-            var user = await GetCurrentUserAsync();
-            if (user == null)
-                return StatusCode(500, new { message = "User not found" });
-
-            var userBuddies = await context.UserBuddies
-                .Include(ub => ub.Player)
-                .Where(ub => ub.UserId == user.Id)
-                .OrderBy(ub => ub.CreatedAt)
-                .ToListAsync();
-
-            var buddies = (await Task.WhenAll(userBuddies.Select(async ub => new UserBuddyResponse
-            {
-                Id = ub.Id,
-                BuddyPlayerName = ub.BuddyPlayerName,
-                CreatedAt = ub.CreatedAt,
-                Player = ub.Player != null ? await EnrichPlayerInfoAsync(ub.Player) : null
-            }))).ToList();
-
-            return Ok(buddies);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error retrieving buddies");
-            return StatusCode(500, new { message = "Error retrieving buddies" });
         }
     }
 
@@ -500,7 +426,7 @@ public class AuthController(
             context.UserBuddies.Add(userBuddy);
             await context.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(GetBuddies), new UserBuddyResponse
+            return Ok(new UserBuddyResponse
             {
                 Id = userBuddy.Id,
                 BuddyPlayerName = userBuddy.BuddyPlayerName,

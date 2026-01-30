@@ -1,5 +1,9 @@
 pipeline {
   agent none
+  parameters {
+    string(name: 'AKS_RESOURCE_GROUP', defaultValue: '', description: 'Azure resource group containing the AKS cluster')
+    string(name: 'AKS_CLUSTER_NAME', defaultValue: '', description: 'AKS cluster name')
+  }
   stages {
     stage('Build and Deploy') {
       parallel {
@@ -43,30 +47,34 @@ pipeline {
             stage('Deploy API') {
               agent {
                 kubernetes {
-                  cloud 'AKS'
+                  cloud 'Local k8s'
                   yamlFile 'deploy/pod.yaml'
+                  nodeSelector 'kubernetes.io/hostname=bethany'
                 }
               }
               steps {
-                container('kubectl') {
-                  withKubeConfig([namespace: "bf42-stats"]) {
-                     withCredentials([
-                       string(credentialsId: 'bf42-stats-secrets-jwt-private-key', variable: 'JWT_PRIVATE_KEY'),
-                       string(credentialsId: 'bf42-stats-secrets-refresh-token-secret', variable: 'REFRESH_TOKEN_SECRET')
-                     ]) {
-                       sh '''
-                         set -euo pipefail
-                         TMPDIR=$(mktemp -d)
-                         trap 'rm -rf "$TMPDIR"' EXIT
-                         printf "%s" "$JWT_PRIVATE_KEY" > "$TMPDIR/jwt-private.pem"
-                         # Create or update the bf42-stats-secrets secret with both keys
-                         kubectl create secret generic bf42-stats-secrets \
-                           --from-file=jwt-private-key="$TMPDIR/jwt-private.pem" \
-                           --from-literal=refresh-token-secret="$REFRESH_TOKEN_SECRET" \
-                           --dry-run=client -o yaml | kubectl apply -f -
-                       '''
-                     }
-                    sh 'kubectl rollout restart deployment/bf42-stats'
+                container('deploy-aks') {
+                  withCredentials([
+                    string(credentialsId: 'bf42-stats-aks-sp-client-id', variable: 'AZURE_CLIENT_ID'),
+                    string(credentialsId: 'bf42-stats-aks-sp-client-secret', variable: 'AZURE_CLIENT_SECRET'),
+                    string(credentialsId: 'bf42-stats-aks-sp-tenant-id', variable: 'AZURE_TENANT_ID'),
+                    string(credentialsId: 'bf42-stats-secrets-jwt-private-key', variable: 'JWT_PRIVATE_KEY'),
+                    string(credentialsId: 'bf42-stats-secrets-refresh-token-secret', variable: 'REFRESH_TOKEN_SECRET')
+                  ]) {
+                    sh '''
+                      set -euo pipefail
+                      export KUBECONFIG=$(mktemp)
+                      TMPDIR=$(mktemp -d)
+                      trap 'rm -rf "$TMPDIR" "$KUBECONFIG"' EXIT
+                      az login --service-principal -u "$AZURE_CLIENT_ID" -p "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID"
+                      az aks get-credentials --resource-group "''' + params.AKS_RESOURCE_GROUP + '''" --name "''' + params.AKS_CLUSTER_NAME + '''" --file "$KUBECONFIG"
+                      printf "%s" "$JWT_PRIVATE_KEY" > "$TMPDIR/jwt-private.pem"
+                      kubectl -n bf42-stats create secret generic bf42-stats-secrets \
+                        --from-file=jwt-private-key="$TMPDIR/jwt-private.pem" \
+                        --from-literal=refresh-token-secret="$REFRESH_TOKEN_SECRET" \
+                        --dry-run=client -o yaml | kubectl apply -f -
+                      kubectl -n bf42-stats rollout restart deployment/bf42-stats
+                    '''
                   }
                 }
               }
@@ -113,14 +121,26 @@ pipeline {
             stage('Deploy Notifications') {
               agent {
                 kubernetes {
-                  cloud 'AKS'
+                  cloud 'Local k8s'
                   yamlFile 'deploy/pod.yaml'
+                  nodeSelector 'kubernetes.io/hostname=bethany'
                 }
               }
               steps {
-                container('kubectl') {
-                  withKubeConfig([namespace: "bf42-stats"]) {
-                    sh 'kubectl rollout restart deployment/bf42-notifications'
+                container('deploy-aks') {
+                  withCredentials([
+                    string(credentialsId: 'bf42-stats-aks-sp-client-id', variable: 'AZURE_CLIENT_ID'),
+                    string(credentialsId: 'bf42-stats-aks-sp-client-secret', variable: 'AZURE_CLIENT_SECRET'),
+                    string(credentialsId: 'bf42-stats-aks-sp-tenant-id', variable: 'AZURE_TENANT_ID')
+                  ]) {
+                    sh '''
+                      set -euo pipefail
+                      export KUBECONFIG=$(mktemp)
+                      trap 'rm -f "$KUBECONFIG"' EXIT
+                      az login --service-principal -u "$AZURE_CLIENT_ID" -p "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID"
+                      az aks get-credentials --resource-group "''' + params.AKS_RESOURCE_GROUP + '''" --name "''' + params.AKS_CLUSTER_NAME + '''" --file "$KUBECONFIG"
+                      kubectl -n bf42-stats rollout restart deployment/bf42-notifications
+                    '''
                   }
                 }
               }

@@ -217,118 +217,11 @@ public class GamificationService(SqliteGamificationService gamificationService, 
     }
 
     /// <summary>
-    /// Get comprehensive achievement summary for a player
-    /// </summary>
-    public async Task<PlayerAchievementSummary> GetPlayerAchievementSummaryAsync(string playerName)
-    {
-        try
-        {
-            // Get all achievements for the player
-            var allAchievements = await gamificationService.GetPlayerAchievementsAsync(playerName, 1000);
-
-            // Get kill streak stats
-            var streakStats = await killStreakDetector.GetPlayerKillStreakStatsAsync(playerName);
-
-            // Categorize achievements
-            var recentAchievements = allAchievements
-                .Where(a => a.AchievedAt >= DateTime.UtcNow.AddDays(-30))
-                .OrderByDescending(a => a.AchievedAt)
-                .Take(20)
-                .ToList();
-
-            var badges = allAchievements
-                .Where(a => a.AchievementType == AchievementTypes.Badge)
-                .OrderByDescending(a => a.AchievedAt)
-                .ToList();
-
-            var milestones = allAchievements
-                .Where(a => a.AchievementType is AchievementTypes.Milestone or AchievementTypes.Placement)
-                .OrderByDescending(a => a.Value)
-                .ToList();
-
-            var teamVictories = allAchievements
-                .Where(a => a.AchievementType is AchievementTypes.TeamVictory or AchievementTypes.TeamVictorySwitched)
-                .OrderByDescending(a => a.AchievedAt)
-                .ToList();
-
-            return new PlayerAchievementSummary
-            {
-                PlayerName = playerName,
-                RecentAchievements = recentAchievements,
-                AllBadges = badges,
-                Milestones = milestones,
-                TeamVictories = teamVictories,
-                BestStreaks = streakStats,
-                LastCalculated = DateTime.UtcNow
-            };
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting achievement summary for player {PlayerName}", playerName);
-            throw;
-        }
-    }
-
-    /// <summary>
-    /// Get leaderboard for specific achievement type
-    /// </summary>
-    public async Task<GamificationLeaderboard> GetLeaderboardAsync(string category, string period = "all_time", int limit = 100)
-    {
-        try
-        {
-            var entries = category.ToLower() switch
-            {
-                "kill_streaks" => await gamificationService.GetKillStreakLeaderboardAsync(limit),
-                _ => new List<LeaderboardEntry>()
-            };
-
-            return new GamificationLeaderboard
-            {
-                Category = category,
-                Period = period,
-                Entries = entries,
-                LastUpdated = DateTime.UtcNow
-            };
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting leaderboard for category {Category}", category);
-            throw;
-        }
-    }
-
-    public Task<PlayerPlacementSummary> GetPlayerPlacementSummaryAsync(string playerName, string? serverGuid = null, string? mapName = null)
-    {
-        return gamificationService.GetPlayerPlacementSummaryAsync(playerName, serverGuid, mapName);
-    }
-
-    public async Task<List<PlacementLeaderboardEntry>> GetPlacementLeaderboardAsync(string? serverGuid = null, string? mapName = null, int limit = 100)
-    {
-        return await gamificationService.GetPlacementLeaderboardAsync(serverGuid, mapName, limit);
-    }
-
-    /// <summary>
     /// Get available badge definitions
     /// </summary>
     public List<BadgeDefinition> GetAllBadgeDefinitions()
     {
         return badgeDefinitionsService.GetAllBadges();
-    }
-
-    /// <summary>
-    /// Get badge definitions by category
-    /// </summary>
-    public List<BadgeDefinition> GetBadgeDefinitionsByCategory(string category)
-    {
-        return badgeDefinitionsService.GetBadgesByCategory(category);
-    }
-
-    /// <summary>
-    /// Check if a player has a specific achievement
-    /// </summary>
-    public async Task<bool> PlayerHasAchievementAsync(string playerName, string achievementId)
-    {
-        return await gamificationService.PlayerHasAchievementAsync(playerName, achievementId);
     }
 
     public Task<List<PlayerAchievementGroup>> GetPlayerAchievementGroupsAsync(string playerName)

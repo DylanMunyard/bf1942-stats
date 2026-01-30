@@ -685,7 +685,6 @@ try
     builder.Services.AddScoped<api.PlayerStats.ISqliteLeaderboardService, api.PlayerStats.SqliteLeaderboardService>();
     builder.Services.AddScoped<api.PlayerStats.ISqlitePlayerStatsService, api.PlayerStats.SqlitePlayerStatsService>();
     builder.Services.AddScoped<api.PlayerStats.ISqlitePlayerComparisonService, api.PlayerStats.SqlitePlayerComparisonService>();
-    builder.Services.AddScoped<api.PlayerStats.IPlayerBestScoresService, api.PlayerStats.PlayerBestScoresService>();
 
     // Register Data Explorer service
     builder.Services.AddScoped<api.DataExplorer.IDataExplorerService, api.DataExplorer.DataExplorerService>();

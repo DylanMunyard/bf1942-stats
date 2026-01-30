@@ -24,19 +24,6 @@ public class AssetsController(IAssetServingService assetServingService) : Contro
         return HandleAssetResult(result);
     }
 
-    /// <summary>
-    /// Get a generic asset file from the assets root
-    /// Path should be relative to the assets directory, e.g., "tournaments/golden-gun/map1.png"
-    /// </summary>
-    /// <param name="path">Relative path to the asset file</param>
-    [HttpGet("{*path}")]
-    public async Task<IActionResult> GetAsset(string path)
-    {
-        var basePath = TournamentImagesConfig.ResolveBasePath();
-        var result = await assetServingService.GetAssetAsync(basePath, path);
-        return HandleAssetResult(result);
-    }
-
     private IActionResult HandleAssetResult(AssetResult result)
     {
         if (!result.IsSuccess)

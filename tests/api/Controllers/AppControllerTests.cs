@@ -85,54 +85,6 @@ public class AppControllerTests
     }
 
     [Fact]
-    public async Task GetLandingPageData_ReturnsOkResult_WhenCacheIsEmpty()
-    {
-        // Arrange
-        _badgeDefinitionsService.GetAllBadges()
-            .Returns(
-            [
-                new BadgeDefinition { Id = "test1", Name = "Test Badge", Category = "performance", Tier = "bronze" }
-            ]);
-
-        _cacheService.GetAsync<LandingPageData>(Arg.Any<string>())
-            .Returns(Task.FromResult<LandingPageData?>(null));
-
-        _cacheService.SetAsync(Arg.Any<string>(), Arg.Any<LandingPageData>(), Arg.Any<TimeSpan>())
-            .Returns(Task.CompletedTask);
-
-        // Act
-        var result = await _controller.GetLandingPageData();
-
-        // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result.Result);
-        Assert.NotNull(okResult.Value);
-    }
-
-    [Fact]
-    public async Task GetLandingPageData_ReturnsCachedData_WhenAvailable()
-    {
-        // Arrange
-        var cachedData = new LandingPageData
-        {
-            BadgeDefinitions = [],
-            Categories = ["performance"],
-            Tiers = ["bronze"],
-            GeneratedAt = DateTime.UtcNow
-        };
-
-        _cacheService.GetAsync<LandingPageData>(Arg.Any<string>())
-            .Returns(Task.FromResult<LandingPageData?>(cachedData));
-
-        // Act
-        var result = await _controller.GetLandingPageData();
-
-        // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result.Result);
-        var returnedData = Assert.IsType<LandingPageData>(okResult.Value);
-        Assert.Same(cachedData, returnedData);
-    }
-
-    [Fact]
     public async Task GetInitialData_ReturnsInternalServerError_OnCacheException()
     {
         // Arrange
@@ -144,21 +96,6 @@ public class AppControllerTests
 
         // Act
         var result = await _controller.GetInitialData();
-
-        // Assert
-        var statusResult = Assert.IsType<ObjectResult>(result.Result);
-        Assert.Equal(500, statusResult.StatusCode);
-    }
-
-    [Fact]
-    public async Task GetLandingPageData_ReturnsInternalServerError_OnCacheException()
-    {
-        // Arrange
-        _cacheService.GetAsync<LandingPageData>(Arg.Any<string>())
-            .Returns(Task.FromException<LandingPageData?>(new Exception("Cache error")));
-
-        // Act
-        var result = await _controller.GetLandingPageData();
 
         // Assert
         var statusResult = Assert.IsType<ObjectResult>(result.Result);

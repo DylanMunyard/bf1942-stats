@@ -12,7 +12,6 @@ namespace api.Controllers;
 
 [ApiController]
 [Route("stats/tournaments")]
-[Route("stats/t")]
 public class PublicTournamentController(
     PlayerTrackerDbContext context,
     TournamentFeedService feedService,

@@ -2950,60 +2950,6 @@ public class AdminTournamentController(
         }
     }
 
-    // ===== TOURNAMENT LEADERBOARD ENDPOINTS =====
-
-    /// <summary>
-    /// Get leaderboard rankings for a tournament (week-specific or cumulative)
-    /// </summary>
-    [HttpGet("{tournamentId}/leaderboard")]
-    [Authorize]
-    public async Task<ActionResult<List<TournamentTeamRankingResponse>>> GetLeaderboard(
-        int tournamentId,
-        string? week = null)
-    {
-        try
-        {
-            // Verify tournament belongs to user
-            var tournament = await context.Tournaments
-                .Where(t => t.CreatedByUserEmail == User.FindFirstValue(ClaimTypes.Email) && t.Id == tournamentId)
-                .FirstOrDefaultAsync();
-
-            if (tournament == null)
-                return NotFound(new { message = "Tournament not found" });
-
-            // Get rankings from database - Week == week OR (Week == null AND week == null) for cumulative
-            var rankings = await context.TournamentTeamRankings
-                .Where(r => r.TournamentId == tournamentId && r.Week == week)
-                .OrderBy(r => r.Rank)
-                .Select(r => new TournamentTeamRankingResponse
-                {
-                    Rank = r.Rank,
-                    TeamId = r.TeamId,
-                    TeamName = r.Team != null ? r.Team.Name : $"Team {r.TeamId}",
-                    MatchesPlayed = r.MatchesPlayed,
-                    Victories = r.Victories,
-                    Ties = r.Ties,
-                    Losses = r.Losses,
-                    RoundsWon = r.RoundsWon,
-                    RoundsTied = r.RoundsTied,
-                    RoundsLost = r.RoundsLost,
-                    TicketsFor = r.TicketsFor,
-                    TicketsAgainst = r.TicketsAgainst,
-                    TicketDifferential = r.TicketDifferential,
-                    Points = r.Points,
-                    Week = r.Week
-                })
-                .ToListAsync();
-
-            return Ok(rankings);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error getting leaderboard for tournament {TournamentId}, week {Week}", tournamentId, week);
-            return StatusCode(500, new { message = "Error retrieving leaderboard" });
-        }
-    }
-
     /// <summary>
     /// Delete a match result
     /// </summary>
@@ -3671,59 +3617,6 @@ public class AdminTournamentController(
 
         return (weeks, cumulativeRankings.Count);
     }
-
-    /// <summary>
-    /// Cleanup orphaned match results for a tournament
-    /// This removes MatchResult records whose maps no longer exist
-    /// Useful for fixing data consistency issues from previous versions
-    /// </summary>
-    [HttpPost("{tournamentId}/maintenance/cleanup-orphaned-results")]
-    [Authorize]
-    public async Task<ActionResult<CleanupOrphanedResultsResponse>> CleanupOrphanedResults(int tournamentId)
-    {
-        try
-        {
-            var userEmail = User.FindFirstValue(ClaimTypes.Email);
-            if (string.IsNullOrEmpty(userEmail))
-                return Unauthorized(new { message = "User email not found in token" });
-
-            // Verify tournament belongs to user
-            var tournament = await context.Tournaments
-                .Where(t => t.CreatedByUserEmail == userEmail && t.Id == tournamentId)
-                .FirstOrDefaultAsync();
-
-            if (tournament == null)
-                return NotFound(new { message = "Tournament not found" });
-
-            logger.LogInformation(
-                "Manual cleanup of orphaned match results triggered for tournament {TournamentId}",
-                tournamentId);
-
-            var orphanedCount = await CleanupOrphanedMatchResultsAsync(tournamentId);
-
-            if (orphanedCount > 0)
-            {
-                logger.LogInformation(
-                    "Cleaned up {Count} orphaned match results from tournament {TournamentId}. Recalculating rankings...",
-                    orphanedCount, tournamentId);
-
-                // Recalculate rankings after cleanup
-                await rankingCalculator.RecalculateAllRankingsAsync(tournamentId);
-            }
-
-            return Ok(new CleanupOrphanedResultsResponse
-            {
-                TournamentId = tournamentId,
-                OrphanedResultsRemoved = orphanedCount,
-                UpdatedAt = SystemClock.Instance.GetCurrentInstant()
-            });
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error cleaning up orphaned results for tournament {TournamentId}", tournamentId);
-            return StatusCode(500, new { message = "Error cleaning up orphaned results" });
-        }
-    }
 }
 
 // Request DTOs
@@ -4068,14 +3961,6 @@ public class RecalculateRankingsResponse
     public int TotalRankingsUpdated { get; set; }
     public Instant UpdatedAt { get; set; }
 }
-
-public class CleanupOrphanedResultsResponse
-{
-    public int TournamentId { get; set; }
-    public int OrphanedResultsRemoved { get; set; }
-    public Instant UpdatedAt { get; set; }
-}
-
 
 public class RecalculateRankingsAdvancedRequest
 {

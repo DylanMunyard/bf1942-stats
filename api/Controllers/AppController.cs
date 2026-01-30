@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using api.Gamification.Services;
 using api.Caching;
-using api.GameTrends.Models;
 using api.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -83,74 +82,6 @@ public class AppController(
     }
 
     /// <summary>
-    /// Get landing page data with game trends, optimized for fast loading
-    /// </summary>
-    [HttpGet("landingdata")]
-    [ResponseCache(Duration = 600, Location = ResponseCacheLocation.Any, VaryByHeader = "Accept")]
-    public async Task<ActionResult<LandingPageData>> GetLandingPageData()
-    {
-        const string cacheKey = "app:landing:data:v1";
-
-        try
-        {
-            // Try to get from cache first
-            var cachedData = await cacheService.GetAsync<LandingPageData>(cacheKey);
-            if (cachedData != null)
-            {
-                logger.LogDebug("Returning cached landing page data");
-                return Ok(cachedData);
-            }
-
-            // Generate fresh data - fetch trends and badges in parallel
-            var badgeDefinitionsTask = Task.FromResult(badgeDefinitionsService.GetAllBadges());
-
-            await Task.WhenAll(badgeDefinitionsTask);
-
-            var landingData = new LandingPageData
-            {
-                BadgeDefinitions = badgeDefinitionsTask.Result.Select(b => new BadgeUIDefinition
-                {
-                    Id = b.Id,
-                    Name = b.Name,
-                    Description = b.UIDescription,
-                    Tier = b.Tier,
-                    Category = b.Category,
-                    Requirements = b.Requirements
-                }).ToList(),
-                Categories = new[]
-                {
-                    "performance",
-                    "milestone",
-                    "social",
-                    "map_mastery",
-                    "consistency"
-                },
-                Tiers = new[]
-                {
-                    "bronze",
-                    "silver",
-                    "gold",
-                    "legend"
-                },
-                GeneratedAt = DateTime.UtcNow
-            };
-
-            // Cache for 10 minutes - landing page data should be fresh but not too frequent
-            await cacheService.SetAsync(cacheKey, landingData, TimeSpan.FromMinutes(10));
-
-            logger.LogInformation("Generated and cached fresh landing page data with {BadgeCount} badges and trend data",
-                badgeDefinitionsTask.Result.Count);
-
-            return Ok(landingData);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error generating landing page data");
-            return StatusCode(500, "An internal server error occurred while retrieving landing page data.");
-        }
-    }
-
-    /// <summary>
     /// Get system statistics showing data volume metrics
     /// </summary>
     [HttpGet("systemstats")]
@@ -212,18 +143,6 @@ public class AppInitialData
     public List<BadgeUIDefinition> BadgeDefinitions { get; set; } = new();
     public string[] Categories { get; set; } = Array.Empty<string>();
     public string[] Tiers { get; set; } = Array.Empty<string>();
-    public DateTime GeneratedAt { get; set; }
-}
-
-/// <summary>
-/// Landing page data structure including trends for comprehensive dashboard
-/// </summary>
-public class LandingPageData
-{
-    public List<BadgeUIDefinition> BadgeDefinitions { get; set; } = new();
-    public string[] Categories { get; set; } = Array.Empty<string>();
-    public string[] Tiers { get; set; } = Array.Empty<string>();
-    public LandingPageTrendSummary TrendSummary { get; set; } = new();
     public DateTime GeneratedAt { get; set; }
 }
 
