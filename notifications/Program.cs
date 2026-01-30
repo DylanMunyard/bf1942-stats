@@ -30,6 +30,8 @@ var appInsightsConnectionString = earlyConfig["APPLICATIONINSIGHTS_CONNECTION_ST
 var useAzureMonitor = !string.IsNullOrEmpty(appInsightsConnectionString);
 var serviceName = "junie-des-1942stats.Notifications";
 var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development";
+var samplingRatioEnv = Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_SAMPLING_RATIO");
+var samplingRatio = double.TryParse(samplingRatioEnv, out var ratio) && ratio >= 0.0 && ratio <= 1.0 ? ratio : 1.0;
 
 var loggerConfig = new LoggerConfiguration()
     .MinimumLevel.Warning()
@@ -177,6 +179,17 @@ try
 
         .WithTracing(tracing =>
             {
+                // Configure sampling based on environment variable
+                if (samplingRatio < 1.0)
+                {
+                    tracing.SetSampler(new TraceIdRatioBasedSampler(samplingRatio));
+                    Log.Information("Application Insights sampling enabled: {SamplingRatio:P0}", samplingRatio);
+                }
+                else
+                {
+                    Log.Information("Application Insights sampling disabled (100%)");
+                }
+                
                 tracing.AddAspNetCoreInstrumentation(options =>
                 {
                     // Don't trace health checks and SignalR negotiate

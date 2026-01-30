@@ -33,6 +33,8 @@ spec:
                 secretKeyRef:
                   name: appinsights-secrets
                   key: connection-string
+            - name: APPLICATIONINSIGHTS_SAMPLING_RATIO
+              value: "0.5"
             # Legacy observability stack (kept for fallback/reference, not used when App Insights is configured)
             # - name: SEQ_URL
             #   value: "http://seq-k3s:5341"

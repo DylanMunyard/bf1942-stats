@@ -48,6 +48,8 @@ var appInsightsConnectionString = earlyConfig["APPLICATIONINSIGHTS_CONNECTION_ST
 var useAzureMonitor = !string.IsNullOrEmpty(appInsightsConnectionString);
 var serviceName = "junie-des-1942stats";
 var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development";
+var samplingRatioEnv = Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_SAMPLING_RATIO");
+var samplingRatio = double.TryParse(samplingRatioEnv, out var ratio) && ratio is >= 0.0 and <= 1.0 ? ratio : 1.0;
 
 var loggerConfig = new LoggerConfiguration()
     .MinimumLevel.Information()
@@ -116,8 +118,8 @@ try
     Log.Information("Telemetry backend: {Backend}", loggingBackend);
     if (useAzureMonitor)
     {
-        Log.Information("APPLICATIONINSIGHTS_CONNECTION_STRING is set: {IsSet}, length: {Length}", 
-            !string.IsNullOrEmpty(appInsightsConnectionString), 
+        Log.Information("APPLICATIONINSIGHTS_CONNECTION_STRING is set: {IsSet}, length: {Length}",
+            !string.IsNullOrEmpty(appInsightsConnectionString),
             appInsightsConnectionString?.Length ?? 0);
     }
 
@@ -128,21 +130,21 @@ try
     if (useAzureMonitor)
     {
         // Read connection string from builder.Configuration as well (may have additional sources)
-        var azureMonitorConnectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"] 
+        var azureMonitorConnectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]
             ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING")
             ?? appInsightsConnectionString;
-        
+
         if (string.IsNullOrEmpty(azureMonitorConnectionString))
         {
             Log.Warning("APPLICATIONINSIGHTS_CONNECTION_STRING is not set. Azure Monitor logging will not work.");
         }
         else
         {
-            Log.Information("Configuring Azure Monitor logging with connection string (length: {Length}, starts with: {Prefix})", 
-                azureMonitorConnectionString.Length, 
+            Log.Information("Configuring Azure Monitor logging with connection string (length: {Length}, starts with: {Prefix})",
+                azureMonitorConnectionString.Length,
                 azureMonitorConnectionString.Substring(0, Math.Min(50, azureMonitorConnectionString.Length)));
         }
-        
+
         builder.Logging.AddOpenTelemetry(logging =>
         {
             logging.IncludeScopes = true;
@@ -220,6 +222,17 @@ try
             })
         .WithTracing(tracing =>
             {
+                // Configure sampling based on environment variable
+                if (samplingRatio < 1.0)
+                {
+                    tracing.SetSampler(new TraceIdRatioBasedSampler(samplingRatio));
+                    Log.Information("Application Insights sampling enabled: {SamplingRatio:P0}", samplingRatio);
+                }
+                else
+                {
+                    Log.Information("Application Insights sampling disabled (100%)");
+                }
+
                 tracing.AddAspNetCoreInstrumentation(options =>
                 {
                     // Don't trace health checks and metrics endpoints
@@ -279,10 +292,10 @@ try
                 if (useAzureMonitor)
                 {
                     // Read connection string from builder.Configuration as well (may have additional sources)
-                    var azureMonitorTraceConnectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"] 
+                    var azureMonitorTraceConnectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]
                         ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING")
                         ?? appInsightsConnectionString;
-                    
+
                     tracing.AddAzureMonitorTraceExporter(options =>
                     {
                         if (!string.IsNullOrEmpty(azureMonitorTraceConnectionString))
