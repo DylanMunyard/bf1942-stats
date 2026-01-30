@@ -1,0 +1,9 @@
+# Image for Jenkins deploy stages: Azure CLI + kubectl (AKS with local accounts disabled).
+# Build for your agent arch, e.g.:
+#   docker build -f deploy/Dockerfile.jenkins-aks-deploy -t dylanmunyard/jenkins-agent-kubectl-az:latest deploy/
+#   docker push dylanmunyard/jenkins-agent-kubectl-az:latest
+# Jenkins deploy agent is amd64.
+FROM mcr.microsoft.com/azure-cli:latest
+ARG TARGETARCH=amd64
+RUN curl -sL "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/${TARGETARCH}/kubectl" -o /usr/local/bin/kubectl \
+  && chmod +x /usr/local/bin/kubectl
