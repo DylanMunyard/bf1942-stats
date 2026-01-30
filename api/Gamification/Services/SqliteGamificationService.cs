@@ -112,7 +112,7 @@ public class SqliteGamificationService(
             }
 
             stopwatch.Stop();
-            logger.LogInformation(
+            logger.LogDebug(
                 "Processed {Count} achievements for SQLite insertion in {ElapsedMs}ms (duplicates ignored)",
                 achievements.Count, stopwatch.ElapsedMilliseconds);
         }
@@ -532,16 +532,16 @@ public class SqliteGamificationService(
             var sessions = await dbContext.PlayerSessions
                 .Include(ps => ps.Player)
                 .Where(ps => ps.StartTime >= sinceTime &&
-                            ps.RoundId != null &&
-                            !ps.IsActive &&
-                            ps.TotalKills >= 0) // Basic validation
+                             ps.RoundId != null &&
+                             !ps.IsActive &&
+                             ps.TotalKills >= 0) // Basic validation
                 .OrderBy(ps => ps.StartTime)
                 .ToListAsync();
 
             // Convert PlayerSessions to PlayerRound format expected by achievement calculators
             var rounds = sessions.Select(MapPlayerSessionToPlayerRound).ToList();
 
-            logger.LogInformation("Found {SessionCount} player sessions since {SinceTime}, converted to {RoundCount} rounds",
+            logger.LogDebug("Found {SessionCount} player sessions since {SinceTime}, converted to {RoundCount} rounds",
                 sessions.Count, sinceTime, rounds.Count);
 
             return rounds;

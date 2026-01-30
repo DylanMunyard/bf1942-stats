@@ -114,7 +114,7 @@ public class TeamVictoryProcessor
                 // Get comprehensive player observation analysis for these rounds
                 var sql = @"
                     WITH PlayerObservationStats AS (
-                        SELECT 
+                        SELECT
                             ps.RoundId,
                             ps.SessionId,
                             ps.PlayerName,
@@ -127,11 +127,11 @@ public class TeamVictoryProcessor
                             SUM(CASE WHEN po.Team = 2 THEN 1 ELSE 0 END) as Team2Observations,
                             -- Get final team (last observation)
                             FIRST_VALUE(po.Team) OVER (
-                                PARTITION BY ps.SessionId 
+                                PARTITION BY ps.SessionId
                                 ORDER BY po.Timestamp DESC
                             ) as FinalTeam,
                             FIRST_VALUE(po.TeamLabel) OVER (
-                                PARTITION BY ps.SessionId 
+                                PARTITION BY ps.SessionId
                                 ORDER BY po.Timestamp DESC
                             ) as FinalTeamLabel,
                             -- Get the timestamp of the last observation
@@ -156,12 +156,12 @@ public class TeamVictoryProcessor
                         Team1Observations,
                         Team2Observations,
                         LastObservationTime,
-                        CASE 
+                        CASE
                             WHEN Team1Observations > Team2Observations THEN 1
                             WHEN Team2Observations > Team1Observations THEN 2
                             ELSE FinalTeam
                         END as MajorityTeam,
-                        CASE 
+                        CASE
                             WHEN Team1Observations > 0 AND Team2Observations > 0 THEN 1
                             ELSE 0
                         END as WasTeamSwitched
@@ -204,7 +204,7 @@ public class TeamVictoryProcessor
                 }
             }
 
-            _logger.LogInformation("Generated {Count} team victory achievements from {TotalRounds} rounds since {Since}",
+            _logger.LogDebug("Generated {Count} team victory achievements from {TotalRounds} rounds since {Since}",
                 allAchievements.Count, totalProcessed, sinceUtc);
             return allAchievements;
         }
@@ -283,7 +283,7 @@ public class TeamVictoryProcessor
             if (eligiblePlayers.Count == 0)
             {
                 roundsSkipped++;
-                _logger.LogWarning("No eligible players found for round {RoundId} (none active within 2 minutes of end)", round.RoundId);
+                _logger.LogDebug("No eligible players found for round {RoundId} (none active within 2 minutes of end)", round.RoundId);
                 continue;
             }
 
@@ -412,7 +412,7 @@ public class TeamVictoryProcessor
             : finalScore switch
             {
                 >= 1.2 => BadgeTiers.Legend,   // 120%+ of median with high loyalty
-                >= 1.0 => BadgeTiers.Gold,     // At/above median with good loyalty  
+                >= 1.0 => BadgeTiers.Gold,     // At/above median with good loyalty
                 >= 0.7 => BadgeTiers.Silver,   // 70%+ of median
                 >= 0.4 => BadgeTiers.Bronze,   // 40%+ of median
                 _ => BadgeTiers.Bronze         // Everyone gets at least Bronze

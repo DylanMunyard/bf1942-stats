@@ -16,7 +16,7 @@ public class GamificationService(SqliteGamificationService gamificationService, 
     private static ILogger<GamificationService> InitializeLogger(ILogger<GamificationService> logger, IConfiguration configuration)
     {
         var maxConcurrentRounds = configuration.GetValue<int>("GAMIFICATION_MAX_CONCURRENT_ROUNDS", 10);
-        logger.LogInformation("Gamification service initialized with max concurrent rounds: {MaxConcurrentRounds}", maxConcurrentRounds);
+        logger.LogDebug("Gamification service initialized with max concurrent rounds: {MaxConcurrentRounds}", maxConcurrentRounds);
         return logger;
     }
 

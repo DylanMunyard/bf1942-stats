@@ -78,7 +78,7 @@ public class KillStreakDetector(
 
         if (allAchievements.Any())
         {
-            logger.LogInformation("Processed {RoundCount} rounds, found {AchievementCount} kill streak achievements",
+            logger.LogDebug("Processed {RoundCount} rounds, found {AchievementCount} kill streak achievements",
                 rounds.Count, allAchievements.Count);
         }
 
@@ -146,7 +146,7 @@ public class KillStreakDetector(
                             Version = streakInstance.AchievedAt  // Use achieved_at as deterministic version for idempotency
                         });
 
-                        logger.LogInformation("Kill streak achievement: {PlayerName} achieved {AchievementName} with {Threshold} kills at {AchievementTime}",
+                        logger.LogDebug("Kill streak achievement: {PlayerName} achieved {AchievementName} with {Threshold} kills at {AchievementTime}",
                             round.PlayerName, badgeDefinition.Name, streakInstance.Threshold, streakInstance.AchievedAt);
                     }
                 }
