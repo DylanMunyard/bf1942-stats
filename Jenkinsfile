@@ -68,6 +68,7 @@ pipeline {
                       trap 'rm -rf "$TMPDIR" "$KUBECONFIG"' EXIT
                       az login --service-principal -u "$AZURE_CLIENT_ID" -p "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID"
                       az aks get-credentials --resource-group "''' + params.AKS_RESOURCE_GROUP + '''" --name "''' + params.AKS_CLUSTER_NAME + '''" --file "$KUBECONFIG"
+                      kubelogin convert-kubeconfig -l azurecli
                       printf "%s" "$JWT_PRIVATE_KEY" > "$TMPDIR/jwt-private.pem"
                       kubectl -n bf42-stats create secret generic bf42-stats-secrets \
                         --from-file=jwt-private-key="$TMPDIR/jwt-private.pem" \
@@ -139,6 +140,7 @@ pipeline {
                       trap 'rm -f "$KUBECONFIG"' EXIT
                       az login --service-principal -u "$AZURE_CLIENT_ID" -p "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID"
                       az aks get-credentials --resource-group "''' + params.AKS_RESOURCE_GROUP + '''" --name "''' + params.AKS_CLUSTER_NAME + '''" --file "$KUBECONFIG"
+                      kubelogin convert-kubeconfig -l azurecli
                       kubectl -n bf42-stats rollout restart deployment/bf42-notifications
                     '''
                   }

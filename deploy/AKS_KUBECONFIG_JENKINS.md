@@ -110,9 +110,9 @@ Set default values so normal builds don’t require typing them.
 
 ---
 
-## 6. Deploy container image (Azure CLI + kubectl)
+## 6. Deploy container image (Azure CLI + kubectl + kubelogin)
 
-The deploy stages use the **deploy-aks** container (see `deploy/pod.yaml`), which must provide both **Azure CLI** and **kubectl**. Build and push the image from the repo:
+The deploy stages use the **deploy-aks** container (see `deploy/pod.yaml`), which must provide **Azure CLI**, **kubectl**, and **kubelogin**. AKS writes a kubeconfig that uses devicecode auth by default; the pipeline runs `kubelogin convert-kubeconfig -l azurecli` so the kubeconfig uses the current Azure CLI session (the SP) instead, and kubectl then works without a browser. Build and push the image from the repo:
 
 ```bash
 # From repo root. Jenkins deploy agent is amd64.
@@ -120,7 +120,7 @@ docker build -f deploy/Dockerfile.jenkins-aks-deploy -t dylanmunyard/jenkins-age
 docker push dylanmunyard/jenkins-agent-kubectl-az:latest
 ```
 
-The Dockerfile (`deploy/Dockerfile.jenkins-aks-deploy`) is based on the official Azure CLI image and installs kubectl. If you use a different registry or tag, update the `deploy-aks` container image in `deploy/pod.yaml`.
+The Dockerfile (`deploy/Dockerfile.jenkins-aks-deploy`) is based on the official Azure CLI image and installs kubectl and kubelogin. If you use a different registry or tag, update the `deploy-aks` container image in `deploy/pod.yaml`.
 
 ---
 
