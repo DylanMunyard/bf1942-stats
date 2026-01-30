@@ -29,7 +29,7 @@ public class NotificationController(
                 .Select(ub => ub.User.Email)
                 .ToListAsync();
 
-            logger.LogInformation("Found {Count} users with {BuddyName} as a buddy", userEmails.Count, buddyPlayerName);
+            logger.LogDebug("Found {Count} users with {BuddyName} as a buddy", userEmails.Count, buddyPlayerName);
 
             return Ok(userEmails);
         }
@@ -57,7 +57,7 @@ public class NotificationController(
                 .Select(ufs => ufs.User.Email)
                 .ToListAsync();
 
-            logger.LogInformation("Found {Count} users with server {ServerGuid} as a favourite", userEmails.Count, serverGuid);
+            logger.LogDebug("Found {Count} users with server {ServerGuid} as a favourite", userEmails.Count, serverGuid);
 
             return Ok(userEmails);
         }
