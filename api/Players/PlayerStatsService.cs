@@ -143,6 +143,92 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
 
         var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
 
+        // Enrich with aggregate stats from PlayerServerStats (batch load for efficiency)
+        if (players.Count > 0)
+        {
+            var playerNames = players.Select(p => p.PlayerName).ToList();
+
+            // Get aggregate stats for all players in the current page
+            var aggregateStats = await dbContext.PlayerServerStats
+                .Where(pss => playerNames.Contains(pss.PlayerName))
+                .GroupBy(pss => pss.PlayerName)
+                .Select(g => new
+                {
+                    PlayerName = g.Key,
+                    TotalKills = g.Sum(x => x.TotalKills),
+                    TotalDeaths = g.Sum(x => x.TotalDeaths),
+                    TotalRounds = g.Sum(x => x.TotalRounds),
+                })
+                .ToDictionaryAsync(x => x.PlayerName);
+
+            // Get favorite server for each player (server with most rounds)
+            var favoriteServers = await dbContext.PlayerServerStats
+                .Where(pss => playerNames.Contains(pss.PlayerName))
+                .GroupBy(pss => new { pss.PlayerName, pss.ServerGuid })
+                .Select(g => new
+                {
+                    g.Key.PlayerName,
+                    g.Key.ServerGuid,
+                    TotalRounds = g.Sum(x => x.TotalRounds)
+                })
+                .ToListAsync();
+
+            var favoriteServerByPlayer = favoriteServers
+                .GroupBy(x => x.PlayerName)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.OrderByDescending(x => x.TotalRounds).First().ServerGuid
+                );
+
+            // Get server names for favorite servers
+            var favoriteServerGuids = favoriteServerByPlayer.Values.Distinct().ToList();
+            var serverNames = await dbContext.Servers
+                .Where(s => favoriteServerGuids.Contains(s.Guid))
+                .ToDictionaryAsync(s => s.Guid, s => s.Name);
+
+            // Get recent activity (rounds this week)
+            var now = DateTime.UtcNow;
+            var currentYear = now.Year;
+            var currentWeek = System.Globalization.ISOWeek.GetWeekOfYear(now);
+
+            var recentActivity = await dbContext.PlayerServerStats
+                .Where(pss => playerNames.Contains(pss.PlayerName)
+                    && pss.Year == currentYear
+                    && pss.Week == currentWeek)
+                .GroupBy(pss => pss.PlayerName)
+                .Select(g => new
+                {
+                    PlayerName = g.Key,
+                    RoundsThisWeek = g.Sum(x => x.TotalRounds)
+                })
+                .ToDictionaryAsync(x => x.PlayerName);
+
+            // Enrich player data
+            foreach (var player in players)
+            {
+                if (aggregateStats.TryGetValue(player.PlayerName, out var stats))
+                {
+                    player.TotalKills = stats.TotalKills;
+                    player.TotalDeaths = stats.TotalDeaths;
+                    player.TotalRounds = stats.TotalRounds;
+                }
+
+                if (favoriteServerByPlayer.TryGetValue(player.PlayerName, out var favoriteServerGuid) &&
+                    serverNames.TryGetValue(favoriteServerGuid, out var favoriteServerName))
+                {
+                    player.FavoriteServer = favoriteServerName;
+                }
+
+                if (recentActivity.TryGetValue(player.PlayerName, out var recent))
+                {
+                    player.RecentActivity = new RecentActivitySummary
+                    {
+                        RoundsThisWeek = recent.RoundsThisWeek
+                    };
+                }
+            }
+        }
+
         return new PagedResult<PlayerBasicInfo>
         {
             Items = players,
