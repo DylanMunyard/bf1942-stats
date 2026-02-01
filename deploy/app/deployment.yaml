@@ -130,6 +130,13 @@ spec:
                   optional: true
             - name: DiscordSuspicious__ScoreThreshold
               value: "150"
+            # Discord AI quality alerts. Webhook in discord-secrets (optional).
+            - name: DiscordAIQuality__WebhookUrl
+              valueFrom:
+                secretKeyRef:
+                  name: discord-secrets
+                  key: ai-quality-webhook
+                  optional: true
             # Azure OpenAI Configuration
             - name: AzureOpenAI__Endpoint
               value: "https://dylan-ml3fg2xi-eastus.cognitiveservices.azure.com/"

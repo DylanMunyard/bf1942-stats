@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using api.AI.Models;
+using api.DiscordNotifications;
+using api.DiscordNotifications.Models;
 using api.PlayerTracking;
 using api.Telemetry;
 using Microsoft.AspNetCore.Http;
@@ -21,6 +23,7 @@ namespace api.AI;
 [Route("stats/[controller]")]
 public class AIController(
     IAIService aiService,
+    IDiscordWebhookService discordWebhookService,
     PlayerTrackerDbContext dbContext,
     IOptions<AzureOpenAIOptions> aiOptions,
     ILogger<AIController> logger) : ControllerBase
@@ -230,6 +233,14 @@ public class AIController(
                 string.Join(", ", quality.MissingContext),
                 string.Join(", ", quality.SuggestedKernelMethods),
                 userMessage.Length > 200 ? userMessage[..200] + "..." : userMessage);
+
+            // Send Discord alert for low quality responses (fire-and-forget)
+            _ = discordWebhookService.SendAIQualityAlertAsync(new AIQualityAlert(
+                quality.Confidence,
+                quality.SufficientKernelMethods,
+                quality.MissingContext,
+                quality.SuggestedKernelMethods,
+                userMessage));
         }
         else
         {

@@ -13,4 +13,9 @@ public interface IDiscordWebhookService
     /// Sends a Discord notification for a round with suspicious player scores.
     /// </summary>
     Task SendSuspiciousRoundAlertAsync(SuspiciousRoundAlert alert);
+
+    /// <summary>
+    /// Sends a Discord notification for a low-quality AI response.
+    /// </summary>
+    Task SendAIQualityAlertAsync(AIQualityAlert alert);
 }

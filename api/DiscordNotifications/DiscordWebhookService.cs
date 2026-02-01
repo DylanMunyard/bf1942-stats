@@ -8,16 +8,18 @@ namespace api.DiscordNotifications;
 
 public class DiscordWebhookService(
     IHttpClientFactory httpClientFactory,
-    IOptions<DiscordSuspiciousOptions> options,
+    IOptions<DiscordSuspiciousOptions> suspiciousOptions,
+    IOptions<DiscordAIQualityOptions> aiQualityOptions,
     ILogger<DiscordWebhookService> logger) : IDiscordWebhookService
 {
-    private readonly DiscordSuspiciousOptions _options = options.Value;
+    private readonly DiscordSuspiciousOptions _suspiciousOptions = suspiciousOptions.Value;
+    private readonly DiscordAIQualityOptions _aiQualityOptions = aiQualityOptions.Value;
 
-    public int ScoreThreshold => _options.ScoreThreshold;
+    public int ScoreThreshold => _suspiciousOptions.ScoreThreshold;
 
     public async Task SendSuspiciousRoundAlertAsync(SuspiciousRoundAlert alert)
     {
-        if (string.IsNullOrEmpty(_options.RoundWebhookUrl))
+        if (string.IsNullOrEmpty(_suspiciousOptions.RoundWebhookUrl))
         {
             logger.LogDebug("Discord webhook URL not configured, skipping suspicious round alert");
             return;
@@ -29,7 +31,7 @@ public class DiscordWebhookService(
             var payload = new { embeds = new[] { embed } };
 
             var client = httpClientFactory.CreateClient("DiscordWebhook");
-            var response = await client.PostAsJsonAsync(_options.RoundWebhookUrl, payload);
+            var response = await client.PostAsJsonAsync(_suspiciousOptions.RoundWebhookUrl, payload);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -51,6 +53,42 @@ public class DiscordWebhookService(
         }
     }
 
+    public async Task SendAIQualityAlertAsync(AIQualityAlert alert)
+    {
+        if (string.IsNullOrEmpty(_aiQualityOptions.WebhookUrl))
+        {
+            logger.LogDebug("Discord AI quality webhook URL not configured, skipping alert");
+            return;
+        }
+
+        try
+        {
+            var embed = BuildAIQualityEmbed(alert);
+            var payload = new { embeds = new[] { embed } };
+
+            var client = httpClientFactory.CreateClient("DiscordWebhook");
+            var response = await client.PostAsJsonAsync(_aiQualityOptions.WebhookUrl, payload);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                logger.LogWarning(
+                    "Discord AI quality webhook returned {StatusCode}: {Body}",
+                    response.StatusCode, body);
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Sent AI quality alert: Confidence={Confidence}, SufficientMethods={Sufficient}",
+                    alert.Confidence, alert.SufficientKernelMethods);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to send Discord AI quality alert");
+        }
+    }
+
     private object BuildEmbed(SuspiciousRoundAlert alert)
     {
         var playerLines = alert.Players
@@ -61,7 +99,7 @@ public class DiscordWebhookService(
 
         var description = new StringBuilder();
         description.AppendLine($"**{alert.MapName}** on **{alert.ServerName}**");
-        description.AppendLine($"Player scores >= {_options.ScoreThreshold}");
+        description.AppendLine($"Player scores >= {_suspiciousOptions.ScoreThreshold}");
         description.AppendLine();
         description.AppendLine("**Players:**");
         foreach (var line in playerLines)
@@ -80,6 +118,60 @@ public class DiscordWebhookService(
                 name = "🔗 View Round Report",
                 url = roundUrl
             }
+        };
+    }
+
+    private object BuildAIQualityEmbed(AIQualityAlert alert)
+    {
+        var description = new StringBuilder();
+
+        // Confidence indicator
+        var confidenceEmoji = alert.Confidence switch
+        {
+            "low" => "🔴",
+            "medium" => "🟡",
+            _ => "🟢"
+        };
+        description.AppendLine($"**Confidence:** {confidenceEmoji} {alert.Confidence}");
+        description.AppendLine($"**Sufficient Methods:** {(alert.SufficientKernelMethods ? "✅ Yes" : "❌ No")}");
+        description.AppendLine();
+
+        if (alert.MissingContext.Length > 0)
+        {
+            description.AppendLine("**Missing Context:**");
+            foreach (var context in alert.MissingContext)
+            {
+                description.AppendLine($"• {context}");
+            }
+            description.AppendLine();
+        }
+
+        if (alert.SuggestedKernelMethods.Length > 0)
+        {
+            description.AppendLine("**Suggested Kernel Methods:**");
+            foreach (var method in alert.SuggestedKernelMethods)
+            {
+                description.AppendLine($"• `{method}`");
+            }
+            description.AppendLine();
+        }
+
+        // Truncate user message if too long
+        var userMessage = alert.UserMessage.Length > 500
+            ? alert.UserMessage[..500] + "..."
+            : alert.UserMessage;
+        description.AppendLine("**User Message:**");
+        description.AppendLine($"```{userMessage}```");
+
+        // Color based on confidence (red for low, yellow for medium)
+        var color = alert.Confidence == "low" ? 15158332 : 16776960; // Red or Yellow
+
+        return new
+        {
+            title = "🤖 AI Quality Alert",
+            description = description.ToString(),
+            color,
+            timestamp = DateTime.UtcNow.ToString("o")
         };
     }
 }

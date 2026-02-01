@@ -666,9 +666,11 @@ try
 
     builder.Services.AddScoped<api.Bflist.IBfListApiService, api.Bflist.BfListApiService>();
 
-    // Register Discord webhook service for suspicious round alerts
+    // Register Discord webhook service for suspicious round alerts and AI quality alerts
     builder.Services.Configure<api.DiscordNotifications.DiscordSuspiciousOptions>(
         builder.Configuration.GetSection("DiscordSuspicious"));
+    builder.Services.Configure<api.DiscordNotifications.DiscordAIQualityOptions>(
+        builder.Configuration.GetSection("DiscordAIQuality"));
     builder.Services.AddHttpClient("DiscordWebhook", client =>
     {
         client.Timeout = TimeSpan.FromSeconds(10);
