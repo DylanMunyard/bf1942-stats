@@ -4,15 +4,15 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  namespace: bf42-stats
-  name: jenkins-deployer
+    namespace: bf42-stats
+    name: jenkins-deployer
 rules:
-  - apiGroups: [""]
-    resources: ["secrets", "pods", "pods/log"]
-    verbs: ["get", "list", "create", "update", "patch"]
-  - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: ["get", "list", "patch"]
+    - apiGroups: [""]
+      resources: ["secrets", "pods", "pods/log"]
+      verbs: ["get", "list", "create", "update", "patch"]
+    - apiGroups: ["apps"]
+      resources: ["deployments"]
+      verbs: ["get", "list", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

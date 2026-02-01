@@ -23,7 +23,11 @@
         "BotDetection__DefaultPlayerNames__0": "BFPlayer",
         "BotDetection__DefaultPlayerNames__1": "Player",
         "BotDetection__DefaultPlayerNames__2": "BFSoldier",
-        "ServerFiltering__StuckServers__0": "Tragic! [USA] - Dallas"
+        "ServerFiltering__StuckServers__0": "Tragic! [USA] - Dallas",
+        "AzureOpenAI:Endpoint": "https://dylan-ml3fg2xi-eastus.cognitiveservices.azure.com/",
+        "AzureOpenAI:DeploymentName": "gpt-4o-mini",
+        "AzureOpenAI:MaxTokens": "4096",
+        "AzureOpenAI:Temperature": "0.7"
       }
     }
   }

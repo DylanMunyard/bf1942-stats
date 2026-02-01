@@ -1,0 +1,173 @@
+using System.ClientModel;
+using System.Text.Json;
+using api.AI.Models;
+using api.PlayerTracking;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+namespace api.AI;
+
+/// <summary>
+/// Controller for AI chat functionality.
+/// </summary>
+[ApiController]
+[Route("stats/[controller]")]
+public class AIController(
+    IAIService aiService,
+    PlayerTrackerDbContext dbContext,
+    IOptions<AzureOpenAIOptions> aiOptions,
+    ILogger<AIController> logger) : ControllerBase
+{
+    /// <summary>
+    /// Streams a chat response using Server-Sent Events.
+    /// </summary>
+    /// <param name="request">The chat request.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    [HttpPost("chat")]
+    [EnableRateLimiting("ai-chat")]
+    [Produces("text/event-stream")]
+    public async Task StreamChat([FromBody] ChatRequest request, CancellationToken cancellationToken)
+    {
+        logger.LogInformation("AI chat request received: {MessagePreview}",
+            request.Message.Length > 50 ? request.Message[..50] + "..." : request.Message);
+
+        Response.ContentType = "text/event-stream";
+        Response.Headers.CacheControl = "no-cache";
+        Response.Headers.Connection = "keep-alive";
+
+        try
+        {
+            await foreach (var chunk in aiService.StreamChatAsync(request, cancellationToken))
+            {
+                var data = JsonSerializer.Serialize(new { content = chunk });
+                await Response.WriteAsync($"data: {data}\n\n", cancellationToken);
+                await Response.Body.FlushAsync(cancellationToken);
+            }
+
+            await Response.WriteAsync("data: [DONE]\n\n", cancellationToken);
+            await Response.Body.FlushAsync(cancellationToken);
+
+            logger.LogDebug("AI chat stream completed successfully");
+        }
+        catch (OperationCanceledException)
+        {
+            logger.LogDebug("AI chat stream was cancelled by client");
+        }
+        catch (ClientResultException ex) when (ex.Message.Contains("DeploymentNotFound", StringComparison.OrdinalIgnoreCase))
+        {
+            var deploymentName = aiOptions.Value?.DeploymentName ?? "(not set)";
+            logger.LogError(
+                "Azure OpenAI deployment not found. Ensure AzureOpenAI:DeploymentName in config matches the deployment name in your Azure OpenAI resource (Azure Portal → your resource → Model deployments). Currently using deployment name: {DeploymentName}. Inner: {Message}",
+                deploymentName,
+                ex.Message);
+
+            var errorData = JsonSerializer.Serialize(new
+            {
+                error = "AI service configuration error: the configured deployment was not found. Please ensure AzureOpenAI:DeploymentName matches the deployment name in your Azure OpenAI resource (see Azure Portal → your resource → Model deployments)."
+            });
+            await Response.WriteAsync($"data: {errorData}\n\n", cancellationToken);
+            await Response.WriteAsync("data: [DONE]\n\n", cancellationToken);
+            await Response.Body.FlushAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error during AI chat stream");
+
+            var errorData = JsonSerializer.Serialize(new { error = "An error occurred processing your request." });
+            await Response.WriteAsync($"data: {errorData}\n\n", cancellationToken);
+            await Response.WriteAsync("data: [DONE]\n\n", cancellationToken);
+            await Response.Body.FlushAsync(cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Search for servers by name (for @ mentions).
+    /// </summary>
+    [HttpGet("search/servers")]
+    public async Task<ActionResult<object>> SearchServers([FromQuery] string query)
+    {
+        if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+        {
+            return Ok(new { servers = Array.Empty<object>() });
+        }
+
+        var queryLower = query.ToLowerInvariant();
+        var servers = await dbContext.Servers
+            .AsNoTracking()
+            .Where(s => s.Name.ToLower().Contains(queryLower))
+            .OrderBy(s => s.Name)
+            .Take(10)
+            .Select(s => new
+            {
+                serverGuid = s.Guid,
+                serverName = s.Name,
+                gameId = s.GameId
+            })
+            .ToListAsync();
+
+        return Ok(new { servers });
+    }
+
+    /// <summary>
+    /// Search for players by name (for @ mentions).
+    /// </summary>
+    [HttpGet("search/players")]
+    public async Task<ActionResult<object>> SearchPlayers([FromQuery] string query, [FromQuery] string game = "bf1942")
+    {
+        if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+        {
+            return Ok(new { players = Array.Empty<object>() });
+        }
+
+        // Normalize game name
+        var normalizedGame = game.ToLowerInvariant() switch
+        {
+            "bf1942" or "battlefield 1942" => "bf1942",
+            "fh2" or "forgotten hope 2" => "fh2",
+            "bfvietnam" or "battlefield vietnam" => "bfvietnam",
+            _ => "bf1942"
+        };
+
+        // Get server GUIDs for the specified game
+        var serverGuids = await dbContext.Servers
+            .AsNoTracking()
+            .Where(s => s.Game == normalizedGame)
+            .Select(s => s.Guid)
+            .ToListAsync();
+
+        if (serverGuids.Count == 0)
+        {
+            return Ok(new { players = Array.Empty<object>() });
+        }
+
+        // Search players via PlayerMapStats (aggregated stats)
+        var queryLower = query.ToLowerInvariant();
+        var players = await dbContext.PlayerMapStats
+            .AsNoTracking()
+            .Where(pms => serverGuids.Contains(pms.ServerGuid) && pms.PlayerName.ToLower().Contains(queryLower))
+            .GroupBy(pms => pms.PlayerName)
+            .Select(g => new
+            {
+                playerName = g.Key,
+                totalScore = g.Sum(pms => pms.TotalScore)
+            })
+            .OrderByDescending(p => p.totalScore)
+            .Take(10)
+            .ToListAsync();
+
+        return Ok(new { players });
+    }
+
+    /// <summary>
+    /// Health check endpoint for AI service.
+    /// </summary>
+    [HttpGet("health")]
+    public ActionResult<object> HealthCheck()
+    {
+        return Ok(new { status = "ok", service = "ai-chat" });
+    }
+}

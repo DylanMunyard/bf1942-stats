@@ -52,6 +52,7 @@ public class PlayerTrackerDbContext : DbContext
     // Admin data management
     public DbSet<AdminPin> AdminPins { get; set; }
     public DbSet<AdminAuditLog> AdminAuditLogs { get; set; }
+    public DbSet<AppData> AppData { get; set; }
 
     private static readonly InstantPattern InstantExtendedIsoPattern = InstantPattern.ExtendedIso;
     private static readonly LocalDateTimePattern LegacySqliteInstantPattern =
@@ -1025,6 +1026,12 @@ public class PlayerTrackerDbContext : DbContext
             .HasConversion(
                 instant => FormatInstant(instant),
                 str => ParseInstant(str));
+
+        // Configure AppData entity (KVP for app-level data, e.g. site_notice)
+        modelBuilder.Entity<AppData>()
+            .ToTable("app_data");
+        modelBuilder.Entity<AppData>()
+            .HasKey(a => a.Id);
     }
 
     private static string FormatInstant(Instant instant) => InstantExtendedIsoPattern.Format(instant);

@@ -18,10 +18,21 @@ public class ServerStatsService(
     ISqliteGameTrendsService sqliteGameTrendsService,
     ISqliteLeaderboardService sqliteLeaderboardService) : IServerStatsService
 {
+    /// <summary>
+    /// Normalizes server name for lookup: strips leading # (from UI mentions) and trims.
+    /// </summary>
+    private static string NormalizeServerName(string serverName)
+    {
+        if (string.IsNullOrWhiteSpace(serverName)) return serverName;
+        var trimmed = serverName.Trim();
+        return trimmed.StartsWith('#') ? trimmed[1..].Trim() : trimmed;
+    }
+
     public async Task<ServerStatistics> GetServerStatistics(
         string serverName,
         int daysToAnalyze = 7)
     {
+        serverName = NormalizeServerName(serverName);
         // Check cache first - simplified cache key since we removed all leaderboard queries
         var cacheKey = cacheKeyService.GetServerStatisticsKey(serverName, daysToAnalyze);
         var cachedResult = await cacheService.GetAsync<ServerStatistics>(cacheKey);
@@ -41,6 +52,7 @@ public class ServerStatsService(
         // Get the server by name - CurrentMap is now stored directly on the server
         var server = await dbContext.Servers
             .Where(s => s.Name == serverName)
+            .OrderBy(s => s.Guid)
             .FirstOrDefaultAsync();
 
         if (server == null)
@@ -98,6 +110,7 @@ public class ServerStatsService(
         int days = 7,
         int? minPlayersForWeighting = null)
     {
+        serverName = NormalizeServerName(serverName);
         // Validate days parameter
         if (days <= 0)
         {
@@ -119,6 +132,7 @@ public class ServerStatsService(
         // Get the server by name
         var server = await dbContext.Servers
             .Where(s => s.Name == serverName)
+            .OrderBy(s => s.Guid)
             .FirstOrDefaultAsync();
 
         if (server == null)
@@ -363,6 +377,7 @@ LIMIT $limit";
 
     public async Task<ServerInsights> GetServerInsights(string serverName, int days = 7, int? rollingWindowDays = null)
     {
+        serverName = NormalizeServerName(serverName);
         // Validate days parameter
         if (days <= 0)
             throw new ArgumentException("Days must be greater than 0", nameof(days));
@@ -387,7 +402,9 @@ LIMIT $limit";
         // Get the server by name
         var server = await dbContext.Servers
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Name == serverName);
+            .Where(s => s.Name == serverName)
+            .OrderBy(s => s.Guid)
+            .FirstOrDefaultAsync();
 
         if (server == null)
             return new ServerInsights { ServerName = serverName, StartPeriod = startPeriod, EndPeriod = endPeriod };
@@ -430,6 +447,7 @@ LIMIT $limit";
 
     public async Task<ServerMapsInsights> GetServerMapsInsights(string serverName, int days = 7)
     {
+        serverName = NormalizeServerName(serverName);
         // Validate days parameter
         if (days <= 0)
             throw new ArgumentException("Days must be greater than 0", nameof(days));
@@ -453,7 +471,9 @@ LIMIT $limit";
         // Get the server by name
         var server = await dbContext.Servers
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Name == serverName);
+            .Where(s => s.Name == serverName)
+            .OrderBy(s => s.Guid)
+            .FirstOrDefaultAsync();
 
         if (server == null)
             return new ServerMapsInsights { ServerName = serverName, StartPeriod = startPeriod, EndPeriod = endPeriod };

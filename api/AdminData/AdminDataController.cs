@@ -158,6 +158,41 @@ public class AdminDataController(IAdminDataService adminDataService, PlayerTrack
         await dbContext.SaveChangesAsync();
         return NoContent();
     }
+
+    /// <summary>Get a key-value entry from app_data (e.g. site_notice for the notice banner).</summary>
+    [HttpGet("app-data/{key}")]
+    public async Task<ActionResult<AppDataRow>> GetAppData(string key)
+    {
+        var row = await adminDataService.GetAppDataAsync(key);
+        if (row == null)
+            return NotFound();
+        return Ok(row);
+    }
+
+    /// <summary>Upsert a key-value entry. Body: { "value": "..." }.</summary>
+    [HttpPut("app-data/{key}")]
+    [Authorize(Policy = "Admin")]
+    public async Task<IActionResult> SetAppData(string key, [FromBody] SetAppDataRequest? request)
+    {
+        if (request == null)
+            return BadRequest("body with value is required");
+        await adminDataService.SetAppDataAsync(key, request.Value ?? "");
+        return NoContent();
+    }
+
+    /// <summary>Delete a key-value entry.</summary>
+    [HttpDelete("app-data/{key}")]
+    [Authorize(Policy = "Admin")]
+    public async Task<IActionResult> DeleteAppData(string key)
+    {
+        await adminDataService.DeleteAppDataAsync(key);
+        return NoContent();
+    }
+}
+
+public class SetAppDataRequest
+{
+    public string? Value { get; set; }
 }
 
 public record AuditLogEntry(

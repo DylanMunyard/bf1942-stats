@@ -34,6 +34,8 @@ using System.IO.Compression;
 using api.Data.Migrations;
 using api.Players;
 using api.Servers;
+using api.AI;
+using System.Threading.RateLimiting;
 
 // Configure telemetry endpoints
 // Build a minimal config to read user-secrets before the full builder is created
@@ -706,6 +708,25 @@ try
     builder.Services.AddScoped<api.AdminData.AdminDataService>();
     builder.Services.AddScoped<api.AdminData.IAdminDataService>(sp => sp.GetRequiredService<api.AdminData.AdminDataService>());
 
+    // Register AI services (Azure OpenAI + Semantic Kernel)
+    builder.Services.AddAIServices(builder.Configuration);
+
+    // Configure rate limiting for AI chat endpoint (public endpoint, needs protection)
+    builder.Services.AddRateLimiter(options =>
+    {
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        options.AddPolicy("ai-chat", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 20, // 20 requests per minute per IP
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 2 // Allow 2 queued requests
+                }));
+    });
+
     var host = builder.Build();
 
     // Initialize RequestEnricher with HttpContextAccessor
@@ -733,6 +754,7 @@ try
     host.UseMiddleware<RequestTelemetryMiddleware>();
 
     host.UseCors("default");
+    host.UseRateLimiter(); // Rate limiting for AI endpoints
     host.UseAuthentication();
     host.UseAuthorization();
 

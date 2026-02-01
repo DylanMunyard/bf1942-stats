@@ -1,5 +1,6 @@
 using System.Text.Json;
 using api.AdminData.Models;
+using api.Caching;
 using api.Data.Entities;
 using api.Gamification.Services;
 using api.PlayerTracking;
@@ -16,6 +17,7 @@ public class AdminDataService(
     PlayerTrackerDbContext dbContext,
     IServiceScopeFactory scopeFactory,
     IClock clock,
+    ICacheService cacheService,
     ILogger<AdminDataService> logger
 ) : IAdminDataService
 {
@@ -457,6 +459,57 @@ public class AdminDataService(
             .OrderByDescending(l => l.Timestamp)
             .Take(limit)
             .ToListAsync();
+    }
+
+    private const string InitialDataCacheKey = "app:initial:data:v1";
+
+    public async Task<AppDataRow?> GetAppDataAsync(string key)
+    {
+        var row = await dbContext.AppData
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == key);
+        return row == null ? null : new AppDataRow(row.Id, row.Value, row.UpdatedAt);
+    }
+
+    public async Task SetAppDataAsync(string key, string value)
+    {
+        var row = await dbContext.AppData.FirstOrDefaultAsync(a => a.Id == key);
+        var now = DateTime.UtcNow;
+        if (row != null)
+        {
+            row.Value = value;
+            row.UpdatedAt = now;
+        }
+        else
+        {
+            dbContext.AppData.Add(new AppData
+            {
+                Id = key,
+                Value = value,
+                UpdatedAt = now
+            });
+        }
+        await dbContext.SaveChangesAsync();
+        if (string.Equals(key, "site_notice", StringComparison.OrdinalIgnoreCase))
+        {
+            await cacheService.RemoveAsync(InitialDataCacheKey);
+            logger.LogInformation("Invalidated initial data cache after site_notice update");
+        }
+    }
+
+    public async Task DeleteAppDataAsync(string key)
+    {
+        var row = await dbContext.AppData.FirstOrDefaultAsync(a => a.Id == key);
+        if (row != null)
+        {
+            dbContext.AppData.Remove(row);
+            await dbContext.SaveChangesAsync();
+            if (string.Equals(key, "site_notice", StringComparison.OrdinalIgnoreCase))
+            {
+                await cacheService.RemoveAsync(InitialDataCacheKey);
+                logger.LogInformation("Invalidated initial data cache after site_notice delete");
+            }
+        }
     }
 
 }

@@ -130,6 +130,20 @@ spec:
                   optional: true
             - name: DiscordSuspicious__ScoreThreshold
               value: "150"
+            # Azure OpenAI Configuration
+            - name: AzureOpenAI__Endpoint
+              value: "https://dylan-ml3fg2xi-eastus.cognitiveservices.azure.com/"
+            - name: AzureOpenAI__DeploymentName
+              value: "gpt-4o-mini"
+            - name: AzureOpenAI__MaxTokens
+              value: "4096"
+            - name: AzureOpenAI__Temperature
+              value: "0.7"
+            - name: AzureOpenAI__ApiKey
+              valueFrom:
+                secretKeyRef:
+                  name: azure-openai-secrets
+                  key: api-key
           volumeMounts:
             - name: stats-data
               mountPath: /mnt/data

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using api.Gamification.Services;
 using api.Caching;
@@ -38,6 +39,22 @@ public class AppController(
             // Generate fresh data
             var badgeDefinitions = badgeDefinitionsService.GetAllBadges();
 
+            SiteNoticeDto? siteNotice = null;
+            var siteNoticeRow = await dbContext.AppData
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Id == "site_notice");
+            if (siteNoticeRow != null && !string.IsNullOrEmpty(siteNoticeRow.Value))
+            {
+                try
+                {
+                    siteNotice = JsonSerializer.Deserialize<SiteNoticeDto>(siteNoticeRow.Value);
+                }
+                catch (JsonException)
+                {
+                    // Invalid JSON stored for site_notice — leave null
+                }
+            }
+
             var initialData = new AppInitialData
             {
                 BadgeDefinitions = badgeDefinitions.Select(b => new BadgeUIDefinition
@@ -64,7 +81,8 @@ public class AppController(
                     "gold",
                     "legend"
                 },
-                GeneratedAt = DateTime.UtcNow
+                GeneratedAt = DateTime.UtcNow,
+                SiteNotice = siteNotice
             };
 
             // Cache for 1 hour - static data doesn't change often
@@ -144,6 +162,21 @@ public class AppInitialData
     public string[] Categories { get; set; } = Array.Empty<string>();
     public string[] Tiers { get; set; } = Array.Empty<string>();
     public DateTime GeneratedAt { get; set; }
+    /// <summary>Optional site-wide notice banner (from app_data.site_notice).</summary>
+    public SiteNoticeDto? SiteNotice { get; set; }
+}
+
+/// <summary>
+/// Site notice banner payload (stored as JSON in app_data.site_notice).
+/// </summary>
+public class SiteNoticeDto
+{
+    public string Id { get; set; } = "";
+    public string Content { get; set; } = "";
+    public string Type { get; set; } = "info"; // info | warning | success | error
+    public bool Dismissible { get; set; } = true;
+    public string? ExpiresAt { get; set; }
+    public string CreatedAt { get; set; } = "";
 }
 
 /// <summary>
