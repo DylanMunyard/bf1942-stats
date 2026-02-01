@@ -1,7 +1,10 @@
 using System.ClientModel;
+using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using api.AI.Models;
 using api.PlayerTracking;
+using api.Telemetry;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -41,10 +44,27 @@ public class AIController(
 
         try
         {
+            var fullResponse = new StringBuilder();
+
             await foreach (var chunk in aiService.StreamChatAsync(request, cancellationToken))
             {
+                fullResponse.Append(chunk);
                 var data = JsonSerializer.Serialize(new { content = chunk });
                 await Response.WriteAsync($"data: {data}\n\n", cancellationToken);
+                await Response.Body.FlushAsync(cancellationToken);
+            }
+
+            // Parse quality assessment from response
+            var (quality, _) = AIService.ParseQualityAssessment(fullResponse.ToString());
+
+            // Log quality assessment for analytics
+            LogQualityAssessment(quality, request.Message);
+
+            // Send quality metadata to client before [DONE]
+            if (quality != null)
+            {
+                var qualityData = JsonSerializer.Serialize(new { quality });
+                await Response.WriteAsync($"data: {qualityData}\n\n", cancellationToken);
                 await Response.Body.FlushAsync(cancellationToken);
             }
 
@@ -169,5 +189,54 @@ public class AIController(
     public ActionResult<object> HealthCheck()
     {
         return Ok(new { status = "ok", service = "ai-chat" });
+    }
+
+    /// <summary>
+    /// Logs quality assessment metrics for analytics and kernel method improvement.
+    /// </summary>
+    private void LogQualityAssessment(QualityAssessment? quality, string userMessage)
+    {
+        using var activity = ActivitySources.AIChat.StartActivity("QualityAssessment");
+
+        if (quality == null)
+        {
+            logger.LogWarning("AI response did not include quality assessment marker");
+            activity?.SetTag("ai.quality.parsed", false);
+            return;
+        }
+
+        activity?.SetTag("ai.quality.parsed", true);
+        activity?.SetTag("ai.quality.confidence", quality.Confidence);
+        activity?.SetTag("ai.quality.sufficient_kernel_methods", quality.SufficientKernelMethods);
+
+        if (quality.MissingContext.Length > 0)
+        {
+            activity?.SetTag("ai.quality.missing_context", string.Join(", ", quality.MissingContext));
+        }
+
+        if (quality.SuggestedKernelMethods.Length > 0)
+        {
+            activity?.SetTag("ai.quality.suggested_methods", string.Join(", ", quality.SuggestedKernelMethods));
+        }
+
+        // Log for easy querying - especially interested in low confidence or missing kernel methods
+        if (quality.Confidence == "low" || !quality.SufficientKernelMethods)
+        {
+            logger.LogInformation(
+                "AI quality gap detected. Confidence: {Confidence}, SufficientMethods: {Sufficient}, " +
+                "MissingContext: [{MissingContext}], SuggestedMethods: [{SuggestedMethods}], UserMessage: {Message}",
+                quality.Confidence,
+                quality.SufficientKernelMethods,
+                string.Join(", ", quality.MissingContext),
+                string.Join(", ", quality.SuggestedKernelMethods),
+                userMessage.Length > 200 ? userMessage[..200] + "..." : userMessage);
+        }
+        else
+        {
+            logger.LogDebug(
+                "AI quality assessment: Confidence={Confidence}, SufficientMethods={Sufficient}",
+                quality.Confidence,
+                quality.SufficientKernelMethods);
+        }
     }
 }

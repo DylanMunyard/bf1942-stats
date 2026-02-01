@@ -1,5 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using api.AI.Models;
 using api.AI.Plugins;
 using Microsoft.Extensions.Logging;
@@ -13,11 +15,19 @@ namespace api.AI;
 /// <summary>
 /// AI chat service using Semantic Kernel with Azure OpenAI.
 /// </summary>
-public class AIService(
+public partial class AIService(
     Kernel kernel,
     IOptions<AzureOpenAIOptions> options,
     ILogger<AIService> logger) : IAIService
 {
+    [GeneratedRegex(@"\[BFSTATS_QUALITY:\s*(\{.*?\})\s*\]", RegexOptions.Singleline)]
+    private static partial Regex QualityMarkerRegex();
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private const string SystemPrompt = """
         You are BFStats AI, an assistant for the BFStats.io Battlefield 1942 statistics website.
         You help users understand player statistics, find game activity patterns, and explore server data.
@@ -53,6 +63,18 @@ public class AIService(
 
         You have access to functions that can query the database. Use them to get real data.
         If the user asks about "this player" or "this server", use the context provided.
+
+        QUALITY ASSESSMENT (required at end of every response):
+        After your response, on a new line, append a quality assessment in this exact format:
+        [BFSTATS_QUALITY:{"confidence":"high|medium|low","missingContext":[],"sufficientKernelMethods":true,"suggestedKernelMethods":[]}]
+
+        Guidelines for quality assessment:
+        - confidence: "high" if you fully answered the question with available data, "medium" if partially answered, "low" if you couldn't provide a good answer
+        - missingContext: Array of strings describing what data/context would have helped (e.g., ["player's clan history", "historical server population data"])
+        - sufficientKernelMethods: false if you needed data that no available function could provide
+        - suggestedKernelMethods: Array of function names that would help (e.g., ["GetPlayerClanHistory", "GetServerPopulationHistory"])
+
+        This assessment helps us improve the system. Always include it, even for simple questions.
         """;
 
     /// <inheritdoc/>
@@ -151,5 +173,32 @@ public class AIService(
         }
 
         return contextInfo.ToString();
+    }
+
+    /// <summary>
+    /// Parses the quality assessment marker from a complete AI response.
+    /// </summary>
+    /// <param name="fullResponse">The complete response text.</param>
+    /// <returns>The parsed quality assessment, or null if not found or invalid.</returns>
+    public static (QualityAssessment? Assessment, string CleanedResponse) ParseQualityAssessment(string fullResponse)
+    {
+        var match = QualityMarkerRegex().Match(fullResponse);
+        if (!match.Success)
+        {
+            return (null, fullResponse);
+        }
+
+        var jsonPart = match.Groups[1].Value;
+        var cleanedResponse = fullResponse[..match.Index].TrimEnd();
+
+        try
+        {
+            var assessment = JsonSerializer.Deserialize<QualityAssessment>(jsonPart, JsonOptions);
+            return (assessment, cleanedResponse);
+        }
+        catch (JsonException)
+        {
+            return (null, cleanedResponse);
+        }
     }
 }

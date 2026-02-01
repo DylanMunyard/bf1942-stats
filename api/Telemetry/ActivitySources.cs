@@ -14,4 +14,5 @@ public static class ActivitySources
     public static readonly ActivitySource AggregateCalculation = new("junie-des-1942stats.AggregateCalculation");
     public static readonly ActivitySource SqliteAnalytics = new("BfStats.SqliteAnalytics");
     public static readonly ActivitySource Backfill = new("BfStats.Backfill");
+    public static readonly ActivitySource AIChat = new("BfStats.AIChat");
 }
