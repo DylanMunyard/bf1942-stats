@@ -21,6 +21,11 @@ public record PageContext
     public string? ServerGuid { get; init; }
 
     /// <summary>
+    /// Server display name if on a server page (used for plugin calls and AI responses).
+    /// </summary>
+    public string? ServerName { get; init; }
+
+    /// <summary>
     /// Game identifier: bf1942, fh2, bfvietnam.
     /// </summary>
     public string? Game { get; init; }
