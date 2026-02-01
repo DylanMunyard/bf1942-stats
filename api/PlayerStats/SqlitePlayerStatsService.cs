@@ -1,9 +1,11 @@
 using System.Diagnostics;
+using System.Globalization;
 using api.Analytics.Models;
 using api.Players.Models;
 using api.PlayerTracking;
 using api.Telemetry;
 using Microsoft.EntityFrameworkCore;
+using NodaTime;
 using ServerStatistics = api.Analytics.Models.ServerStatistics;
 
 namespace api.PlayerStats;
@@ -54,17 +56,23 @@ public class SqlitePlayerStatsService(PlayerTrackerDbContext dbContext) : ISqlit
     }
 
     /// <inheritdoc/>
-    public async Task<PlayerLifetimeStats?> GetPlayerStatsAsync(string playerName)
+    public async Task<PlayerLifetimeStats?> GetPlayerStatsAsync(string playerName, int lookBackDays = 30)
     {
         using var activity = ActivitySources.SqliteAnalytics.StartActivity("GetPlayerStatsAsync");
         activity?.SetTag("query.name", "GetPlayerStats");
-        activity?.SetTag("query.filters", $"player:{playerName}");
+        activity?.SetTag("query.filters", $"player:{playerName},lookBackDays:{lookBackDays}");
 
         var stopwatch = Stopwatch.StartNew();
 
-        // SUM across all months for lifetime stats
-        var stats = await dbContext.PlayerStatsMonthly
-            .Where(p => p.PlayerName == playerName)
+        var query = dbContext.PlayerStatsMonthly.Where(p => p.PlayerName == playerName);
+        if (lookBackDays > 0)
+        {
+            var cutoff = Instant.FromDateTimeUtc(DateTime.SpecifyKind(DateTime.UtcNow.AddDays(-lookBackDays), DateTimeKind.Utc));
+            query = query.Where(p => p.LastRoundTime >= cutoff);
+        }
+
+        // SUM across matching months for lifetime stats
+        var stats = await query
             .GroupBy(p => p.PlayerName)
             .Select(g => new
             {
@@ -170,17 +178,26 @@ public class SqlitePlayerStatsService(PlayerTrackerDbContext dbContext) : ISqlit
     }
 
     /// <inheritdoc/>
-    public async Task<List<ServerInsight>> GetPlayerServerInsightsAsync(string playerName)
+    public async Task<List<ServerInsight>> GetPlayerServerInsightsAsync(string playerName, int lookBackDays = 30)
     {
         using var activity = ActivitySources.SqliteAnalytics.StartActivity("GetPlayerServerInsightsAsync");
         activity?.SetTag("query.name", "GetPlayerServerInsights");
-        activity?.SetTag("query.filters", $"player:{playerName}");
+        activity?.SetTag("query.filters", $"player:{playerName},lookBackDays:{lookBackDays}");
 
         var stopwatch = Stopwatch.StartNew();
 
-        // SUM across all months, then filter by 10+ hours (600 minutes)
-        var serverStats = await dbContext.PlayerServerStats
-            .Where(p => p.PlayerName == playerName)
+        var query = dbContext.PlayerServerStats.Where(p => p.PlayerName == playerName);
+        if (lookBackDays > 0)
+        {
+            var cutoff = DateTime.UtcNow.AddDays(-lookBackDays);
+            var (cutoffYear, cutoffWeek) = GetIsoWeek(cutoff);
+            query = query.Where(p =>
+                (p.Year > cutoffYear) ||
+                (p.Year == cutoffYear && p.Week >= cutoffWeek));
+        }
+
+        // SUM across matching weeks, then filter by 10+ hours (600 minutes)
+        var serverStats = await query
             .GroupBy(p => p.ServerGuid)
             .Select(g => new
             {
@@ -238,16 +255,22 @@ public class SqlitePlayerStatsService(PlayerTrackerDbContext dbContext) : ISqlit
     }
 
     /// <inheritdoc/>
-    public async Task<PlayerBestScores> GetPlayerBestScoresAsync(string playerName)
+    public async Task<PlayerBestScores> GetPlayerBestScoresAsync(string playerName, int lookBackDays = 30)
     {
         using var activity = ActivitySources.SqliteAnalytics.StartActivity("GetPlayerBestScoresAsync");
         activity?.SetTag("query.name", "GetPlayerBestScores");
-        activity?.SetTag("query.filters", $"player:{playerName}");
+        activity?.SetTag("query.filters", $"player:{playerName},lookBackDays:{lookBackDays}");
 
         var stopwatch = Stopwatch.StartNew();
 
-        var bestScores = await dbContext.PlayerBestScores
-            .Where(p => p.PlayerName == playerName)
+        var query = dbContext.PlayerBestScores.Where(p => p.PlayerName == playerName);
+        if (lookBackDays > 0)
+        {
+            var cutoff = Instant.FromDateTimeUtc(DateTime.SpecifyKind(DateTime.UtcNow.AddDays(-lookBackDays), DateTimeKind.Utc));
+            query = query.Where(p => p.RoundEndTime >= cutoff);
+        }
+
+        var bestScores = await query
             .OrderBy(p => p.Period)
             .ThenBy(p => p.Rank)
             .ToListAsync();
@@ -329,5 +352,12 @@ public class SqlitePlayerStatsService(PlayerTrackerDbContext dbContext) : ISqlit
         activity?.SetTag("result.table", "PlayerSessions");
 
         return pingData.ToDictionary(p => p.PlayerName, p => p.AvgPing ?? 0);
+    }
+
+    private static (int Year, int Week) GetIsoWeek(DateTime date)
+    {
+        var week = ISOWeek.GetWeekOfYear(date);
+        var year = ISOWeek.GetYear(date);
+        return (year, week);
     }
 }

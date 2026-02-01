@@ -12,7 +12,8 @@ public interface ISqlitePlayerStatsService
     /// <summary>
     /// Gets lifetime statistics for a player.
     /// </summary>
-    Task<PlayerLifetimeStats?> GetPlayerStatsAsync(string playerName);
+    /// <param name="lookBackDays">Only include data from the last N days. Default 30. Use 0 or less for all time.</param>
+    Task<PlayerLifetimeStats?> GetPlayerStatsAsync(string playerName, int lookBackDays = 30);
 
     /// <summary>
     /// Gets player's stats broken down by map.
@@ -25,12 +26,14 @@ public interface ISqlitePlayerStatsService
     /// <summary>
     /// Gets player's insights per server (servers with 10+ hours playtime).
     /// </summary>
-    Task<List<ServerInsight>> GetPlayerServerInsightsAsync(string playerName);
+    /// <param name="lookBackDays">Only include data from the last N days. Default 30. Use 0 or less for all time.</param>
+    Task<List<ServerInsight>> GetPlayerServerInsightsAsync(string playerName, int lookBackDays = 30);
 
     /// <summary>
     /// Gets player's top 3 scores for each time period.
     /// </summary>
-    Task<PlayerBestScores> GetPlayerBestScoresAsync(string playerName);
+    /// <param name="lookBackDays">Only include rounds from the last N days. Default 30. Use 0 or less for all time.</param>
+    Task<PlayerBestScores> GetPlayerBestScoresAsync(string playerName, int lookBackDays = 30);
 
     /// <summary>
     /// Gets average ping for players over the last 7 days.

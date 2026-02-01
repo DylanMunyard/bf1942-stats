@@ -21,11 +21,12 @@ public class PlayerStatsPlugin(
     [KernelFunction("GetPlayerLifetimeStats")]
     [Description("Gets lifetime statistics for a player including total kills, deaths, score, K/D ratio, and playtime.")]
     public async Task<string> GetPlayerLifetimeStatsAsync(
-        [Description("The exact player name to look up")] string playerName)
+        [Description("The exact player name to look up")] string playerName,
+        [Description("Number of days to look back for stats (default 30). Increase if the player hasn't been online recently.")] int lookBackDays = 30)
     {
-        logger.LogDebug("AI requesting lifetime stats for player: {PlayerName}", playerName);
+        logger.LogDebug("AI requesting lifetime stats for player: {PlayerName}, lookBackDays: {LookBackDays}", playerName, lookBackDays);
 
-        var stats = await playerStatsService.GetPlayerStatsAsync(playerName);
+        var stats = await playerStatsService.GetPlayerStatsAsync(playerName, lookBackDays);
         if (stats == null)
         {
             return $"No statistics found for player '{playerName}'. The player may not exist or hasn't played recently.";
@@ -51,11 +52,12 @@ public class PlayerStatsPlugin(
     [KernelFunction("GetPlayerServerInsights")]
     [Description("Gets which servers a player frequents and their performance on each server. Only includes servers where the player has 10+ hours of playtime.")]
     public async Task<string> GetPlayerServerInsightsAsync(
-        [Description("The exact player name to look up")] string playerName)
+        [Description("The exact player name to look up")] string playerName,
+        [Description("Number of days to look back for stats (default 30). Increase if the player hasn't been online recently.")] int lookBackDays = 30)
     {
-        logger.LogDebug("AI requesting server insights for player: {PlayerName}", playerName);
+        logger.LogDebug("AI requesting server insights for player: {PlayerName}, lookBackDays: {LookBackDays}", playerName, lookBackDays);
 
-        var insights = await playerStatsService.GetPlayerServerInsightsAsync(playerName);
+        var insights = await playerStatsService.GetPlayerServerInsightsAsync(playerName, lookBackDays);
         if (insights.Count == 0)
         {
             return $"No server insights found for player '{playerName}'. They may not have 10+ hours on any single server.";
@@ -115,11 +117,12 @@ public class PlayerStatsPlugin(
     [KernelFunction("GetPlayerBestScores")]
     [Description("Gets a player's top 3 best scores for this week, last 30 days, and all time.")]
     public async Task<string> GetPlayerBestScoresAsync(
-        [Description("The exact player name to look up")] string playerName)
+        [Description("The exact player name to look up")] string playerName,
+        [Description("Number of days to look back for stats (default 30). Increase if the player hasn't been online recently.")] int lookBackDays = 30)
     {
-        logger.LogDebug("AI requesting best scores for player: {PlayerName}", playerName);
+        logger.LogDebug("AI requesting best scores for player: {PlayerName}, lookBackDays: {LookBackDays}", playerName, lookBackDays);
 
-        var bestScores = await playerStatsService.GetPlayerBestScoresAsync(playerName);
+        var bestScores = await playerStatsService.GetPlayerBestScoresAsync(playerName, lookBackDays);
 
         var formatScores = (List<BestScoreDetail> scores) => scores.Select(s => new
         {
