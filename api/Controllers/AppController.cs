@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using api.Gamification.Services;
 using api.Caching;
 using api.PlayerTracking;
@@ -14,8 +15,10 @@ public class AppController(
     IBadgeDefinitionsService badgeDefinitionsService,
     ICacheService cacheService,
     ILogger<AppController> logger,
-    PlayerTrackerDbContext dbContext) : ControllerBase
+    PlayerTrackerDbContext dbContext,
+    IOptions<JsonOptions> jsonOptions) : ControllerBase
 {
+    private readonly JsonSerializerOptions _jsonSerializerOptions = jsonOptions.Value.JsonSerializerOptions;
 
     /// <summary>
     /// Get initial data required by the UI on page load, heavily cached for performance
@@ -47,7 +50,7 @@ public class AppController(
             {
                 try
                 {
-                    siteNotice = JsonSerializer.Deserialize<SiteNoticeDto>(siteNoticeRow.Value);
+                    siteNotice = JsonSerializer.Deserialize<SiteNoticeDto>(siteNoticeRow.Value, _jsonSerializerOptions);
                 }
                 catch (JsonException)
                 {
