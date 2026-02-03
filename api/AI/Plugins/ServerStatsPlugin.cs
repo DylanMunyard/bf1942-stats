@@ -2,7 +2,6 @@ using System.ComponentModel;
 using System.Text.Json;
 using api.PlayerTracking;
 using api.Servers;
-using api.Servers.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;

@@ -1,6 +1,5 @@
 using api.Gamification.Models;
 using api.Analytics.Models;
-using api.Telemetry;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using Serilog.Context;

@@ -185,6 +185,7 @@ public class AdminTournamentController(
                 DiscordUrl = t.DiscordUrl,
                 ForumUrl = t.ForumUrl,
                 YouTubeUrl = t.YouTubeUrl,
+                PromoVideoUrl = t.PromoVideoUrl,
                 Theme = t.Theme != null ? new TournamentThemeResponse
                 {
                     Id = t.Theme.Id,
@@ -369,6 +370,7 @@ public class AdminTournamentController(
                 ForumUrl = tournament.ForumUrl,
                 YouTubeUrl = tournament.YouTubeUrl,
                 TwitchUrl = tournament.TwitchUrl,
+                PromoVideoUrl = tournament.PromoVideoUrl,
                 Theme = themeResponse
             };
 
@@ -525,7 +527,8 @@ public class AdminTournamentController(
                 DiscordUrl = request.DiscordUrl,
                 ForumUrl = request.ForumUrl,
                 YouTubeUrl = request.YouTubeUrl,
-                TwitchUrl = request.TwitchUrl
+                TwitchUrl = request.TwitchUrl,
+                PromoVideoUrl = request.PromoVideoUrl
             };
 
             context.Tournaments.Add(tournament);
@@ -756,6 +759,9 @@ public class AdminTournamentController(
 
             if (request.TwitchUrl != null)
                 tournament.TwitchUrl = request.TwitchUrl;
+
+            if (request.PromoVideoUrl != null)
+                tournament.PromoVideoUrl = request.PromoVideoUrl;
 
             // Handle theme updates
             if (request.Theme != null)
@@ -1485,38 +1491,6 @@ public class AdminTournamentController(
         return await context.Users.FirstOrDefaultAsync(u => u.Id == id);
     }
 
-    /// <summary>
-    /// Cleanup orphaned match results - removes MatchResults whose maps no longer exist
-    /// This handles cases where cascade delete didn't work properly in previous versions
-    /// </summary>
-    private async Task<int> CleanupOrphanedMatchResultsAsync(int tournamentId)
-    {
-        // Find all MatchResults in this tournament that reference non-existent maps
-        var orphanedResults = await context.TournamentMatchResults
-            .Where(mr => mr.TournamentId == tournamentId)
-            .Where(mr => !context.TournamentMatchMaps.Any(m => m.Id == mr.MapId))
-            .ToListAsync();
-
-        if (orphanedResults.Count > 0)
-        {
-            logger.LogWarning(
-                "Found {Count} orphaned match results in tournament {TournamentId}. Cleaning up...",
-                orphanedResults.Count, tournamentId);
-
-            foreach (var result in orphanedResults)
-            {
-                logger.LogInformation(
-                    "Deleting orphaned match result {ResultId} (referenced non-existent map {MapId})",
-                    result.Id, result.MapId);
-                context.TournamentMatchResults.Remove(result);
-            }
-
-            await context.SaveChangesAsync();
-        }
-
-        return orphanedResults.Count;
-    }
-
     private (byte[]? imageData, string? error) ValidateAndProcessImage(string? base64Image, string? contentType)
     {
         if (string.IsNullOrWhiteSpace(base64Image))
@@ -1724,6 +1698,7 @@ public class AdminTournamentController(
             ForumUrl = tournament.ForumUrl,
             YouTubeUrl = tournament.YouTubeUrl,
             TwitchUrl = tournament.TwitchUrl,
+            PromoVideoUrl = tournament.PromoVideoUrl,
             Theme = themeResponse
         };
     }
@@ -3653,6 +3628,8 @@ public class CreateTournamentRequest
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
     public string? YouTubeUrl { get; set; }
+
+    public string? PromoVideoUrl { get; set; }
     public string? TwitchUrl { get; set; }
     public TournamentThemeRequest? Theme { get; set; }
     public List<WeekDateRequest>? WeekDates { get; set; }
@@ -3680,6 +3657,8 @@ public class UpdateTournamentRequest
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
     public string? YouTubeUrl { get; set; }
+
+    public string? PromoVideoUrl { get; set; }
     public string? TwitchUrl { get; set; }
     public TournamentThemeRequest? Theme { get; set; }
     public List<WeekDateRequest>? WeekDates { get; set; } // Replace all week dates
@@ -3760,6 +3739,8 @@ public class TournamentListResponse
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
     public string? YouTubeUrl { get; set; }
+
+    public string? PromoVideoUrl { get; set; }
     public TournamentThemeResponse? Theme { get; set; }
 }
 
@@ -3788,6 +3769,8 @@ public class TournamentDetailResponse
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
     public string? YouTubeUrl { get; set; }
+
+    public string? PromoVideoUrl { get; set; }
     public string? TwitchUrl { get; set; }
     public TournamentThemeResponse? Theme { get; set; }
 }

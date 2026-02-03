@@ -1328,6 +1328,8 @@ public class Tournament
     public string? DiscordUrl { get; set; }
     public string? ForumUrl { get; set; }
     public string? YouTubeUrl { get; set; }
+
+    public string? PromoVideoUrl { get; set; }
     public string? TwitchUrl { get; set; }
 
     // Navigation properties

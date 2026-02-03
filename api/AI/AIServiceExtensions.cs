@@ -2,7 +2,6 @@ using api.AI.Models;
 using api.AI.Plugins;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 
 namespace api.AI;

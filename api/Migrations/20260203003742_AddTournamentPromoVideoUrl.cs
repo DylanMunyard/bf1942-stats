@@ -1,18 +1,18 @@
-using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace api.Migrations
 {
     /// <inheritdoc />
-    public partial class AddUserRole : Migration
+    public partial class AddTournamentPromoVideoUrl : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<string>(
-                name: "Role",
-                table: "Users",
+                name: "PromoVideoUrl",
+                table: "Tournaments",
                 type: "TEXT",
                 nullable: true);
         }
@@ -21,8 +21,8 @@ namespace api.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(
-                name: "Role",
-                table: "Users");
+                name: "PromoVideoUrl",
+                table: "Tournaments");
         }
     }
 }

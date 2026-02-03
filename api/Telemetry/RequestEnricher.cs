@@ -183,8 +183,8 @@ public class RequestEnricher : ILogEventEnricher
             return "landing_page";
 
         // API routes (internal app calls)
-        if (path.StartsWith("/api/") || path.StartsWith("/stats/players/search") || 
-            path.StartsWith("/stats/players/compare") || path.StartsWith("/stats/players/") && 
+        if (path.StartsWith("/api/") || path.StartsWith("/stats/players/search") ||
+            path.StartsWith("/stats/players/compare") || path.StartsWith("/stats/players/") &&
             (path.Contains("/sessions/") || path.Contains("/server/")))
             return "api_call";
 
