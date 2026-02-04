@@ -262,4 +262,114 @@ public class ServerStatsPlugin(
             return $"Could not find map statistics for server '{serverName}'.";
         }
     }
+
+    [KernelFunction("GetTopServersByCurrentPlayers")]
+    [Description("Gets servers that are CURRENTLY ACTIVE RIGHT NOW, ranked by current player count. Returns real-time data showing which servers have players online at this moment. Use this for questions about 'servers playing right now' or 'top servers currently active'.")]
+    public async Task<string> GetTopServersByCurrentPlayersAsync(
+        [Description("Maximum number of servers to return (default: 20)")] int limit = 20)
+    {
+        logger.LogDebug("AI requesting top servers by current players, limit: {Limit}", limit);
+
+        try
+        {
+            var topServers = await dbContext.Servers
+                .AsNoTracking()
+                .Where(s => s.CurrentNumPlayers > 0)
+                .OrderByDescending(s => s.CurrentNumPlayers)
+                .ThenByDescending(s => s.Sessions.Any(session => session.IsActive))
+                .Take(limit)
+                .Select(s => new
+                {
+                    s.Name,
+                    s.GameId,
+                    CurrentPlayers = s.CurrentNumPlayers,
+                    s.CurrentMap
+                })
+                .ToListAsync();
+
+            if (topServers.Count == 0)
+            {
+                return "No servers currently have players online.";
+            }
+
+            return JsonSerializer.Serialize(new
+            {
+                Servers = topServers.Select(s => new
+                {
+                    ServerName = s.Name,
+                    s.GameId,
+                    s.CurrentPlayers,
+                    s.CurrentMap
+                }).ToList()
+            });
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to get top servers by current players");
+            return "Could not retrieve top servers by current player count.";
+        }
+    }
+
+    [KernelFunction("GetMapsOnServersWithMinPlayers")]
+    [Description("Gets ALL maps CURRENTLY BEING PLAYED RIGHT NOW on servers that have at least the specified minimum number of players. Returns real-time data showing what maps are active on servers meeting the player threshold. Use this for questions like 'what maps are being played on servers with >= X players' or 'what maps are active on busy servers'. Returns ALL matching servers, not just the top ones.")]
+    public async Task<string> GetMapsOnServersWithMinPlayersAsync(
+        [Description("Minimum number of players required on the server (default: 5)")] int minPlayers = 5)
+    {
+        logger.LogDebug("AI requesting maps on servers with min players: {MinPlayers}", minPlayers);
+
+        try
+        {
+            var serversWithMaps = await dbContext.Servers
+                .AsNoTracking()
+                .Where(s => s.CurrentNumPlayers >= minPlayers && !string.IsNullOrEmpty(s.CurrentMap))
+                .Select(s => new
+                {
+                    s.Name,
+                    s.CurrentMap,
+                    s.CurrentNumPlayers,
+                    s.GameId
+                })
+                .ToListAsync();
+
+            if (serversWithMaps.Count == 0)
+            {
+                return $"No servers currently have {minPlayers} or more players.";
+            }
+
+            var mapsGrouped = serversWithMaps
+                .GroupBy(s => s.CurrentMap)
+                .Select(g => new
+                {
+                    MapName = g.Key,
+                    ServerCount = g.Count(),
+                    Servers = g.Select(s => new
+                    {
+                        s.Name,
+                        s.CurrentNumPlayers
+                    }).ToList()
+                })
+                .OrderByDescending(m => m.ServerCount)
+                .ThenByDescending(m => m.Servers.Sum(s => s.CurrentNumPlayers))
+                .ToList();
+
+            return JsonSerializer.Serialize(new
+            {
+                Maps = mapsGrouped.Select(m => new
+                {
+                    m.MapName,
+                    m.ServerCount,
+                    Servers = m.Servers.Select(s => new
+                    {
+                        ServerName = s.Name,
+                        s.CurrentNumPlayers
+                    }).ToList()
+                }).ToList()
+            });
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to get maps on servers with min players: {MinPlayers}", minPlayers);
+            return $"Could not retrieve maps on servers with at least {minPlayers} players.";
+        }
+    }
 }

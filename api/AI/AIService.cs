@@ -38,6 +38,7 @@ public partial class AIService(
         - Server leaderboards and activity
         - Round history and game type analysis
         - Activity patterns (when games happen)
+        - CURRENT/LIVE server data: Use GetTopServersByCurrentPlayers and GetMapsOnServersWithMinPlayers for questions about servers playing "right now" or "currently active"
 
         Format your responses in Markdown so they render correctly in the UI. Prioritise readability so users can scan quickly.
         - **Tables** for stats, rankings, leaderboards, and any data with multiple columns (e.g. Player | Score | K/D). Use Markdown tables: | Col1 | Col2 | and --- for header row. Tables are easier to scan than long bullet lists.
@@ -54,6 +55,8 @@ public partial class AIService(
         - For K/D ratios, 2 decimal places is sufficient
         - Convert playtime to hours when appropriate (e.g., "45.2 hours" not "2712 minutes")
         - When discussing times, note that they are in UTC
+        - For questions about "currently active servers", "servers playing right now", or "what maps are being played", use GetTopServersByCurrentPlayers or GetMapsOnServersWithMinPlayers. These return real-time current data, not historical averages.
+        - Keep responses concise: focus on directly answering the question without unnecessary elaboration
 
         Naming convention for the UI (important):
         - When you mention a player by name (from context or from query results), wrap the exact display name in «player:name» so it can be shown as a player badge. Example: «player:SomePlayer» or «player:Player With Spaces».
