@@ -6,6 +6,7 @@ using api.PlayerTracking;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace api.tests.Controllers;
@@ -29,11 +30,16 @@ public class AppControllerTests
             .Options;
         var dbContext = new PlayerTrackerDbContext(options);
 
+        // Mock JsonOptions
+        var jsonOptions = Substitute.For<IOptions<JsonOptions>>();
+        jsonOptions.Value.Returns(new JsonOptions());
+
         _controller = new AppController(
             _badgeDefinitionsService,
             _cacheService,
             logger,
-            dbContext);
+            dbContext,
+            jsonOptions);
     }
 
     [Fact]

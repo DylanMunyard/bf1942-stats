@@ -44,6 +44,8 @@ public class DailyAggregateRefreshJob(
                 results["mapGlobalAverages"] = await RefreshMapGlobalAveragesAsync(dbContext, ct);
                 results["serverMapStats"] = await concurrency.ExecuteWithServerMapStatsLockAsync(async (c) => await RefreshServerMapStatsAsync(dbContext, c), ct);
                 results["mapServerHourlyPatterns"] = await RefreshMapServerHourlyPatternsAsync(dbContext, ct);
+                results["bestScores"] = await concurrency.ExecuteWithPlayerAggregatesLockAsync(
+                    async (c) => await RefreshBestScoresAsync(dbContext, c), ct);
 
                 stopwatch.Stop();
 
@@ -52,10 +54,11 @@ public class DailyAggregateRefreshJob(
                 activity?.SetTag("result.total_records", totalRecords);
 
                 logger.LogInformation(
-                    "Daily aggregate refresh completed: {TotalRecords} records in {Duration}ms (patterns={Patterns}, predictions={Predictions}, activity={Activity}, mapAvg={MapAvg}, serverMap={ServerMap}, mapHourly={MapHourly})",
+                    "Daily aggregate refresh completed: {TotalRecords} records in {Duration}ms (patterns={Patterns}, predictions={Predictions}, activity={Activity}, mapAvg={MapAvg}, serverMap={ServerMap}, mapHourly={MapHourly}, bestScores={BestScores})",
                     totalRecords, stopwatch.ElapsedMilliseconds,
                     results["serverHourlyPatterns"], results["hourlyPlayerPredictions"], results["hourlyActivityPatterns"],
-                    results["mapGlobalAverages"], results["serverMapStats"], results["mapServerHourlyPatterns"]);
+                    results["mapGlobalAverages"], results["serverMapStats"], results["mapServerHourlyPatterns"],
+                    results["bestScores"]);
             }
             catch (Exception ex)
             {
@@ -488,6 +491,134 @@ public class DailyAggregateRefreshJob(
                      CAST(strftime('%H', r.StartTime) AS INTEGER)";
 
         return await dbContext.Database.ExecuteSqlRawAsync(sql, [nowIso, cutoffTime], ct);
+    }
+
+    /// <summary>
+    /// Refreshes PlayerBestScores (top 3 scores per player per period) for recently active players.
+    /// Targets players active in the last 7 days. Uses the same SQL pattern as the backfill service.
+    /// </summary>
+    private async Task<int> RefreshBestScoresAsync(PlayerTrackerDbContext dbContext, CancellationToken ct)
+    {
+        using var activity = ActivitySources.SqliteAnalytics.StartActivity("DailyAggregateRefresh.BestScores");
+        activity?.SetTag("bulk_operation", "true");
+        var stopwatch = Stopwatch.StartNew();
+
+        var now = clock.GetCurrentInstant();
+        var nowUtc = now.ToDateTimeUtc();
+        var cutoffTime = nowUtc.AddDays(-7).ToString("yyyy-MM-dd HH:mm:ss");
+
+        // Get distinct player names active in the last 7 days (non-bot, non-deleted sessions)
+        var playerNamesSql = $@"
+            SELECT DISTINCT ps.PlayerName
+            FROM PlayerSessions ps
+            INNER JOIN Players p ON ps.PlayerName = p.Name
+            WHERE ps.LastSeenTime >= @p0
+              AND p.AiBot = 0
+              AND (ps.IsDeleted = 0 OR ps.IsDeleted IS NULL)
+            ORDER BY ps.PlayerName";
+
+        var playerNames = await dbContext.Database
+            .SqlQueryRaw<string>(playerNamesSql, cutoffTime)
+            .ToListAsync(ct);
+
+        logger.LogInformation("Best scores refresh: found {PlayerCount} recently active players", playerNames.Count);
+        activity?.SetTag("result.player_count", playerNames.Count);
+
+        if (playerNames.Count == 0)
+            return 0;
+
+        var totalCount = 0;
+        const int batchSize = 100;
+        var totalBatches = (playerNames.Count + batchSize - 1) / batchSize;
+
+        var periods = new[]
+        {
+            ("all_time", (DateTime?)null),
+            ("last_30_days", nowUtc.AddDays(-30)),
+            ("this_week", nowUtc.AddDays(-7))
+        };
+
+        for (var batchStart = 0; batchStart < playerNames.Count; batchStart += batchSize)
+        {
+            if (ct.IsCancellationRequested) break;
+
+            var batchPlayers = playerNames.Skip(batchStart).Take(batchSize).ToList();
+            var batchIndex = batchStart / batchSize + 1;
+
+            // Build parameterized IN clause for player names
+            var placeholders = string.Join(", ", batchPlayers.Select((_, i) => $"@p{i}"));
+            var playerNamesFilter = $"ps.PlayerName IN ({placeholders})";
+            var playerNamesFilterNoAlias = $"PlayerName IN ({placeholders})";
+            var playerParams = batchPlayers.Cast<object>().ToArray();
+
+            foreach (var (period, cutoff) in periods)
+            {
+                var periodParamIndex = batchPlayers.Count;
+                var deleteParams = playerParams.Append(period).ToArray();
+
+                // Delete existing records for this period and batch's players
+                var deleteSql = $@"
+                    DELETE FROM PlayerBestScores
+                    WHERE Period = @p{periodParamIndex}
+                      AND {playerNamesFilterNoAlias}";
+
+                await dbContext.Database.ExecuteSqlRawAsync(deleteSql, deleteParams, ct);
+
+                // Build INSERT query with parameterized period and optional cutoff
+                var insertParams = new List<object>(playerParams) { period };
+                var cutoffFilter = "";
+
+                if (cutoff.HasValue)
+                {
+                    var cutoffParamIndex = batchPlayers.Count + 1;
+                    insertParams.Add(cutoff.Value.ToString("yyyy-MM-dd HH:mm:ss"));
+                    cutoffFilter = $"AND ps.LastSeenTime >= @p{cutoffParamIndex}";
+                }
+
+                // Insert top 3 scores per player for this period
+                var insertSql = $@"
+                    INSERT INTO PlayerBestScores (
+                        PlayerName, Period, Rank, FinalScore, FinalKills, FinalDeaths,
+                        MapName, ServerGuid, RoundEndTime, RoundId
+                    )
+                    SELECT
+                        PlayerName, Period, Rank, FinalScore, FinalKills, FinalDeaths,
+                        MapName, ServerGuid, RoundEndTime, RoundId
+                    FROM (
+                        SELECT
+                            ps.PlayerName,
+                            @p{periodParamIndex} as Period,
+                            ROW_NUMBER() OVER (PARTITION BY ps.PlayerName ORDER BY ps.TotalScore DESC) as Rank,
+                            ps.TotalScore as FinalScore,
+                            ps.TotalKills as FinalKills,
+                            ps.TotalDeaths as FinalDeaths,
+                            ps.MapName,
+                            ps.ServerGuid,
+                            strftime('%Y-%m-%dT%H:%M:%fZ', ps.LastSeenTime) as RoundEndTime,
+                            COALESCE(ps.RoundId, '') as RoundId
+                        FROM PlayerSessions ps
+                        WHERE {playerNamesFilter}
+                          AND ps.TotalScore > 0
+                          AND (ps.IsDeleted = 0 OR ps.IsDeleted IS NULL)
+                          {cutoffFilter}
+                    ) ranked
+                    WHERE Rank <= 3";
+
+                totalCount += await dbContext.Database.ExecuteSqlRawAsync(insertSql, insertParams.ToArray(), ct);
+            }
+
+            logger.LogDebug("Best scores refresh: batch {Batch}/{TotalBatches} ({BatchSize} players)",
+                batchIndex, totalBatches, batchPlayers.Count);
+        }
+
+        stopwatch.Stop();
+        activity?.SetTag("result.record_count", totalCount);
+        activity?.SetTag("result.duration_ms", stopwatch.ElapsedMilliseconds);
+
+        logger.LogInformation("Best scores refresh completed: {RecordCount} records for {PlayerCount} players in {Duration}ms",
+            totalCount, playerNames.Count, stopwatch.ElapsedMilliseconds);
+
+        return totalCount;
     }
 
     /// <summary>
