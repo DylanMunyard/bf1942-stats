@@ -535,6 +535,13 @@ try
         Log.Information("Using default database path: {DbPath}", dbPath);
     }
 
+    // Ensure the directory for the database file exists
+    var dbDir = Path.GetDirectoryName(dbPath);
+    if (!string.IsNullOrEmpty(dbDir))
+    {
+        Directory.CreateDirectory(dbDir);
+    }
+
     // Configure SQLite with proper connection settings to prevent locking issues
     // - busy_timeout: Wait up to 5 seconds for locks instead of failing immediately (via interceptor)
     // - journal_mode: WAL provides better concurrent read/write performance

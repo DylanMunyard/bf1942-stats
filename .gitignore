@@ -295,4 +295,7 @@ playertracker.db-wal
 # Tournament images uploaded via FileBrowser in local development
 tournament-images/
 
+# JWT signing keys (local development)
+keys/
+
 
