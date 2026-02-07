@@ -330,6 +330,7 @@ try
 
     // Add HttpContextAccessor for request enricher
     builder.Services.AddHttpContextAccessor();
+    builder.Services.AddHealthChecks();
 
     // Add services to the container
     builder.Services.AddControllers().AddJsonOptions(o =>
@@ -791,6 +792,7 @@ try
         return new RsaSecurityKey(rsa);
     }
     host.MapControllers();
+    host.MapHealthChecks("/health");
     host.MapPrometheusScrapingEndpoint();
 
     // Ensure databases are created and migrated
