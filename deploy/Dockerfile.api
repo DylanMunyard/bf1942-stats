@@ -1,5 +1,4 @@
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
-USER $APP_UID
 WORKDIR /app
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
@@ -17,11 +16,4 @@ RUN dotnet publish "api.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAp
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-
-# Create data directories for the SQLite database and ensure the app user can write to them.
-# Railway volumes mount as root-owned, so we need to pre-create and chown the directories.
-USER root
-RUN mkdir -p /data /mnt/data && chown $APP_UID /data /mnt/data
-USER $APP_UID
-
 ENTRYPOINT ["dotnet", "api.dll"]
