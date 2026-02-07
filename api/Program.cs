@@ -795,6 +795,8 @@ try
 
     static SecurityKey CreateRsaKey(string pem)
     {
+        // Environment variables may have literal \n instead of actual newlines
+        pem = pem.Replace("\\n", "\n");
         var rsa = RSA.Create();
         rsa.ImportFromPem(pem);
         return new Microsoft.IdentityModel.Tokens.RsaSecurityKey(rsa);
