@@ -18,10 +18,10 @@ FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 
-# Create a data directory for the SQLite database and ensure the app user can write to it.
-# Railway volumes mount as root-owned, so we need to pre-create and chown the directory.
+# Create data directories for the SQLite database and ensure the app user can write to them.
+# Railway volumes mount as root-owned, so we need to pre-create and chown the directories.
 USER root
-RUN mkdir -p /data && chown $APP_UID /data
+RUN mkdir -p /data /mnt/data && chown $APP_UID /data /mnt/data
 USER $APP_UID
 
 ENTRYPOINT ["dotnet", "api.dll"]
