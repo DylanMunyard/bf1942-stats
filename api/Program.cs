@@ -793,13 +793,17 @@ try
         host.Logger.LogWarning(ex, "Failed to initialize tournament image serving. This feature will be disabled.");
     }
 
-    static SecurityKey CreateRsaKey(string pem)
+    static SecurityKey CreateRsaKey(string input)
     {
-        // Environment variables may have literal \n instead of actual newlines
-        pem = pem.Replace("\\n", "\n");
+        // Support base64-encoded PEM for environment variables that can't preserve newlines
+        if (!input.StartsWith("-----"))
+        {
+            input = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(input));
+        }
+
         var rsa = RSA.Create();
-        rsa.ImportFromPem(pem);
-        return new Microsoft.IdentityModel.Tokens.RsaSecurityKey(rsa);
+        rsa.ImportFromPem(input);
+        return new RsaSecurityKey(rsa);
     }
     host.MapControllers();
     host.MapPrometheusScrapingEndpoint();
