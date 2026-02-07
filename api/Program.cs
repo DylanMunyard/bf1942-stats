@@ -386,16 +386,7 @@ try
     // JWT Auth
     var issuer = builder.Configuration["Jwt:Issuer"] ?? "";
     var audience = builder.Configuration["Jwt:Audience"] ?? "";
-    string? ReadConfigStringOrFile(string valueKey, string pathKey)
-    {
-        var v = builder.Configuration[valueKey];
-        if (!string.IsNullOrWhiteSpace(v)) return v;
-        var p = builder.Configuration[pathKey];
-        if (!string.IsNullOrWhiteSpace(p) && File.Exists(p)) return File.ReadAllText(p);
-        return null;
-    }
-
-    var privateKeyPem = ReadConfigStringOrFile("Jwt:PrivateKey", "Jwt:PrivateKeyPath");
+    var privateKeyPem = TokenServiceConfigHelpers.ReadConfigStringOrFile(builder.Configuration, "Jwt:PrivateKey", "Jwt:PrivateKeyPath");
 
     builder.Services.AddAuthentication(options =>
     {
@@ -793,16 +784,10 @@ try
         host.Logger.LogWarning(ex, "Failed to initialize tournament image serving. This feature will be disabled.");
     }
 
-    static SecurityKey CreateRsaKey(string input)
+    static SecurityKey CreateRsaKey(string pem)
     {
-        // Support base64-encoded PEM for environment variables that can't preserve newlines
-        if (!input.StartsWith("-----"))
-        {
-            input = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(input));
-        }
-
         var rsa = RSA.Create();
-        rsa.ImportFromPem(input);
+        rsa.ImportFromPem(pem);
         return new RsaSecurityKey(rsa);
     }
     host.MapControllers();
