@@ -41,8 +41,8 @@ In the Railway dashboard:
 1. Click **+ New** → **GitHub Repo** → select `bf1942-stats`
 2. Name the service `api`
 3. Go to **Settings** → **Build**:
-   - Config File Path: `deploy/railway-api.json`
-   - (This sets the Dockerfile, healthcheck, and restart policy automatically)
+   - Builder: **Dockerfile**
+   - Dockerfile Path: `deploy/Dockerfile.api`
 4. Go to **Settings** → **Networking**:
    - Generate a Railway domain (for testing)
    - Or add custom domain `bfstats.io` later (step 6)
@@ -122,8 +122,8 @@ AzureOpenAI__ApiKey=<your azure openai key>
 1. Click **+ New** → **GitHub Repo** → select `bf1942-stats` (same repo)
 2. Name the service `notifications`
 3. Go to **Settings** → **Build**:
-   - Config File Path: `deploy/railway-notifications.json`
-   - (This sets the Dockerfile, healthcheck, and restart policy automatically)
+   - Builder: **Dockerfile**
+   - Dockerfile Path: `deploy/Dockerfile.notifications`
 4. Watch Paths: set to `notifications/**` to avoid rebuilds when only API code changes
 
 #### Notifications Environment Variables
@@ -144,9 +144,12 @@ Jwt__Audience=https://bfstats.io
 Jwt__PrivateKey=<same PEM private key as API>
 ```
 
-### 5. Healthchecks
+### 5. Configure Healthchecks
 
-Healthchecks and restart policies are configured automatically via the per-service `railway-*.toml` config files — no manual dashboard setup needed.
+For both services, go to **Settings** → **Deploy**:
+- Healthcheck Path: `/health`
+- Healthcheck Timeout: `300` seconds
+- Restart Policy: **On Failure**
 
 ### 6. Custom Domain + Routing
 
@@ -253,8 +256,8 @@ In the Railway dashboard:
 1. Click **+ New** → **GitHub Repo** → select `bf1942-stats`
 2. Name the service `sqlite-seed`
 3. Go to **Settings** → **Build**:
-   - Config File Path: `deploy/railway-sqlite-seed.json`
-   - (This sets the Dockerfile and restart policy automatically)
+   - Builder: **Dockerfile**
+   - Dockerfile Path: `deploy/Dockerfile.sqlite-seed`
 4. Go to **Settings** → **Volumes**:
    - Attach the **same volume** as the `api` service
    - Mount path: `/mnt/data`
