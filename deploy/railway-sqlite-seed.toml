@@ -1,0 +1,6 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "deploy/Dockerfile.sqlite-seed"
+
+[deploy]
+restartPolicyType = "NEVER"
