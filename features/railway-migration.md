@@ -219,22 +219,77 @@ Railway Pro plan volumes max out at **50GB per volume**. Your current AKS PVC is
 
 ## Database Migration
 
-To copy your SQLite database from AKS to Railway:
+Uses Azure Blob Storage as an intermediary: AKS disk snapshot → Azure VM → Blob Storage → Railway sidecar → volume.
 
+### Prerequisites
+
+- Azure CLI logged in with permissions to create VMs, manage storage, and assign roles
+- The AKS disk snapshot `pre-migrate-back-to-home` exists in the `MC_bfstats-io_bfstats-aks_australiaeast` resource group
+- Storage account `bfstatsio` exists in resource group `bfstats-io`
+
+### Procedure
+
+#### Step 1: Extract DB from snapshot and upload to blob storage
+
+```powershell
+.\deploy\azure-grab-sqlite.ps1
+```
+
+This script will:
+1. Create a temp VM, attach the disk from the AKS snapshot
+2. Mount the disk, copy files, run `PRAGMA wal_checkpoint(TRUNCATE)` to merge the WAL
+3. Upload `playertracker.db` to blob storage (`bfstatsio/sqlite`)
+4. Print a SAS URL (valid 24 hours) — copy this for the next step
+
+Verify the blob exists:
 ```bash
-# 1. Download from AKS
-kubectl cp bf42-stats/bf42-stats-0:/mnt/data/playertracker.db ./playertracker.db -c nginx
+az storage blob list --account-name bfstatsio --container-name sqlite --auth-mode login -o table
+```
 
-# 2. Upload to Railway volume via railway CLI or a temporary upload endpoint
-#    Option A: Use railway shell
-railway shell -s api
-#    Then from inside the container, use curl/wget to fetch the DB
-#    from a temporary upload location (e.g. presigned S3 URL)
+#### Step 2: Stop the API service
 
-#    Option B: Use rsync via railway's volume mount
-#    Railway doesn't support direct file copy to volumes yet.
-#    The common approach is to create a temporary seed endpoint in your app
-#    or use a database initialization script that downloads from a URL.
+In the Railway dashboard, stop the `api` service so nothing is trying to write to the volume.
+
+#### Step 3: Deploy the sqlite-seed sidecar
+
+In the Railway dashboard:
+1. Click **+ New** → **GitHub Repo** → select `bf1942-stats`
+2. Name the service `sqlite-seed`
+3. Go to **Settings** → **Build**:
+   - Builder: **Dockerfile**
+   - Dockerfile Path: `deploy/Dockerfile.sqlite-seed`
+4. Go to **Settings** → **Volumes**:
+   - Attach the **same volume** as the `api` service
+   - Mount path: `/mnt/data`
+5. Set environment variables:
+   - `BLOB_SAS_URL` = paste the SAS URL from step 1
+   - `OVERWRITE` = `true` (only if replacing an existing DB)
+
+#### Step 4: Verify the download
+
+Check the Railway logs for the `sqlite-seed` service. You should see:
+```
+Download complete: <size>
+SQLite header check: OK
+Integrity check: OK
+Seed complete. Database is ready.
+```
+
+#### Step 5: Stop and delete the sqlite-seed service
+
+Once verified, stop and delete the `sqlite-seed` service from the Railway dashboard.
+
+#### Step 6: Redeploy the API service
+
+Start the `api` service again. Verify it's healthy:
+```bash
+curl https://bfstats.io/health
+```
+
+#### Step 7: Azure cleanup
+
+```powershell
+az group delete -n temp-recovery-rg --yes --no-wait
 ```
 
 ## Cost Comparison
