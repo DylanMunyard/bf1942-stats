@@ -65,8 +65,8 @@ ASPNETCORE_ENVIRONMENT=Production
 DB_PATH=/mnt/data/playertracker.db
 ASSETS_STORAGE_PATH=/mnt/data/assets
 
-# Redis (use the Railway-provided internal URL)
-REDIS_CONNECTION_STRING=redis.railway.internal:6379
+# Redis (use Railway reference variables for auth)
+REDIS_CONNECTION_STRING=${{Redis.REDISHOST}}:${{Redis.REDISPORT}},password=${{Redis.REDISPASSWORD}}
 
 # Gamification
 ENABLE_GAMIFICATION_PROCESSING=true
@@ -132,8 +132,8 @@ AzureOpenAI__ApiKey=<your azure openai key>
 ASPNETCORE_URLS=http://+:8080
 ASPNETCORE_ENVIRONMENT=Production
 
-# Redis (Railway internal URL)
-ConnectionStrings__Redis=redis.railway.internal:6379
+# Redis (use Railway reference variables for auth)
+ConnectionStrings__Redis=${{Redis.REDISHOST}}:${{Redis.REDISPORT}},password=${{Redis.REDISPASSWORD}}
 
 # Internal API URL (Railway private networking)
 ApiBaseUrl=http://api.railway.internal:8080
