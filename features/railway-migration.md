@@ -41,7 +41,7 @@ In the Railway dashboard:
 1. Click **+ New** → **GitHub Repo** → select `bf1942-stats`
 2. Name the service `api`
 3. Go to **Settings** → **Build**:
-   - Config File Path: `deploy/railway-api.toml`
+   - Config File Path: `deploy/railway-api.json`
    - (This sets the Dockerfile, healthcheck, and restart policy automatically)
 4. Go to **Settings** → **Networking**:
    - Generate a Railway domain (for testing)
@@ -122,7 +122,7 @@ AzureOpenAI__ApiKey=<your azure openai key>
 1. Click **+ New** → **GitHub Repo** → select `bf1942-stats` (same repo)
 2. Name the service `notifications`
 3. Go to **Settings** → **Build**:
-   - Config File Path: `deploy/railway-notifications.toml`
+   - Config File Path: `deploy/railway-notifications.json`
    - (This sets the Dockerfile, healthcheck, and restart policy automatically)
 4. Watch Paths: set to `notifications/**` to avoid rebuilds when only API code changes
 
@@ -253,7 +253,7 @@ In the Railway dashboard:
 1. Click **+ New** → **GitHub Repo** → select `bf1942-stats`
 2. Name the service `sqlite-seed`
 3. Go to **Settings** → **Build**:
-   - Config File Path: `deploy/railway-sqlite-seed.toml`
+   - Config File Path: `deploy/railway-sqlite-seed.json`
    - (This sets the Dockerfile and restart policy automatically)
 4. Go to **Settings** → **Volumes**:
    - Attach the **same volume** as the `api` service
