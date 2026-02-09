@@ -2,10 +2,5 @@ FROM datalust/seq:latest
 
 ENV ACCEPT_EULA=Y
 
-COPY deploy/seq-entrypoint.sh /seq-entrypoint.sh
-RUN chmod +x /seq-entrypoint.sh
-
 EXPOSE 5341
 EXPOSE 45341
-
-ENTRYPOINT ["/seq-entrypoint.sh"]
