@@ -8,6 +8,4 @@ RUN chmod +x /seq-entrypoint.sh
 EXPOSE 5341
 EXPOSE 45341
 
-VOLUME /data
-
 ENTRYPOINT ["/seq-entrypoint.sh"]
