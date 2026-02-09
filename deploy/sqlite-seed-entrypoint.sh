@@ -56,6 +56,4 @@ echo "Seed complete. Database is ready."
 echo "========================================="
 echo ""
 
-# Keep container running so volume stays mounted
-echo "Sleeping to keep volume mounted. Stop this service when ready."
-sleep infinity
+echo "Container will now exit. Delete this service and start the API."

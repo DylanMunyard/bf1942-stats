@@ -2,12 +2,13 @@
 
 ## Architecture on Railway
 
-Railway project with **4 services**:
+Railway project with **5 services**:
 
 | Railway Service   | Dockerfile                         | Port | Description                    |
 |-------------------|------------------------------------|------|--------------------------------|
 | `api`             | `deploy/Dockerfile.api`            | 8080 | Main API                       |
 | `notifications`   | `deploy/Dockerfile.notifications`  | 8080 | SignalR hub                    |
+| `seq`             | `deploy/Dockerfile.seq`            | 5341 | Logging + traces (Seq)         |
 | `redis`           | (Railway template)                 | 6379 | Caching                        |
 | `redis-commander` | (optional, Railway template)       | 80   | Redis admin UI                 |
 
@@ -112,9 +113,10 @@ AzureOpenAI__MaxTokens=4096
 AzureOpenAI__Temperature=0.7
 AzureOpenAI__ApiKey=<your azure openai key>
 
-# Observability (optional — Railway has built-in logging)
-# APPLICATIONINSIGHTS_CONNECTION_STRING=<if you want to keep App Insights>
-# APPLICATIONINSIGHTS_SAMPLING_RATIO=0.5
+# Observability (Seq for logs + traces)
+SEQ_URL=http://seq.railway.internal:5341
+OTLP_ENDPOINT=http://seq.railway.internal:5341/ingest/otlp
+# TRACE_SAMPLING_RATIO=1.0  # optional, defaults to 1.0 (100%)
 ```
 
 ### 4. Create the Notifications Service

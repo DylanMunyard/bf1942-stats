@@ -27,23 +27,13 @@ spec:
               value: "http://+:8080"
             - name: ASPNETCORE_ENVIRONMENT
               value: "Production"
-            # Azure Application Insights (OTEL) - replaces Loki for production logging
-            - name: APPLICATIONINSIGHTS_CONNECTION_STRING
-              valueFrom:
-                secretKeyRef:
-                  name: appinsights-secrets
-                  key: connection-string
-            - name: APPLICATIONINSIGHTS_SAMPLING_RATIO
+            # Observability — Seq for logs + OTLP traces
+            - name: SEQ_URL
+              value: "http://seq.railway.internal:5341"
+            - name: OTLP_ENDPOINT
+              value: "http://seq.railway.internal:5341/ingest/otlp"
+            - name: TRACE_SAMPLING_RATIO
               value: "0.5"
-            # Legacy observability stack (kept for fallback/reference, not used when App Insights is configured)
-            # - name: SEQ_URL
-            #   value: "http://seq-k3s:5341"
-            # - name: LOKI_URL
-            #   value: "http://loki.monitoring:3100"
-            # - name: TEMPO_URL
-            #   value: "http://tempo.monitoring:3200"
-            # - name: OTLP_ENDPOINT
-            #   value: "http://tempo.monitoring:4318/v1/traces"
             - name: ConnectionStrings__Redis
               value: "redis-service.bf42-stats:6379"
             - name: ApiBaseUrl

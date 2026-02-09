@@ -25,10 +25,8 @@ using NodaTime.Serialization.SystemTextJson;
 using OpenTelemetry.Trace;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Metrics;
-using OpenTelemetry.Logs;
 using api.Telemetry;
 using OpenTelemetry.Exporter;
-using Azure.Monitor.OpenTelemetry.Exporter;
 using Microsoft.AspNetCore.ResponseCompression;
 using System.IO.Compression;
 using api.Data.Migrations;
@@ -46,11 +44,9 @@ var earlyConfig = new ConfigurationBuilder()
 
 var seqUrl = earlyConfig["SEQ_URL"] ?? Environment.GetEnvironmentVariable("SEQ_URL");
 var otlpEndpoint = earlyConfig["OTLP_ENDPOINT"] ?? Environment.GetEnvironmentVariable("OTLP_ENDPOINT") ?? "http://localhost:4318/v1/traces";
-var appInsightsConnectionString = earlyConfig["APPLICATIONINSIGHTS_CONNECTION_STRING"] ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
-var useAzureMonitor = !string.IsNullOrEmpty(appInsightsConnectionString);
 var serviceName = "junie-des-1942stats";
 var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development";
-var samplingRatioEnv = Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_SAMPLING_RATIO");
+var samplingRatioEnv = Environment.GetEnvironmentVariable("TRACE_SAMPLING_RATIO");
 var samplingRatio = double.TryParse(samplingRatioEnv, out var ratio) && ratio is >= 0.0 and <= 1.0 ? ratio : 1.0;
 
 var loggerConfig = new LoggerConfiguration()
@@ -104,9 +100,7 @@ var loggerConfig = new LoggerConfiguration()
     .WriteTo.Console(
         outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj} {Properties:j}{NewLine}{Exception}");
 
-// Local development: use Seq only
-// Production with Azure Monitor: logs go via OTEL to App Insights
-if (!useAzureMonitor && !string.IsNullOrEmpty(seqUrl))
+if (!string.IsNullOrEmpty(seqUrl))
 {
     loggerConfig.WriteTo.Seq(seqUrl);
 }
@@ -116,87 +110,13 @@ Log.Logger = loggerConfig.CreateLogger();
 try
 {
     Log.Information("Starting up junie-des-1942stats application");
-    var loggingBackend = useAzureMonitor ? "Azure Application Insights (OTEL)" : (!string.IsNullOrEmpty(seqUrl) ? "Seq" : "Console only");
-    Log.Information("Telemetry backend: {Backend}", loggingBackend);
-    if (useAzureMonitor)
-    {
-        Log.Information("APPLICATIONINSIGHTS_CONNECTION_STRING is set: {IsSet}, length: {Length}",
-            !string.IsNullOrEmpty(appInsightsConnectionString),
-            appInsightsConnectionString?.Length ?? 0);
-    }
+    var loggingBackend = !string.IsNullOrEmpty(seqUrl) ? "Seq" : "Console only";
+    Log.Information("Telemetry backend: {Backend}, Traces: OTLP ({OtlpEndpoint})", loggingBackend, otlpEndpoint);
 
     var builder = WebApplication.CreateBuilder(args);
 
-    // Configure OTEL logging for Azure Monitor FIRST (before Serilog) to ensure provider is registered
-    // This is important because Serilog's writeToProviders: true forwards logs to registered ILogger providers
-    if (useAzureMonitor)
-    {
-        // Read connection string from builder.Configuration as well (may have additional sources)
-        var azureMonitorConnectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]
-            ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING")
-            ?? appInsightsConnectionString;
-
-        if (string.IsNullOrEmpty(azureMonitorConnectionString))
-        {
-            Log.Warning("APPLICATIONINSIGHTS_CONNECTION_STRING is not set. Azure Monitor logging will not work.");
-        }
-        else
-        {
-            Log.Information("Configuring Azure Monitor logging with connection string (length: {Length}, starts with: {Prefix})",
-                azureMonitorConnectionString.Length,
-                azureMonitorConnectionString.Substring(0, Math.Min(50, azureMonitorConnectionString.Length)));
-        }
-
-        builder.Logging.AddOpenTelemetry(logging =>
-        {
-            logging.IncludeScopes = true;
-            logging.IncludeFormattedMessage = true;
-            logging.AddAzureMonitorLogExporter(options =>
-            {
-                // Explicitly set connection string - Azure Monitor exporter will also read from env var if not set
-                if (!string.IsNullOrEmpty(azureMonitorConnectionString))
-                {
-                    options.ConnectionString = azureMonitorConnectionString;
-                    Log.Information("Azure Monitor log exporter configured with explicit connection string");
-                }
-                else
-                {
-                    Log.Warning("Azure Monitor log exporter will attempt to read connection string from APPLICATIONINSIGHTS_CONNECTION_STRING environment variable");
-                }
-            });
-        });
-    }
-
-    // Add Serilog to the application
-    // writeToProviders: true forwards logs to other configured providers (e.g., OTEL logging for Azure Monitor)
-    if (useAzureMonitor)
-    {
-        // When using Azure Monitor, forward logs to both Serilog and OTEL logging provider
-        builder.Host.UseSerilog((context, services, configuration) =>
-        {
-            configuration
-                .MinimumLevel.Information()
-                // Reduce high-volume ASP.NET Core and EF Core framework logging (performance tracked via OTEL traces)
-                .MinimumLevel.Override("Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker", Serilog.Events.LogEventLevel.Warning)
-                .MinimumLevel.Override("Microsoft.AspNetCore.Hosting.Diagnostics", Serilog.Events.LogEventLevel.Warning)
-                .MinimumLevel.Override("Microsoft.AspNetCore.Routing.EndpointMiddleware", Serilog.Events.LogEventLevel.Warning)
-                .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", Serilog.Events.LogEventLevel.Warning)
-                .Enrich.WithProperty("service.name", serviceName)
-                .Enrich.WithProperty("deployment.environment", environment)
-                .Enrich.FromLogContext()
-                .Enrich.WithMachineName()
-                .Enrich.WithSpan()
-                .Enrich.With<UserAgentEnricher>()
-                .Enrich.With<RequestEnricher>()
-                .WriteTo.Console(
-                    outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{SourceContext}] {Message:lj} {Properties:j}{NewLine}{Exception}");
-        }, writeToProviders: true);
-    }
-    else
-    {
-        // Local dev: use the static Log.Logger configured earlier (with Loki + Seq)
-        builder.Host.UseSerilog();
-    }
+    // Use the static Log.Logger configured earlier (with Seq + Console)
+    builder.Host.UseSerilog();
 
     // Configure OpenTelemetry
     builder.Services.AddOpenTelemetry()
@@ -224,15 +144,11 @@ try
             })
         .WithTracing(tracing =>
             {
-                // Configure sampling based on environment variable
+                // Configure sampling based on TRACE_SAMPLING_RATIO environment variable
                 if (samplingRatio < 1.0)
                 {
                     tracing.SetSampler(new TraceIdRatioBasedSampler(samplingRatio));
-                    Log.Information("Application Insights sampling enabled: {SamplingRatio:P0}", samplingRatio);
-                }
-                else
-                {
-                    Log.Information("Application Insights sampling disabled (100%)");
+                    Log.Information("Trace sampling enabled: {SamplingRatio:P0}", samplingRatio);
                 }
 
                 tracing.AddAspNetCoreInstrumentation(options =>
@@ -290,30 +206,11 @@ try
                 // SqlClient instrumentation removed to reduce telemetry overhead
                 // EF Core instrumentation above already covers most database operations
 
-                // Configure trace exporter: Azure Monitor for production, OTLP for local dev
-                if (useAzureMonitor)
+                tracing.AddOtlpExporter(opt =>
                 {
-                    // Read connection string from builder.Configuration as well (may have additional sources)
-                    var azureMonitorTraceConnectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]
-                        ?? Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING")
-                        ?? appInsightsConnectionString;
-
-                    tracing.AddAzureMonitorTraceExporter(options =>
-                    {
-                        if (!string.IsNullOrEmpty(azureMonitorTraceConnectionString))
-                        {
-                            options.ConnectionString = azureMonitorTraceConnectionString;
-                        }
-                    });
-                }
-                else
-                {
-                    tracing.AddOtlpExporter(opt =>
-                    {
-                        opt.Endpoint = new Uri(otlpEndpoint);
-                        opt.Protocol = OtlpExportProtocol.HttpProtobuf;
-                    });
-                }
+                    opt.Endpoint = new Uri(otlpEndpoint);
+                    opt.Protocol = OtlpExportProtocol.HttpProtobuf;
+                });
 
                 // Only trace API-related activity sources, exclude background service sources
                 tracing.AddSource("junie-des-1942stats.*");
