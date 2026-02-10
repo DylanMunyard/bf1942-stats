@@ -27,8 +27,6 @@ spec:
           env:
             - name: ACCEPT_EULA
               value: "Y"
-            - name: SEQ_FIRSTRUN_NOAUTHENTICATION
-              value: "true"
           volumeMounts:
             - name: seq-data
               mountPath: /data

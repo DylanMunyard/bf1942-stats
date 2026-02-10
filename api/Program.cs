@@ -50,7 +50,10 @@ var samplingRatioEnv = Environment.GetEnvironmentVariable("TRACE_SAMPLING_RATIO"
 var samplingRatio = double.TryParse(samplingRatioEnv, out var ratio) && ratio is >= 0.0 and <= 1.0 ? ratio : 1.0;
 
 var loggerConfig = new LoggerConfiguration()
-    .MinimumLevel.Information()
+    .MinimumLevel.Debug()
+    // Suppress Microsoft and System framework logs — only show warnings and above
+    .MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning)
+    .MinimumLevel.Override("System", Serilog.Events.LogEventLevel.Warning)
     // Filter to suppress EF Core SQL logs only during bulk operations
     .Filter.ByExcluding(logEvent =>
     {
@@ -65,18 +68,6 @@ var loggerConfig = new LoggerConfiguration()
         }
         return false; // Include this log
     })
-    // Keep controller logs at Information level
-    .MinimumLevel.Override("api.PlayerStats.PlayersController", Serilog.Events.LogEventLevel.Information)
-    .MinimumLevel.Override("api.ServerStats.ServersController", Serilog.Events.LogEventLevel.Information)
-    // Reduce high-volume ASP.NET Core and EF Core framework logging (performance tracked via OTEL traces)
-    .MinimumLevel.Override("Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker", Serilog.Events.LogEventLevel.Warning)
-    .MinimumLevel.Override("Microsoft.AspNetCore.Hosting.Diagnostics", Serilog.Events.LogEventLevel.Warning)
-    .MinimumLevel.Override("Microsoft.AspNetCore.Routing.EndpointMiddleware", Serilog.Events.LogEventLevel.Warning)
-    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", Serilog.Events.LogEventLevel.Warning)
-    // Suppress verbose HTTP client logs from the OTLP trace exporter and buddy services
-    .MinimumLevel.Override("System.Net.Http.HttpClient.OtlpTraceExporter.LogicalHandler", Serilog.Events.LogEventLevel.Warning)
-    .MinimumLevel.Override("System.Net.Http.HttpClient.OtlpTraceExporter.ClientHandler", Serilog.Events.LogEventLevel.Warning)
-    .MinimumLevel.Override("System.Net.Http.HttpClient.IBuddyApiService.ClientHandler", Serilog.Events.LogEventLevel.Warning)
     // Filter out OTLP trace export HTTP requests
     .Filter.ByExcluding(logEvent =>
     {
