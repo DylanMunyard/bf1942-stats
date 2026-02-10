@@ -4,6 +4,7 @@ pipeline {
     stage('Build and Deploy') {
       parallel {
         stage('API Pipeline') {
+          when { changeset "api/**" }
           stages {
             stage('Build API Docker Image') {
               agent {
@@ -71,6 +72,7 @@ pipeline {
           }
         }
         stage('Notifications Pipeline') {
+          when { changeset "notifications/**" }
           stages {
             stage('Build Notifications Docker Image') {
               agent {
@@ -121,6 +123,68 @@ pipeline {
                       set -euo pipefail
                       export KUBECONFIG="$KUBECONFIG_FILE"
                       kubectl -n bf42-stats rollout restart deployment/bf42-notifications
+                    '''
+                  }
+                }
+              }
+            }
+          }
+        }
+        stage('UI Pipeline') {
+          when { changeset "ui/**" }
+          stages {
+            stage('Build UI Docker Image') {
+              agent {
+                kubernetes {
+                  cloud 'Local k8s'
+                  yamlFile 'deploy/pod.yaml'
+                  nodeSelector 'kubernetes.io/hostname=bethany'
+                }
+              }
+              steps {
+                container('dind') {
+                  withCredentials([
+                    usernamePassword(credentialsId: 'jenkins-bf1942-stats-dockerhub-pat', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD'),
+                    string(credentialsId: 'bfstats-appi-connection-string', variable: 'APPINSIGHTS_CONNECTION_STRING')
+                  ]) {
+                    sh '''
+                      # Login to Docker Hub
+                      echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+
+                      # Setup Docker buildx for cross-platform builds with DinD optimizations
+                      docker buildx create --name multiarch-builder-ui --driver docker-container --use || true
+                      docker buildx use multiarch-builder-ui
+
+                      # Build and push ARM64 image for UI
+                      # Pass Application Insights connection string as build arg
+                      DOCKER_BUILDKIT=1 docker buildx build -f ui/Dockerfile ui/ \
+                        --platform linux/arm64 \
+                        --build-arg BUILDKIT_PROGRESS=plain \
+                        --build-arg VITE_APPLICATIONINSIGHTS_CONNECTION_STRING="${APPINSIGHTS_CONNECTION_STRING}" \
+                        --push \
+                        -t dylanmunyard/bfstats-ui:latest
+                    '''
+                  }
+                }
+              }
+            }
+            stage('Deploy UI') {
+              agent {
+                kubernetes {
+                  cloud 'Local k8s'
+                  yamlFile 'deploy/pod.yaml'
+                  nodeSelector 'kubernetes.io/hostname=bethany'
+                }
+              }
+              steps {
+                container('kubectl') {
+                  withCredentials([
+                    file(credentialsId: 'bf42-stats-k3s-kubeconfig', variable: 'KUBECONFIG_FILE')
+                  ]) {
+                    sh '''
+                      set -euo pipefail
+                      export KUBECONFIG="$KUBECONFIG_FILE"
+                      kubectl -n bfstats-ui rollout restart deployment/bfstats-ui
                     '''
                   }
                 }

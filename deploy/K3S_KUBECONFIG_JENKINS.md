@@ -8,6 +8,7 @@ Jenkins runs on a local k8s agent and deploys to a remote Hetzner k3s cluster. A
 
 - `kubectl` configured to reach the k3s cluster (e.g. via the k3s admin kubeconfig)
 - The `deployment-manager` Role already exists in the `bf42-stats` namespace (from `deploy/app/deployment-manager.yaml`)
+- The `deployment-manager` Role already exists in the `bfstats-ui` namespace (from the UI repo's `deploy/app/deployment-manager.yaml`, applied separately)
 
 ---
 
@@ -24,8 +25,9 @@ This creates:
 | ServiceAccount | `jenkins-deployer` | `bf42-stats` |
 | Secret | `jenkins-deployer-token` | `bf42-stats` |
 | RoleBinding | `jenkins-deployer-binding` | `bf42-stats` |
+| RoleBinding | `jenkins-deployer-binding` | `bfstats-ui` |
 
-The RoleBinding grants the ServiceAccount the permissions defined in the existing `deployment-manager` Role.
+The RoleBindings grant the ServiceAccount the permissions defined in the existing `deployment-manager` Role in both namespaces. The single kubeconfig works for deploying to both `bf42-stats` and `bfstats-ui` namespaces.
 
 ---
 
@@ -74,9 +76,10 @@ EOF
 
 ```bash
 kubectl --kubeconfig=jenkins-kubeconfig.yaml -n bf42-stats get pods
+kubectl --kubeconfig=jenkins-kubeconfig.yaml -n bfstats-ui get pods
 ```
 
-You should see the pods in the `bf42-stats` namespace. If this works, the kubeconfig is valid.
+You should see the pods in both namespaces. If this works, the kubeconfig is valid.
 
 ---
 
@@ -107,7 +110,8 @@ Remove these Jenkins credentials (no longer needed):
 
 | Credential ID | Type | Purpose |
 |---------------|------|---------|
-| `bf42-stats-k3s-kubeconfig` | Secret File | kubeconfig for k3s cluster |
+| `bf42-stats-k3s-kubeconfig` | Secret File | kubeconfig for k3s cluster (covers `bf42-stats` + `bfstats-ui` namespaces) |
 | `bf42-stats-secrets-jwt-private-key` | Secret Text | JWT signing key |
 | `bf42-stats-secrets-refresh-token-secret` | Secret Text | Refresh token secret |
 | `jenkins-bf1942-stats-dockerhub-pat` | Username/Password | Docker Hub push |
+| `bfstats-appi-connection-string` | Secret Text | Application Insights connection string (UI build) |
