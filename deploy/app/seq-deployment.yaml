@@ -19,8 +19,6 @@ spec:
       labels:
         app: seq
     spec:
-      nodeSelector:
-        workload: core
       containers:
         - name: seq
           image: datalust/seq:latest
@@ -50,7 +48,7 @@ metadata:
     app: seq
   annotations:
     tailscale.com/expose: "true"
-    tailscale.com/hostname: seq-aks
+    tailscale.com/hostname: seq-hetzner
 spec:
   selector:
     app: seq

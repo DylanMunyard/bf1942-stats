@@ -1,0 +1,34 @@
+# ServiceAccount and long-lived token for Jenkins CI/CD on the k3s cluster.
+# Binds to the existing 'deployment-manager' Role in the 'bf42-stats' namespace.
+#
+# Apply with:
+#   kubectl apply -f deploy/k3s-jenkins-rbac.yaml
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jenkins-deployer
+  namespace: bf42-stats
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jenkins-deployer-token
+  namespace: bf42-stats
+  annotations:
+    kubernetes.io/service-account.name: jenkins-deployer
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jenkins-deployer-binding
+  namespace: bf42-stats
+subjects:
+  - kind: ServiceAccount
+    name: jenkins-deployer
+    namespace: bf42-stats
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: deployment-manager

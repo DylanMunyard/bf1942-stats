@@ -77,12 +77,22 @@ internal static class TokenServiceConfigHelpers
     public static string? ReadConfigStringOrFile(IConfiguration config, string valueKey, string pathKey)
     {
         var v = config[valueKey];
-        if (!string.IsNullOrWhiteSpace(v)) return v;
+        if (!string.IsNullOrWhiteSpace(v)) return DecodePemIfBase64(v);
         var path = config[pathKey];
         if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
         {
             return File.ReadAllText(path);
         }
         return null;
+    }
+
+    /// <summary>
+    /// If the value is base64-encoded PEM (no -----BEGIN header), decode it.
+    /// This allows environment variables to carry PEM keys without newline issues.
+    /// </summary>
+    private static string DecodePemIfBase64(string value)
+    {
+        if (value.StartsWith("-----")) return value;
+        return System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(value));
     }
 }
