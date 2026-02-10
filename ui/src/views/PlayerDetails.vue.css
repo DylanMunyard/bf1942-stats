@@ -1,0 +1,199 @@
+/* ===== PLAYER DETAILS - Map-details style (darker, sleeker slate theme) ===== */
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 8s linear infinite;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-clamp: 2;
+}
+
+.relative .absolute {
+  pointer-events: none;
+}
+
+.trend-chart-container canvas {
+  pointer-events: auto !important;
+}
+
+.timeline-node {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 3px solid;
+  background: currentColor;
+}
+
+.performance-excellent .timeline-node {
+  color: #22c55e;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2);
+}
+
+.performance-good .timeline-node {
+  color: #eab308;
+  box-shadow: 0 0 0 4px rgba(234, 179, 8, 0.2);
+}
+
+.performance-average .timeline-node {
+  color: #f87171;
+  box-shadow: 0 0 0 4px rgba(248, 113, 113, 0.2);
+}
+
+.performance-poor .timeline-node {
+  color: #dc2626;
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.2);
+}
+
+.timeline-item:not(:last-child) .timeline-node-container::after {
+  content: '';
+  position: absolute;
+  top: 28px;
+  left: 50%;
+  width: 2px;
+  height: calc(100% + 16px);
+  background: linear-gradient(to bottom, #475569, transparent);
+  transform: translateX(-50%);
+}
+
+.sort-indicator.desc {
+  transform: rotate(180deg);
+}
+
+.toggle-switch input {
+  display: none;
+}
+
+.toggle-slider {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background: #334155;
+  border: 1px solid #475569;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #94a3b8;
+  top: 1px;
+  left: 1px;
+  transition: transform 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: #06b6d4;
+  border-color: #06b6d4;
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.3);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(20px);
+  background: #0f172a;
+}
+
+.glow-cyan {
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.3);
+}
+
+.glow-purple {
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.3);
+}
+
+.glow-green {
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+}
+
+@keyframes slideInLeft {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.3s ease-out;
+}
+
+.best-scores-scroll-container {
+  scrollbar-width: thin;
+  scrollbar-color: #475569 #1e293b;
+}
+
+.best-scores-scroll-container::-webkit-scrollbar {
+  height: 4px;
+}
+
+.best-scores-scroll-container::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+.best-scores-scroll-container::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 2px;
+}
+
+.rank-gold {
+  background: #eab308 !important;
+  color: #0f172a !important;
+  box-shadow: 0 0 10px rgba(234, 179, 8, 0.3);
+}
+
+.rank-silver {
+  background: #c0c0c0 !important;
+  color: #0f172a !important;
+}
+
+.rank-bronze {
+  background: #cd7f32 !important;
+  color: #0f172a !important;
+}
+
+/* Server rankings ping: high-contrast on dark background (WCAG-friendly) */
+.ping-good {
+  color: #6ee7b7 !important;  /* green-400: clear “good” on dark, ~5.5:1 on #0d1117 */
+}
+.ping-warning {
+  color: #fef08a !important;  /* yellow-200: light yellow, high contrast on black */
+}
+.ping-bad {
+  color: #fca5a5 !important;  /* red-500: strong contrast for “bad” ping */
+}
+
+/* Rankings panel hero: high-contrast accent on dark (replaces cyan-400) */
+.rankings-hero-accent {
+  color: #a5f3fc !important;  /* cyan-200: readable on dark */
+}
+a.rankings-hero-accent:hover {
+  color: #cffafe !important;  /* cyan-100 on hover */
+}
+
+/* Rankings list: “Rankings” button – high-contrast on dark */
+.rankings-list-btn {
+  color: #a5f3fc !important;
+  border-color: rgba(165, 243, 252, 0.5) !important;
+}
+.rankings-list-btn:hover {
+  color: #cffafe !important;
+  background-color: rgba(165, 243, 252, 0.1) !important;
+}

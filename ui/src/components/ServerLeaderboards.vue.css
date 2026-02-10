@@ -1,0 +1,372 @@
+/* ===== Server Leaderboards – Hacker / Gaming Theme ===== */
+
+.hacker-leaderboards {
+  width: 100%;
+}
+
+/* Global period bar */
+.hacker-leaderboards-global-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background: var(--bg-panel, #0d1117);
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 8px;
+}
+
+.hacker-leaderboards-global-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #8b949e);
+  font-family: ui-monospace, 'JetBrains Mono', monospace;
+}
+
+.hacker-leaderboards-period-tabs {
+  display: flex;
+  gap: 0.25rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  padding: 0.25rem;
+  border: 1px solid var(--border-color, #30363d);
+}
+
+.hacker-period-tab {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: ui-monospace, 'JetBrains Mono', monospace;
+  color: var(--text-secondary, #8b949e);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s;
+}
+
+.hacker-period-tab:hover:not(:disabled) {
+  color: var(--text-primary, #e6edf3);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.hacker-period-tab--active {
+  color: var(--bg-dark, #0a0a0f);
+  background: var(--neon-cyan, #00fff2);
+  box-shadow: 0 0 12px rgba(0, 255, 242, 0.35);
+}
+
+.hacker-period-tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.hacker-period-tab-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: hacker-lb-spin 0.6s linear infinite;
+}
+
+@keyframes hacker-lb-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Grid of tiles */
+.hacker-leaderboards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.hacker-tile {
+  background: var(--bg-panel, #0d1117);
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.hacker-tile:hover {
+  border-color: rgba(0, 255, 242, 0.25);
+  box-shadow: 0 0 24px rgba(0, 255, 242, 0.08);
+}
+
+.hacker-tile--placements {
+  grid-column: 1 / -1;
+  border-color: rgba(255, 215, 0, 0.25);
+}
+
+.hacker-tile--placements:hover {
+  border-color: rgba(255, 215, 0, 0.4);
+  box-shadow: 0 0 24px rgba(255, 215, 0, 0.08);
+}
+
+.hacker-tile-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color, #30363d);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.hacker-tile-icon {
+  font-size: 1rem;
+  color: var(--neon-cyan, #00fff2);
+  font-family: ui-monospace, monospace;
+}
+
+.hacker-tile--placements .hacker-tile-icon {
+  color: var(--neon-gold, #ffd700);
+}
+
+.hacker-tile-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--text-primary, #e6edf3);
+  font-family: ui-monospace, 'JetBrains Mono', monospace;
+}
+
+.hacker-tile-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.hacker-tile-subtitle {
+  margin: 0.2rem 0 0 0;
+  font-size: 0.7rem;
+  color: var(--text-secondary, #8b949e);
+}
+
+.hacker-tile-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hacker-tile-toggle {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-family: ui-monospace, monospace;
+  color: var(--text-secondary, #8b949e);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.hacker-tile-toggle:hover {
+  color: var(--text-primary, #e6edf3);
+  border-color: var(--hacker-border-focus, #484f58);
+}
+
+.hacker-tile-toggle--active {
+  color: var(--neon-gold, #ffd700);
+  border-color: rgba(255, 215, 0, 0.4);
+  background: rgba(255, 215, 0, 0.08);
+}
+
+.hacker-tile-select {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.7rem;
+  font-family: ui-monospace, monospace;
+  color: var(--text-primary, #e6edf3);
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.hacker-tile-select:hover,
+.hacker-tile-select:focus {
+  border-color: var(--neon-cyan, #00fff2);
+  outline: none;
+}
+
+.hacker-tile-select--right {
+  margin-left: auto;
+}
+
+.hacker-tile-body {
+  padding: 0.75rem 1rem;
+}
+
+.hacker-tile-body--podium {
+  padding: 0.5rem 1rem 1rem;
+}
+
+.hacker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.hacker-list-row {
+  display: grid;
+  grid-template-columns: 1.5rem 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+  font-size: 0.8rem;
+}
+
+.hacker-list-row:last-child {
+  border-bottom: none;
+}
+
+.hacker-list-row--top-1 .hacker-list-rank {
+  color: var(--neon-gold, #ffd700);
+  font-weight: 800;
+}
+
+.hacker-list-row--top-2 .hacker-list-rank {
+  color: var(--text-secondary, #8b949e);
+  font-weight: 700;
+}
+
+.hacker-list-row--top-3 .hacker-list-rank {
+  color: rgba(205, 127, 50, 0.95);
+  font-weight: 700;
+}
+
+.hacker-list-rank {
+  font-family: ui-monospace, 'JetBrains Mono', monospace;
+  font-weight: 600;
+  color: var(--text-secondary, #8b949e);
+}
+
+.hacker-list-name {
+  color: var(--text-primary, #e6edf3);
+  text-decoration: none;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hacker-list-name:hover {
+  color: var(--neon-cyan, #00fff2);
+}
+
+.hacker-list-value {
+  color: var(--neon-cyan, #00fff2);
+  font-size: 0.75rem;
+}
+
+.hacker-tile-empty {
+  padding: 1.5rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-secondary, #8b949e);
+}
+
+.hacker-tile-empty-icon {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 1.5rem;
+  opacity: 0.5;
+}
+
+/* OlympicLeaderboard lives inside .hacker-tile-body--podium – scope its container */
+.hacker-tile-body--podium :deep(.placement-leaderboard) {
+  margin: 0;
+}
+
+.hacker-tile-body--podium :deep(.placement-podium) {
+  margin: 0;
+}
+
+/* Error state */
+.hacker-leaderboards-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: rgba(255, 49, 49, 0.08);
+  border: 1px solid rgba(255, 49, 49, 0.3);
+  border-radius: 10px;
+}
+
+.hacker-leaderboards-error-icon {
+  font-size: 2rem;
+  margin-bottom: 0.75rem;
+  color: var(--neon-red, #ff3131);
+}
+
+.hacker-leaderboards-error-text {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-primary, #e6edf3);
+}
+
+/* Skeleton */
+.skeleton-bar {
+  height: 2.5rem;
+  background: linear-gradient(
+    90deg,
+    rgba(48, 54, 61, 0.3) 25%,
+    rgba(48, 54, 61, 0.5) 50%,
+    rgba(48, 54, 61, 0.3) 75%
+  );
+  background-size: 200% 100%;
+  animation: hacker-skeleton-shine 1.2s ease-in-out infinite;
+}
+
+.skeleton-tile {
+  min-height: 180px;
+}
+
+.skeleton-tile-header {
+  height: 2.5rem;
+  margin-bottom: 0.5rem;
+  background: rgba(48, 54, 61, 0.3);
+  border-radius: 4px;
+}
+
+.skeleton-row {
+  height: 2rem;
+  margin-bottom: 0.35rem;
+  background: rgba(48, 54, 61, 0.2);
+  border-radius: 4px;
+}
+
+@keyframes hacker-skeleton-shine {
+  to { background-position: 200% 0; }
+}
+
+@media (max-width: 768px) {
+  .hacker-leaderboards-global-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hacker-leaderboards-period-tabs {
+    justify-content: center;
+  }
+
+  .hacker-tile-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .hacker-tile-actions {
+    width: 100%;
+  }
+
+  .hacker-tile-select--right {
+    margin-left: 0;
+  }
+}
