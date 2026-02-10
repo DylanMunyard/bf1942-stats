@@ -1,8 +1,13 @@
-# ServiceAccount and long-lived token for Jenkins CI/CD on the k3s cluster.
-# Binds to the existing 'deployment-manager' Role in the 'bf42-stats' and 'bfstats-ui' namespaces.
+# ServiceAccount, Roles, and RoleBindings for Jenkins CI/CD on the k3s cluster.
+# Consolidates all deployment and RBAC configuration needed for the jenkins-deployer service account.
 #
 # Apply with:
 #   kubectl apply -f deploy/k3s-jenkins-rbac.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bf42-stats
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -18,6 +23,32 @@ metadata:
   annotations:
     kubernetes.io/service-account.name: jenkins-deployer
 type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: deployment-manager
+  namespace: bf42-stats
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: deployment-manager
+  namespace: bfstats-ui
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
