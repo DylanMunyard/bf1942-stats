@@ -5,7 +5,7 @@ metadata:
   name: filebrowser
   namespace: bf42-stats
 spec:
-  replicas: 1
+  replicas: 0  # Start scaled down — deploy after API creates the assets dir (subPath creates a directory if path doesn't exist)
   selector:
     matchLabels:
       app: filebrowser
@@ -14,8 +14,6 @@ spec:
       labels:
         app: filebrowser
     spec:
-      nodeSelector:
-        workload: core
       securityContext:
         fsGroup: 1000
       containers:
@@ -67,7 +65,7 @@ metadata:
     app: filebrowser
   annotations:
     tailscale.com/expose: "true"
-    tailscale.com/hostname: filebrowser-aks
+    tailscale.com/hostname: filebrowser-hetzner
 spec:
   selector:
     app: filebrowser

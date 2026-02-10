@@ -1,4 +1,9 @@
-﻿# Configuration
+﻿param(
+    [Parameter(Mandatory=$true)]
+    [string]$HetznerKeyPath
+)
+
+# Configuration
 $RESOURCE_GROUP = "MC_bfstats-io_bfstats-aks_australiaeast"
 $SNAPSHOT_NAME = "pre-migrate-back-to-home"
 $TEMP_RG = "temp-recovery-rg"
@@ -58,119 +63,83 @@ if (!$attachedDisks) {
     Write-Host "Disk already attached to VM" -ForegroundColor Yellow
 }
 
-# Storage account config
-$STORAGE_ACCOUNT = "bfstatsio"
-$STORAGE_RG = "bfstats-io"
-$CONTAINER_NAME = "sqlite"
+# Hetzner config
+$HETZNER_IP = "HETZNER_VM_IP"
+$HETZNER_USER = "HETZNER_VM_SSH_USER"
+$HETZNER_KEY = Resolve-Path $HetznerKeyPath
+$HETZNER_DEST = "/root"
 
-# Assign managed identity to VM
-Write-Host "Assigning managed identity to VM..." -ForegroundColor Green
-az vm identity assign --resource-group $TEMP_RG --name $TEMP_VM_NAME
+# Get Azure VM's public IP
+Write-Host "Getting Azure VM public IP..." -ForegroundColor Green
+$vmIp = az vm show -g $TEMP_RG -n $TEMP_VM_NAME -d --query publicIps -o tsv
+Write-Host "Azure VM IP: $vmIp" -ForegroundColor Cyan
 
-# Ensure blob container exists (no-op if it already exists)
-Write-Host "Ensuring blob container '$CONTAINER_NAME' exists..." -ForegroundColor Green
-az storage container create `
-  --name $CONTAINER_NAME `
-  --account-name $STORAGE_ACCOUNT `
-  --resource-group $STORAGE_RG `
-  --auth-mode login
-
-# Grant Storage Blob Data Contributor role to VM's managed identity
-Write-Host "Granting Storage Blob Data Contributor role to VM identity..." -ForegroundColor Green
-$vmPrincipalId = az vm show --resource-group $TEMP_RG --name $TEMP_VM_NAME --query identity.principalId -o tsv
-$storageAccountId = az storage account show --name $STORAGE_ACCOUNT --resource-group $STORAGE_RG --query id -o tsv
-
-az role assignment create `
-  --assignee-object-id $vmPrincipalId `
-  --assignee-principal-type ServicePrincipal `
-  --role "Storage Blob Data Contributor" `
-  --scope $storageAccountId
-
-Write-Host "Waiting 60s for role assignment propagation..." -ForegroundColor Yellow
-Start-Sleep -Seconds 60
-
-# Write VM script to temp file to avoid PowerShell here-string escaping issues
-$vmScript = @'
-#!/bin/bash
+# Mount disk, checkpoint WAL, copy and compress (streamed via SSH for live output)
+$gzReady = ssh -o StrictHostKeyChecking=accept-new "azureuser@${vmIp}" "test -f /home/azureuser/playertracker.db.gz && echo 'yes' || echo 'no'"
+if ($gzReady.Trim() -eq "yes") {
+    Write-Host "Compressed database already on VM, skipping mount/checkpoint/gzip" -ForegroundColor Yellow
+    ssh "azureuser@${vmIp}" "ls -lh /home/azureuser/playertracker.db.gz"
+} else {
+    Write-Host "Mounting disk, checkpointing WAL, compressing..." -ForegroundColor Green
+    $mountScript = @"
 set -e
-echo "Starting..."
+echo 'Mounting disk...'
 sudo mkdir -p /mnt/recovery
-if sudo mount /dev/sdc /mnt/recovery 2>/dev/null; then
-  echo "Mounted /dev/sdc"
+if mountpoint -q /mnt/recovery; then
+  echo 'Already mounted'
+elif sudo mount /dev/sdc /mnt/recovery 2>/dev/null; then
+  echo 'Mounted /dev/sdc'
 elif sudo mount /dev/sdc1 /mnt/recovery 2>/dev/null; then
-  echo "Mounted /dev/sdc1"
+  echo 'Mounted /dev/sdc1'
 else
-  echo "ERROR: Could not mount /dev/sdc or /dev/sdc1" >&2
+  echo 'ERROR: Could not mount /dev/sdc or /dev/sdc1' >&2
   exit 1
 fi
 ls -lh /mnt/recovery/playertracker.db*
-sudo apt-get update -qq && sudo apt-get install -y -qq sqlite3
-sudo sqlite3 /mnt/recovery/playertracker.db "PRAGMA wal_checkpoint(TRUNCATE);"
-echo "WAL checkpoint complete"
+echo 'Installing sqlite3 and pigz...'
+sudo apt-get update -qq && sudo apt-get install -y -qq sqlite3 pigz
+echo 'Running WAL checkpoint...'
+sudo sqlite3 /mnt/recovery/playertracker.db 'PRAGMA wal_checkpoint(TRUNCATE);'
+echo 'WAL checkpoint complete'
 ls -lh /mnt/recovery/playertracker.db*
-curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-az login --identity
-for f in /mnt/recovery/playertracker.db /mnt/recovery/playertracker.db-wal /mnt/recovery/playertracker.db-shm; do
-  if [ -f "$f" ]; then
-    echo "Uploading $(basename "$f")..."
-    az storage blob upload \
-      --account-name __STORAGE_ACCOUNT__ \
-      --container-name __CONTAINER_NAME__ \
-      --name "$(basename "$f")" \
-      --file "$f" \
-      --overwrite \
-      --auth-mode login
-  fi
-done
-echo "Upload complete"
-az storage blob list --account-name __STORAGE_ACCOUNT__ --container-name __CONTAINER_NAME__ --auth-mode login -o table
-'@ -replace '__STORAGE_ACCOUNT__', $STORAGE_ACCOUNT -replace '__CONTAINER_NAME__', $CONTAINER_NAME
+echo 'Compressing database with pigz (fast mode)...'
+sudo pigz -1 -c /mnt/recovery/playertracker.db > /home/azureuser/playertracker.db.gz
+ls -lh /mnt/recovery/playertracker.db /home/azureuser/playertracker.db.gz
+echo 'Compressed and ready for transfer'
+"@
+    $mountScript -replace "`r", "" | ssh "azureuser@${vmIp}" "bash -s"
+}
 
-$tempScript = Join-Path $env:TEMP "vm-upload.sh"
-[System.IO.File]::WriteAllText($tempScript, $vmScript)
+# Get Hetzner's SSH public key (generate ed25519 key if none exists)
+Write-Host "Fetching Hetzner SSH public key..." -ForegroundColor Green
+$hetznerPubKey = ssh -i $HETZNER_KEY -o StrictHostKeyChecking=accept-new "${HETZNER_USER}@${HETZNER_IP}" "cat ~/.ssh/id_ed25519.pub 2>/dev/null || cat ~/.ssh/id_rsa.pub 2>/dev/null || (ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N '' >/dev/null 2>&1 && cat ~/.ssh/id_ed25519.pub)"
 
-Write-Host "Mounting disk, checkpointing WAL, and uploading to blob storage..." -ForegroundColor Green
-az vm run-command invoke `
-  --resource-group $TEMP_RG `
-  --name $TEMP_VM_NAME `
-  --command-id RunShellScript `
-  --scripts "@$tempScript"
+if (!$hetznerPubKey) {
+    Write-Host "ERROR: Could not get SSH public key from Hetzner" -ForegroundColor Red
+    exit 1
+}
+Write-Host "Got Hetzner public key" -ForegroundColor Green
 
-Remove-Item $tempScript
+# Add Hetzner's public key to Azure VM's authorized_keys
+Write-Host "Adding Hetzner key to Azure VM authorized_keys..." -ForegroundColor Green
+ssh "azureuser@${vmIp}" "echo '$hetznerPubKey' >> ~/.ssh/authorized_keys"
 
-# Generate SAS URLs (24hr expiry) for each uploaded blob
-Write-Host "Generating SAS URLs..." -ForegroundColor Green
-$expiry = (Get-Date).AddHours(24).ToUniversalTime().ToString("yyyy-MM-ddTHH:mmZ")
-$accountKey = az storage account keys list --account-name $STORAGE_ACCOUNT --resource-group $STORAGE_RG --query "[0].value" -o tsv
-$blobs = az storage blob list --account-name $STORAGE_ACCOUNT --container-name $CONTAINER_NAME --account-key $accountKey --query "[].name" -o tsv
+# Pull compressed database from Azure VM to Hetzner via SCP
+Write-Host "Pulling compressed database from Azure VM ($vmIp) to Hetzner ($HETZNER_IP)..." -ForegroundColor Green
+ssh -i $HETZNER_KEY "${HETZNER_USER}@${HETZNER_IP}" "scp -o StrictHostKeyChecking=accept-new azureuser@${vmIp}:/home/azureuser/playertracker.db.gz ${HETZNER_DEST}/playertracker.db.gz"
+
+# Decompress on Hetzner and set ownership for container (runs as 1000:1000)
+Write-Host "Decompressing and setting permissions on Hetzner..." -ForegroundColor Green
+ssh -i $HETZNER_KEY "${HETZNER_USER}@${HETZNER_IP}" "gunzip -f ${HETZNER_DEST}/playertracker.db.gz && chown 1000:1000 ${HETZNER_DEST}/playertracker.db && ls -lh ${HETZNER_DEST}/playertracker.db"
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
-Write-Host "SAS URLs (valid for 24 hours):" -ForegroundColor Green
-foreach ($blob in $blobs) {
-    $sasUrl = az storage blob generate-sas `
-      --account-name $STORAGE_ACCOUNT `
-      --container-name $CONTAINER_NAME `
-      --name $blob `
-      --permissions r `
-      --expiry $expiry `
-      --account-key $accountKey `
-      --full-uri `
-      -o tsv
-    Write-Host ""
-    Write-Host "${blob}:" -ForegroundColor Yellow
-    Write-Host $sasUrl -ForegroundColor Cyan
-}
+Write-Host "Transfer complete!" -ForegroundColor Green
+Write-Host "Database: ${HETZNER_USER}@${HETZNER_IP}:${HETZNER_DEST}/playertracker.db" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "Set these env vars in the Railway sqlite-seed service:" -ForegroundColor Yellow
-Write-Host "  BLOB_SAS_URL     = <playertracker.db URL>" -ForegroundColor Yellow
-if ($blobs -contains "playertracker.db-wal") {
-    Write-Host "  BLOB_SAS_URL_WAL = <playertracker.db-wal URL>" -ForegroundColor Yellow
-}
-if ($blobs -contains "playertracker.db-shm") {
-    Write-Host "  BLOB_SAS_URL_SHM = <playertracker.db-shm URL>" -ForegroundColor Yellow
-}
+Write-Host "Verify on Hetzner:" -ForegroundColor Yellow
+Write-Host "  ssh -i $HETZNER_KEY ${HETZNER_USER}@${HETZNER_IP} 'ls -lh ${HETZNER_DEST}/playertracker.db'" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Cleanup when done:" -ForegroundColor Yellow
 Write-Host "  az group delete -n $TEMP_RG --yes --no-wait" -ForegroundColor Cyan

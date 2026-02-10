@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "api", "api\api.csproj", "{8407897C-9190-4688-835C-0B1D2CD6D9D4}"
 EndProject
@@ -22,13 +22,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "app", "app", "{E9373366-3A5
 		deploy\app\seq-deployment.yaml = deploy\app\seq-deployment.yaml
 		deploy\app\seq-external-service.yaml = deploy\app\seq-external-service.yaml
 		deploy\app\filebrowser-deployment.yaml = deploy\app\filebrowser-deployment.yaml
-	EndProjectSection
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "k3s", "k3s", "{67D0EE3E-1825-4084-8A52-33C1888346B8}"
-	ProjectSection(SolutionItems) = preProject
-		deploy\app\k3s\bf42-api-aks-monitor.yml = deploy\app\k3s\bf42-api-aks-monitor.yml
-		deploy\app\k3s\MONITORING.md = deploy\app\k3s\MONITORING.md
-		deploy\app\k3s\README.md = deploy\app\k3s\README.md
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "api.tests", "tests\api\api.tests.csproj", "{09D635B4-2E52-4D4C-8F45-F8B8A0D557C3}"
@@ -69,6 +62,13 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "local.dev", "local.dev", "{
 		docker-compose.dev.yml = docker-compose.dev.yml
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ingress", "ingress", "{504C0194-68BC-44F6-A5AD-98C9EA71A346}"
+	ProjectSection(SolutionItems) = preProject
+		deploy\app\ingress\cloudflared-tunnel.yml = deploy\app\ingress\cloudflared-tunnel.yml
+		deploy\app\ingress\deployment.yaml = deploy\app\ingress\deployment.yaml
+		deploy\app\ingress\README.md = deploy\app\ingress\README.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -94,6 +94,6 @@ Global
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{E9373366-3A5C-4916-A225-08477EE23649} = {D2AAAE5D-8D28-4907-AD74-0417D6DDC04D}
-		{67D0EE3E-1825-4084-8A52-33C1888346B8} = {E9373366-3A5C-4916-A225-08477EE23649}
+		{504C0194-68BC-44F6-A5AD-98C9EA71A346} = {E9373366-3A5C-4916-A225-08477EE23649}
 	EndGlobalSection
 EndGlobal

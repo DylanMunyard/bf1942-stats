@@ -1,0 +1,105 @@
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: haproxy
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: haproxy-config
+  namespace: haproxy
+data:
+  haproxy.cfg: |
+    global
+      maxconn 256
+      log stdout format raw local0 debug
+
+    defaults
+      mode http
+      timeout connect 5000ms
+      timeout client 50000ms
+      timeout server 50000ms
+      option forwardfor
+      option http-server-close
+
+    frontend http-in
+      bind *:8080
+      log global
+      option httplog
+      option dontlognull
+
+      # ACL definitions
+      acl host_staging_bfstats req.hdr(host) -i staging.bfstats.io
+      acl is_stats path_beg /stats
+      acl is_hub path_beg /hub
+
+      capture request header CF-Connecting-IP len 15
+      log-format "%[capture.req.hdr(0)]\ %ci:%cp [%t] %ft %b/%s %Tq/%Tw/%Tc/%Tr/%Tt %ST %B %CC %CS %tsc %ac/%fc/%bc/%sc/%rc %sq/%bq %hr %hs %{+Q}r %sslv"
+
+      # Route /stats to stats API
+      use_backend stats_api if is_stats
+      use_backend stats_api if host_staging_bfstats is_stats
+
+      # Route /hub to hub API
+      use_backend hub_api if is_hub
+      use_backend hub_api if host_staging_bfstats is_hub
+
+      # Route staging.bfstats.io to staging frontend
+      use_backend staging_frontend if host_staging_bfstats
+
+      # Everything else to frontend
+      default_backend frontend
+
+    backend stats_api
+      server stats bf42-stats-service.bf42-stats:8080
+
+    backend hub_api
+      server hub bf42-notifications-service.bf42-stats:8080
+
+    backend staging_frontend
+      server staging bfstats-ui-service.bfstats-ui:80
+
+    backend frontend
+      server frontend bfstats-ui-service.bfstats-ui:80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: haproxy
+  namespace: haproxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: haproxy
+  template:
+    metadata:
+      labels:
+        app: haproxy
+    spec:
+      containers:
+      - name: haproxy
+        image: haproxy:3.2-alpine
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: config
+          mountPath: /usr/local/etc/haproxy
+      volumes:
+      - name: config
+        configMap:
+          name: haproxy-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: haproxy-service
+  namespace: haproxy
+spec:
+  type: ClusterIP
+  selector:
+    app: haproxy
+  ports:
+  - port: 80
+    targetPort: 8080

@@ -14,8 +14,6 @@ spec:
         app: bf42-notifications
     spec:
       priorityClassName: 1942-services
-      nodeSelector:
-        workload: core
       containers:
         - name: notifications
           image: dylanmunyard/bf42-notifications:latest
@@ -29,9 +27,9 @@ spec:
               value: "Production"
             # Observability — Seq for logs + OTLP traces
             - name: SEQ_URL
-              value: "http://seq.railway.internal:5341"
+              value: "http://seq-service.seq:5341"
             - name: OTLP_ENDPOINT
-              value: "http://seq.railway.internal:5341/ingest/otlp"
+              value: "http://seq-service.seq:5341/ingest/otlp"
             - name: TRACE_SAMPLING_RATIO
               value: "0.5"
             - name: ConnectionStrings__Redis

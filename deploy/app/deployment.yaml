@@ -6,7 +6,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: managed-premium
+  storageClassName: local-path
   resources:
     requests:
       storage: 128Gi
@@ -28,8 +28,6 @@ spec:
         app: bf42-stats
     spec:
       priorityClassName: 1942-services
-      nodeSelector:
-        workload: core
       securityContext:
         fsGroup: 1000
         runAsUser: 1000
@@ -51,9 +49,9 @@ spec:
               value: "Production"
             # Observability — Seq for logs + OTLP traces
             - name: SEQ_URL
-              value: "http://seq.railway.internal:5341"
+              value: "http://seq-service.seq:5341"
             - name: OTLP_ENDPOINT
-              value: "http://seq.railway.internal:5341/ingest/otlp"
+              value: "http://seq-service.seq:5341/ingest/otlp"
             - name: TRACE_SAMPLING_RATIO
               value: "0.5"
             - name: REDIS_CONNECTION_STRING
@@ -208,8 +206,6 @@ spec:
         app: redis
     spec:
       priorityClassName: 1942-services
-      nodeSelector:
-        workload: core
       containers:
         - name: redis
           image: redis:7-alpine
@@ -259,8 +255,6 @@ spec:
       labels:
         app: redis-commander
     spec:
-      nodeSelector:
-        workload: core
       containers:
         - name: redis-commander
           image: erikdubbelboer/phpredisadmin:latest
@@ -296,7 +290,7 @@ metadata:
   name: sqlite-browser
   namespace: bf42-stats
 spec:
-  replicas: 1
+  replicas: 0  # Start scaled down — deploy after API creates the database (subPath creates a directory if file doesn't exist)
   selector:
     matchLabels:
       app: sqlite-browser
@@ -305,8 +299,6 @@ spec:
       labels:
         app: sqlite-browser
     spec:
-      nodeSelector:
-        workload: core
       securityContext:
         fsGroup: 1000
       containers:
@@ -351,7 +343,7 @@ metadata:
     app: sqlite-browser
   annotations:
     tailscale.com/expose: "true"
-    tailscale.com/hostname: sqlite-browser-aks
+    tailscale.com/hostname: sqlite-browser-hetzner
 spec:
   selector:
     app: sqlite-browser
