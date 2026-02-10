@@ -24,17 +24,14 @@ pipeline {
                       docker buildx create --name multiarch-builder --driver docker-container --use || true
                       docker buildx use multiarch-builder
 
-                      # Build and push ARM64 image for API with DinD optimizations
+                      # Build and push ARM64 image for API (cross-compiled natively on amd64)
                       DOCKER_BUILDKIT=1 docker buildx build -f deploy/Dockerfile . \
                         --platform linux/arm64 \
                         --build-arg PROJECT_PATH=api \
                         --build-arg PROJECT_NAME=api \
                         --build-arg BUILDKIT_PROGRESS=plain \
-                        --load \
+                        --push \
                         -t dylanmunyard/bf42-stats:latest
-
-                      # Push the built image
-                      docker push dylanmunyard/bf42-stats:latest
                     '''
                   }
                 }
@@ -94,17 +91,14 @@ pipeline {
                       docker buildx create --name multiarch-builder-notif --driver docker-container --use || true
                       docker buildx use multiarch-builder-notif
 
-                      # Build and push ARM64 image for Notifications with DinD optimizations
+                      # Build and push ARM64 image for Notifications (cross-compiled natively on amd64)
                       DOCKER_BUILDKIT=1 docker buildx build -f deploy/Dockerfile . \
                         --platform linux/arm64 \
                         --build-arg PROJECT_PATH=notifications \
                         --build-arg PROJECT_NAME=notifications \
                         --build-arg BUILDKIT_PROGRESS=plain \
-                        --load \
+                        --push \
                         -t dylanmunyard/bf42-notifications:latest
-
-                      # Push the built image
-                      docker push dylanmunyard/bf42-notifications:latest
                     '''
                   }
                 }
