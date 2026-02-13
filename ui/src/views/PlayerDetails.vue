@@ -712,11 +712,8 @@ onUnmounted(() => {
         <!-- Main Content -->
         <div
           v-else-if="playerStats"
-          class="w-full px-1 sm:px-4 pb-6 sm:pb-12"
+          class="w-full px-1 sm:px-4 pb-6 sm:pb-12 space-y-4 sm:space-y-8"
         >
-          <div class="grid grid-cols-1 xl:grid-cols-12 gap-4 xl:gap-6">
-          <!-- Left Column: Recent Rounds + Best Scores -->
-          <div class="xl:col-span-7 space-y-4 sm:space-y-6">
 
           <!-- Recent Rounds Section -->
           <div
@@ -857,10 +854,6 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
-
-          </div>
-          <!-- Right Column: Servers + Achievements -->
-          <div class="xl:col-span-5 space-y-4 sm:space-y-6">
 
           <!-- Servers – Unified list sorted by ranking -->
           <div
@@ -1026,8 +1019,6 @@ onUnmounted(() => {
             </div>
           </div>
 
-          </div>
-          </div>
         </div>
       </div>
     </div>
