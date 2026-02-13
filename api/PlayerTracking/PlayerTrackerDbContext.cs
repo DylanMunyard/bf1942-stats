@@ -1,3 +1,4 @@
+using api.AI.Models;
 using api.Data.Entities;
 using api.ImageStorage.Models;
 using api.Players.Models;
@@ -53,6 +54,9 @@ public class PlayerTrackerDbContext : DbContext
     public DbSet<AdminPin> AdminPins { get; set; }
     public DbSet<AdminAuditLog> AdminAuditLogs { get; set; }
     public DbSet<AppData> AppData { get; set; }
+
+    // AI chat feedback
+    public DbSet<AIChatFeedback> AIChatFeedback { get; set; }
 
     private static readonly InstantPattern InstantExtendedIsoPattern = InstantPattern.ExtendedIso;
     private static readonly LocalDateTimePattern LegacySqliteInstantPattern =
@@ -1032,6 +1036,16 @@ public class PlayerTrackerDbContext : DbContext
             .ToTable("app_data");
         modelBuilder.Entity<AppData>()
             .HasKey(a => a.Id);
+
+        // Configure AIChatFeedback entity
+        modelBuilder.Entity<AIChatFeedback>()
+            .HasKey(f => f.Id);
+
+        modelBuilder.Entity<AIChatFeedback>()
+            .HasIndex(f => f.CreatedAt);
+
+        modelBuilder.Entity<AIChatFeedback>()
+            .HasIndex(f => f.IsPositive);
     }
 
     private static string FormatInstant(Instant instant) => InstantExtendedIsoPattern.Format(instant);

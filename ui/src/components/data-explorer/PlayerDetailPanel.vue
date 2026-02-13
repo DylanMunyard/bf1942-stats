@@ -146,16 +146,16 @@
         </div>
 
         <div class="bg-slate-800/30 rounded-lg overflow-hidden">
-          <table class="w-full">
+          <table class="w-full table-fixed">
             <!-- Table Header -->
             <thead class="bg-slate-700/50">
               <tr>
-                <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Rank</th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ getTableHeaderLabel() }}</th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ getSecondaryMetricLabel() }}</th>
-                <th class="px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">{{ getPrimaryMetricLabel() }}</th>
-                <th class="px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">{{ getPercentageLabel() }}</th>
-                <th v-if="hasAdditionalData()" class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Additional Stats</th>
+                <th class="w-16 px-4 py-3 text-center text-xs font-medium text-slate-400 uppercase tracking-wider">Rank</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider min-w-0">{{ getTableHeaderLabel() }}</th>
+                <th class="w-20 px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">{{ getSecondaryMetricLabel() }}</th>
+                <th class="w-24 px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">{{ getPrimaryMetricLabel() }}</th>
+                <th class="w-20 px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">{{ getPercentageLabel() }}</th>
+                <th v-if="hasAdditionalData()" class="w-48 px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Additional Stats</th>
               </tr>
             </thead>
 
@@ -168,7 +168,7 @@
               >
                 <!-- Rank -->
                 <td class="px-4 py-3">
-                  <div class="flex items-center">
+                  <div class="flex items-center justify-center">
                     <div class="flex-shrink-0 w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center text-sm font-bold text-slate-200">
                       {{ result.rank }}
                     </div>
@@ -184,7 +184,7 @@
                 </td>
 
                 <!-- Secondary Value -->
-                <td class="px-4 py-3 text-slate-300">
+                <td class="px-4 py-3 text-right text-slate-300">
                   {{ result.secondaryValue.toLocaleString() }}
                 </td>
 
@@ -338,6 +338,8 @@ const error = ref<string | null>(null);
 const selectedTimeRange = ref<number>(60); // Default to 60 days
 const selectedSliceType = ref<string>('ScoreByMap'); // Default slice type
 const currentPage = ref<number>(1);
+const pageSize = ref<number>(10); // Client-side pagination with 10 rows per page
+const allResults = ref<PlayerSliceResultDto[]>([]); // Store all results for client-side pagination
 
 const timeRangeOptions = PLAYER_STATS_TIME_RANGE_OPTIONS;
 
@@ -370,28 +372,28 @@ const loadSliceDimensions = async () => {
   }
 };
 
-const loadData = async (days?: number, page?: number) => {
+const loadData = async (days?: number) => {
   if (!props.playerName) return;
 
   const timeRange = days || selectedTimeRange.value;
-  const pageNum = page || currentPage.value;
-  
+
   isLoading.value = true;
   error.value = null;
 
   try {
-    console.log(`Loading sliced player data for ${props.playerName} with ${timeRange} days, slice: ${selectedSliceType.value}, page: ${pageNum}`);
-    
+    console.log(`Loading sliced player data for ${props.playerName} with ${timeRange} days, slice: ${selectedSliceType.value}`);
+
+    // Fetch all data for client-side pagination by using a large page size
     const params = new URLSearchParams({
       sliceType: selectedSliceType.value,
       game: props.game || 'bf1942',
-      page: pageNum.toString(),
-      pageSize: '20',
+      page: '1',
+      pageSize: '1000', // Large page size to get all records for client-side pagination
       days: timeRange.toString()
     });
 
     const response = await fetch(`/stats/data-explorer/players/${encodeURIComponent(props.playerName)}/sliced-stats?${params}`);
-    
+
     if (!response.ok) {
       if (response.status === 404) {
         throw new Error(`No data available for this player in the last ${timeRange} days`);
@@ -400,8 +402,24 @@ const loadData = async (days?: number, page?: number) => {
       }
     }
 
-    slicedData.value = await response.json();
-    currentPage.value = pageNum;
+    const responseData = await response.json();
+
+    // Store all results for client-side pagination
+    allResults.value = responseData.results || [];
+
+    // Create paginated response structure for compatibility
+    slicedData.value = {
+      ...responseData,
+      results: getPaginatedResults(),
+      pagination: {
+        page: currentPage.value,
+        pageSize: pageSize.value,
+        totalItems: allResults.value.length,
+        totalPages: Math.ceil(allResults.value.length / pageSize.value),
+        hasNext: currentPage.value < Math.ceil(allResults.value.length / pageSize.value),
+        hasPrevious: currentPage.value > 1
+      }
+    };
 
     // Update document title
     if (slicedData.value?.playerName) {
@@ -415,21 +433,42 @@ const loadData = async (days?: number, page?: number) => {
   isLoading.value = false;
 };
 
+// Client-side pagination helper
+const getPaginatedResults = (): PlayerSliceResultDto[] => {
+  const startIndex = (currentPage.value - 1) * pageSize.value;
+  const endIndex = startIndex + pageSize.value;
+  return allResults.value.slice(startIndex, endIndex);
+};
+
 const changeTimeRange = (days: number) => {
   selectedTimeRange.value = days;
   currentPage.value = 1;
-  loadData(days, 1);
+  loadData(days);
 };
 
 const changeSliceType = () => {
   currentPage.value = 1;
-  loadData(selectedTimeRange.value, 1);
+  loadData(selectedTimeRange.value);
 };
 
 const changePage = (page: number) => {
-  if (page < 1 || (slicedData.value && page > slicedData.value.pagination.totalPages)) return;
+  if (page < 1 || page > Math.ceil(allResults.value.length / pageSize.value)) return;
   currentPage.value = page;
-  loadData(selectedTimeRange.value, page);
+  // Update slicedData with new page results
+  if (slicedData.value) {
+    slicedData.value = {
+      ...slicedData.value,
+      results: getPaginatedResults(),
+      pagination: {
+        page: currentPage.value,
+        pageSize: pageSize.value,
+        totalItems: allResults.value.length,
+        totalPages: Math.ceil(allResults.value.length / pageSize.value),
+        hasNext: currentPage.value < Math.ceil(allResults.value.length / pageSize.value),
+        hasPrevious: currentPage.value > 1
+      }
+    };
+  }
 };
 
 // UI Helper Methods

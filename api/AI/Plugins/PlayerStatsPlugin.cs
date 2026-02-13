@@ -4,6 +4,8 @@ using api.Analytics.Models;
 using api.DataExplorer;
 using api.Players.Models;
 using api.PlayerStats;
+using api.PlayerTracking;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 
@@ -16,6 +18,7 @@ namespace api.AI.Plugins;
 public class PlayerStatsPlugin(
     ISqlitePlayerStatsService playerStatsService,
     IDataExplorerService dataExplorerService,
+    PlayerTrackerDbContext dbContext,
     ILogger<PlayerStatsPlugin> logger)
 {
     [KernelFunction("GetPlayerLifetimeStats")]
@@ -140,6 +143,175 @@ public class PlayerStatsPlugin(
             Last30Days = formatScores(bestScores.Last30Days),
             AllTime = formatScores(bestScores.AllTime)
         });
+    }
+
+    [KernelFunction("GetTopPlayersByKDRatio")]
+    [Description("Gets the top players ranked by K/D ratio across ALL servers (global leaderboard) or for a specific server. Supports a minimum rounds filter to exclude low-sample-size players. Use this for questions like 'top players by KD', 'best KD ratio with minimum X games', 'highest KD players'.")]
+    public async Task<string> GetTopPlayersByKDRatioAsync(
+        [Description("Minimum number of rounds/games played to qualify (default: 20)")] int minRounds = 20,
+        [Description("Number of players to return (default: 10)")] int limit = 10,
+        [Description("Number of days to look back (default: 90)")] int days = 90,
+        [Description("Optional server name to filter by a specific server. Leave empty for global leaderboard.")] string? serverName = null)
+    {
+        logger.LogDebug("AI requesting top KD ratio players, minRounds: {MinRounds}, limit: {Limit}, days: {Days}, server: {Server}",
+            minRounds, limit, days, serverName);
+
+        try
+        {
+            var startDate = DateTime.UtcNow.AddDays(-days);
+            var (startYear, startWeek) = GetIsoWeek(startDate);
+            var (endYear, endWeek) = GetIsoWeek(DateTime.UtcNow);
+
+            var query = dbContext.PlayerServerStats
+                .AsNoTracking()
+                .Where(pss =>
+                    (pss.Year > startYear || (pss.Year == startYear && pss.Week >= startWeek)) &&
+                    (pss.Year < endYear || (pss.Year == endYear && pss.Week <= endWeek)));
+
+            // Filter by server if specified
+            if (!string.IsNullOrEmpty(serverName))
+            {
+                var serverGuid = await dbContext.Servers
+                    .AsNoTracking()
+                    .Where(s => s.Name == serverName)
+                    .Select(s => s.Guid)
+                    .FirstOrDefaultAsync();
+
+                if (serverGuid == null)
+                    return $"Server '{serverName}' not found.";
+
+                query = query.Where(pss => pss.ServerGuid == serverGuid);
+            }
+
+            var data = await query
+                .GroupBy(pss => pss.PlayerName)
+                .Select(g => new
+                {
+                    PlayerName = g.Key,
+                    TotalKills = g.Sum(pss => pss.TotalKills),
+                    TotalDeaths = g.Sum(pss => pss.TotalDeaths),
+                    TotalRounds = g.Sum(pss => pss.TotalRounds)
+                })
+                .Where(x => x.TotalRounds >= minRounds && (x.TotalKills > 0 || x.TotalDeaths > 0))
+                .ToListAsync();
+
+            var result = data
+                .Select(x => new
+                {
+                    x.PlayerName,
+                    KDRatio = x.TotalDeaths > 0
+                        ? Math.Round((double)x.TotalKills / x.TotalDeaths, 3)
+                        : (double)x.TotalKills,
+                    x.TotalKills,
+                    x.TotalDeaths,
+                    x.TotalRounds
+                })
+                .OrderByDescending(x => x.KDRatio)
+                .Take(limit)
+                .ToList();
+
+            return JsonSerializer.Serialize(new
+            {
+                MinRoundsFilter = minRounds,
+                DaysAnalyzed = days,
+                ServerFilter = serverName ?? "All servers",
+                Players = result
+            });
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to get top KD ratio players");
+            return "Could not retrieve top K/D ratio players.";
+        }
+    }
+
+    [KernelFunction("GetTopPlayersByKillRate")]
+    [Description("Gets the top players ranked by kills per minute (kill rate) across ALL servers (global leaderboard) or for a specific server. Supports a minimum rounds filter to exclude low-sample-size players. Use this for questions like 'top kill rate', 'highest kills per minute with minimum X games', 'best kill rate players'.")]
+    public async Task<string> GetTopPlayersByKillRateAsync(
+        [Description("Minimum number of rounds/games played to qualify (default: 20)")] int minRounds = 20,
+        [Description("Number of players to return (default: 10)")] int limit = 10,
+        [Description("Number of days to look back (default: 90)")] int days = 90,
+        [Description("Optional server name to filter by a specific server. Leave empty for global leaderboard.")] string? serverName = null)
+    {
+        logger.LogDebug("AI requesting top kill rate players, minRounds: {MinRounds}, limit: {Limit}, days: {Days}, server: {Server}",
+            minRounds, limit, days, serverName);
+
+        try
+        {
+            var startDate = DateTime.UtcNow.AddDays(-days);
+            var (startYear, startWeek) = GetIsoWeek(startDate);
+            var (endYear, endWeek) = GetIsoWeek(DateTime.UtcNow);
+
+            var query = dbContext.PlayerServerStats
+                .AsNoTracking()
+                .Where(pss =>
+                    (pss.Year > startYear || (pss.Year == startYear && pss.Week >= startWeek)) &&
+                    (pss.Year < endYear || (pss.Year == endYear && pss.Week <= endWeek)));
+
+            // Filter by server if specified
+            if (!string.IsNullOrEmpty(serverName))
+            {
+                var serverGuid = await dbContext.Servers
+                    .AsNoTracking()
+                    .Where(s => s.Name == serverName)
+                    .Select(s => s.Guid)
+                    .FirstOrDefaultAsync();
+
+                if (serverGuid == null)
+                    return $"Server '{serverName}' not found.";
+
+                query = query.Where(pss => pss.ServerGuid == serverGuid);
+            }
+
+            var data = await query
+                .GroupBy(pss => pss.PlayerName)
+                .Select(g => new
+                {
+                    PlayerName = g.Key,
+                    TotalKills = g.Sum(pss => pss.TotalKills),
+                    TotalDeaths = g.Sum(pss => pss.TotalDeaths),
+                    TotalPlayTimeMinutes = g.Sum(pss => pss.TotalPlayTimeMinutes),
+                    TotalRounds = g.Sum(pss => pss.TotalRounds)
+                })
+                .Where(x => x.TotalRounds >= minRounds && x.TotalKills > 0 && x.TotalPlayTimeMinutes > 0)
+                .ToListAsync();
+
+            var result = data
+                .Select(x => new
+                {
+                    x.PlayerName,
+                    KillsPerMinute = x.TotalPlayTimeMinutes > 0
+                        ? Math.Round(x.TotalKills / x.TotalPlayTimeMinutes, 3)
+                        : 0.0,
+                    x.TotalKills,
+                    x.TotalDeaths,
+                    PlayTimeHours = Math.Round(x.TotalPlayTimeMinutes / 60.0, 1),
+                    x.TotalRounds
+                })
+                .OrderByDescending(x => x.KillsPerMinute)
+                .Take(limit)
+                .ToList();
+
+            return JsonSerializer.Serialize(new
+            {
+                MinRoundsFilter = minRounds,
+                DaysAnalyzed = days,
+                ServerFilter = serverName ?? "All servers",
+                Players = result
+            });
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to get top kill rate players");
+            return "Could not retrieve top kill rate players.";
+        }
+    }
+
+    private static (int Year, int Week) GetIsoWeek(DateTime date)
+    {
+        var week = System.Globalization.ISOWeek.GetWeekOfYear(date);
+        var year = System.Globalization.ISOWeek.GetYear(date);
+        return (year, week);
     }
 
     [KernelFunction("SearchPlayers")]

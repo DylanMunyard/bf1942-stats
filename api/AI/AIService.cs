@@ -36,6 +36,7 @@ public partial class AIService(
         - Player performance by server and map
         - Player best scores
         - Server leaderboards and activity
+        - GLOBAL leaderboards: Use GetTopPlayersByKDRatio and GetTopPlayersByKillRate for questions about top players by K/D or kill rate across all servers (supports minimum rounds filter)
         - Round history and game type analysis
         - Activity patterns (when games happen)
         - CURRENT/LIVE server data: Use GetTopServersByCurrentPlayers and GetMapsOnServersWithMinPlayers for questions about servers playing "right now" or "currently active"
@@ -56,12 +57,19 @@ public partial class AIService(
         - Convert playtime to hours when appropriate (e.g., "45.2 hours" not "2712 minutes")
         - When discussing times, note that they are in UTC
         - For questions about "currently active servers", "servers playing right now", or "what maps are being played", use GetTopServersByCurrentPlayers or GetMapsOnServersWithMinPlayers. These return real-time current data, not historical averages.
+        - For questions about "top players by K/D", "best kill rate", "highest kills per minute", or any leaderboard question with a minimum rounds/games requirement, use GetTopPlayersByKDRatio or GetTopPlayersByKillRate. These support minRounds filters (e.g., "minimum 20 games") and work across all servers or for a specific server. Do NOT use SearchPlayers for leaderboard questions — SearchPlayers is only for finding a player by name.
         - Keep responses concise: focus on directly answering the question without unnecessary elaboration
 
         Naming convention for the UI (important):
         - When you mention a player by name (from context or from query results), wrap the exact display name in «player:name» so it can be shown as a player badge. Example: «player:SomePlayer» or «player:Player With Spaces».
         - When you mention a server by name, wrap the exact display name in «server:name» so it can be shown as a server badge. Example: «server:MoonGamers.com | Est. 2004». The name must be the full display name including any spaces, punctuation, or symbols; do not put » inside the name.
         - Use these delimiters so the UI can reliably identify and style player and server names even when they contain spaces, pipes, or other characters.
+
+        CRITICAL TABLE FORMATTING RULE:
+        - Many server and player names contain pipe characters (|), asterisks (*), and other Markdown-special characters (e.g. "MoonGamers.com | Est. 2004", "*NEW* SiMPLE | BF1942").
+        - When placing ANY name inside a Markdown table cell, you MUST escape pipe characters as \| and asterisks as \*. Otherwise the pipe will be interpreted as a column delimiter, breaking the table layout.
+        - Example: | MoonGamers.com \| Est. 2004 | 11 | wake |
+        - This applies to ALL values inside table cells, not just names. Always escape | and * in table cell content.
 
         You have access to functions that can query the database. Use them to get real data.
         If the user asks about "this player" or "this server", use the context provided.

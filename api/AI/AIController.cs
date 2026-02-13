@@ -185,6 +185,84 @@ public class AIController(
     }
 
     /// <summary>
+    /// Submit feedback (thumbs up/down) for an AI chat response.
+    /// </summary>
+    [HttpPost("feedback")]
+    public async Task<ActionResult> SubmitFeedback([FromBody] SubmitFeedbackRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Prompt) || string.IsNullOrWhiteSpace(request.Response))
+        {
+            return BadRequest(new { error = "Prompt and response are required." });
+        }
+
+        var feedback = new Models.AIChatFeedback
+        {
+            Prompt = request.Prompt.Length > 2000 ? request.Prompt[..2000] : request.Prompt,
+            Response = request.Response.Length > 8000 ? request.Response[..8000] : request.Response,
+            IsPositive = request.IsPositive,
+            Comment = request.Comment?.Length > 500 ? request.Comment[..500] : request.Comment,
+            PageContext = request.PageContext,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        dbContext.AIChatFeedback.Add(feedback);
+        await dbContext.SaveChangesAsync();
+
+        logger.LogInformation("AI chat feedback received: {Rating}, prompt: {Prompt}",
+            request.IsPositive ? "positive" : "negative",
+            request.Prompt.Length > 80 ? request.Prompt[..80] + "..." : request.Prompt);
+
+        return Ok(new { success = true });
+    }
+
+    /// <summary>
+    /// Gets AI chat feedback entries (admin only).
+    /// </summary>
+    [HttpGet("feedback")]
+    public async Task<ActionResult<object>> GetFeedback(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] bool? isPositive = null)
+    {
+        var query = dbContext.AIChatFeedback.AsNoTracking();
+
+        if (isPositive.HasValue)
+        {
+            query = query.Where(f => f.IsPositive == isPositive.Value);
+        }
+
+        var totalCount = await query.CountAsync();
+        var positiveCount = await dbContext.AIChatFeedback.AsNoTracking().CountAsync(f => f.IsPositive);
+        var negativeCount = await dbContext.AIChatFeedback.AsNoTracking().CountAsync(f => !f.IsPositive);
+
+        var items = await query
+            .OrderByDescending(f => f.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(f => new
+            {
+                f.Id,
+                f.Prompt,
+                f.Response,
+                f.IsPositive,
+                f.Comment,
+                f.PageContext,
+                f.CreatedAt
+            })
+            .ToListAsync();
+
+        return Ok(new
+        {
+            items,
+            totalCount,
+            positiveCount,
+            negativeCount,
+            page,
+            pageSize
+        });
+    }
+
+    /// <summary>
     /// Health check endpoint for AI service.
     /// </summary>
     [HttpGet("health")]

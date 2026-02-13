@@ -72,6 +72,30 @@
                   v-html="formatMessage(msg.content, msg.role)"
                 />
               </div>
+              <!-- Feedback buttons for assistant messages -->
+              <div v-if="msg.role === 'assistant'" class="feedback-row">
+                <button
+                  type="button"
+                  class="feedback-btn"
+                  :class="{ 'feedback-btn--active': feedbackState.get(index) === 'up', 'feedback-btn--disabled': feedbackState.get(index) === 'down' }"
+                  :disabled="feedbackSubmitting === index || feedbackState.get(index) != null"
+                  aria-label="Thumbs up"
+                  @click="submitFeedback(index, true)"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" /></svg>
+                </button>
+                <button
+                  type="button"
+                  class="feedback-btn"
+                  :class="{ 'feedback-btn--active feedback-btn--negative': feedbackState.get(index) === 'down', 'feedback-btn--disabled': feedbackState.get(index) === 'up' }"
+                  :disabled="feedbackSubmitting === index || feedbackState.get(index) != null"
+                  aria-label="Thumbs down"
+                  @click="submitFeedback(index, false)"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17" /></svg>
+                </button>
+                <span v-if="feedbackState.get(index)" class="feedback-thanks">thanks for the feedback</span>
+              </div>
             </div>
 
             <div v-if="isLoading" class="message assistant loading">
@@ -151,7 +175,7 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, computed } from 'vue';
 import { marked } from 'marked';
-import { streamChat, stripQualityMarker, type ChatMessage, type PageContext } from '@/services/aiChatService';
+import { streamChat, stripQualityMarker, submitChatFeedback, type ChatMessage, type PageContext } from '@/services/aiChatService';
 import { searchPlayersForMention, searchServersForMention, type MentionResult } from '@/services/aiChatService';
 
 interface MentionData {
@@ -159,6 +183,11 @@ interface MentionData {
   name: string;
   id: string;
 }
+
+// Feedback state per assistant message index
+// Key: message index, Value: 'up' | 'down' | null
+const feedbackState = ref<Map<number, 'up' | 'down' | null>>(new Map());
+const feedbackSubmitting = ref<number | null>(null);
 
 // Store mention data keyed by name for lookup when sending
 const mentionRegistry = new Map<string, MentionData>();
@@ -207,6 +236,8 @@ function clearConversation() {
   mentionRegistry.clear();
   inputMessage.value = '';
   conversationContext.value = { ...props.context };
+  feedbackState.value = new Map();
+  feedbackSubmitting.value = null;
 }
 
 // Focus input and pin current page context when drawer opens (so first message uses up-to-date context)
@@ -390,6 +421,40 @@ function formatMessage(content: string, role?: 'user' | 'assistant'): string {
   formatted = applyMentionBadges(formatted);
   formatted = formatted.replace(/\n/g, '<br>');
   return formatted;
+}
+
+async function submitFeedback(messageIndex: number, isPositive: boolean) {
+  if (feedbackState.value.get(messageIndex) != null) return;
+  feedbackSubmitting.value = messageIndex;
+
+  // Find the corresponding user message (the one before this assistant message)
+  let prompt = '';
+  for (let i = messageIndex - 1; i >= 0; i--) {
+    if (messages.value[i].role === 'user') {
+      prompt = messages.value[i].content;
+      break;
+    }
+  }
+
+  const response = messages.value[messageIndex].content;
+  const contextJson = conversationContext.value
+    ? JSON.stringify(conversationContext.value)
+    : undefined;
+
+  try {
+    await submitChatFeedback({
+      prompt,
+      response,
+      isPositive,
+      pageContext: contextJson,
+    });
+    feedbackState.value.set(messageIndex, isPositive ? 'up' : 'down');
+  } catch {
+    // Silently fail - don't disrupt the chat experience
+    console.warn('Failed to submit feedback');
+  } finally {
+    feedbackSubmitting.value = null;
+  }
 }
 
 async function sendMessage() {
@@ -900,6 +965,63 @@ async function sendMessage() {
 
 @keyframes blink {
   50% { opacity: 0; }
+}
+
+/* Feedback buttons */
+.feedback-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+  padding-left: 1.75rem; /* align with message text (past the $ prompt) */
+}
+
+.feedback-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #6e7681;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.feedback-btn:hover:not(:disabled) {
+  color: #8b949e;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: #30363d;
+}
+
+.feedback-btn:disabled {
+  cursor: default;
+}
+
+.feedback-btn--active {
+  color: #00fff2;
+  background: rgba(0, 255, 242, 0.1);
+  border-color: rgba(0, 255, 242, 0.3);
+}
+
+.feedback-btn--active.feedback-btn--negative {
+  color: #f85149;
+  background: rgba(248, 81, 73, 0.1);
+  border-color: rgba(248, 81, 73, 0.3);
+}
+
+.feedback-btn--disabled:not(.feedback-btn--active) {
+  opacity: 0.3;
+}
+
+.feedback-thanks {
+  font-size: 0.65rem;
+  color: #6e7681;
+  margin-left: 0.25rem;
+  font-style: italic;
 }
 
 /* Autocomplete */

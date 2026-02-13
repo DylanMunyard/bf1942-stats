@@ -118,6 +118,25 @@ export interface ServerSearchResult {
   serverPort?: number;
 }
 
+export interface AIChatFeedbackEntry {
+  id: number;
+  prompt: string;
+  response: string;
+  isPositive: boolean;
+  comment?: string;
+  pageContext?: string;
+  createdAt: string;
+}
+
+export interface AIChatFeedbackResponse {
+  items: AIChatFeedbackEntry[];
+  totalCount: number;
+  positiveCount: number;
+  negativeCount: number;
+  page: number;
+  pageSize: number;
+}
+
 class AdminDataService {
   private baseUrl = '/stats/admin/data';
 
@@ -289,6 +308,31 @@ class AdminDataService {
 
   async listUsers(): Promise<UserWithRoleResponse[]> {
     return this.request<UserWithRoleResponse[]>('/users', { method: 'GET' });
+  }
+
+  async getAIChatFeedback(
+    page = 1,
+    pageSize = 50,
+    isPositive?: boolean | null
+  ): Promise<AIChatFeedbackResponse> {
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+    });
+    if (isPositive != null) params.set('isPositive', String(isPositive));
+
+    // AI feedback endpoint is on the AI controller, not the admin data controller
+    const { authService } = await import('./authService');
+    const isValid = await authService.ensureValidToken();
+    if (!isValid) throw new Error('Authentication required');
+
+    const token = localStorage.getItem('authToken');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`/stats/ai/feedback?${params}`, { headers });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
   }
 
   async setUserRole(userId: number, role: string): Promise<void> {

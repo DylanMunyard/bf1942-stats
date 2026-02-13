@@ -199,6 +199,28 @@ export async function* streamChatWithQuality(request: ChatRequest): AsyncGenerat
 }
 
 /**
+ * Submit feedback (thumbs up/down) for an AI chat response.
+ */
+export async function submitChatFeedback(request: {
+  prompt: string;
+  response: string;
+  isPositive: boolean;
+  comment?: string;
+  pageContext?: string;
+}): Promise<boolean> {
+  try {
+    const response = await fetch('/stats/ai/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Checks if the AI chat service is available.
  */
 export async function checkAIHealth(): Promise<boolean> {
