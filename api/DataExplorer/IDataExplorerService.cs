@@ -102,4 +102,27 @@ public interface IDataExplorerService
     /// <param name="playerName">The player name</param>
     /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
     Task<PlayerEngagementStatsDto> GetPlayerEngagementStatsAsync(string playerName, string game = "bf1942");
+
+    /// <summary>
+    /// Get sliced player statistics with configurable dimensions and pagination.
+    /// Enables advanced data exploration by different metrics and groupings.
+    /// </summary>
+    /// <param name="playerName">The player name</param>
+    /// <param name="sliceType">The slice dimension type</param>
+    /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
+    /// <param name="page">Page number (1-based)</param>
+    /// <param name="pageSize">Number of results per page (default 20, max 100)</param>
+    /// <param name="days">Number of days to look back (default 60)</param>
+    Task<PlayerSlicedStatsResponse?> GetPlayerSlicedStatsAsync(
+        string playerName, 
+        SliceDimensionType sliceType,
+        string game = "bf1942",
+        int page = 1,
+        int pageSize = 20,
+        int days = 60);
+
+    /// <summary>
+    /// Get available slice dimensions for the player data explorer.
+    /// </summary>
+    Task<List<SliceDimensionOption>> GetAvailableSliceDimensionsAsync();
 }

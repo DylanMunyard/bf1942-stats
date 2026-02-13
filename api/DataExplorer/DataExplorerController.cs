@@ -318,4 +318,71 @@ public class DataExplorerController(
         var result = await dataExplorerService.GetPlayerEngagementStatsAsync(playerName, game);
         return Ok(result);
     }
+
+    /// <summary>
+    /// Get sliced player statistics with configurable dimensions and pagination.
+    /// Enables advanced data exploration by different metrics and groupings.
+    /// </summary>
+    /// <param name="playerName">The player name</param>
+    /// <param name="sliceType">The slice dimension type (e.g., winsByMap, scoreByMap, etc.)</param>
+    /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
+    /// <param name="page">Page number (1-based, default 1)</param>
+    /// <param name="pageSize">Number of results per page (default 20, max 100)</param>
+    /// <param name="days">Number of days to look back (default 60)</param>
+    [HttpGet("players/{playerName}/sliced-stats")]
+    [ProducesResponseType(typeof(PlayerSlicedStatsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<PlayerSlicedStatsResponse>> GetPlayerSlicedStats(
+        string playerName,
+        [FromQuery] string sliceType,
+        [FromQuery] string game = "bf1942",
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] int days = 60)
+    {
+        // URL decode the player name
+        playerName = Uri.UnescapeDataString(playerName);
+
+        // Parse slice type
+        if (!Enum.TryParse<SliceDimensionType>(sliceType, true, out var parsedSliceType))
+        {
+            logger.LogWarning("Invalid slice type provided: {SliceType}", sliceType);
+            return BadRequest($"Invalid slice type '{sliceType}'. Valid types are: " +
+                string.Join(", ", Enum.GetNames<SliceDimensionType>()));
+        }
+
+        // Clamp parameters
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        logger.LogDebug(
+            "Getting sliced player stats for {PlayerName} with sliceType: {SliceType}, game: {Game}, page: {Page}, pageSize: {PageSize}, days: {Days}",
+            playerName, parsedSliceType, game, page, pageSize, days);
+
+        var result = await dataExplorerService.GetPlayerSlicedStatsAsync(
+            playerName, parsedSliceType, game, page, pageSize, days);
+
+        if (result == null)
+        {
+            logger.LogWarning("Player not found or no data: {PlayerName} for game: {Game} with slice type: {SliceType}",
+                playerName, game, parsedSliceType);
+            return NotFound($"No data found for player '{playerName}' in game '{game}' with slice type '{sliceType}'");
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Get available slice dimensions for the player data explorer.
+    /// </summary>
+    [HttpGet("slice-dimensions")]
+    [ProducesResponseType(typeof(List<SliceDimensionOption>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<SliceDimensionOption>>> GetSliceDimensions()
+    {
+        logger.LogDebug("Getting available slice dimensions for player data explorer");
+
+        var result = await dataExplorerService.GetAvailableSliceDimensionsAsync();
+        return Ok(result);
+    }
 }
