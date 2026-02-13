@@ -206,16 +206,9 @@
                 <!-- Additional Data -->
                 <td v-if="hasAdditionalData()" class="px-4 py-3">
                   <div v-if="isTeamWinSlice()" class="space-y-2">
-                    <!-- Team Wins Layout -->
-                    <div v-if="getTeamLabel(result.additionalData, 'team1Label') || getTeamLabel(result.additionalData, 'team2Label')" class="grid grid-cols-2 gap-3">
-                      <div class="text-center p-2 bg-slate-700/30 rounded text-xs">
-                        <div class="font-medium text-slate-300">{{ getTeamLabel(result.additionalData, 'team1Label') || 'Team 1' }}</div>
-                        <div class="text-cyan-400 font-bold">{{ formatAdditionalValue(result.primaryValue) }}</div>
-                      </div>
-                      <div class="text-center p-2 bg-slate-700/30 rounded text-xs">
-                        <div class="font-medium text-slate-300">{{ getTeamLabel(result.additionalData, 'team2Label') || 'Team 2' }}</div>
-                        <div class="text-cyan-400 font-bold">{{ formatAdditionalValue(result.additionalData.team2Victories || 0) }}</div>
-                      </div>
+                    <!-- Visual Win Rate Bar -->
+                    <div v-if="getTeamLabel(result.additionalData, 'team1Label') || getTeamLabel(result.additionalData, 'team2Label')" class="px-2">
+                      <WinStatsBar :winStats="getTeamWinStats(result)" />
                     </div>
                     <!-- Other additional data for team wins -->
                     <div v-if="Object.keys(getTeamWinAdditionalData(result.additionalData, result.percentage)).length > 0" class="text-xs text-slate-400">
@@ -291,6 +284,8 @@
 import { ref, watch, onMounted, computed } from 'vue';
 import { RouterLink } from 'vue-router';
 import { PLAYER_STATS_TIME_RANGE_OPTIONS } from '@/utils/constants';
+import WinStatsBar from '@/components/data-explorer/WinStatsBar.vue';
+import type { WinStats } from '@/services/dataExplorerService';
 
 const props = defineProps<{
   playerName: string;
@@ -576,6 +571,21 @@ const getTeamWinAdditionalData = (additionalData: Record<string, any>, team1WinR
       key !== 'team2Victories'
     )
   );
+};
+
+const getTeamWinStats = (result: PlayerSliceResultDto): WinStats => {
+  const team1Label = getTeamLabel(result.additionalData, 'team1Label') || 'Team 1';
+  const team2Label = getTeamLabel(result.additionalData, 'team2Label') || 'Team 2';
+
+  return {
+    team1Label,
+    team2Label,
+    team1Victories: result.primaryValue,
+    team2Victories: result.additionalData.team2Victories || 0,
+    team1WinPercentage: Math.round(result.percentage),
+    team2WinPercentage: Math.round(result.additionalData.team2WinRate || 0),
+    totalRounds: result.secondaryValue
+  };
 };
 
 const getVisiblePages = () => {
