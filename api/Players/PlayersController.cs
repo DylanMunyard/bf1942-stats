@@ -137,7 +137,7 @@ public class PlayersController(
 
     // Get session details
     [HttpGet("{playerName}/sessions/{sessionId}")]
-    public async Task<ActionResult<SessionDetail>> GetPlayerStats(string playerName, int sessionId)
+    public async Task<ActionResult<SessionDetail>> GetSessionDetail(string playerName, int sessionId)
     {
         // Use modern URL decoding that preserves + signs
         playerName = Uri.UnescapeDataString(playerName);

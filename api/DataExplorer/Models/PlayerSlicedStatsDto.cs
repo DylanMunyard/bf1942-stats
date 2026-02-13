@@ -19,6 +19,7 @@ public record PlayerSlicedStatsResponse(
 public record PlayerSliceResultDto(
     string SliceKey,      // Map name, server name, etc.
     string? SubKey,       // Server name when slicing by map+server, null for map-only
+    string? SubKeyLabel,  // Friendly label for the SubKey (e.g. Server Name)
     string SliceLabel,    // Human readable label
     int PrimaryValue,     // The main metric (wins, score, kills, etc.)
     int SecondaryValue,   // Supporting metric (total rounds, deaths, etc.)

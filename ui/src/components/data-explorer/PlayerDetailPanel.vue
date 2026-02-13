@@ -11,9 +11,9 @@
     </div>
 
     <!-- Error State -->
-    <div v-else-if="error" class="text-center py-8">
-      <div class="text-slate-400 mb-4">{{ error }}</div>
-      <div class="mb-4">
+    <div v-else-if="error" class="text-center py-12 bg-slate-800/30 rounded-xl border border-slate-700/50">
+      <div class="text-slate-400 mb-4 text-lg">{{ error }}</div>
+      <div class="mb-6">
         <p class="text-slate-500 text-sm mb-3">Try selecting a different time period or slice dimension:</p>
         <div class="flex gap-2 justify-center mb-3">
           <button
@@ -22,7 +22,7 @@
             :class="[
               'px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200',
               selectedTimeRange === option.value
-                ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg'
+                ? `${theme.activeButton} shadow-lg`
                 : 'bg-slate-700/50 text-slate-300 hover:bg-slate-600/50 border border-slate-600'
             ]"
             @click="changeTimeRange(option.value)"
@@ -32,7 +32,7 @@
           </button>
         </div>
       </div>
-      <button @click="loadData()" class="text-cyan-400 hover:text-cyan-300 text-sm">
+      <button @click="loadData()" class="text-sm font-medium hover:underline" :class="theme.text">
         Try again
       </button>
     </div>
@@ -42,11 +42,10 @@
       <!-- Header -->
       <div>
         <div class="flex items-center gap-3 mb-4">
-          <span class="text-3xl">👤</span>
           <h2 class="text-2xl font-bold">
             <RouterLink
               :to="{ name: 'player-details', params: { playerName: slicedData.playerName } }"
-              class="text-slate-200 hover:text-cyan-400 transition-colors"
+              class="text-slate-200 hover:text-white transition-colors"
               title="View full player profile"
             >
               {{ slicedData.playerName }}
@@ -54,53 +53,67 @@
           </h2>
         </div>
 
-        <!-- Current Data Context Banner -->
-        <div class="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 rounded-lg p-4 mb-6">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center">
-              <div>
-                <h3 class="text-lg font-semibold text-slate-200">{{ getCurrentSliceName() }}</h3>
-                <p class="text-sm text-slate-400">{{ getCurrentSliceDescription() }}</p>
+        <!-- Current Data Context Banner - THEMED -->
+        <div
+          class="relative overflow-hidden rounded-xl border p-6 mb-6 transition-all duration-300 shadow-lg"
+          :class="[
+            theme.bgGradient,
+            theme.borderColor
+          ]"
+        >
+          <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-3 mb-2">
+                <h3 class="text-xl font-bold text-white tracking-tight">{{ getCurrentSliceName() }}</h3>
               </div>
+              <p class="text-slate-200/90 max-w-xl text-sm leading-relaxed">{{ getCurrentSliceDescription() }}</p>
             </div>
-            <div class="text-right text-sm text-slate-400">
-              <div>{{ gameLabel }}</div>
-              <div>Last {{ slicedData.dateRange.days }} days</div>
+            <div class="text-right flex flex-col items-end">
+               <div class="text-xs uppercase tracking-wider text-white/60 mb-1 font-semibold">Context</div>
+               <div class="font-mono text-lg font-medium text-white mb-0.5">{{ gameLabel }}</div>
+               <div class="text-sm text-white/80 bg-black/20 px-2 py-0.5 rounded inline-block">Last {{ slicedData.dateRange.days }} days</div>
             </div>
           </div>
         </div>
 
         <!-- Controls Row -->
-        <div class="flex flex-col gap-4 mb-6">
+        <div class="flex flex-col md:flex-row gap-4 mb-6 justify-between items-end md:items-center bg-slate-900/50 p-4 rounded-xl border border-slate-800/50">
           <!-- Slice Dimension Selector -->
-          <div class="flex items-center gap-3">
-            <label class="text-sm text-slate-400 whitespace-nowrap">Slice by:</label>
-            <select
-              v-model="selectedSliceType"
-              @change="changeSliceType"
-              class="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm text-slate-200 focus:border-cyan-500 focus:outline-none transition-colors"
-            >
-              <option
-                v-for="dimension in availableDimensions"
-                :key="dimension.type"
-                :value="dimension.type"
-              >
-                {{ dimension.name }}
-              </option>
-            </select>
+          <div class="flex flex-col gap-1.5 w-full md:w-auto">
+            <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Metric Dimension</label>
+            <div class="relative group">
+                <select
+                  v-model="selectedSliceType"
+                  @change="changeSliceType"
+                  class="w-full md:w-72 appearance-none pl-4 pr-10 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-2 transition-all cursor-pointer hover:border-slate-600 hover:bg-slate-750"
+                  :class="theme.focusRing"
+                >
+                  <option
+                    v-for="dimension in availableDimensions"
+                    :key="dimension.type"
+                    :value="dimension.type"
+                  >
+                    {{ dimension.name }}
+                  </option>
+                </select>
+                <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-slate-200 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                </div>
+            </div>
           </div>
 
           <!-- Time Range Selector -->
-          <div class="flex items-center justify-end">
-            <div class="flex gap-2">
+          <div class="flex flex-col gap-1.5 w-full md:w-auto">
+             <label class="text-xs font-bold text-slate-500 uppercase tracking-wider md:text-right">Time Period</label>
+            <div class="flex bg-slate-800 p-1 rounded-lg border border-slate-700">
               <button
                 v-for="option in timeRangeOptions"
                 :key="option.value"
                 :class="[
-                  'px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200',
+                  'px-4 py-1.5 rounded-md text-sm font-medium transition-all duration-200 flex-1 md:flex-none',
                   selectedTimeRange === option.value
-                    ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg'
-                    : 'bg-slate-700/50 text-slate-300 hover:bg-slate-600/50 border border-slate-600'
+                    ? `${theme.activeButton} shadow-sm`
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
                 ]"
                 @click="changeTimeRange(option.value)"
                 :disabled="isLoading"
@@ -112,64 +125,73 @@
         </div>
       </div>
 
-      <!-- Summary Stats -->
-      <div v-if="slicedData.results.length > 0" class="bg-slate-800/30 rounded-lg p-4">
-        <h3 class="text-sm font-medium text-slate-300 mb-3">Statistics Summary</h3>
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div class="text-center">
-            <div class="text-2xl font-bold text-cyan-400">{{ slicedData.results.length }}</div>
-            <div class="text-xs text-slate-400 mt-1">{{ getResultTypeLabel() }}</div>
+      <!-- Summary Stats - THEMED -->
+      <div v-if="slicedData.results.length > 0" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <!-- Card 1: Count -->
+          <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 flex flex-col items-center justify-center hover:bg-slate-800/60 transition-colors group">
+            <div class="text-3xl font-bold text-slate-200 group-hover:text-white transition-colors">{{ slicedData.results.length }}</div>
+            <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">{{ getResultTypeLabel() }}</div>
           </div>
-          <div class="text-center">
-            <div class="text-2xl font-bold text-slate-200">{{ getTotalPrimaryValue() }}</div>
-            <div class="text-xs text-slate-400 mt-1">{{ getPrimaryMetricLabel() }}</div>
+
+          <!-- Card 2: Primary Metric -->
+          <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 flex flex-col items-center justify-center hover:bg-slate-800/60 transition-colors relative overflow-hidden group">
+             <div class="absolute top-0 left-0 w-full h-1" :class="theme.bg"></div>
+             <div class="text-3xl font-bold transition-transform group-hover:scale-110 duration-200" :class="theme.text">{{ getTotalPrimaryValue() }}</div>
+             <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">{{ getPrimaryMetricLabel() }}</div>
           </div>
-          <div class="text-center">
-            <div class="text-2xl font-bold text-slate-200">{{ getTotalSecondaryValue() }}</div>
-            <div class="text-xs text-slate-400 mt-1">{{ getSecondaryMetricLabel() }}</div>
+
+          <!-- Card 3: Secondary Metric -->
+          <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 flex flex-col items-center justify-center hover:bg-slate-800/60 transition-colors group">
+             <div class="text-3xl font-bold text-slate-200 group-hover:text-white transition-colors">{{ getTotalSecondaryValue() }}</div>
+             <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">{{ getSecondaryMetricLabel() }}</div>
           </div>
-          <div class="text-center">
-            <div class="text-2xl font-bold text-slate-200">{{ getAveragePercentage() }}%</div>
-            <div class="text-xs text-slate-400 mt-1">{{ getPercentageLabel() }}</div>
+
+          <!-- Card 4: Percentage -->
+          <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 flex flex-col items-center justify-center hover:bg-slate-800/60 transition-colors group">
+             <div class="text-3xl font-bold text-slate-200 group-hover:text-white transition-colors">{{ getAveragePercentage() }}<span class="text-lg text-slate-500 ml-0.5">%</span></div>
+             <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">{{ getPercentageLabel() }}</div>
           </div>
-        </div>
       </div>
 
       <!-- Results Table -->
       <div v-if="slicedData.results.length > 0">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-sm font-medium text-slate-300">Detailed Results</h3>
-          <div class="text-sm text-slate-400">
-            Page {{ slicedData.pagination.page }} of {{ slicedData.pagination.totalPages }}
-            ({{ slicedData.pagination.totalItems }} total)
+        <div class="flex items-center justify-between mb-4 px-1">
+          <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider">Detailed Results</h3>
+          <div class="text-sm text-slate-500 font-mono">
+            Page {{ slicedData.pagination.page }} / {{ slicedData.pagination.totalPages }}
+            <span class="text-slate-600 mx-2">|</span>
+            {{ slicedData.pagination.totalItems }} items
           </div>
         </div>
 
-        <div class="bg-slate-800/30 rounded-lg overflow-hidden">
+        <div class="bg-slate-900/40 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
           <table class="w-full table-fixed">
             <!-- Table Header -->
-            <thead class="bg-slate-700/50">
+            <thead class="bg-slate-900/80 border-b border-slate-800">
               <tr>
-                <th class="w-16 px-4 py-3 text-center text-xs font-medium text-slate-400 uppercase tracking-wider">Rank</th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider min-w-0">{{ getTableHeaderLabel() }}</th>
-                <th class="w-20 px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">{{ getSecondaryMetricLabel() }}</th>
-                <th class="w-24 px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">{{ getPrimaryMetricLabel() }}</th>
-                <th class="w-20 px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">{{ getPercentageLabel() }}</th>
-                <th v-if="hasAdditionalData()" class="w-48 px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Additional Stats</th>
+                <th class="w-16 px-4 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Rank</th>
+                <th class="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider min-w-0">{{ getTableHeaderLabel() }}</th>
+                <th class="w-24 px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">{{ getSecondaryMetricLabel() }}</th>
+                <th class="w-28 px-4 py-4 text-right text-xs font-bold uppercase tracking-wider" :class="theme.text">{{ getPrimaryMetricLabel() }}</th>
+                <th class="w-24 px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">{{ getPercentageLabel() }}</th>
+                <th v-if="hasAdditionalData()" class="w-48 px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Additional Stats</th>
               </tr>
             </thead>
 
             <!-- Table Body -->
-            <tbody class="divide-y divide-slate-700/50">
+            <tbody class="divide-y divide-slate-800/50">
               <tr
                 v-for="(result, index) in slicedData.results"
                 :key="`${result.sliceKey}-${result.subKey || 'global'}`"
-                class="hover:bg-slate-700/20 transition-colors"
+                class="group hover:bg-slate-800/30 transition-colors duration-150"
               >
                 <!-- Rank -->
                 <td class="px-4 py-3">
                   <div class="flex items-center justify-center">
-                    <div class="flex-shrink-0 w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center text-sm font-bold text-slate-200">
+                    <div 
+                        class="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold text-white shadow-sm transition-transform group-hover:scale-110"
+                        :class="index < 3 ? theme.bg : 'bg-slate-800 text-slate-400'"
+                    >
                       {{ result.rank }}
                     </div>
                   </div>
@@ -177,25 +199,26 @@
 
                 <!-- Main Label -->
                 <td class="px-4 py-3">
-                  <div class="text-slate-200 font-medium">{{ result.sliceLabel }}</div>
-                  <div v-if="result.subKey" class="text-xs text-slate-500 mt-1">
-                    Server: {{ getServerName(result.subKey) }}
+                  <div class="text-slate-200 font-medium group-hover:text-white transition-colors text-base">{{ result.sliceLabel }}</div>
+                  <div v-if="result.subKey" class="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-70"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                    {{ result.subKeyLabel || getServerName(result.subKey) }}
                   </div>
                 </td>
 
                 <!-- Secondary Value -->
-                <td class="px-4 py-3 text-right text-slate-300">
+                <td class="px-4 py-3 text-right text-slate-400 font-mono text-sm group-hover:text-slate-300">
                   {{ result.secondaryValue.toLocaleString() }}
                 </td>
 
                 <!-- Primary Value -->
                 <td class="px-4 py-3 text-right">
-                  <div class="text-lg font-bold text-cyan-400">{{ result.primaryValue.toLocaleString() }}</div>
+                  <div class="text-lg font-bold font-mono" :class="theme.text">{{ result.primaryValue.toLocaleString() }}</div>
                 </td>
 
                 <!-- Percentage -->
-                <td class="px-4 py-3 text-right text-slate-300">
-                  {{ result.percentage.toFixed(1) }}{{ getPercentageUnit() }}
+                <td class="px-4 py-3 text-right text-slate-300 font-mono text-sm">
+                  {{ result.percentage.toFixed(1) }}<span class="text-slate-500 text-xs ml-0.5">{{ getPercentageUnit() }}</span>
                 </td>
 
                 <!-- Additional Data -->
@@ -209,14 +232,14 @@
                     <div v-if="Object.keys(getTeamWinAdditionalData(result.additionalData, result.percentage)).length > 0" class="text-xs text-slate-400">
                       <div v-for="(value, key) in getTeamWinAdditionalData(result.additionalData, result.percentage)" :key="key" class="flex justify-between">
                         <span>{{ formatTeamWinKey(key, result.additionalData) }}:</span>
-                        <span class="text-slate-300">{{ formatAdditionalValue(value) }}</span>
+                        <span class="text-slate-300 font-mono">{{ formatAdditionalValue(value) }}</span>
                       </div>
                     </div>
                   </div>
                   <div v-else class="text-xs text-slate-400 space-y-1">
-                    <div v-for="(value, key) in result.additionalData" :key="key" class="flex justify-between">
+                    <div v-for="(value, key) in result.additionalData" :key="key" class="flex justify-between border-b border-slate-800/50 pb-0.5 last:border-0">
                       <span>{{ formatAdditionalKey(key) }}:</span>
-                      <span class="text-slate-300">{{ formatAdditionalValue(value) }}</span>
+                      <span class="text-slate-300 font-mono">{{ formatAdditionalValue(value) }}</span>
                     </div>
                   </div>
                 </td>
@@ -226,11 +249,11 @@
         </div>
 
         <!-- Pagination Controls -->
-        <div v-if="slicedData.pagination.totalPages > 1" class="flex items-center justify-center gap-4 mt-6">
+        <div v-if="slicedData.pagination.totalPages > 1" class="flex items-center justify-center gap-4 mt-8">
           <button
             @click="changePage(slicedData.pagination.page - 1)"
             :disabled="!slicedData.pagination.hasPrevious || isLoading"
-            class="px-4 py-2 bg-slate-700/50 text-slate-300 rounded-lg transition-colors hover:bg-slate-600/50 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="px-4 py-2 bg-slate-800 border border-slate-700 text-slate-300 rounded-lg transition-colors hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:text-white"
           >
             Previous
           </button>
@@ -241,23 +264,23 @@
                 v-if="pageNum !== '...'"
                 @click="changePage(pageNum)"
                 :class="[
-                  'w-8 h-8 rounded text-sm font-medium transition-colors',
+                  'w-9 h-9 rounded-lg text-sm font-bold transition-all',
                   pageNum === slicedData.pagination.page
-                    ? 'bg-cyan-500 text-white'
-                    : 'bg-slate-700/50 text-slate-300 hover:bg-slate-600/50'
+                    ? `${theme.activeButton} shadow-md`
+                    : 'bg-slate-800 border border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white'
                 ]"
                 :disabled="isLoading"
               >
                 {{ pageNum }}
               </button>
-              <span v-else class="text-slate-500 px-2">...</span>
+              <span v-else class="text-slate-600 px-2 font-bold">...</span>
             </template>
           </div>
           
           <button
             @click="changePage(slicedData.pagination.page + 1)"
             :disabled="!slicedData.pagination.hasNext || isLoading"
-            class="px-4 py-2 bg-slate-700/50 text-slate-300 rounded-lg transition-colors hover:bg-slate-600/50 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="px-4 py-2 bg-slate-800 border border-slate-700 text-slate-300 rounded-lg transition-colors hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:text-white"
           >
             Next
           </button>
@@ -265,11 +288,11 @@
       </div>
 
       <!-- Empty State -->
-      <div v-else class="text-center py-12">
-        <div class="text-6xl mb-4">📊</div>
-        <h3 class="text-xl font-semibold text-slate-300 mb-2">No Data Available</h3>
-        <p class="text-slate-400">No statistics found for this player with the current filters.</p>
-        <p class="text-slate-500 text-sm mt-2">Try adjusting the time range or slice dimension.</p>
+      <div v-else class="text-center py-16 bg-slate-800/20 rounded-xl border border-dashed border-slate-700">
+        <div class="text-6xl mb-6 opacity-50 grayscale hover:grayscale-0 transition-all duration-500 cursor-default">📊</div>
+        <h3 class="text-xl font-bold text-slate-300 mb-2">No Data Available</h3>
+        <p class="text-slate-400 max-w-md mx-auto">No statistics found for this player with the current filters.</p>
+        <p class="text-slate-500 text-sm mt-4">Try adjusting the time range or slice dimension.</p>
       </div>
     </div>
   </div>
@@ -320,6 +343,7 @@ interface PlayerSlicedStatsResponse {
 interface PlayerSliceResultDto {
   sliceKey: string;
   subKey: string | null;
+  subKeyLabel?: string | null;
   sliceLabel: string;
   primaryValue: number;
   secondaryValue: number;
@@ -342,6 +366,49 @@ const pageSize = ref<number>(10); // Client-side pagination with 10 rows per pag
 const allResults = ref<PlayerSliceResultDto[]>([]); // Store all results for client-side pagination
 
 const timeRangeOptions = PLAYER_STATS_TIME_RANGE_OPTIONS;
+
+// Computed Theme
+const theme = computed(() => {
+  const type = selectedSliceType.value;
+  if (type.includes('Kills')) {
+    return {
+      name: 'kills',
+      icon: '⚔️',
+      text: 'text-rose-400',
+      bg: 'bg-rose-500',
+      border: 'border-rose-500',
+      borderColor: 'border-rose-500/30',
+      bgGradient: 'bg-gradient-to-br from-rose-900/90 to-slate-900',
+      activeButton: 'bg-rose-600 text-white',
+      focusRing: 'focus:border-rose-500 focus:ring-rose-500/20'
+    };
+  } else if (type.includes('Wins')) {
+    return {
+      name: 'wins',
+      icon: '🏆',
+      text: 'text-emerald-400',
+      bg: 'bg-emerald-500',
+      border: 'border-emerald-500',
+      borderColor: 'border-emerald-500/30',
+      bgGradient: 'bg-gradient-to-br from-emerald-900/90 to-slate-900',
+      activeButton: 'bg-emerald-600 text-white',
+      focusRing: 'focus:border-emerald-500 focus:ring-emerald-500/20'
+    };
+  } else {
+    // Score (Default)
+    return {
+      name: 'score',
+      icon: '⭐',
+      text: 'text-cyan-400',
+      bg: 'bg-cyan-500',
+      border: 'border-cyan-500',
+      borderColor: 'border-cyan-500/30',
+      bgGradient: 'bg-gradient-to-br from-cyan-900/90 to-slate-900',
+      activeButton: 'bg-cyan-600 text-white',
+      focusRing: 'focus:border-cyan-500 focus:ring-cyan-500/20'
+    };
+  }
+});
 
 const gameLabel = computed(() => {
   switch (slicedData.value?.game?.toLowerCase()) {

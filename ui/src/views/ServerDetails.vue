@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
+import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ServerDetails, ServerInsights, LeaderboardsData, fetchServerDetails, fetchServerInsights, fetchServerLeaderboards, fetchLiveServerData, ServerBusyIndicator, ServerHourlyTimelineEntry, fetchServerBusyIndicators } from '../services/serverDetailsService';
 import { fetchServerMapRotation, type MapRotationItem } from '../services/dataExplorerService';
@@ -50,7 +50,7 @@ const historyRollingWindow = ref('7d');
 const historyPeriod = ref<'1d' | '3d' | '7d' | 'longer'>('7d');
 const longerPeriod = ref<'1month' | '3months' | 'thisyear' | 'alltime'>('1month');
 const showLongerDropdown = ref(false);
-const showPlayerHistory = ref(false);
+const showPlayerHistory = ref(true);
 const hasLoadedPlayerHistory = ref(false);
 
 // Maps state
@@ -166,6 +166,12 @@ const fetchData = async () => {
     // Now fetch leaderboards (non-blocking)
     // Player history and maps will be loaded when user expands those sections
     fetchLeaderboardsAsync();
+
+    // Fetch insights if player history is shown by default
+    if (showPlayerHistory.value) {
+      hasLoadedPlayerHistory.value = true;
+      fetchInsightsAsync();
+    }
   } catch (err) {
     console.error('Error fetching server details:', err);
     error.value = 'Failed to load server details. Please try again later.';
@@ -579,576 +585,350 @@ const closeForecastOverlay = () => {
   <div class="portal-page">
     <div class="portal-grid" aria-hidden="true" />
     <div class="portal-inner">
-  <div class="w-full rounded-lg border border-[var(--portal-border)] bg-[var(--portal-surface)] mb-3">
-    <div class="w-full px-2 sm:px-4 lg:px-6 py-2.5">
-      <div class="flex flex-wrap items-center gap-2 lg:gap-3">
-        <HeroBackButton :on-click="() => $router.push(getServersRoute(serverDetails?.gameId || (liveServerInfo?.gameType as string)))" />
-        <h1 class="text-base md:text-lg font-semibold text-neutral-200 truncate max-w-full lg:max-w-[34rem]">
-          {{ serverName }}
-        </h1>
-
-        <div
-          v-if="serverDetails?.region"
-          class="inline-flex items-center px-2 py-0.5 rounded border border-neutral-700 bg-neutral-900 text-[11px] text-neutral-300"
-        >
-          {{ serverDetails.region }}
-        </div>
-        <div
-          v-if="serverDetails?.country || serverDetails?.countryCode"
-          class="inline-flex items-center px-2 py-0.5 rounded border border-neutral-700 bg-neutral-900 text-[11px] text-neutral-300"
-        >
-          {{ getCountryName(serverDetails?.countryCode, serverDetails?.country) }}
-        </div>
-        <div
-          v-if="serverDetails?.timezone && getTimezoneDisplay(serverDetails.timezone)"
-          class="inline-flex items-center px-2 py-0.5 rounded border border-neutral-700 bg-neutral-900 text-[11px] text-neutral-300"
-        >
-          {{ getTimezoneDisplay(serverDetails.timezone) }}
-        </div>
-
-        <a
-          v-if="liveServerInfo?.discordUrl"
-          :href="liveServerInfo.discordUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="inline-flex items-center px-2 py-0.5 rounded border border-indigo-500/30 bg-indigo-600/15 text-[11px]"
-          title="Join Discord"
-        >
-          <img :src="discordIcon" alt="Discord" class="w-3.5 h-3.5">
-        </a>
-        <a
-          v-if="liveServerInfo?.forumUrl"
-          :href="liveServerInfo.forumUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="inline-flex items-center px-2 py-0.5 rounded border border-orange-500/30 bg-orange-600/15 text-[11px] text-orange-300"
-          title="Visit Forum"
-        >
-          Forum
-        </a>
-
-        <button
-          v-if="liveServerInfo"
-          type="button"
-          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded border text-[11px] font-medium transition-colors"
-          :class="liveServerInfo.players.length > 0
-            ? 'bg-emerald-600/90 border-emerald-500/60 text-white hover:bg-emerald-600'
-            : 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:bg-neutral-700'"
-          @click.stop="openPlayersModal"
-        >
-          <span class="font-semibold">{{ liveServerInfo.numPlayers }}</span>
-          <span>online</span>
-        </button>
-        <div
-          v-else-if="isLiveServerLoading"
-          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-neutral-700 bg-neutral-900 text-[11px] text-neutral-400"
-        >
-          <div class="w-3 h-3 border border-neutral-600 border-t-neutral-300 rounded-full animate-spin" />
-          <span>Loading</span>
-        </div>
-
-        <button
-          v-if="liveServerInfo?.joinLink"
-          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-cyan-500/40 bg-cyan-500 text-neutral-950 text-[11px] font-semibold hover:bg-cyan-400 transition-colors"
-          @click="joinServer"
-        >
-          <span>Join</span>
-        </button>
-
-        <button
-          v-if="serverBusyIndicator && serverHourlyTimeline.length > 0"
-          type="button"
-          class="ml-auto inline-flex items-end gap-0.5 px-2 py-1 rounded border border-neutral-700 bg-neutral-900/90 group/forecast"
-          @click.stop="toggleForecastOverlay"
-        >
-          <span class="text-[10px] text-neutral-500 mr-1 hidden sm:inline">Forecast</span>
-          <span
-            v-for="(entry, index) in serverHourlyTimeline"
-            :key="index"
-            class="w-1 rounded-t"
-            :class="entry.isCurrentHour ? 'bg-cyan-400' : 'bg-neutral-600'"
-            :style="{ height: getMiniTimelineBarHeight(entry) + 'px' }"
-            :title="formatTimelineTooltip(entry)"
-          />
-          <ForecastModal
-            :show-overlay="true"
-            :show-modal="showForecastOverlay"
-            :hourly-timeline="serverHourlyTimeline"
-            :current-status="`${serverBusyIndicator.currentPlayers} players (typical: ${Math.round(serverBusyIndicator.typicalPlayers)})`"
-            :current-players="serverBusyIndicator.currentPlayers"
-            overlay-class="opacity-0 group-hover/forecast:opacity-100"
-            @close="closeForecastOverlay"
-          />
-        </button>
-      </div>
-
-      <div v-if="serverDetails" class="mt-1 text-[10px] text-neutral-500">
-        Data {{ formatDate(serverDetails.startPeriod) }} - {{ formatDate(serverDetails.endPeriod) }}
-      </div>
-    </div>
-  </div>
-
-  <!-- Main Content Area: flex row on lg when a panel is open for side-by-side layout -->
-  <div class="min-h-screen bg-neutral-950">
-    <div
-      class="relative flex flex-col min-h-0"
-      :class="{ 'lg:flex-row': showPlayersModal || showMapDetailPanel }"
-    >
-      <div
-        class="flex-1 min-w-0"
-        @click="closeForecastOverlay"
-      >
-        <div class="relative">
-          <div class="relative py-6 sm:py-8">
-            <div class="w-full px-2 sm:px-6 lg:px-12">
+      <div class="data-explorer">
+        <div class="explorer-inner">
+          
           <!-- Loading State -->
-          <div
-            v-if="isLoading"
-            class="flex flex-col items-center justify-center py-20 text-neutral-400"
-          >
-            <div class="w-12 h-12 border-4 border-neutral-700 border-t-cyan-400 rounded-full animate-spin mb-4" />
-            <p class="text-lg text-neutral-300">
-              Loading server profile...
-            </p>
+          <div v-if="isLoading" class="flex flex-col items-center justify-center py-20 text-neutral-400" role="status" aria-label="Loading server profile">
+            <div class="explorer-spinner mb-4" />
+            <p class="text-lg text-neutral-300">Loading server profile...</p>
           </div>
 
           <!-- Error State -->
-          <div
-            v-else-if="error"
-            class="bg-neutral-900/80 border border-red-800/50 rounded-xl p-8 text-center"
-          >
-            <div class="text-6xl mb-4">
-              ⚠️
+          <div v-else-if="error" class="explorer-card p-8 text-center" role="alert">
+            <div class="flex items-center justify-center mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-red-400"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
             </div>
-            <p class="text-red-400 text-lg font-medium">
-              {{ error }}
-            </p>
+            <p class="text-neon-red text-lg font-medium">{{ error }}</p>
           </div>
 
-          <!-- Server Content -->
-          <div
-            v-else-if="serverDetails"
-            :class="[
-              'grid grid-cols-1 gap-4 sm:gap-6',
-              !(showPlayersModal || showMapDetailPanel) && 'xl:grid-cols-12'
-            ]"
-          >
-            <div :class="['space-y-4 sm:space-y-6', !(showPlayersModal || showMapDetailPanel) && 'xl:col-span-6']">
-              <div class="bg-neutral-900/80 border border-neutral-700/50 rounded-xl overflow-hidden">
-                <div class="px-3 sm:px-6 py-4 border-b border-neutral-700/50 flex items-center justify-between">
-                  <h3 class="text-lg font-semibold text-neutral-200 flex items-center gap-3">
-                    🎯 Recent Sessions
-                  </h3>
-                  <router-link
-                    :to="`/servers/${encodeURIComponent(serverName)}/sessions`"
-                    class="inline-flex items-center gap-1.5 text-neutral-300 hover:text-neutral-200 transition-colors text-xs sm:text-sm font-medium group"
-                  >
-                    <span>View All</span>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      class="transition-transform group-hover:translate-x-0.5"
-                    >
-                      <path d="m9 18 6-6-6-6"/>
-                    </svg>
-                  </router-link>
-                </div>
-                <div class="p-3 sm:p-6">
-                  <RecentSessionsList
-                    v-if="serverDetails?.serverGuid"
-                    :server-guid="serverDetails.serverGuid"
-                    :server-name="serverName"
-                    :limit="5"
-                    :initial-visible-count="2"
-                    empty-message="No recent sessions found for this server"
-                  />
-                </div>
-              </div>
+          <!-- Content -->
+          <div v-else-if="serverDetails" class="space-y-6">
+            
+            <!-- Server Header Card -->
+            <div class="explorer-card">
+              <div class="explorer-card-body">
+                <div class="flex flex-wrap items-center gap-3">
+                  
+                  <h1 class="text-xl md:text-2xl font-bold text-neon-cyan truncate max-w-full lg:max-w-[34rem] font-mono">
+                    {{ serverName }}
+                  </h1>
 
-              <div class="bg-neutral-900/80 border border-neutral-700/50 rounded-xl overflow-hidden px-3 sm:px-6 py-4 sm:py-5">
-                  <ServerLeaderboards
-                    :leaderboards-data="leaderboardsData"
-                    :is-loading="isLeaderboardsLoading"
-                    :error="leaderboardsError"
-                    :server-name="serverName"
-                    :server-guid="serverDetails.serverGuid"
-                    :min-players-for-weighting="minPlayersForWeighting"
-                    :min-rounds-for-kill-boards="minRoundsForKillBoards"
-                    @update-min-players-for-weighting="handleMinPlayersUpdate"
-                    @update-min-rounds-for-kill-boards="handleMinRoundsUpdate"
-                    @period-change="handleLeaderboardPeriodChange"
-                  />
+                  <div class="flex flex-wrap gap-2 items-center ml-auto">
+                    <div v-if="serverDetails?.region" class="explorer-tag">{{ serverDetails.region }}</div>
+                    <div v-if="serverDetails?.country || serverDetails?.countryCode" class="explorer-tag">
+                      {{ getCountryName(serverDetails?.countryCode, serverDetails?.country) }}
+                    </div>
+                    
+                    <!-- Discord & Forum Links -->
+                    <a v-if="liveServerInfo?.discordUrl" :href="liveServerInfo.discordUrl" target="_blank" rel="noopener noreferrer" class="explorer-btn explorer-btn--ghost explorer-btn--sm" title="Join Discord">
+                      <img :src="discordIcon" alt="Discord" class="w-3.5 h-3.5">
+                    </a>
+                    <a v-if="liveServerInfo?.forumUrl" :href="liveServerInfo.forumUrl" target="_blank" rel="noopener noreferrer" class="explorer-btn explorer-btn--ghost explorer-btn--sm" title="Visit Forum">
+                      Forum
+                    </a>
+
+                    <!-- Online Players -->
+                    <button
+                      v-if="liveServerInfo"
+                      type="button"
+                      class="explorer-btn explorer-btn--sm flex items-center gap-2"
+                      :class="liveServerInfo.players.length > 0 ? 'text-neon-green border-neon-green bg-green-900/20' : 'text-neutral-400 border-neutral-700'"
+                      @click.stop="openPlayersModal"
+                    >
+                      <span class="w-2 h-2 rounded-full" :class="liveServerInfo.players.length > 0 ? 'bg-neon-green animate-pulse' : 'bg-neutral-500'"></span>
+                      <span class="font-bold">{{ liveServerInfo.numPlayers }}</span>
+                      <span>online</span>
+                    </button>
+
+                    <!-- Join Button -->
+                    <button
+                      v-if="liveServerInfo?.joinLink"
+                      class="explorer-btn explorer-btn--primary explorer-btn--sm"
+                      @click="joinServer"
+                    >
+                      JOIN SERVER
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Forecast & Data Info -->
+                <div class="flex items-center justify-between mt-4 pt-4 border-t border-[var(--border-color)]">
+                  <div class="text-[10px] text-neutral-500 font-mono">
+                    Data {{ formatDate(serverDetails.startPeriod) }} - {{ formatDate(serverDetails.endPeriod) }}
+                  </div>
+
+                  <!-- Forecast Mini Chart -->
+                  <button
+                    v-if="serverBusyIndicator && serverHourlyTimeline.length > 0"
+                    type="button"
+                    class="inline-flex items-end gap-0.5 px-2 py-1 rounded border border-[var(--border-color)] bg-[var(--bg-panel)] group/forecast"
+                    @click.stop="toggleForecastOverlay"
+                  >
+                    <span class="text-[10px] text-neutral-500 mr-1 hidden sm:inline font-mono uppercase">Forecast</span>
+                    <span
+                      v-for="(entry, index) in serverHourlyTimeline"
+                      :key="index"
+                      class="w-1 rounded-t"
+                      :class="entry.isCurrentHour ? 'bg-neon-cyan' : 'bg-neutral-700'"
+                      :style="{ height: getMiniTimelineBarHeight(entry) + 'px' }"
+                      :title="formatTimelineTooltip(entry)"
+                    />
+                    <ForecastModal
+                      :show-overlay="true"
+                      :show-modal="showForecastOverlay"
+                      :hourly-timeline="serverHourlyTimeline"
+                      :current-status="`${serverBusyIndicator.currentPlayers} players (typical: ${Math.round(serverBusyIndicator.typicalPlayers)})`"
+                      :current-players="serverBusyIndicator.currentPlayers"
+                      overlay-class="opacity-0 group-hover/forecast:opacity-100"
+                      @close="closeForecastOverlay"
+                    />
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div :class="['space-y-4 sm:space-y-6', !(showPlayersModal || showMapDetailPanel) && 'xl:col-span-6']">
-              <div class="bg-neutral-900/80 border border-neutral-700/50 rounded-xl overflow-hidden">
-                <button
-                  class="w-full flex items-center justify-between p-4 hover:bg-neutral-800/50 transition-all duration-300 group"
-                  @click="toggleMapRotation"
-                >
-                  <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center">
-                      <span class="text-neutral-200 text-sm font-bold">🗺️</span>
-                    </div>
-                    <div class="text-left">
-                      <div class="text-base font-semibold text-neutral-200">
-                        Map Rotation
-                      </div>
-                      <div class="text-xs text-neutral-400">
-                        Top map winners from placement achievements
-                      </div>
-                    </div>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <span class="text-xs text-neutral-400 hidden sm:block">{{ showMapRotation ? 'Hide' : 'Show' }}</span>
-                    <div
-                      class="transform transition-transform duration-300"
-                      :class="{ 'rotate-180': showMapRotation }"
+            <!-- Main Grid Layout -->
+            <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+              
+              <!-- Left Column -->
+              <div class="xl:col-span-6 space-y-6">
+                
+                <!-- Recent Sessions -->
+                <div class="explorer-card">
+                  <div class="explorer-card-header flex items-center justify-between">
+                    <h3 class="explorer-card-title">RECENT SESSIONS</h3>
+                    <router-link
+                      :to="`/servers/${encodeURIComponent(serverName)}/sessions`"
+                      class="explorer-link text-xs font-mono uppercase"
                     >
-                      <svg
-                        class="w-5 h-5 text-neutral-400 group-hover:text-neutral-200"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                      </svg>
-                    </div>
+                      View All &rarr;
+                    </router-link>
                   </div>
-                </button>
-
-                <div v-if="showMapRotation" class="border-t border-neutral-700/50">
-                  <div v-if="mapRotation.length > 0" class="bg-neutral-800/30 relative">
-                    <div
-                      v-if="isMapsLoading"
-                      class="absolute inset-0 bg-neutral-900/80 rounded-xl flex items-center justify-center z-10"
-                    >
-                      <div class="flex flex-col items-center gap-3">
-                        <div class="w-8 h-8 border-2 border-orange-500/30 border-t-orange-400 rounded-full animate-spin" />
-                        <div class="text-orange-400 text-sm font-medium">Loading map rotation...</div>
-                      </div>
-                    </div>
-                    <div class="p-3 sm:p-6">
-                      <MapRotationTable
-                        :map-rotation="mapRotation"
-                        :current-page="mapRotationPage"
-                        :total-pages="mapRotationTotalPages"
-                        :total-count="mapRotationTotalCount"
-                        :page-size="mapRotationPageSize"
-                        :is-loading="isMapsLoading"
-                        @navigate="handleMapNavigate"
-                        @page-change="handleMapRotationPageChange"
-                      />
-                    </div>
-                  </div>
-                  <div v-else-if="isMapsLoading" class="p-6 flex justify-center py-8">
-                    <div class="flex flex-col items-center gap-3">
-                      <div class="w-8 h-8 border-2 border-orange-500/30 border-t-orange-400 rounded-full animate-spin" />
-                      <div class="text-orange-400 text-sm font-medium">Loading map rotation...</div>
-                    </div>
-                  </div>
-                  <div v-else-if="mapsError" class="p-3 sm:p-6">
-                    <div class="bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex items-center gap-3">
-                      <span class="text-sm text-red-400">{{ mapsError }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-            <!-- Player Activity History Section (Collapsible) -->
-            <div class="bg-neutral-900/80 border border-neutral-700/50 rounded-xl overflow-hidden">
-              <!-- Toggle Button -->
-              <button
-                class="w-full flex items-center justify-between p-4 hover:bg-neutral-800/50 transition-all duration-300 group"
-                @click="togglePlayerHistory"
-              >
-                <div class="flex items-center gap-3">
-                  <div class="w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center">
-                    <span class="text-neutral-200 text-sm font-bold">📈</span>
-                  </div>
-                  <div class="text-left">
-                    <div class="text-base font-semibold text-neutral-200">
-                      Player Activity History
-                    </div>
-                    <div class="text-xs text-neutral-400">
-                      Server population trends
-                    </div>
-                  </div>
-                </div>
-                <div class="flex items-center gap-2">
-                  <span class="text-xs text-neutral-400 hidden sm:block">{{ showPlayerHistory ? 'Hide' : 'Show' }}</span>
-                  <div
-                    class="transform transition-transform duration-300"
-                    :class="{ 'rotate-180': showPlayerHistory }"
-                  >
-                    <svg
-                      class="w-5 h-5 text-neutral-400 group-hover:text-neutral-200"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M19 9l-7 7-7-7"
-                      />
-                    </svg>
-                  </div>
-                </div>
-              </button>
-
-              <!-- Collapsible Content -->
-              <div
-                v-if="showPlayerHistory"
-                class="border-t border-neutral-700/50"
-              >
-                <div
-                  v-if="serverInsights?.playersOnlineHistory"
-                  class="animate-in slide-in-from-top duration-300"
-                >
-                  <!-- Period Selector -->
-                  <div class="px-6 py-4 bg-neutral-800/30 flex justify-center">
-                    <div class="flex items-center gap-2 bg-neutral-800/30 rounded-lg p-1">
-                      <!-- Short periods -->
-                      <button
-                        v-for="period in ['1d', '3d', '7d']"
-                        :key="period"
-                        :class="[
-                          'px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200',
-                          historyPeriod === period
-                            ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
-                            : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-700/50'
-                        ]"
-                        @click="handleHistoryPeriodChange(period as '1d' | '3d' | '7d')"
-                      >
-                        {{ period === '1d' ? '24h' : period === '3d' ? '3 days' : '7 days' }}
-                      </button>
-
-                      <!-- Longer periods dropdown -->
-                      <div class="relative">
-                        <button
-                          :class="[
-                            'px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 flex items-center gap-1',
-                            historyPeriod === 'longer'
-                              ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
-                              : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-700/50'
-                          ]"
-                          @click="toggleLongerDropdown"
-                        >
-                          {{ getLongerPeriodLabel() }}
-                          <svg
-                            class="w-3 h-3"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M19 9l-7 7-7-7"
-                            />
-                          </svg>
-                        </button>
-
-                        <!-- Dropdown menu -->
-                        <div
-                          v-if="showLongerDropdown"
-                          class="absolute top-full mt-1 right-0 bg-neutral-900/95 rounded-lg border border-neutral-700/50 shadow-xl z-50 min-w-[120px]"
-                        >
-                          <button
-                            v-for="period in [{ id: '1month', label: '1 Month' }, { id: '3months', label: '3 Months' }, { id: 'thisyear', label: 'This Year' }, { id: 'alltime', label: 'All Time' }]"
-                            :key="period.id"
-                            :class="[
-                              'w-full text-left px-3 py-2 text-xs hover:bg-neutral-700/50 transition-colors first:rounded-t-lg last:rounded-b-lg',
-                              longerPeriod === period.id ? 'text-cyan-400 bg-cyan-500/10' : 'text-neutral-300'
-                            ]"
-                            @click="selectLongerPeriod(period.id as '1month' | '3months' | 'thisyear' | 'alltime')"
-                          >
-                            {{ period.label }}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Chart -->
-                  <div class="p-3 sm:p-6">
-                    <PlayerHistoryChart
-                      :chart-data="serverInsights.playersOnlineHistory.dataPoints"
-                      :insights="serverInsights.playersOnlineHistory.insights"
-                      :period="serverInsights.playersOnlineHistory.period"
-                      :rolling-window="historyRollingWindow"
-                      :loading="isInsightsLoading"
-                      :error="insightsError"
-                      @rolling-window-change="handleRollingWindowChange"
+                  <div class="explorer-card-body p-0">
+                    <RecentSessionsList
+                      v-if="serverDetails?.serverGuid"
+                      :server-guid="serverDetails.serverGuid"
+                      :server-name="serverName"
+                      :limit="5"
+                      :initial-visible-count="2"
+                      empty-message="No recent sessions found"
                     />
                   </div>
                 </div>
-                <div
-                  v-else-if="isInsightsLoading"
-                  class="p-3 sm:p-6"
-                >
-                  <div class="flex items-center justify-center py-8">
-                    <div class="w-8 h-8 border-2 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin" />
+
+                <!-- Leaderboards -->
+                <div class="explorer-card">
+                  <div class="explorer-card-header">
+                    <h3 class="explorer-card-title">LEADERBOARDS</h3>
+                  </div>
+                  <div class="explorer-card-body">
+                    <ServerLeaderboards
+                      :leaderboards-data="leaderboardsData"
+                      :is-loading="isLeaderboardsLoading"
+                      :error="leaderboardsError"
+                      :server-name="serverName"
+                      :server-guid="serverDetails.serverGuid"
+                      :min-players-for-weighting="minPlayersForWeighting"
+                      :min-rounds-for-kill-boards="minRoundsForKillBoards"
+                      @update-min-players-for-weighting="handleMinPlayersUpdate"
+                      @update-min-rounds-for-kill-boards="handleMinRoundsUpdate"
+                      @period-change="handleLeaderboardPeriodChange"
+                    />
                   </div>
                 </div>
+
+              </div>
+
+              <!-- Right Column -->
+              <div class="xl:col-span-6 space-y-6">
+                
+                <!-- Map Rotation -->
+                <div class="explorer-card">
+                  <div 
+                    class="explorer-card-header flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors"
+                    @click="toggleMapRotation"
+                  >
+                    <div class="flex items-center gap-3">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400 flex-shrink-0"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15"/><path d="M15 6v15"/></svg>
+                      <div>
+                        <h3 class="explorer-card-title">MAP ROTATION</h3>
+                        <div class="text-[10px] text-neutral-500 font-mono mt-0.5">TOP MAP WINNERS</div>
+                      </div>
+                    </div>
+                    <div class="explorer-toggle-btn" :class="{ 'rotate-180': showMapRotation }">
+                      ▼
+                    </div>
+                  </div>
+                  
+                  <div v-if="showMapRotation" class="explorer-card-body border-t border-[var(--border-color)] p-0">
+                    <div v-if="isMapsLoading && mapRotation.length === 0" class="p-8 flex justify-center">
+                      <div class="explorer-spinner"></div>
+                    </div>
+                    <div v-else-if="mapsError" class="p-6 text-neon-red text-sm text-center">
+                      {{ mapsError }}
+                    </div>
+                    <MapRotationTable
+                      v-else
+                      :map-rotation="mapRotation"
+                      :current-page="mapRotationPage"
+                      :total-pages="mapRotationTotalPages"
+                      :total-count="mapRotationTotalCount"
+                      :page-size="mapRotationPageSize"
+                      :is-loading="isMapsLoading"
+                      @navigate="handleMapNavigate"
+                      @page-change="handleMapRotationPageChange"
+                    />
+                  </div>
+                </div>
+
+                <!-- Player Activity History -->
+                <div class="explorer-card">
+                  <div 
+                    class="explorer-card-header flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors"
+                    @click="togglePlayerHistory"
+                  >
+                    <div class="flex items-center gap-3">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-cyan-400 flex-shrink-0"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
+                      <div>
+                        <h3 class="explorer-card-title">PLAYER ACTIVITY</h3>
+                        <div class="text-[10px] text-neutral-500 font-mono mt-0.5">POPULATION TRENDS</div>
+                      </div>
+                    </div>
+                    <div class="explorer-toggle-btn" :class="{ 'rotate-180': showPlayerHistory }">
+                      ▼
+                    </div>
+                  </div>
+
+                  <div v-if="showPlayerHistory" class="explorer-card-body border-t border-[var(--border-color)]">
+                    <div v-if="serverInsights?.playersOnlineHistory">
+                      <!-- Period Controls -->
+                      <div class="flex justify-center mb-4">
+                        <div class="explorer-toggle-group">
+                          <button
+                            v-for="period in ['1d', '3d', '7d']"
+                            :key="period"
+                            class="explorer-toggle-btn"
+                            :class="{ 'explorer-toggle-btn--active': historyPeriod === period }"
+                            @click="handleHistoryPeriodChange(period as '1d' | '3d' | '7d')"
+                          >
+                            {{ period === '1d' ? '24H' : period === '3d' ? '3D' : '7D' }}
+                          </button>
+                          
+                          <!-- More Dropdown -->
+                          <div class="relative">
+                            <button
+                              class="explorer-toggle-btn flex items-center gap-1"
+                              :class="{ 'explorer-toggle-btn--active': historyPeriod === 'longer' }"
+                              @click="toggleLongerDropdown"
+                            >
+                              {{ getLongerPeriodLabel() }} ▼
+                            </button>
+                            <div v-if="showLongerDropdown" class="absolute top-full right-0 mt-1 bg-[var(--bg-card)] border border-[var(--border-color)] rounded shadow-xl z-50 min-w-[120px]">
+                              <button
+                                v-for="period in [{ id: '1month', label: '1 Month' }, { id: '3months', label: '3 Months' }, { id: 'thisyear', label: 'This Year' }, { id: 'alltime', label: 'All Time' }]"
+                                :key="period.id"
+                                class="w-full text-left px-3 py-2 text-xs font-mono hover:bg-white/5 hover:text-neon-cyan transition-colors"
+                                :class="{ 'text-neon-cyan': longerPeriod === period.id }"
+                                @click="selectLongerPeriod(period.id as '1month' | '3months' | 'thisyear' | 'alltime')"
+                              >
+                                {{ period.label }}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <PlayerHistoryChart
+                        :chart-data="serverInsights.playersOnlineHistory.dataPoints"
+                        :insights="serverInsights.playersOnlineHistory.insights"
+                        :period="serverInsights.playersOnlineHistory.period"
+                        :rolling-window="historyRollingWindow"
+                        :loading="isInsightsLoading"
+                        :error="insightsError"
+                        @rolling-window-change="handleRollingWindowChange"
+                      />
+                    </div>
+                    <div v-else-if="isInsightsLoading" class="p-8 flex justify-center">
+                      <div class="explorer-spinner"></div>
+                    </div>
+                  </div>
+                </div>
+
               </div>
             </div>
-            </div>
+
           </div>
 
-          <!-- No Data State -->
-          <div
-            v-else
-            class="bg-neutral-900/80 border border-neutral-700/50 rounded-xl p-12 text-center"
-          >
-            <div class="text-6xl mb-4 opacity-50">
-              📊
-            </div>
-            <p class="text-neutral-400 text-lg">
-              No server data available
-            </p>
+          <!-- Empty State -->
+          <div v-else class="explorer-empty">
+            <div class="explorer-empty-icon"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-500"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></div>
+            <p class="explorer-empty-title">No server data available</p>
           </div>
         </div>
       </div>
     </div>
-    </div>
 
-      <!-- Players Panel: overlay on mobile, side-by-side on lg when space allows (must be inside flex container) -->
-      <div
-        v-if="showPlayersModal"
-        class="fixed inset-0 md:right-20 z-[100] lg:relative lg:inset-auto lg:z-auto lg:w-[640px] xl:w-[720px] 2xl:w-[800px] lg:mr-20 lg:flex-shrink-0 lg:border-l lg:border-neutral-800 lg:min-h-0"
-      >
-      <PlayersPanel
-        :show="showPlayersModal"
-        :server="liveServerInfo"
-        :inline="isWideScreen"
-        @close="closePlayersModal"
-      />
-      </div>
-
-      <!-- Server Map Detail Panel: overlay on mobile, side-by-side on lg when space allows (same as DataExplorer server→map view) -->
-    <template v-if="showMapDetailPanel && selectedMapName && serverDetails?.serverGuid">
-      <div
-        class="fixed inset-0 bg-black/20 backdrop-blur-sm z-[100] lg:hidden"
-        aria-hidden="true"
-        @click="handleCloseMapDetailPanel"
-      />
-      <div
-        class="fixed inset-y-0 left-0 right-0 md:right-20 z-[100] flex items-stretch lg:relative lg:inset-auto lg:z-auto lg:w-[560px] xl:w-[620px] 2xl:w-[700px] lg:mr-20 lg:flex-shrink-0 lg:min-h-0 lg:border-l lg:border-neutral-800"
-        @click.stop
-      >
-        <div
-          class="bg-neutral-950 w-full max-w-6xl lg:max-w-none shadow-2xl animate-slide-in-left overflow-hidden flex flex-col border-r border-neutral-800 lg:border-r-0"
-          :class="{ 'h-[calc(100vh-4rem)]': true, 'md:h-full': true, 'mt-16': true, 'md:mt-0': true }"
-        >
-      <!-- Header -->
-      <div class="sticky top-0 z-20 bg-neutral-950/95 border-b border-neutral-800 p-4 flex justify-between items-center">
-        <div class="flex flex-col min-w-0 flex-1 mr-4">
-          <h2 class="text-xl font-bold text-neutral-200 truncate">
-            {{ showRankingsInPanel ? `Rankings: ${rankingsMapNameForPanel}` : selectedMapName }}
-          </h2>
-          <p class="text-sm text-neutral-400 mt-1 truncate">
-            on {{ serverName }}
-          </p>
+    <!-- Players Modal (Overlay) -->
+    <div v-if="showPlayersModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" @click="closePlayersModal">
+      <div class="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-[var(--bg-panel)] border border-[var(--border-color)] rounded-lg shadow-2xl" @click.stop>
+        <div class="p-4 border-b border-[var(--border-color)] flex justify-between items-center sticky top-0 bg-[var(--bg-panel)] z-10">
+          <h3 class="explorer-card-title text-lg">ONLINE PLAYERS</h3>
+          <button class="explorer-btn explorer-btn--ghost explorer-btn--sm" @click="closePlayersModal">CLOSE</button>
         </div>
-        <button 
-          class="group p-2 text-neutral-400 hover:text-white hover:bg-red-500/20 border border-neutral-600 hover:border-red-500/50 rounded-lg transition-all duration-300 flex items-center justify-center w-10 h-10 flex-shrink-0"
-          title="Close panel"
-          @click="handleCloseMapDetailPanel"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            class="group-hover:text-red-400"
-          >
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-      </div>
-
-      <!-- Content -->
-      <div class="flex-1 min-h-0 overflow-y-auto">
-        <!-- Rankings Drill-Down View -->
-        <div v-if="showRankingsInPanel && rankingsMapNameForPanel" class="p-2 sm:p-4">
-          <button
-            class="flex items-center gap-1.5 mb-3 px-2 py-1 text-xs font-medium text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 rounded transition-colors"
-            @click="handleCloseRankingsInPanel"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-            Back to Map Detail
-          </button>
-          <MapRankingsPanel
-            :map-name="rankingsMapNameForPanel"
-            :server-guid="serverDetails.serverGuid"
-            :game="(serverDetails.gameId as any) || 'bf1942'"
-          />
-        </div>
-        <!-- Map Detail View -->
-        <ServerMapDetailPanel
-          v-else
-          :server-guid="serverDetails.serverGuid"
-          :map-name="selectedMapName"
-          @navigate-to-server="handleNavigateToServerFromMap"
-          @navigate-to-map="handleNavigateToMapFromMap"
-          @close="handleCloseMapDetailPanel"
-          @open-rankings="handleOpenRankingsFromMap"
+        <PlayersPanel
+          :show="true"
+          :server="liveServerInfo"
+          :inline="true"
+          @close="closePlayersModal"
         />
       </div>
+    </div>
+
+    <!-- Map Detail Panel (Overlay) -->
+    <div v-if="showMapDetailPanel && selectedMapName && serverDetails?.serverGuid" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" @click="handleCloseMapDetailPanel">
+      <div class="w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border border-[var(--border-color)] rounded-lg shadow-2xl" @click.stop>
+        <!-- Header -->
+        <div class="p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">
+          <div>
+            <h2 class="text-lg font-bold text-neon-cyan font-mono">
+              {{ showRankingsInPanel ? `RANKINGS: ${rankingsMapNameForPanel}` : selectedMapName }}
+            </h2>
+            <p class="text-xs text-neutral-400 font-mono mt-1">ON {{ serverName }}</p>
+          </div>
+          <button class="explorer-btn explorer-btn--ghost explorer-btn--sm" aria-label="Close map detail panel" @click="handleCloseMapDetailPanel">CLOSE</button>
+        </div>
+
+        <!-- Content -->
+        <div class="flex-1 overflow-y-auto p-4">
+          <div v-if="showRankingsInPanel && rankingsMapNameForPanel">
+            <button
+              class="explorer-btn explorer-btn--ghost explorer-btn--sm mb-4 flex items-center gap-2"
+              @click="handleCloseRankingsInPanel"
+            >
+              &larr; BACK TO MAP DETAIL
+            </button>
+            <MapRankingsPanel
+              :map-name="rankingsMapNameForPanel"
+              :server-guid="serverDetails.serverGuid"
+              :game="(serverDetails.gameId as any) || 'bf1942'"
+            />
+          </div>
+          <ServerMapDetailPanel
+            v-else
+            :server-guid="serverDetails.serverGuid"
+            :map-name="selectedMapName"
+            @navigate-to-server="handleNavigateToServerFromMap"
+            @navigate-to-map="handleNavigateToMapFromMap"
+            @close="handleCloseMapDetailPanel"
+            @open-rankings="handleOpenRankingsFromMap"
+          />
         </div>
       </div>
-    </template>
-      </div>
-  </div>
     </div>
+
   </div>
 </template>
 
 <style src="./portal-layout.css"></style>
-<style scoped>
-/* Map-details style: darker, sleeker slate theme (no neon overrides) */
-@keyframes spin-slow {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.animate-spin-slow {
-  animation: spin-slow 3s linear infinite;
-}
-
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: #171717;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #404040;
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #525252;
-}
-</style>
+<style scoped src="./DataExplorer.vue.css"></style>

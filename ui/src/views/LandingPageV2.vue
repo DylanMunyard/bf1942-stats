@@ -76,6 +76,8 @@
         <div
           v-if="loading"
           class="flex items-center justify-center py-20"
+          role="status"
+          aria-label="Loading servers"
         >
           <div class="text-center space-y-6">
             <div class="relative flex items-center justify-center">
@@ -93,6 +95,7 @@
         <div
           v-else-if="error"
           class="flex items-center justify-center py-20"
+          role="alert"
         >
           <div class="text-center space-y-4">
             <div class="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center border border-red-500/50">
@@ -143,11 +146,14 @@
             <thead class="sticky top-0 z-10">
               <tr class="bg-gradient-to-r from-neutral-900/95 to-neutral-950/95 backdrop-blur-sm">
                 <!-- Rank Column Header (hidden on mobile - rank controls are in NAME column on mobile) -->
-                <th class="hidden lg:table-cell p-1.5 text-center font-bold text-xs uppercase tracking-wide text-neutral-300 cursor-pointer hover:bg-neutral-700/50 transition-all duration-300 border-b border-neutral-700/30 hover:border-yellow-500/50"
+                <th scope="col" class="hidden lg:table-cell p-1.5 text-center font-bold text-xs uppercase tracking-wide text-neutral-300 cursor-pointer hover:bg-neutral-700/50 transition-all duration-300 border-b border-neutral-700/30 hover:border-yellow-500/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
+                    tabindex="0"
+                    :aria-sort="sortField === 'rank' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'"
                     @click="sortBy('rank')"
+                    @keydown.enter="sortBy('rank')"
                 >
                   <div class="flex items-center gap-1.5">
-                    <span class="text-yellow-400 text-xs">🏆</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-yellow-400"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
                     <span class="font-mono font-bold">RANK</span>
                     <span
                       class="text-xs transition-transform duration-200"
@@ -160,7 +166,7 @@
                     >▲</span>
                   </div>
                 </th>
-                <th class="group p-1.5 text-left font-bold text-xs uppercase tracking-wide text-neutral-300 border-b border-neutral-700/30">
+                <th scope="col" class="group p-1.5 text-left font-bold text-xs uppercase tracking-wide text-neutral-300 border-b border-neutral-700/30">
                   <!-- Desktop Layout: Horizontal -->
                   <div class="hidden lg:flex items-center justify-between gap-2">
                     <div class="flex items-center gap-2">
@@ -168,7 +174,7 @@
                         class="flex items-center gap-1.5 cursor-pointer hover:bg-neutral-700/50 rounded px-2 py-1 transition-all duration-300 hover:border-cyan-500/50"
                         @click="sortBy('name')"
                       >
-                        <span class="text-neutral-400 text-xs">🏷️</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-400"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>
                         <span class="font-mono font-bold">NAME</span>
                         <span
                           class="text-xs transition-transform duration-200"
@@ -184,17 +190,19 @@
                       <!-- Server Filter Input (Desktop) -->
                       <div class="relative">
                         <div class="absolute left-2 top-1/2 transform -translate-y-1/2 z-10">
-                          <span class="text-neutral-500 text-xs">🔍</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-500"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
                         </div>
                         <input
                           v-model="serverFilterQuery"
                           type="text"
                           placeholder="Filter..."
+                          aria-label="Filter servers by name, map, or IP"
                           class="w-48 pl-7 pr-7 py-1 bg-neutral-700/60 border border-neutral-600/50 rounded text-neutral-200 placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all duration-200 text-xs"
                         >
                         <button
                           v-if="serverFilterQuery"
                           class="absolute right-2 top-1/2 transform -translate-y-1/2 text-neutral-500 hover:text-neutral-300 transition-colors"
+                          aria-label="Clear filter"
                           @click="serverFilterQuery = ''"
                         >
                           <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -213,7 +221,7 @@
                         class="flex items-center gap-1.5 cursor-pointer hover:bg-neutral-700/50 rounded px-2 py-1 transition-all duration-300 hover:border-yellow-500/50"
                         @click="sortBy('rank')"
                       >
-                        <span class="text-yellow-400 text-xs">🏆</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-yellow-400"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
                         <span class="font-mono font-bold">RANK</span>
                         <span
                           class="text-xs transition-transform duration-200"
@@ -229,7 +237,7 @@
                         class="flex items-center gap-1.5 cursor-pointer hover:bg-neutral-700/50 rounded px-2 py-1 transition-all duration-300 hover:border-cyan-500/50"
                         @click="sortBy('name')"
                       >
-                        <span class="text-neutral-400 text-xs">🏷️</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-400"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>
                         <span class="font-mono font-bold">NAME</span>
                         <span
                           class="text-xs transition-transform duration-200"
@@ -246,17 +254,19 @@
                     <!-- Server Filter Input (Mobile) -->
                     <div class="relative">
                       <div class="absolute left-2 top-1/2 transform -translate-y-1/2 z-10">
-                        <span class="text-neutral-500 text-xs">🔍</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-500"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
                       </div>
                       <input
                         v-model="serverFilterQuery"
                         type="text"
                         placeholder="Filter servers..."
+                        aria-label="Filter servers by name, map, or IP"
                         class="w-full pl-7 pr-7 py-1.5 bg-neutral-700/60 border border-neutral-600/50 rounded text-neutral-200 placeholder-neutral-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all duration-200 text-xs"
                       >
                       <button
                         v-if="serverFilterQuery"
                         class="absolute right-2 top-1/2 transform -translate-y-1/2 text-neutral-500 hover:text-neutral-300 transition-colors"
+                        aria-label="Clear filter"
                         @click="serverFilterQuery = ''"
                       >
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -273,11 +283,15 @@
                   </div>
                 </th>
                 <th
-                  class="group p-1.5 text-left font-bold text-xs uppercase tracking-wide text-neutral-300 cursor-pointer hover:bg-neutral-700/50 transition-all duration-300 border-b border-neutral-700/30 hover:border-green-500/50"
+                  scope="col"
+                  class="group p-1.5 text-left font-bold text-xs uppercase tracking-wide text-neutral-300 cursor-pointer hover:bg-neutral-700/50 transition-all duration-300 border-b border-neutral-700/30 hover:border-green-500/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
+                  tabindex="0"
+                  :aria-sort="sortField === 'numPlayers' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'"
                   @click="sortBy('numPlayers')"
+                  @keydown.enter="sortBy('numPlayers')"
                 >
                   <div class="flex items-center gap-1.5">
-                    <span class="text-green-400 text-xs">👥</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-400"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                     <span class="font-mono font-bold">PLAYERS</span>
                     <span
                       class="text-xs transition-transform duration-200"
@@ -291,11 +305,15 @@
                   </div>
                 </th>
                 <th
-                  class="group p-1.5 text-left font-bold text-xs uppercase tracking-wide text-neutral-300 cursor-pointer hover:bg-neutral-700/50 transition-all duration-300 border-b border-neutral-700/30 hover:border-orange-500/50"
+                  scope="col"
+                  class="group p-1.5 text-left font-bold text-xs uppercase tracking-wide text-neutral-300 cursor-pointer hover:bg-neutral-700/50 transition-all duration-300 border-b border-neutral-700/30 hover:border-orange-500/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
+                  tabindex="0"
+                  :aria-sort="sortField === 'mapName' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'"
                   @click="sortBy('mapName')"
+                  @keydown.enter="sortBy('mapName')"
                 >
                   <div class="flex items-center gap-1.5">
-                    <span class="text-orange-400 text-xs">🗺️</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-orange-400"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15"/><path d="M15 6v15"/></svg>
                     <span class="font-mono font-bold">MAP</span>
                     <span
                       class="text-xs transition-transform duration-200"
@@ -309,11 +327,15 @@
                   </div>
                 </th>
                 <th
-                  class="group p-1.5 text-left font-bold text-xs uppercase tracking-wide text-neutral-300 cursor-pointer hover:bg-neutral-700/50 transition-all duration-300 border-b border-neutral-700/30 hover:border-yellow-500/50"
+                  scope="col"
+                  class="group p-1.5 text-left font-bold text-xs uppercase tracking-wide text-neutral-300 cursor-pointer hover:bg-neutral-700/50 transition-all duration-300 border-b border-neutral-700/30 hover:border-yellow-500/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
+                  tabindex="0"
+                  :aria-sort="sortField === 'roundTimeRemain' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'"
                   @click="sortBy('roundTimeRemain')"
+                  @keydown.enter="sortBy('roundTimeRemain')"
                 >
                   <div class="flex items-center gap-1.5">
-                    <span class="text-yellow-400 text-xs">⏱️</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-yellow-400"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
                     <span class="font-mono font-bold">TIME</span>
                     <span
                       class="text-xs transition-transform duration-200"
@@ -327,11 +349,15 @@
                   </div>
                 </th>
                 <th
-                  class="group p-1.5 text-left font-bold text-xs uppercase tracking-wide text-neutral-300 cursor-pointer hover:bg-neutral-700/50 transition-all duration-300 border-b border-neutral-700/30 hover:border-purple-500/50"
+                  scope="col"
+                  class="group p-1.5 text-left font-bold text-xs uppercase tracking-wide text-neutral-300 cursor-pointer hover:bg-neutral-700/50 transition-all duration-300 border-b border-neutral-700/30 hover:border-purple-500/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500"
+                  tabindex="0"
+                  :aria-sort="sortField === 'gameType' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'"
                   @click="sortBy('gameType')"
+                  @keydown.enter="sortBy('gameType')"
                 >
                   <div class="flex items-center gap-1.5">
-                    <span class="text-purple-400 text-xs">🎮</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-purple-400"><rect width="20" height="12" x="2" y="6" rx="2"/><path d="M6 12h4"/><path d="M8 10v4"/><path d="M15 11h.01"/><path d="M18 11h.01"/></svg>
                     <span class="font-mono font-bold">MODE</span>
                     <span
                       class="text-xs transition-transform duration-200"
@@ -344,15 +370,15 @@
                     >▲</span>
                   </div>
                 </th>
-                <th class="p-1.5 text-left font-bold text-xs uppercase tracking-wide text-neutral-300 border-b border-neutral-700/30">
+                <th scope="col" class="p-1.5 text-left font-bold text-xs uppercase tracking-wide text-neutral-300 border-b border-neutral-700/30">
                   <div class="flex items-center gap-1.5">
-                    <span class="text-blue-400 text-xs">🔗</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-400"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                     <span class="font-mono font-bold">IP</span>
                   </div>
                 </th>
-                <th class="p-1.5 text-center font-bold text-xs uppercase tracking-wide text-neutral-300 border-b border-neutral-700/30">
+                <th scope="col" class="p-1.5 text-center font-bold text-xs uppercase tracking-wide text-neutral-300 border-b border-neutral-700/30">
                   <div class="flex items-center justify-center gap-1.5">
-                    <span class="text-red-400 text-xs">⚔️</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-red-400"><polygon points="5,3 19,12 5,21 5,3"/></svg>
                     <span class="font-mono font-bold">JOIN</span>
                   </div>
                 </th>
@@ -611,6 +637,7 @@
                       rel="noopener noreferrer"
                       class="w-7 h-7 bg-indigo-500/20 hover:bg-indigo-500/30 rounded border border-indigo-500/30 hover:border-indigo-500/50 flex items-center justify-center transition-all duration-200 p-1"
                       title="Join Discord"
+                      aria-label="Join Discord"
                     >
                       <img
                         :src="discordIcon"
@@ -627,8 +654,9 @@
                       rel="noopener noreferrer"
                       class="w-7 h-7 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 hover:text-orange-300 rounded border border-orange-500/30 hover:border-orange-500/50 flex items-center justify-center transition-all duration-200 text-sm"
                       title="Visit Forum"
+                      aria-label="Visit Forum"
                     >
-                      📋
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
                     </a>
 
                     <!-- Join Server Button -->

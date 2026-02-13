@@ -377,24 +377,19 @@ try
         }
 
         // Helper function to get a short namespace identifier
+        // Uses the feature folder name (segment after "api.") to avoid collisions
+        // e.g. "api.Bflist.Models" -> "Bflist", "api.DataExplorer.Models" -> "DataExplorer"
         static string GetNamespacePart(string? typeNamespace)
         {
             if (string.IsNullOrEmpty(typeNamespace))
                 return "";
 
-            // Create short namespace identifiers
-            if (typeNamespace.Contains("PlayerStats"))
-                return "PlayerStats";
-            if (typeNamespace.Contains("ServerStats"))
-                return "ServerStats";
-            if (typeNamespace.Contains("PlayerTracking"))
-                return "PlayerTracking";
-
-            if (typeNamespace.Contains("StatsCollectors"))
-                return "StatsCollectors";
-
-            // For other namespaces, use the last part
             var parts = typeNamespace.Split('.');
+            // Feature name is the segment right after "api"
+            var apiIndex = Array.IndexOf(parts, "api");
+            if (apiIndex >= 0 && apiIndex + 1 < parts.Length)
+                return parts[apiIndex + 1];
+
             return parts.Length > 0 ? parts[^1] : "";
         }
     });

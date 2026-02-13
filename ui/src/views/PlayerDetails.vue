@@ -272,11 +272,9 @@ const formatPlayTime = (minutes: number): string => {
   const remainingMinutes = Math.floor(minutes % 60);
 
   if (hours === 0) {
-    return `${remainingMinutes} minutes`;
-  } else if (hours === 1) {
-    return `${hours} hour ${remainingMinutes} minutes`;
+    return `${remainingMinutes}m`;
   } else {
-    return `${hours} hours ${remainingMinutes} minutes`;
+    return `${hours}h ${remainingMinutes}m`;
   }
 };
 
@@ -449,10 +447,10 @@ const unifiedServerList = computed<UnifiedServer[]>(() => {
 
 // Helper: rank badge color based on position
 const getRankBadgeClass = (rank: number): string => {
-  if (rank === 1) return 'text-amber-400 font-bold';
+  if (rank === 1) return 'text-neon-gold font-bold';
   if (rank === 2) return 'text-neutral-300 font-bold';
   if (rank === 3) return 'text-orange-400 font-bold';
-  if (rank <= 10) return 'text-cyan-400 font-semibold';
+  if (rank <= 10) return 'text-neon-cyan font-semibold';
   return 'text-neutral-400 font-medium';
 };
 
@@ -532,526 +530,326 @@ onUnmounted(() => {
   <div class="portal-page">
     <div class="portal-grid" aria-hidden="true" />
     <div class="portal-inner">
-  <!-- Full-width Hero Section (slim) -->
-  <div class="w-full rounded-lg border border-[var(--portal-border)] bg-[var(--portal-surface)] mb-3">
-    <div class="w-full px-2 sm:px-4 lg:px-6 py-2.5">
-      <div class="flex flex-wrap items-center gap-2 lg:gap-3">
-        <HeroBackButton fallback-route="/players" />
-
-        <!-- Player Avatar (compact) -->
-        <div class="relative group cursor-pointer flex-shrink-0" @click="showLastOnline = !showLastOnline">
-          <div class="w-8 h-8 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center text-sm font-bold text-neutral-200"
-               :class="playerStats?.isActive ? 'ring-2 ring-green-500/50' : ''">
-            {{ playerName?.charAt(0)?.toUpperCase() || '?' }}
+      <div class="data-explorer">
+        <div class="explorer-inner">
+          
+          <!-- Loading State -->
+          <div v-if="isLoading" class="flex flex-col items-center justify-center py-20 text-neutral-400" role="status" aria-label="Loading player statistics">
+            <div class="explorer-spinner mb-4" />
+            <p class="text-lg text-neutral-300">Loading Player Statistics...</p>
           </div>
-          <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[var(--portal-surface)]"
-               :class="playerStats?.isActive ? 'bg-green-500' : 'bg-neutral-600'" />
-          <!-- Last Online Tooltip -->
-          <div
-            v-if="showLastOnline"
-            class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-neutral-300 whitespace-nowrap z-50 shadow-lg"
-          >
-            <div class="flex items-center gap-2">
-              <div class="w-2 h-2 rounded-full" :class="playerStats?.isActive ? 'bg-green-400' : 'bg-neutral-500'" />
-              <span>
-                {{ playerStats?.isActive ? 'Currently Online' : `Last online: ${formatRelativeTime(playerStats?.lastPlayed || '')}` }}
-              </span>
+
+          <!-- Error State -->
+          <div v-else-if="error" class="explorer-card p-8 text-center" role="alert">
+            <div class="flex items-center justify-center mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-red-400"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
             </div>
-            <div class="absolute -top-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-neutral-950 border-l border-t border-neutral-700 rotate-45" />
-          </div>
-        </div>
-
-        <h1 class="text-base md:text-lg font-semibold text-neutral-200 truncate max-w-full lg:max-w-[34rem]">
-          {{ playerName }}
-        </h1>
-
-        <PlayerAchievementHeroBadges
-          :player-name="playerName"
-        />
-
-        <!-- K/D badge with hover trends -->
-        <div class="relative" @mouseenter="enterTrendChartArea" @mouseleave="leaveTrendChartArea">
-          <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-neutral-700 bg-neutral-900 text-[11px] text-neutral-300 cursor-pointer hover:border-neutral-600 transition-colors">
-            <span class="font-semibold text-neutral-200">{{ calculateKDR(playerStats?.totalKills || 0, playerStats?.totalDeaths || 0) }}</span>
-            <span class="text-neutral-500">K/D</span>
-            <span class="text-neutral-600 mx-0.5">|</span>
-            <span class="text-green-400 font-medium">{{ playerStats?.totalKills?.toLocaleString() }}</span>
-            <span class="text-neutral-600">/</span>
-            <span class="text-red-400 font-medium">{{ playerStats?.totalDeaths?.toLocaleString() }}</span>
+            <p class="text-neon-red text-lg font-medium">{{ error }}</p>
           </div>
 
-          <!-- Trend Charts - Show on Hover -->
-          <div
-            v-if="showTrendCharts"
-            class="absolute left-0 top-full mt-2 bg-neutral-950 border border-neutral-700 rounded-lg p-3 w-80 z-50 shadow-2xl transition-all duration-200"
-            @mouseenter="enterTrendChartArea"
-            @mouseleave="leaveTrendChartArea"
-          >
-            <div class="space-y-2">
-              <div class="space-y-1">
-                <div class="text-xs font-semibold text-neutral-300">Kill Rate Trend</div>
-                <div class="h-10 -mx-1 trend-chart-container">
-                  <Line
-                    :data="killRateTrendChartData"
-                    :options="microChartOptions"
+          <!-- Content -->
+          <div v-else-if="playerStats" class="space-y-6">
+            
+            <!-- Player Header Card -->
+            <div class="explorer-card">
+              <div class="explorer-card-body">
+                <div class="flex flex-wrap items-center gap-3">
+                  
+                  <!-- Avatar -->
+                  <div class="relative group cursor-pointer flex-shrink-0" @click="showLastOnline = !showLastOnline">
+                    <div class="w-10 h-10 rounded-full bg-[var(--bg-panel)] border border-[var(--border-color)] flex items-center justify-center text-lg font-bold text-neon-cyan font-mono"
+                         :class="playerStats?.isActive ? 'ring-2 ring-neon-green/50' : ''">
+                      {{ playerName?.charAt(0)?.toUpperCase() || '?' }}
+                    </div>
+                    <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[var(--bg-panel)]"
+                         :class="playerStats?.isActive ? 'bg-neon-green' : 'bg-neutral-600'" />
+                    <!-- Last Online Tooltip -->
+                    <div
+                      v-if="showLastOnline"
+                      class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 bg-[var(--bg-card)] border border-[var(--border-color)] rounded px-3 py-2 text-xs text-neutral-300 whitespace-nowrap z-50 shadow-xl"
+                    >
+                      <div class="flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full" :class="playerStats?.isActive ? 'bg-neon-green' : 'bg-neutral-500'" />
+                        <span class="font-mono">
+                          {{ playerStats?.isActive ? 'CURRENTLY ONLINE' : `LAST ONLINE: ${formatRelativeTime(playerStats?.lastPlayed || '')}`.toUpperCase() }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <h1 class="text-xl md:text-2xl font-bold text-neon-cyan truncate max-w-full lg:max-w-[34rem] font-mono">
+                    {{ playerName }}
+                  </h1>
+
+                  <PlayerAchievementHeroBadges :player-name="playerName" />
+
+                  <div class="flex flex-wrap gap-2 items-center ml-auto">
+                    <!-- K/D Badge -->
+                    <div class="relative" @mouseenter="enterTrendChartArea" @mouseleave="leaveTrendChartArea">
+                      <div class="explorer-tag explorer-tag--accent flex items-center gap-2 cursor-pointer">
+                        <span class="font-bold">{{ calculateKDR(playerStats?.totalKills || 0, playerStats?.totalDeaths || 0) }}</span>
+                        <span class="text-neutral-500">K/D</span>
+                      </div>
+
+                      <!-- Trend Charts -->
+                      <div
+                        v-if="showTrendCharts"
+                        class="absolute right-0 top-full mt-2 bg-[var(--bg-card)] border border-[var(--border-color)] rounded p-3 w-80 z-50 shadow-2xl"
+                        @mouseenter="enterTrendChartArea"
+                        @mouseleave="leaveTrendChartArea"
+                      >
+                        <div class="space-y-4">
+                          <div class="space-y-1">
+                            <div class="text-xs font-mono text-neon-cyan">KILL RATE TREND</div>
+                            <div class="h-16 -mx-1">
+                              <Line :data="killRateTrendChartData" :options="microChartOptions" />
+                            </div>
+                          </div>
+                          <div class="space-y-1">
+                            <div class="text-xs font-mono text-neon-pink">K/D TREND</div>
+                            <div class="h-16 -mx-1">
+                              <Line :data="kdRatioTrendChartData" :options="microChartOptions" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Playtime -->
+                    <div class="explorer-tag flex items-center gap-2">
+                      <span class="text-neutral-400">TIME</span>
+                      <span>{{ formatPlayTime(playerStats?.totalPlayTimeMinutes || 0) }}</span>
+                    </div>
+
+                    <!-- Last Played -->
+                    <div class="explorer-tag flex items-center gap-2">
+                      <span class="text-neutral-400">SEEN</span>
+                      <span>{{ formatRelativeTime(playerStats?.lastPlayed || '') }}</span>
+                    </div>
+
+                    <!-- Compare Button -->
+                    <router-link
+                      :to="{ path: '/players/compare', query: { player1: playerName } }"
+                      class="explorer-btn explorer-btn--ghost explorer-btn--sm"
+                      title="Compare this player"
+                    >
+                      COMPARE
+                    </router-link>
+                  </div>
+                </div>
+
+                <!-- Recent Rounds Compact -->
+                <div v-if="playerStats?.recentSessions && playerStats.recentSessions.length > 0" class="mt-4 pt-4 border-t border-[var(--border-color)]">
+                  <PlayerRecentRoundsCompact
+                    :sessions="playerStats.recentSessions"
+                    :player-name="playerName"
                   />
                 </div>
               </div>
-              <div class="space-y-1">
-                <div class="text-xs font-semibold text-neutral-300">K/D Trend</div>
-                <div class="h-10 -mx-1 trend-chart-container">
-                  <Line
-                    :data="kdRatioTrendChartData"
-                    :options="microChartOptions"
-                  />
+            </div>
+
+            <!-- Main Grid Layout -->
+            <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+              
+              <!-- Left Column: Data Explorer Breakdown -->
+              <div class="xl:col-span-7 space-y-6">
+                <div class="explorer-card">
+                  <div class="explorer-card-header">
+                    <h3 class="explorer-card-title">DATA EXPLORER BREAKDOWN</h3>
+                    <p class="text-[10px] text-neutral-500 font-mono mt-1">EXPANDED MAP AND SERVER SLICING</p>
+                  </div>
+                  <div class="explorer-card-body p-0">
+                    <PlayerDetailPanel
+                      :player-name="playerName"
+                      :game="playerPanelGame"
+                    />
+                  </div>
                 </div>
               </div>
+
+              <!-- Right Column: Achievements, Best Scores, Servers -->
+              <div class="xl:col-span-5 space-y-6">
+                
+                <!-- Achievements -->
+                <div class="explorer-card">
+                  <div class="explorer-card-header flex items-center justify-between">
+                    <h3 class="explorer-card-title">ACHIEVEMENTS</h3>
+                    <router-link
+                      :to="`/players/${encodeURIComponent(playerName)}/achievements`"
+                      class="explorer-link text-xs font-mono uppercase"
+                    >
+                      View All &rarr;
+                    </router-link>
+                  </div>
+                  <div class="explorer-card-body">
+                    <PlayerAchievementSummary
+                      :player-name="playerName"
+                      :achievement-groups="achievementGroups"
+                      :loading="achievementGroupsLoading"
+                      :error="achievementGroupsError"
+                    />
+                  </div>
+                </div>
+
+                <!-- Best Scores -->
+                <div class="explorer-card">
+                  <div class="explorer-card-header flex items-center justify-between">
+                    <h3 class="explorer-card-title">BEST SCORES</h3>
+                    <div class="explorer-toggle-group">
+                      <button
+                        v-for="tab in bestScoresTabOptions"
+                        :key="tab.key"
+                        class="explorer-toggle-btn"
+                        :class="{ 'explorer-toggle-btn--active': selectedBestScoresTab === tab.key }"
+                        @click="changeBestScoresTab(tab.key)"
+                      >
+                        {{ tab.label === 'All Time' ? 'ALL' : tab.label === '30 Days' ? '30D' : 'WK' }}
+                      </button>
+                    </div>
+                  </div>
+                  <div class="explorer-card-body p-0">
+                    <div v-if="currentBestScores.length === 0" class="p-6 text-center text-neutral-500 text-sm font-mono">
+                      NO SCORES RECORDED
+                    </div>
+                    <div v-else class="divide-y divide-[var(--border-color)]">
+                      <div
+                        v-for="(score, index) in currentBestScores.slice(0, 5)"
+                        :key="`${score.roundId}-${index}`"
+                        class="p-3 hover:bg-white/5 transition-colors cursor-pointer flex items-center gap-3"
+                        @click="navigateToRoundReport(score.roundId)"
+                      >
+                        <div class="w-6 h-6 rounded bg-[var(--bg-panel)] border border-[var(--border-color)] flex items-center justify-center text-xs font-bold text-neon-gold font-mono">
+                          {{ index + 1 }}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                          <div class="text-sm font-bold text-neon-cyan font-mono truncate">
+                            {{ score.score.toLocaleString() }} PTS
+                          </div>
+                          <div class="text-xs text-neutral-400 truncate font-mono">
+                            {{ score.mapName }} • {{ score.serverName }}
+                          </div>
+                        </div>
+                        <div class="text-[10px] text-neutral-500 font-mono text-right">
+                          <div>{{ formatRelativeTime(score.timestamp) }}</div>
+                          <div>K/D {{ calculateKDR(score.kills, score.deaths) }}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Servers List -->
+                <div class="explorer-card">
+                  <div class="explorer-card-header flex items-center justify-between">
+                    <h3 class="explorer-card-title">SERVERS</h3>
+                    <button
+                      type="button"
+                      class="explorer-btn explorer-btn--ghost explorer-btn--sm"
+                      @click="showAllServerMaps"
+                    >
+                      ALL MAP RANKINGS
+                    </button>
+                  </div>
+                  <div class="explorer-card-body p-0">
+                    <div class="divide-y divide-[var(--border-color)]">
+                      <div
+                        v-for="server in unifiedServerList"
+                        :key="server.serverGuid"
+                        class="group p-3 hover:bg-white/5 transition-colors cursor-pointer flex items-center gap-3"
+                        @click="showServerMapStats(server.serverGuid)"
+                      >
+                        <!-- Rank -->
+                        <div class="w-8 text-center font-mono text-sm" :class="getRankBadgeClass(rankNum(server.ranking))">
+                          <span v-if="server.ranking">#{{ server.ranking.rankDisplay ?? server.ranking.rank }}</span>
+                          <span v-else class="text-neutral-600">-</span>
+                        </div>
+
+                        <!-- Icon -->
+                        <div v-if="server.gameId" class="w-8 h-8 rounded bg-black/20 p-0.5">
+                          <img :src="getGameIcon(server.gameId)" alt="" class="w-full h-full object-cover rounded-sm" />
+                        </div>
+
+                        <!-- Details -->
+                        <div class="flex-1 min-w-0">
+                          <div class="text-sm font-medium text-neutral-200 truncate group-hover:text-neon-cyan transition-colors font-mono">
+                            {{ server.serverName }}
+                          </div>
+                          <div class="flex items-center gap-2 text-[10px] text-neutral-500 font-mono mt-0.5">
+                            <span v-if="server.hasStats">{{ formatPlayTime(server.totalMinutes) }}</span>
+                            <span v-if="server.hasStats">|</span>
+                            <span v-if="server.hasStats">K/D {{ Number(server.kdRatio).toFixed(2) }}</span>
+                            <span v-else-if="server.ranking">{{ server.ranking.scoreDisplay || server.ranking.totalScore.toLocaleString() }} score</span>
+                          </div>
+                        </div>
+
+                        <!-- Arrow -->
+                        <div class="text-neutral-600 group-hover:text-neon-cyan transition-colors">
+                          &rarr;
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
             </div>
+
+          </div>
+
+          <!-- Empty State -->
+          <div v-else class="explorer-empty">
+            <div class="explorer-empty-icon"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-500"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg></div>
+            <p class="explorer-empty-title">No player data available</p>
           </div>
         </div>
+      </div>
+    </div>
 
-        <!-- Playtime badge -->
-        <div class="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-neutral-700 bg-neutral-900 text-[11px] text-neutral-300">
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-400"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
-          <span>{{ formatPlayTime(playerStats?.totalPlayTimeMinutes || 0) }}</span>
+    <!-- Map Stats Panel (Overlay) -->
+    <div v-if="isMapStatsPanelOpen && playerStats?.servers" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" @click="closeServerMapStats">
+      <div class="w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border border-[var(--border-color)] rounded-lg shadow-2xl" @click.stop>
+        <!-- Header -->
+        <div class="p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">
+          <div>
+            <h2 class="text-lg font-bold text-neon-cyan font-mono">
+              {{ rankingsMapName ? `RANKINGS: ${rankingsMapName}` : 'MAP RANKINGS' }}
+            </h2>
+            <p class="text-xs text-neutral-400 font-mono mt-1">
+              {{ selectedServerName || 'SELECTED SERVER' }}
+            </p>
+          </div>
+          <button class="explorer-btn explorer-btn--ghost explorer-btn--sm" aria-label="Close map rankings panel" @click="closeServerMapStats">CLOSE</button>
         </div>
 
-        <!-- Last played badge -->
-        <div class="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-neutral-700 bg-neutral-900 text-[11px] text-neutral-300">
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-400"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>
-          <span>{{ formatRelativeTime(playerStats?.lastPlayed || '') }}</span>
-        </div>
-
-        <!-- Compare Player button -->
-        <router-link
-          :to="{ path: '/players/compare', query: { player1: playerName } }"
-          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-neutral-600 bg-neutral-200 text-neutral-900 text-[11px] font-semibold hover:bg-neutral-100 transition-colors"
-          title="Compare this player with another"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 13L2 9l4-6z"/><path d="M11 3 8 9l4 13 4-13-3-6"/></svg>
-          Compare
-        </router-link>
-
-        <div
-          v-if="playerStats?.recentSessions && playerStats.recentSessions.length > 0"
-          class="ml-auto max-w-full"
-        >
-          <PlayerRecentRoundsCompact
-            :sessions="playerStats.recentSessions"
+        <!-- Content -->
+        <div class="flex-1 overflow-y-auto p-4">
+          <div v-if="rankingsMapName">
+            <button
+              class="explorer-btn explorer-btn--ghost explorer-btn--sm mb-4 flex items-center gap-2"
+              @click="closeRankingsPanel"
+            >
+              &larr; BACK TO MAP STATS
+            </button>
+            <MapRankingsPanel
+              :map-name="rankingsMapName"
+              :server-guid="rankingsServerGuid ?? undefined"
+              :highlight-player="playerName"
+              :game="(effectiveServerGuid ? playerStats?.servers?.find(s => s.serverGuid === effectiveServerGuid)?.gameId as any : undefined) || 'bf1942'"
+            />
+          </div>
+          <PlayerServerMapStats
+            v-else
             :player-name="playerName"
+            :server-guid="effectiveServerGuid"
+            :game="(effectiveServerGuid ? playerStats?.servers?.find(s => s.serverGuid === effectiveServerGuid)?.gameId as any : undefined) || 'bf1942'"
+            @open-rankings="openRankingsPanel"
           />
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Main Content Area: flex row on lg when map stats panel is open for side-by-side layout -->
-  <div class="min-h-screen bg-neutral-950">
-    <div
-      class="relative flex flex-col min-h-0"
-      :class="{ 'lg:flex-row': isMapStatsPanelOpen && playerStats?.servers }"
-    >
-      <div class="flex-1 min-w-0">
-        <div class="relative">
-          <div class="w-full px-2 sm:px-6 lg:px-12 py-6">
-        <!-- Loading State -->
-        <div
-          v-if="isLoading"
-          class="flex flex-col items-center justify-center min-h-[60vh] space-y-6"
-        >
-          <div class="relative">
-            <div class="w-20 h-20 border-4 border-neutral-700 rounded-full animate-spin">
-              <div class="absolute top-0 left-0 w-20 h-20 border-4 border-neutral-400 rounded-full border-t-transparent animate-spin" />
-            </div>
-            <div class="absolute inset-0 flex items-center justify-center">
-              <div class="w-8 h-8 border-2 border-neutral-500 border-t-neutral-300 rounded-full animate-spin" />
-            </div>
-          </div>
-          <div class="text-center space-y-2">
-            <p class="text-xl font-semibold text-neutral-300">
-              Loading Player Statistics...
-            </p>
-            <p class="text-neutral-500">
-              Analyzing battlefield performance data
-            </p>
-          </div>
-        </div>
-
-        <!-- Error State -->
-        <div
-          v-else-if="error"
-          class="flex flex-col items-center justify-center min-h-[60vh] space-y-6"
-        >
-          <div class="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="32"
-              height="32"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              class="text-red-400"
-            >
-              <circle
-                cx="12"
-                cy="12"
-                r="10"
-              />
-              <line
-                x1="15"
-                y1="9"
-                x2="9"
-                y2="15"
-              />
-              <line
-                x1="9"
-                y1="9"
-                x2="15"
-                y2="15"
-              />
-            </svg>
-          </div>
-          <div class="text-center space-y-2">
-            <p class="text-xl font-semibold text-red-400">
-              {{ error }}
-            </p>
-            <p class="text-neutral-500">
-              Unable to load player data
-            </p>
-          </div>
-        </div>
-
-        <!-- Main Content -->
-        <div
-          v-else-if="playerStats"
-          class="w-full px-1 sm:px-4 pb-6 sm:pb-12 space-y-4 sm:space-y-8"
-        >
-
-          <!-- Data Explorer Player Breakdown -->
-          <div class="bg-neutral-900/80 border border-neutral-700/50 rounded-xl overflow-hidden">
-            <div class="px-3 sm:px-6 py-4 border-b border-neutral-700/50">
-              <h3 class="text-xl font-semibold text-neutral-200">
-                Data Explorer Breakdown
-              </h3>
-              <p class="text-sm text-neutral-400 mt-1">
-                Expanded map and server slicing for this player.
-              </p>
-            </div>
-            <PlayerDetailPanel
-              :player-name="playerName"
-              :game="playerPanelGame"
-            />
-          </div>
-
-          <!-- Servers – Unified list sorted by ranking -->
-          <div
-            v-if="unifiedServerList.length > 0"
-            class="bg-neutral-900/80 border border-neutral-700/50 rounded-xl overflow-hidden"
-          >
-            <!-- Header -->
-            <div class="px-3 sm:px-6 py-4 border-b border-neutral-700/50 flex items-center justify-between">
-              <h3 class="text-xl font-semibold text-neutral-200">
-                Servers
-              </h3>
-              <div class="flex items-center gap-3">
-                <div class="hidden sm:flex items-center gap-2 text-xs text-neutral-500">
-                  <span v-if="rankingsSummary?.numOnes" class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-semibold">
-                    #1 on {{ rankingsSummary.numOnes }}
-                  </span>
-                  <span v-if="rankingsSummary?.numTop10 && rankingsSummary.numTop10 !== rankingsSummary?.numOnes" class="text-neutral-400">
-                    Top 10 on {{ rankingsSummary.numTop10 }}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-neutral-600 text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 hover:border-neutral-500 transition-colors"
-                  @click="showAllServerMaps"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-                  All Map Rankings
-                </button>
-              </div>
-            </div>
-
-            <!-- Server List -->
-            <div class="divide-y divide-neutral-800/60">
-              <div
-                v-for="server in unifiedServerList"
-                :key="server.serverGuid"
-                class="group flex items-center gap-3 sm:gap-4 px-3 sm:px-6 py-3 hover:bg-neutral-800/40 transition-colors cursor-pointer"
-                @click="showServerMapStats(server.serverGuid)"
-              >
-                <!-- Rank Badge -->
-                <div class="flex-shrink-0 w-10 text-center">
-                  <div
-                    v-if="server.ranking"
-                    class="text-sm"
-                    :class="getRankBadgeClass(rankNum(server.ranking))"
-                  >
-                    #{{ server.ranking.rankDisplay ?? server.ranking.rank }}
-                  </div>
-                  <div v-else class="text-xs text-neutral-600">—</div>
-                </div>
-
-                <!-- Game Icon -->
-                <div v-if="server.gameId" class="flex-shrink-0 w-8 h-8 rounded bg-neutral-700/80 flex items-center justify-center p-1">
-                  <img :src="getGameIcon(server.gameId)" alt="" class="w-full h-full rounded object-cover" />
-                </div>
-
-                <!-- Server Name + Rank Details -->
-                <div class="flex-1 min-w-0">
-                  <div class="text-sm font-medium text-neutral-200 truncate group-hover:text-cyan-400 transition-colors">
-                    {{ server.serverName }}
-                  </div>
-                  <div class="flex items-center gap-2 text-xs text-neutral-500 mt-0.5">
-                    <span v-if="server.ranking">of {{ server.ranking.totalRankedPlayers }} players</span>
-                    <span
-                      v-if="server.ranking?.averagePing > 0"
-                      class="font-mono"
-                      :class="{
-                        'ping-good': server.ranking.averagePing < 50,
-                        'ping-warning': server.ranking.averagePing >= 50 && server.ranking.averagePing < 100,
-                        'ping-bad': server.ranking.averagePing >= 100
-                      }"
-                    >
-                      {{ server.ranking.averagePing }}ms
-                    </span>
-                    <span v-if="server.hasStats && server.totalMinutes > 0" class="text-neutral-600">{{ formatPlayTime(server.totalMinutes) }}</span>
-                    <span v-if="!server.hasStats && server.ranking" class="text-neutral-500">{{ server.ranking.scoreDisplay || server.ranking.totalScore.toLocaleString() }} score</span>
-                  </div>
-                </div>
-
-                <!-- Compact Stats (desktop) - only when we have full stats -->
-                <div v-if="server.hasStats" class="hidden sm:flex items-center gap-5 text-xs flex-shrink-0">
-                  <div class="text-center min-w-[3rem]">
-                    <div class="font-mono font-semibold text-neutral-200">{{ Number(server.kdRatio).toFixed(2) }}</div>
-                    <div class="text-neutral-500">K/D</div>
-                  </div>
-                  <div class="text-center min-w-[4.5rem]">
-                    <div>
-                      <span class="text-green-400 font-semibold">{{ server.totalKills.toLocaleString() }}</span>
-                      <span class="text-neutral-600 mx-0.5">/</span>
-                      <span class="text-red-400 font-semibold">{{ server.totalDeaths.toLocaleString() }}</span>
-                    </div>
-                    <div class="text-neutral-500">K / D</div>
-                  </div>
-                  <div class="text-center min-w-[2.5rem]">
-                    <div class="font-mono text-neutral-300">{{ getPlaytimePercentage(server.totalMinutes).toFixed(0) }}%</div>
-                    <div class="text-neutral-500">time</div>
-                  </div>
-                </div>
-                <!-- Score display for ranking-only entries -->
-                <div v-else-if="server.ranking" class="hidden sm:flex items-center gap-3 text-xs flex-shrink-0">
-                  <div class="text-center">
-                    <div class="font-mono font-semibold text-amber-400">{{ server.ranking.totalScore.toLocaleString() }}</div>
-                    <div class="text-neutral-500">score</div>
-                  </div>
-                </div>
-
-                <!-- Drill-in Arrow -->
-                <div class="flex-shrink-0 text-neutral-600 group-hover:text-cyan-400 transition-colors">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Player Achievements Section -->
-          <div class="relative overflow-hidden bg-neutral-900/80 rounded-2xl border border-neutral-700/50">
-            <!-- Background Effects (subtle dark theme accent) -->
-            <div class="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-transparent pointer-events-none" aria-hidden="true" />
-            <div class="relative z-10 p-2 sm:p-6 lg:p-8 space-y-6">
-              <!-- Section Header -->
-              <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                <div class="space-y-2">
-                  <h3 class="text-3xl font-bold text-neutral-200">
-                    🏆 Achievements & Streaks
-                  </h3>
-                  <p class="text-neutral-400">
-                    Unlock your battlefield legacy
-                  </p>
-                </div>
-                <router-link
-                  :to="`/players/${encodeURIComponent(playerName)}/achievements`"
-                  class="group inline-flex items-center gap-3 px-6 py-3 text-sm font-bold text-neutral-200 hover:text-cyan-400 bg-neutral-800 border border-neutral-600 hover:border-cyan-500/50 hover:bg-neutral-700/80 rounded-xl transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-cyan-500/10"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    class="group-hover:rotate-12 transition-transform duration-300"
-                  >
-                    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-                    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-                    <path d="M4 22h16" />
-                    <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
-                    <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
-                    <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
-                  </svg>
-                  View All Achievements
-                </router-link>
-              </div>
-
-              <PlayerAchievementSummary
-                :player-name="playerName"
-                :achievement-groups="achievementGroups"
-                :loading="achievementGroupsLoading"
-                :error="achievementGroupsError"
-              />
-
-              <!-- Best Scores integrated into achievements -->
-              <div
-                v-if="playerStats?.bestScores && (playerStats.bestScores.allTime?.length > 0 || playerStats.bestScores.last30Days?.length > 0 || playerStats.bestScores.thisWeek?.length > 0)"
-                class="rounded-xl border border-neutral-700/60 bg-neutral-950/60 p-3 sm:p-4 space-y-3"
-              >
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                  <h4 class="text-lg font-semibold text-neutral-200">Best Scores</h4>
-                  <div class="flex gap-2 bg-neutral-900/60 rounded-lg p-1 border border-neutral-700/50">
-                    <button
-                      v-for="tab in bestScoresTabOptions"
-                      :key="tab.key"
-                      class="px-3 py-1 text-xs font-medium rounded transition-colors duration-200"
-                      :class="{
-                        'bg-neutral-700 text-neutral-100': selectedBestScoresTab === tab.key,
-                        'text-neutral-400 hover:text-neutral-300': selectedBestScoresTab !== tab.key
-                      }"
-                      @click="changeBestScoresTab(tab.key)"
-                    >
-                      {{ tab.label }}
-                    </button>
-                  </div>
-                </div>
-
-                <div v-if="currentBestScores.length === 0" class="py-3 text-sm text-center text-neutral-400">
-                  No scores recorded for this period
-                </div>
-
-                <div v-else class="best-scores-scroll-container space-y-2">
-                  <div
-                    v-for="(score, index) in currentBestScores.slice(0, 5)"
-                    :key="`${score.roundId}-${index}`"
-                    class="p-3 bg-neutral-800/40 hover:bg-neutral-800/60 rounded-lg border border-neutral-700/30 hover:border-neutral-700/60 transition-colors duration-200 cursor-pointer group"
-                    @click="navigateToRoundReport(score.roundId)"
-                  >
-                    <div class="flex items-center gap-3">
-                      <div class="flex-shrink-0 w-6 h-6 bg-neutral-700 rounded-full flex items-center justify-center font-bold text-sm text-neutral-200">
-                        {{ index + 1 }}
-                      </div>
-                      <div class="min-w-0 flex-1">
-                        <div class="text-sm text-neutral-200 font-medium truncate">
-                          {{ score.score.toLocaleString() }} pts - {{ score.mapName }}
-                        </div>
-                        <div class="text-xs text-neutral-500 truncate">
-                          {{ score.serverName }} • {{ score.kills }}/{{ score.deaths }} • K/D {{ calculateKDR(score.kills, score.deaths) }}
-                        </div>
-                      </div>
-                      <div class="flex-shrink-0 text-xs text-neutral-500 text-right">
-                        {{ formatRelativeTime(score.timestamp) }}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    </div>
-    </div>
-
-      <!-- Server Map Statistics Panel: overlay on mobile, side-by-side on lg -->
-      <template v-if="isMapStatsPanelOpen && playerStats?.servers">
-      <div
-        class="fixed inset-0 bg-black/20 backdrop-blur-sm z-[100] lg:hidden"
-        aria-hidden="true"
-        @click="closeServerMapStats"
-      ></div>
-      <div
-        class="fixed inset-y-0 left-0 right-0 md:right-20 z-[100] flex items-stretch lg:relative lg:inset-auto lg:z-auto lg:w-[560px] xl:w-[620px] 2xl:w-[700px] lg:flex-shrink-0 lg:min-h-0 lg:border-l lg:border-neutral-800"
-        @click.stop
-      >
-        <div
-          class="bg-neutral-950 w-full max-w-6xl lg:max-w-none shadow-2xl animate-slide-in-left overflow-hidden flex flex-col border-r border-neutral-800 lg:border-r-0"
-          :class="{ 'h-[calc(100vh-4rem)]': true, 'md:h-full': true, 'mt-16': true, 'md:mt-0': true }"
-        >
-          <!-- Header -->
-          <div class="sticky top-0 z-20 bg-neutral-950/95 border-b border-neutral-800 p-2 sm:p-4 flex justify-between items-center">
-            <div class="flex flex-col min-w-0 flex-1 mr-4">
-              <h2 class="text-xl font-bold text-neutral-200 truncate">
-                {{ rankingsMapName ? `Rankings: ${rankingsMapName}` : 'Map Rankings' }}
-              </h2>
-              <p class="text-sm text-neutral-400 mt-1 truncate">
-                {{ selectedServerName || 'Selected Server' }}
-              </p>
-            </div>
-            <button 
-              class="group p-2 text-neutral-400 hover:text-white hover:bg-red-500/20 border border-neutral-600 hover:border-red-500/50 rounded-lg transition-all duration-300 flex items-center justify-center w-10 h-10 flex-shrink-0"
-              title="Close panel"
-              @click="closeServerMapStats"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                class="group-hover:text-red-400"
-              >
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          </div>
-
-          <!-- Content -->
-          <div class="flex-1 min-h-0 overflow-y-auto">
-            <!-- Rankings Drill-Down View -->
-            <div v-if="rankingsMapName" class="p-2 sm:p-4">
-              <button
-                class="flex items-center gap-1.5 mb-3 px-2 py-1 text-xs font-medium text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 rounded transition-colors"
-                @click="closeRankingsPanel"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-                Back to Map Stats
-              </button>
-              <MapRankingsPanel
-                :map-name="rankingsMapName"
-                :server-guid="rankingsServerGuid ?? undefined"
-                :highlight-player="playerName"
-                :game="(effectiveServerGuid ? playerStats?.servers?.find(s => s.serverGuid === effectiveServerGuid)?.gameId as any : undefined) || 'bf1942'"
-              />
-            </div>
-            <!-- Map Stats View -->
-            <PlayerServerMapStats
-              v-else
-              :player-name="playerName"
-              :server-guid="effectiveServerGuid"
-              :game="(effectiveServerGuid ? playerStats?.servers?.find(s => s.serverGuid === effectiveServerGuid)?.gameId as any : undefined) || 'bf1942'"
-              @open-rankings="openRankingsPanel"
-            />
-          </div>
-        </div>
-      </div>
-    </template>
-    </div>
-  </div>
-    </div>
   </div>
 </template>
 
 <style src="./portal-layout.css"></style>
-<style scoped src="./PlayerDetails.vue.css"></style>
+<style scoped src="./DataExplorer.vue.css"></style>

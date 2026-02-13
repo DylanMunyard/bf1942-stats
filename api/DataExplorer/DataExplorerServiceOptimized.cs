@@ -1902,13 +1902,17 @@ public class DataExplorerService(
         {
             var sliceKey = data.MapName;
             var subKey = includeServer ? data.ServerGuid : null;
-            var sliceLabel = includeServer && serverNameLookup != null && data.ServerGuid != null
-                ? $"{data.MapName} on {serverNameLookup.GetValueOrDefault(data.ServerGuid, "Unknown Server")}"
+            var subKeyLabel = includeServer && serverNameLookup != null && data.ServerGuid != null
+                ? serverNameLookup.GetValueOrDefault(data.ServerGuid, "Unknown Server")
+                : null;
+            var sliceLabel = includeServer && subKeyLabel != null
+                ? $"{data.MapName} on {subKeyLabel}"
                 : data.MapName;
 
             results.Add(new PlayerSliceResultDto(
                 SliceKey: sliceKey,
                 SubKey: subKey,
+                SubKeyLabel: subKeyLabel,
                 SliceLabel: sliceLabel,
                 PrimaryValue: data.Wins,
                 SecondaryValue: data.TotalRounds,
@@ -1983,8 +1987,11 @@ public class DataExplorerService(
         {
             var sliceKey = data.MapName;
             var subKey = includeServer ? data.ServerGuid : null;
-            var sliceLabel = includeServer && serverNameLookup != null 
-                ? $"{data.MapName} on {serverNameLookup.GetValueOrDefault(data.ServerGuid ?? "", "Unknown Server")}"
+            var subKeyLabel = includeServer && serverNameLookup != null
+                ? serverNameLookup.GetValueOrDefault(data.ServerGuid ?? "", "Unknown Server")
+                : null;
+            var sliceLabel = includeServer && subKeyLabel != null
+                ? $"{data.MapName} on {subKeyLabel}"
                 : data.MapName;
             var team1Label = NormalizeTeamLabel(data.Team1Label, game, 1);
             var team2Label = NormalizeTeamLabel(data.Team2Label, game, 2);
@@ -1992,6 +1999,7 @@ public class DataExplorerService(
             results.Add(new PlayerSliceResultDto(
                 SliceKey: sliceKey,
                 SubKey: subKey,
+                SubKeyLabel: subKeyLabel,
                 SliceLabel: sliceLabel,
                 PrimaryValue: data.Team1Victories,
                 SecondaryValue: data.TotalRounds,
@@ -2051,13 +2059,17 @@ public class DataExplorerService(
         {
             var sliceKey = data.MapName;
             var subKey = includeServer ? data.ServerGuid : null;
-            var sliceLabel = includeServer && serverNameLookup != null && data.ServerGuid != null
-                ? $"{data.MapName} on {serverNameLookup.GetValueOrDefault(data.ServerGuid, "Unknown Server")}"
+            var subKeyLabel = includeServer && serverNameLookup != null && data.ServerGuid != null
+                ? serverNameLookup.GetValueOrDefault(data.ServerGuid, "Unknown Server")
+                : null;
+            var sliceLabel = includeServer && subKeyLabel != null
+                ? $"{data.MapName} on {subKeyLabel}"
                 : data.MapName;
 
             results.Add(new PlayerSliceResultDto(
                 SliceKey: sliceKey,
                 SubKey: subKey,
+                SubKeyLabel: subKeyLabel,
                 SliceLabel: sliceLabel,
                 PrimaryValue: data.TotalScore,
                 SecondaryValue: data.TotalRounds,
@@ -2115,13 +2127,17 @@ public class DataExplorerService(
         {
             var sliceKey = data.MapName;
             var subKey = includeServer ? data.ServerGuid : null;
-            var sliceLabel = includeServer && serverNameLookup != null && data.ServerGuid != null
-                ? $"{data.MapName} on {serverNameLookup.GetValueOrDefault(data.ServerGuid, "Unknown Server")}"
+            var subKeyLabel = includeServer && serverNameLookup != null && data.ServerGuid != null
+                ? serverNameLookup.GetValueOrDefault(data.ServerGuid, "Unknown Server")
+                : null;
+            var sliceLabel = includeServer && subKeyLabel != null
+                ? $"{data.MapName} on {subKeyLabel}"
                 : data.MapName;
 
             results.Add(new PlayerSliceResultDto(
                 SliceKey: sliceKey,
                 SubKey: subKey,
+                SubKeyLabel: subKeyLabel,
                 SliceLabel: sliceLabel,
                 PrimaryValue: data.TotalKills,
                 SecondaryValue: data.TotalRounds,
