@@ -12,7 +12,7 @@
       </div>
       
       <!-- Navigation Menu -->
-      <nav class="flex-1 py-6 space-y-3 overflow-visible">
+      <nav class="flex-1 py-6 space-y-3 overflow-y-auto overflow-x-visible sidebar-scroll">
         <!-- Dashboard Link -->
         <router-link
           v-if="isAuthenticated"
@@ -168,6 +168,49 @@
           </div>
         </router-link>
 
+        <button
+          type="button"
+          class="group relative flex flex-col items-center justify-center w-14 h-14 mx-auto rounded-xl bg-gradient-to-br from-neutral-700/50 to-neutral-800/50 backdrop-blur-sm border border-neutral-600/50 hover:border-cyan-500/50 transition-all duration-300 hover:scale-105"
+          :class="isAIChatOpen ? '!border-cyan-500 !bg-gradient-to-br !from-cyan-500/20 !to-blue-500/20 !shadow-lg !shadow-cyan-500/30' : ''"
+          @click="isAIChatOpen = !isAIChatOpen"
+        >
+          <div class="w-8 h-8 flex items-center justify-center opacity-80 group-hover:opacity-100">
+            <i class="pi pi-comment text-2xl text-cyan-300" />
+          </div>
+          <div class="absolute right-full mr-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none">
+            <div class="bg-gradient-to-r from-neutral-900/95 to-neutral-950 backdrop-blur-lg rounded-xl border border-neutral-700/50 p-4 shadow-2xl min-w-52">
+              <div class="text-sm font-bold text-cyan-300">Clippy Chat</div>
+              <p class="text-neutral-300 text-xs mt-1">Open the AI assistant</p>
+            </div>
+            <div class="absolute left-full top-1/2 -translate-y-1/2 border-l-8 border-l-neutral-900 border-y-8 border-y-transparent" />
+          </div>
+        </button>
+
+        <button
+          v-if="isAuthenticated"
+          type="button"
+          class="group relative flex flex-col items-center justify-center w-14 h-14 mx-auto rounded-xl bg-gradient-to-br from-neutral-700/50 to-neutral-800/50 backdrop-blur-sm border border-neutral-600/50 hover:border-emerald-500/50 transition-all duration-300 hover:scale-105"
+          :class="isSocialOpen ? '!border-emerald-500 !bg-gradient-to-br !from-emerald-500/20 !to-green-500/20 !shadow-lg !shadow-emerald-500/30' : ''"
+          @click="isSocialOpen = !isSocialOpen"
+        >
+          <div class="w-8 h-8 flex items-center justify-center opacity-80 group-hover:opacity-100 relative">
+            <i class="pi pi-users text-2xl text-emerald-300" />
+            <span
+              v-if="sidebarNotificationCount > 0"
+              class="absolute -top-1 -right-1 min-w-[1rem] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] leading-4 text-center font-bold"
+            >
+              {{ sidebarNotificationCount > 9 ? '9+' : sidebarNotificationCount }}
+            </span>
+          </div>
+          <div class="absolute right-full mr-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none">
+            <div class="bg-gradient-to-r from-neutral-900/95 to-neutral-950 backdrop-blur-lg rounded-xl border border-neutral-700/50 p-4 shadow-2xl min-w-52">
+              <div class="text-sm font-bold text-emerald-300">Social</div>
+              <p class="text-neutral-300 text-xs mt-1">Online players and notifications</p>
+            </div>
+            <div class="absolute left-full top-1/2 -translate-y-1/2 border-l-8 border-l-neutral-900 border-y-8 border-y-transparent" />
+          </div>
+        </button>
+
         <!-- Admin Data Management (Support and Admin) -->
         <router-link
           v-if="isSupport"
@@ -256,6 +299,31 @@
           />
         </router-link>
 
+        <button
+          type="button"
+          class="group flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-neutral-700/50 to-neutral-800/50 backdrop-blur-sm border border-neutral-600/50 hover:border-cyan-500/50 transition-all duration-300 hover:scale-105"
+          :class="isAIChatOpen ? '!border-cyan-500 !bg-gradient-to-br !from-cyan-500/20 !to-blue-500/20 !shadow-lg !shadow-cyan-500/30' : ''"
+          @click="isAIChatOpen = !isAIChatOpen"
+        >
+          <i class="pi pi-comment text-lg text-cyan-300" />
+        </button>
+
+        <button
+          v-if="isAuthenticated"
+          type="button"
+          class="group relative flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-neutral-700/50 to-neutral-800/50 backdrop-blur-sm border border-neutral-600/50 hover:border-emerald-500/50 transition-all duration-300 hover:scale-105"
+          :class="isSocialOpen ? '!border-emerald-500 !bg-gradient-to-br !from-emerald-500/20 !to-green-500/20 !shadow-lg !shadow-emerald-500/30' : ''"
+          @click="isSocialOpen = !isSocialOpen"
+        >
+          <i class="pi pi-users text-lg text-emerald-300" />
+          <span
+            v-if="sidebarNotificationCount > 0"
+            class="absolute -top-1 -right-1 min-w-[1rem] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] leading-4 text-center font-bold"
+          >
+            {{ sidebarNotificationCount > 9 ? '9+' : sidebarNotificationCount }}
+          </span>
+        </button>
+
         <!-- Admin Data (Support and Admin) -->
         <router-link
           v-if="isSupport"
@@ -268,12 +336,24 @@
       </nav>
     </div>
   </div>
+
+  <OnlinePlayersSidebar
+    v-if="isAuthenticated"
+    v-model="isSocialOpen"
+    :hide-toggle="true"
+  />
+  <AIChatDrawer v-model="isAIChatOpen" :context="aiContext" :key="route.fullPath" />
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import LoginButton from './LoginButton.vue';
+import OnlinePlayersSidebar from './OnlinePlayersSidebar.vue';
+import AIChatDrawer from './AIChatDrawer.vue';
 import { useAuth } from '@/composables/useAuth';
+import { useNotifications } from '@/composables/useNotifications';
+import { useAIContext } from '@/composables/useAIContext';
 
 import dashboardIcon from '@/assets/achievements/dashboard-sidemenu.webp';
 import serversIcon from '@/assets/servers.webp';
@@ -282,6 +362,25 @@ import explorerIcon from '@/assets/menu-item-data-explorer.webp';
 
 const route = useRoute();
 const { isAuthenticated, isSupport } = useAuth();
+const { unreadRecentCount, missedNotificationCount } = useNotifications();
+const { context: aiContext } = useAIContext();
+
+const isAIChatOpen = ref(false);
+const isSocialOpen = ref(false);
+const sidebarNotificationCount = computed(() => {
+  return missedNotificationCount.value > 0 ? missedNotificationCount.value : unreadRecentCount.value;
+});
 </script>
+
+<style scoped>
+.sidebar-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar-scroll::-webkit-scrollbar {
+  display: none;
+}
+</style>
 
  

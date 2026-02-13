@@ -11,6 +11,18 @@ import type { BuddyNotificationMessage } from '@/types/playerStatsTypes';
 const router = useRouter();
 const { isAuthenticated } = useAuth();
 
+const props = withDefaults(defineProps<{
+  modelValue?: boolean;
+  hideToggle?: boolean;
+}>(), {
+  modelValue: false,
+  hideToggle: false,
+});
+
+const emit = defineEmits<{
+  (e: 'update:modelValue', value: boolean): void;
+}>();
+
 // Notifications
 const { 
   recentNotifications,
@@ -31,10 +43,19 @@ const autoRefreshInterval = ref<number | null>(null);
 const refreshIntervalSeconds = 30;
 const isAutoRefresh = ref(true);
 // Panel state management
-const isPanelOpen = ref(false);
+const isPanelOpenInternal = ref(false);
 const activeTab = ref<'social' | 'notifications'>('social');
+const isPanelOpen = computed(() => props.hideToggle ? props.modelValue : isPanelOpenInternal.value);
+const setPanelOpen = (open: boolean) => {
+  if (props.hideToggle) {
+    emit('update:modelValue', open);
+    return;
+  }
+  isPanelOpenInternal.value = open;
+  emit('update:modelValue', open);
+};
 const togglePanel = () => {
-  isPanelOpen.value = !isPanelOpen.value;
+  setPanelOpen(!isPanelOpen.value);
   // Mark recent notifications as viewed when opening panel
   if (isPanelOpen.value && activeTab.value === 'notifications') {
     markRecentAsViewed();
@@ -50,7 +71,7 @@ const switchTab = (tab: 'social' | 'notifications') => {
 
 // Close panel function
 const closePanel = () => {
-  isPanelOpen.value = false;
+  setPanelOpen(false);
 };
 
 // Click outside handler
@@ -58,9 +79,11 @@ const handleClickOutside = (event: Event) => {
   const target = event.target as Element;
   const panel = document.querySelector('.social-panel');
   const toggleBtn = document.querySelector('.social-toggle-btn');
-  
-  if (isPanelOpen.value && panel && toggleBtn && 
-      !panel.contains(target) && !toggleBtn.contains(target)) {
+
+  const clickedInsidePanel = panel?.contains(target) ?? false;
+  const clickedToggle = toggleBtn?.contains(target) ?? false;
+
+  if (isPanelOpen.value && !clickedInsidePanel && !clickedToggle) {
     closePanel();
   }
 };
@@ -245,6 +268,7 @@ onUnmounted(() => {
   <div class="social-container">
     <!-- Toggle handle fixed to the right edge -->
     <button
+      v-if="!hideToggle"
       class="social-toggle-btn"
       @click="togglePanel"
     >
@@ -278,6 +302,16 @@ onUnmounted(() => {
       :class="{ open: isPanelOpen }"
     >
       <div class="panel-header">
+        <div class="panel-header-top">
+          <button
+            type="button"
+            class="panel-close-btn"
+            aria-label="Close social panel"
+            @click="closePanel"
+          >
+            ×
+          </button>
+        </div>
         <div class="tab-navigation">
           <button
             class="tab-button"

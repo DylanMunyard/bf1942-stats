@@ -1032,7 +1032,7 @@ onUnmounted(() => {
         @click="closeServerMapStats"
       ></div>
       <div
-        class="fixed inset-y-0 left-0 right-0 md:right-20 z-[100] flex items-stretch lg:relative lg:inset-auto lg:z-auto lg:w-2/5 lg:mr-20 lg:flex-shrink-0 lg:min-h-0 lg:border-l lg:border-neutral-800"
+        class="fixed inset-y-0 left-0 right-0 md:right-20 z-[100] flex items-stretch lg:relative lg:inset-auto lg:z-auto lg:w-[560px] xl:w-[620px] 2xl:w-[700px] lg:flex-shrink-0 lg:min-h-0 lg:border-l lg:border-neutral-800"
         @click.stop
       >
         <div

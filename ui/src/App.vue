@@ -1,35 +1,22 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, provide } from 'vue';
-import { useRoute } from 'vue-router';
 import DashboardLayout from './layouts/DashboardLayout.vue';
-import AIChatButton from './components/AIChatButton.vue';
-import AIChatDrawer from './components/AIChatDrawer.vue';
 import { initializeBadgeDefinitions } from './services/badgeService';
 import { useSignalR } from '@/composables/useSignalR';
 import { useNotifications } from '@/composables/useNotifications';
 import { createAIContext } from '@/composables/useAIContext';
 
-const route = useRoute();
-
 // Dark mode state
 const isDarkMode = ref(false);
 
 // Initialize SignalR
-const { isConnected, connectionId } = useSignalR();
+useSignalR();
 
 // Initialize notifications
 useNotifications();
 
 // Initialize AI context
-const { context: aiContext } = createAIContext();
-
-// AI Chat state
-const isAIChatOpen = ref(false);
-
-const toggleAIChat = () => {
-  isAIChatOpen.value = !isAIChatOpen.value;
-};
-
+createAIContext();
 
 // Function to toggle dark mode
 const toggleDarkMode = () => {
@@ -90,8 +77,6 @@ provide('toggleDarkMode', toggleDarkMode);
 
 <template>
   <DashboardLayout />
-  <AIChatButton :is-open="isAIChatOpen" @click="toggleAIChat" />
-  <AIChatDrawer v-model="isAIChatOpen" :context="aiContext" :key="route.fullPath" />
 </template>
 
 <style>
