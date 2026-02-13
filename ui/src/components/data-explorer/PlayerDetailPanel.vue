@@ -54,6 +54,27 @@
           </h2>
         </div>
 
+        <!-- Current Data Context Banner -->
+        <div class="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 rounded-lg p-4 mb-6">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+              <div class="flex-shrink-0">
+                <div class="w-10 h-10 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-lg flex items-center justify-center">
+                  <span class="text-white text-lg">📊</span>
+                </div>
+              </div>
+              <div>
+                <h3 class="text-lg font-semibold text-slate-200">{{ getCurrentSliceName() }}</h3>
+                <p class="text-sm text-slate-400">{{ getCurrentSliceDescription() }}</p>
+              </div>
+            </div>
+            <div class="text-right text-sm text-slate-400">
+              <div>{{ gameLabel }}</div>
+              <div>Last {{ slicedData.dateRange.days }} days</div>
+            </div>
+          </div>
+        </div>
+
         <!-- Controls Row -->
         <div class="flex flex-col gap-4 mb-6">
           <!-- Slice Dimension Selector -->
@@ -62,7 +83,7 @@
             <select
               v-model="selectedSliceType"
               @change="changeSliceType"
-              class="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm text-slate-200 focus:border-cyan-500 focus:outline-none"
+              class="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm text-slate-200 focus:border-cyan-500 focus:outline-none transition-colors"
             >
               <option
                 v-for="dimension in availableDimensions"
@@ -75,10 +96,7 @@
           </div>
 
           <!-- Time Range Selector -->
-          <div class="flex items-center justify-between">
-            <div class="text-sm text-slate-400">
-              {{ gameLabel }} &bull; Last {{ slicedData.dateRange.days }} days &bull; {{ slicedData.sliceDimension }}
-            </div>
+          <div class="flex items-center justify-end">
             <div class="flex gap-2">
               <button
                 v-for="option in timeRangeOptions"
@@ -122,7 +140,7 @@
         </div>
       </div>
 
-      <!-- Results List -->
+      <!-- Results Table -->
       <div v-if="slicedData.results.length > 0">
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-sm font-medium text-slate-300">Detailed Results</h3>
@@ -131,57 +149,92 @@
             ({{ slicedData.pagination.totalItems }} total)
           </div>
         </div>
-        
-        <div class="space-y-3">
-          <div
-            v-for="(result, index) in slicedData.results"
-            :key="`${result.sliceKey}-${result.subKey || 'global'}`"
-            class="bg-slate-800/30 rounded-lg p-4 hover:bg-slate-700/30 transition-colors"
-          >
-            <div class="flex items-center justify-between mb-2">
-              <div class="flex items-center gap-3">
-                <div class="flex-shrink-0 w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center text-sm font-bold text-slate-200">
-                  {{ result.rank }}
-                </div>
-                <div>
-                  <div class="text-slate-200 font-medium">{{ result.sliceLabel }}</div>
-                  <div class="text-xs text-slate-500 mt-1">
-                    {{ result.secondaryValue }} {{ getSecondaryMetricLabel().toLowerCase() }}
-                    <span v-if="result.subKey" class="ml-2">
-                      • {{ getServerName(result.subKey) }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div class="text-right">
-                <div class="text-lg font-bold text-cyan-400">{{ result.primaryValue.toLocaleString() }}</div>
-                <div class="text-sm text-slate-400">{{ result.percentage.toFixed(1) }}{{ getPercentageUnit() }}</div>
-              </div>
-            </div>
-            
-            <!-- Additional Stats -->
-            <div v-if="Object.keys(result.additionalData).length > 0" class="mt-3 pt-3 border-t border-slate-700/50">
-              <div
-                v-if="isTeamWinSlice() && (getTeamLabel(result.additionalData, 'team1Label') || getTeamLabel(result.additionalData, 'team2Label'))"
-                class="grid grid-cols-2 gap-4 text-sm mb-3"
+
+        <div class="bg-slate-800/30 rounded-lg overflow-hidden">
+          <table class="w-full">
+            <!-- Table Header -->
+            <thead class="bg-slate-700/50">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Rank</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ getTableHeaderLabel() }}</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ getSecondaryMetricLabel() }}</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">{{ getPrimaryMetricLabel() }}</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">{{ getPercentageLabel() }}</th>
+                <th v-if="hasAdditionalData()" class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Additional Stats</th>
+              </tr>
+            </thead>
+
+            <!-- Table Body -->
+            <tbody class="divide-y divide-slate-700/50">
+              <tr
+                v-for="(result, index) in slicedData.results"
+                :key="`${result.sliceKey}-${result.subKey || 'global'}`"
+                class="hover:bg-slate-700/20 transition-colors"
               >
-                <div class="text-center">
-                  <div class="font-semibold text-slate-300">{{ getTeamLabel(result.additionalData, 'team1Label') || 'Team 1' }}</div>
-                  <div class="text-xs text-slate-500">Team 1 Name</div>
-                </div>
-                <div class="text-center">
-                  <div class="font-semibold text-slate-300">{{ getTeamLabel(result.additionalData, 'team2Label') || 'Team 2' }}</div>
-                  <div class="text-xs text-slate-500">Team 2 Name</div>
-                </div>
-              </div>
-              <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-                <div v-for="(value, key) in getRenderableAdditionalData(result.additionalData)" :key="key" class="text-center">
-                  <div class="font-semibold text-slate-300">{{ formatAdditionalValue(value) }}</div>
-                  <div class="text-xs text-slate-500 capitalize">{{ formatAdditionalKey(key) }}</div>
-                </div>
-              </div>
-            </div>
-          </div>
+                <!-- Rank -->
+                <td class="px-4 py-3">
+                  <div class="flex items-center">
+                    <div class="flex-shrink-0 w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center text-sm font-bold text-slate-200">
+                      {{ result.rank }}
+                    </div>
+                  </div>
+                </td>
+
+                <!-- Main Label -->
+                <td class="px-4 py-3">
+                  <div class="text-slate-200 font-medium">{{ result.sliceLabel }}</div>
+                  <div v-if="result.subKey" class="text-xs text-slate-500 mt-1">
+                    Server: {{ getServerName(result.subKey) }}
+                  </div>
+                </td>
+
+                <!-- Secondary Value -->
+                <td class="px-4 py-3 text-slate-300">
+                  {{ result.secondaryValue.toLocaleString() }}
+                </td>
+
+                <!-- Primary Value -->
+                <td class="px-4 py-3 text-right">
+                  <div class="text-lg font-bold text-cyan-400">{{ result.primaryValue.toLocaleString() }}</div>
+                </td>
+
+                <!-- Percentage -->
+                <td class="px-4 py-3 text-right text-slate-300">
+                  {{ result.percentage.toFixed(1) }}{{ getPercentageUnit() }}
+                </td>
+
+                <!-- Additional Data -->
+                <td v-if="hasAdditionalData()" class="px-4 py-3">
+                  <div v-if="isTeamWinSlice()" class="space-y-2">
+                    <!-- Team Wins Layout -->
+                    <div v-if="getTeamLabel(result.additionalData, 'team1Label') || getTeamLabel(result.additionalData, 'team2Label')" class="grid grid-cols-2 gap-3">
+                      <div class="text-center p-2 bg-slate-700/30 rounded text-xs">
+                        <div class="font-medium text-slate-300">{{ getTeamLabel(result.additionalData, 'team1Label') || 'Team 1' }}</div>
+                        <div class="text-cyan-400 font-bold">{{ formatAdditionalValue(result.additionalData.team1Wins || 0) }}</div>
+                      </div>
+                      <div class="text-center p-2 bg-slate-700/30 rounded text-xs">
+                        <div class="font-medium text-slate-300">{{ getTeamLabel(result.additionalData, 'team2Label') || 'Team 2' }}</div>
+                        <div class="text-cyan-400 font-bold">{{ formatAdditionalValue(result.additionalData.team2Wins || 0) }}</div>
+                      </div>
+                    </div>
+                    <!-- Other additional data for team wins -->
+                    <div v-if="Object.keys(getRenderableAdditionalData(result.additionalData)).length > 0" class="text-xs text-slate-400">
+                      <div v-for="(value, key) in getRenderableAdditionalData(result.additionalData)" :key="key" class="flex justify-between">
+                        <span>{{ formatAdditionalKey(key) }}:</span>
+                        <span class="text-slate-300">{{ formatAdditionalValue(value) }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="text-xs text-slate-400 space-y-1">
+                    <div v-for="(value, key) in result.additionalData" :key="key" class="flex justify-between">
+                      <span>{{ formatAdditionalKey(key) }}:</span>
+                      <span class="text-slate-300">{{ formatAdditionalValue(value) }}</span>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
         <!-- Pagination Controls -->
@@ -390,6 +443,16 @@ const changePage = (page: number) => {
 };
 
 // UI Helper Methods
+const getCurrentSliceName = () => {
+  const dimension = availableDimensions.value.find(d => d.type === selectedSliceType.value);
+  return dimension?.name || selectedSliceType.value;
+};
+
+const getCurrentSliceDescription = () => {
+  const dimension = availableDimensions.value.find(d => d.type === selectedSliceType.value);
+  return dimension?.description || 'Player statistics broken down by selected dimension';
+};
+
 const getResultTypeLabel = () => {
   if (!slicedData.value) return 'Results';
   return selectedSliceType.value.includes('Server') ? 'Map-Server Combinations' : 'Maps';
@@ -415,6 +478,15 @@ const getPercentageLabel = () => {
 const getPercentageUnit = () => {
   if (selectedSliceType.value.includes('Wins')) return '%';
   return '';
+};
+
+const getTableHeaderLabel = () => {
+  if (selectedSliceType.value.includes('Server')) return 'Map & Server';
+  return 'Map';
+};
+
+const hasAdditionalData = () => {
+  return slicedData.value?.results.some(result => Object.keys(result.additionalData).length > 0) || false;
 };
 
 const getTotalPrimaryValue = () => {
