@@ -106,6 +106,7 @@ public interface IDataExplorerService
     /// <summary>
     /// Get sliced player statistics with configurable dimensions and pagination.
     /// Enables advanced data exploration by different metrics and groupings.
+    /// Returns an empty result set if no data is available, preserving player context.
     /// </summary>
     /// <param name="playerName">The player name</param>
     /// <param name="sliceType">The slice dimension type</param>
@@ -113,8 +114,8 @@ public interface IDataExplorerService
     /// <param name="page">Page number (1-based)</param>
     /// <param name="pageSize">Number of results per page (default 20, max 100)</param>
     /// <param name="days">Number of days to look back (default 60)</param>
-    Task<PlayerSlicedStatsResponse?> GetPlayerSlicedStatsAsync(
-        string playerName, 
+    Task<PlayerSlicedStatsResponse> GetPlayerSlicedStatsAsync(
+        string playerName,
         SliceDimensionType sliceType,
         string game = "bf1942",
         int page = 1,

@@ -1743,8 +1743,8 @@ public class DataExplorerService(
     }
 
     /// <inheritdoc/>
-    public async Task<PlayerSlicedStatsResponse?> GetPlayerSlicedStatsAsync(
-        string playerName, 
+    public async Task<PlayerSlicedStatsResponse> GetPlayerSlicedStatsAsync(
+        string playerName,
         SliceDimensionType sliceType,
         string game = "bf1942",
         int page = 1,
@@ -1768,32 +1768,27 @@ public class DataExplorerService(
             .Select(s => new { s.Guid, s.Name })
             .ToListAsync();
 
-        if (servers.Count == 0)
-            return null;
-
         var serverGuids = servers.Select(s => s.Guid).ToList();
         var serverNameLookup = servers.ToDictionary(s => s.Guid, s => s.Name);
 
         // Generate results based on slice type
-        var results = sliceType switch
+        // If there are no servers or no data, we'll return an empty list but preserve player context
+        var results = servers.Count == 0 ? new List<PlayerSliceResultDto>() : sliceType switch
         {
-            SliceDimensionType.WinsByMap => await GetWinsByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, false),
-            SliceDimensionType.WinsByMapAndServer => await GetWinsByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, true, serverNameLookup),
-            SliceDimensionType.TeamWinsByMap => await GetTeamWinsByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, false),
-            SliceDimensionType.TeamWinsByMapAndServer => await GetTeamWinsByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, true, serverNameLookup),
-            SliceDimensionType.ScoreByMap => await GetScoreByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, false),
-            SliceDimensionType.ScoreByMapAndServer => await GetScoreByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, true, serverNameLookup),
-            SliceDimensionType.KillsByMap => await GetKillsByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, false),
-            SliceDimensionType.KillsByMapAndServer => await GetKillsByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, true, serverNameLookup),
+            SliceDimensionType.WinsByMap => await GetWinsByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, false, null, normalizedGame),
+            SliceDimensionType.WinsByMapAndServer => await GetWinsByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, true, serverNameLookup, normalizedGame),
+            SliceDimensionType.TeamWinsByMap => await GetTeamWinsByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, false, null, normalizedGame),
+            SliceDimensionType.TeamWinsByMapAndServer => await GetTeamWinsByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, true, serverNameLookup, normalizedGame),
+            SliceDimensionType.ScoreByMap => await GetScoreByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, false, null, normalizedGame),
+            SliceDimensionType.ScoreByMapAndServer => await GetScoreByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, true, serverNameLookup, normalizedGame),
+            SliceDimensionType.KillsByMap => await GetKillsByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, false, null, normalizedGame),
+            SliceDimensionType.KillsByMapAndServer => await GetKillsByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, true, serverNameLookup, normalizedGame),
             _ => new List<PlayerSliceResultDto>()
         };
 
-        if (results.Count == 0)
-            return null;
-
-        // Calculate pagination info (simplified for now - we'll implement proper counting later)
+        // Calculate pagination info (even for empty results to preserve context)
         var totalItems = results.Count;
-        var totalPages = (int)Math.Ceiling((double)totalItems / pageSize);
+        var totalPages = totalItems > 0 ? (int)Math.Ceiling((double)totalItems / pageSize) : 0;
 
         var dateRange = new DateRangeDto(days, fromDate, toDate);
         var pagination = new PaginationDto(
@@ -1834,42 +1829,44 @@ public class DataExplorerService(
 
     // Helper methods for different slice types
     private async Task<List<PlayerSliceResultDto>> GetWinsByMapAsync(
-        string playerName, 
-        List<string> serverGuids, 
-        int cutoffYear, 
-        int cutoffMonth, 
-        int page, 
-        int pageSize, 
+        string playerName,
+        List<string> serverGuids,
+        int cutoffYear,
+        int cutoffMonth,
+        int page,
+        int pageSize,
         bool includeServer,
-        Dictionary<string, string>? serverNameLookup = null)
+        Dictionary<string, string>? serverNameLookup = null,
+        string game = "bf1942")
     {
         // For now, return a simple implementation
         // TODO: Implement actual wins calculation based on round outcomes
+        // When implemented, use subquery: WHERE ServerGuid IN (SELECT Guid FROM Servers WHERE Game = @gameParam)
         var results = new List<PlayerSliceResultDto>();
-        
+
         // This is a simplified implementation - in a real scenario, we'd need to:
         // 1. Join PlayerMapStats with Rounds table to determine wins/losses
         // 2. Calculate win percentages
         // 3. Rank players by wins
-        
+
         return results;
     }
 
     private async Task<List<PlayerSliceResultDto>> GetTeamWinsByMapAsync(
-        string playerName, 
-        List<string> serverGuids, 
-        int cutoffYear, 
-        int cutoffMonth, 
-        int page, 
-        int pageSize, 
+        string playerName,
+        List<string> serverGuids,
+        int cutoffYear,
+        int cutoffMonth,
+        int page,
+        int pageSize,
         bool includeServer,
-        Dictionary<string, string>? serverNameLookup = null)
+        Dictionary<string, string>? serverNameLookup = null,
+        string game = "bf1942")
     {
         // Use ServerMapStats to get team win data
-        var guidParams = string.Join(", ", serverGuids.Select((_, i) => $"@p{i + 3}"));
-        
-        var sql = includeServer ? $@"
-            SELECT 
+        // Use subquery to avoid parameter limit when there are many servers
+        var sql = includeServer ? @"
+            SELECT
                 s.MapName,
                 s.ServerGuid,
                 s.Team1Victories + s.Team2Victories as TotalRounds,
@@ -1880,9 +1877,9 @@ public class DataExplorerService(
                      ELSE 0 END as Team1WinRate
             FROM ServerMapStats s
             WHERE ((s.Year > @p0) OR (s.Year = @p0 AND s.Month >= @p1))
-              AND s.ServerGuid IN ({guidParams})
-            ORDER BY s.Team1Victories + s.Team2Victories DESC" : $@"
-            SELECT 
+              AND s.ServerGuid IN (SELECT Guid FROM Servers WHERE Game = @p2)
+            ORDER BY s.Team1Victories + s.Team2Victories DESC" : @"
+            SELECT
                 MapName,
                 NULL as ServerGuid,
                 SUM(Team1Victories + Team2Victories) as TotalRounds,
@@ -1893,15 +1890,12 @@ public class DataExplorerService(
                      ELSE 0 END as Team1WinRate
             FROM ServerMapStats
             WHERE ((Year > @p0) OR (Year = @p0 AND Month >= @p1))
-              AND ServerGuid IN ({guidParams})
+              AND ServerGuid IN (SELECT Guid FROM Servers WHERE Game = @p2)
             GROUP BY MapName
             ORDER BY SUM(Team1Victories + Team2Victories) DESC";
 
-        var sqlParams = new List<object> { cutoffYear, cutoffMonth };
-        sqlParams.AddRange(serverGuids.Cast<object>());
-
         var teamWinData = await dbContext.Database
-            .SqlQueryRaw<TeamWinQueryResult>(sql, sqlParams.ToArray())
+            .SqlQueryRaw<TeamWinQueryResult>(sql, cutoffYear, cutoffMonth, game)
             .ToListAsync();
 
         var results = new List<PlayerSliceResultDto>();
@@ -1936,22 +1930,22 @@ public class DataExplorerService(
     }
 
     private async Task<List<PlayerSliceResultDto>> GetScoreByMapAsync(
-        string playerName, 
-        List<string> serverGuids, 
-        int cutoffYear, 
-        int cutoffMonth, 
-        int page, 
-        int pageSize, 
+        string playerName,
+        List<string> serverGuids,
+        int cutoffYear,
+        int cutoffMonth,
+        int page,
+        int pageSize,
         bool includeServer,
-        Dictionary<string, string>? serverNameLookup = null)
+        Dictionary<string, string>? serverNameLookup = null,
+        string game = "bf1942")
     {
-        var guidParams = string.Join(", ", serverGuids.Select((_, i) => $"@p{i + 3}"));
-        
         var groupBy = includeServer ? "MapName, ServerGuid" : "MapName";
         var selectFields = includeServer ? "MapName, ServerGuid," : "MapName, NULL as ServerGuid,";
-        
+
+        // Use subquery to avoid parameter limit when there are many servers
         var sql = $@"
-            SELECT 
+            SELECT
                 {selectFields}
                 SUM(TotalScore) as TotalScore,
                 SUM(TotalKills) as TotalKills,
@@ -1960,15 +1954,12 @@ public class DataExplorerService(
             FROM PlayerMapStats
             WHERE PlayerName = @p0
               AND ((Year > @p1) OR (Year = @p1 AND Month >= @p2))
-              AND ServerGuid IN ({guidParams})
+              AND ServerGuid IN (SELECT Guid FROM Servers WHERE Game = @p3)
             GROUP BY {groupBy}
             ORDER BY SUM(TotalScore) DESC";
 
-        var sqlParams = new List<object> { playerName, cutoffYear, cutoffMonth };
-        sqlParams.AddRange(serverGuids.Cast<object>());
-
         var scoreData = await dbContext.Database
-            .SqlQueryRaw<PlayerScoreQueryResult>(sql, sqlParams.ToArray())
+            .SqlQueryRaw<PlayerScoreQueryResult>(sql, playerName, cutoffYear, cutoffMonth, game)
             .ToListAsync();
 
         var results = new List<PlayerSliceResultDto>();
@@ -2003,22 +1994,22 @@ public class DataExplorerService(
     }
 
     private async Task<List<PlayerSliceResultDto>> GetKillsByMapAsync(
-        string playerName, 
-        List<string> serverGuids, 
-        int cutoffYear, 
-        int cutoffMonth, 
-        int page, 
-        int pageSize, 
+        string playerName,
+        List<string> serverGuids,
+        int cutoffYear,
+        int cutoffMonth,
+        int page,
+        int pageSize,
         bool includeServer,
-        Dictionary<string, string>? serverNameLookup = null)
+        Dictionary<string, string>? serverNameLookup = null,
+        string game = "bf1942")
     {
-        var guidParams = string.Join(", ", serverGuids.Select((_, i) => $"@p{i + 3}"));
-        
         var groupBy = includeServer ? "MapName, ServerGuid" : "MapName";
         var selectFields = includeServer ? "MapName, ServerGuid," : "MapName, NULL as ServerGuid,";
-        
+
+        // Use subquery to avoid parameter limit when there are many servers
         var sql = $@"
-            SELECT 
+            SELECT
                 {selectFields}
                 SUM(TotalKills) as TotalKills,
                 SUM(TotalDeaths) as TotalDeaths,
@@ -2027,15 +2018,12 @@ public class DataExplorerService(
             FROM PlayerMapStats
             WHERE PlayerName = @p0
               AND ((Year > @p1) OR (Year = @p1 AND Month >= @p2))
-              AND ServerGuid IN ({guidParams})
+              AND ServerGuid IN (SELECT Guid FROM Servers WHERE Game = @p3)
             GROUP BY {groupBy}
             ORDER BY SUM(TotalKills) DESC";
 
-        var sqlParams = new List<object> { playerName, cutoffYear, cutoffMonth };
-        sqlParams.AddRange(serverGuids.Cast<object>());
-
         var killData = await dbContext.Database
-            .SqlQueryRaw<PlayerScoreQueryResult>(sql, sqlParams.ToArray())
+            .SqlQueryRaw<PlayerScoreQueryResult>(sql, playerName, cutoffYear, cutoffMonth, game)
             .ToListAsync();
 
         var results = new List<PlayerSliceResultDto>();

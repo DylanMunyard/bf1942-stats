@@ -322,6 +322,7 @@ public class DataExplorerController(
     /// <summary>
     /// Get sliced player statistics with configurable dimensions and pagination.
     /// Enables advanced data exploration by different metrics and groupings.
+    /// Returns an empty result set if no data is available, preserving player context.
     /// </summary>
     /// <param name="playerName">The player name</param>
     /// <param name="sliceType">The slice dimension type (e.g., winsByMap, scoreByMap, etc.)</param>
@@ -331,7 +332,6 @@ public class DataExplorerController(
     /// <param name="days">Number of days to look back (default 60)</param>
     [HttpGet("players/{playerName}/sliced-stats")]
     [ProducesResponseType(typeof(PlayerSlicedStatsResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PlayerSlicedStatsResponse>> GetPlayerSlicedStats(
         string playerName,
@@ -363,11 +363,11 @@ public class DataExplorerController(
         var result = await dataExplorerService.GetPlayerSlicedStatsAsync(
             playerName, parsedSliceType, game, page, pageSize, days);
 
-        if (result == null)
+        // Always return the result (even if empty) to preserve player context
+        if (result.Results.Count == 0)
         {
-            logger.LogWarning("Player not found or no data: {PlayerName} for game: {Game} with slice type: {SliceType}",
+            logger.LogInformation("No data found for player {PlayerName} in game {Game} with slice type {SliceType}, returning empty result set",
                 playerName, game, parsedSliceType);
-            return NotFound($"No data found for player '{playerName}' in game '{game}' with slice type '{sliceType}'");
         }
 
         return Ok(result);

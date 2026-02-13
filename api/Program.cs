@@ -18,6 +18,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using api.Auth;
 using api.Utils;
 using NodaTime;
@@ -225,6 +226,7 @@ try
         o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
         o.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
         o.JsonSerializerOptions.ConfigureForNodaTime(DateTimeZoneProviders.Tzdb);
+        o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 
     // Configure response compression for bandwidth optimization
