@@ -10,6 +10,7 @@ import PlayerRecentSessions from '../components/PlayerRecentSessions.vue';
 import HeroBackButton from '../components/HeroBackButton.vue';
 import PlayerAchievementHeroBadges from '../components/PlayerAchievementHeroBadges.vue';
 import PlayerServerMapStats from '../components/PlayerServerMapStats.vue';
+import MapRankingsPanel from '../components/MapRankingsPanel.vue';
 import { formatRelativeTime } from '@/utils/timeUtils';
 import { calculateKDR } from '@/utils/statsUtils';
 import { useAIContext } from '@/composables/useAIContext';
@@ -45,6 +46,10 @@ const achievementGroupsError = ref<string | null>(null);
 // State for server map stats view
 const selectedServerGuid = ref<string | null>(null);
 const scrollPositionBeforeMapStats = ref(0);
+
+// State for rankings drill-down panel
+const rankingsMapName = ref<string | null>(null);
+const rankingsServerGuid = ref<string | null>(null);
 
 // Wide viewport: show slide-out panel side-by-side (lg: 1024px+)
 const isWideScreen = ref(false);
@@ -212,7 +217,21 @@ const showServerMapStats = (serverGuid: string) => {
 // Function to close server map stats view
 const closeServerMapStats = () => {
   selectedServerGuid.value = null;
+  rankingsMapName.value = null;
+  rankingsServerGuid.value = null;
   window.scrollTo({ top: scrollPositionBeforeMapStats.value, behavior: 'auto' });
+};
+
+// Function to open rankings drill-down from map stats
+const openRankingsPanel = (mapName: string) => {
+  rankingsMapName.value = mapName;
+  rankingsServerGuid.value = effectiveServerGuid.value ?? null;
+};
+
+// Function to close rankings and go back to map stats
+const closeRankingsPanel = () => {
+  rankingsMapName.value = null;
+  rankingsServerGuid.value = null;
 };
 
 const fetchData = async () => {
@@ -693,8 +712,11 @@ onUnmounted(() => {
         <!-- Main Content -->
         <div
           v-else-if="playerStats"
-          class="w-full px-1 sm:px-4 pb-6 sm:pb-12 space-y-4 sm:space-y-8"
+          class="w-full px-1 sm:px-4 pb-6 sm:pb-12"
         >
+          <div class="grid grid-cols-1 xl:grid-cols-12 gap-4 xl:gap-6">
+          <!-- Left Column: Recent Rounds + Best Scores -->
+          <div class="xl:col-span-7 space-y-4 sm:space-y-6">
 
           <!-- Recent Rounds Section -->
           <div
@@ -836,10 +858,14 @@ onUnmounted(() => {
             </div>
           </div>
 
+          </div>
+          <!-- Right Column: Servers + Achievements -->
+          <div class="xl:col-span-5 space-y-4 sm:space-y-6">
+
           <!-- Servers – Unified list sorted by ranking -->
           <div
             v-if="unifiedServerList.length > 0"
-            class="bg-neutral-900/80 border border-neutral-700/50 rounded-xl overflow-hidden mt-8"
+            class="bg-neutral-900/80 border border-neutral-700/50 rounded-xl overflow-hidden"
           >
             <!-- Header -->
             <div class="px-3 sm:px-6 py-4 border-b border-neutral-700/50 flex items-center justify-between">
@@ -950,7 +976,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Player Achievements Section -->
-          <div class="relative overflow-hidden bg-neutral-900/80 rounded-2xl border border-neutral-700/50 mt-8">
+          <div class="relative overflow-hidden bg-neutral-900/80 rounded-2xl border border-neutral-700/50">
             <!-- Background Effects (subtle dark theme accent) -->
             <div class="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-transparent to-transparent pointer-events-none" aria-hidden="true" />
             <div class="relative z-10 p-2 sm:p-6 lg:p-8 space-y-6">
@@ -1000,6 +1026,8 @@ onUnmounted(() => {
             </div>
           </div>
 
+          </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1024,7 +1052,7 @@ onUnmounted(() => {
           <div class="sticky top-0 z-20 bg-neutral-950/95 border-b border-neutral-800 p-2 sm:p-4 flex justify-between items-center">
             <div class="flex flex-col min-w-0 flex-1 mr-4">
               <h2 class="text-xl font-bold text-neutral-200 truncate">
-                Map Rankings
+                {{ rankingsMapName ? `Rankings: ${rankingsMapName}` : 'Map Rankings' }}
               </h2>
               <p class="text-sm text-neutral-400 mt-1 truncate">
                 {{ selectedServerName || 'Selected Server' }}
@@ -1055,10 +1083,29 @@ onUnmounted(() => {
 
           <!-- Content -->
           <div class="flex-1 min-h-0 overflow-y-auto">
+            <!-- Rankings Drill-Down View -->
+            <div v-if="rankingsMapName" class="p-2 sm:p-4">
+              <button
+                class="flex items-center gap-1.5 mb-3 px-2 py-1 text-xs font-medium text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 rounded transition-colors"
+                @click="closeRankingsPanel"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                Back to Map Stats
+              </button>
+              <MapRankingsPanel
+                :map-name="rankingsMapName"
+                :server-guid="rankingsServerGuid ?? undefined"
+                :highlight-player="playerName"
+                :game="(effectiveServerGuid ? playerStats?.servers?.find(s => s.serverGuid === effectiveServerGuid)?.gameId as any : undefined) || 'bf1942'"
+              />
+            </div>
+            <!-- Map Stats View -->
             <PlayerServerMapStats
+              v-else
               :player-name="playerName"
               :server-guid="effectiveServerGuid"
               :game="(effectiveServerGuid ? playerStats?.servers?.find(s => s.serverGuid === effectiveServerGuid)?.gameId as any : undefined) || 'bf1942'"
+              @open-rankings="openRankingsPanel"
             />
           </div>
         </div>

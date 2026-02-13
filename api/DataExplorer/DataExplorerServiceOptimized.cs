@@ -1839,15 +1839,88 @@ public class DataExplorerService(
         Dictionary<string, string>? serverNameLookup = null,
         string game = "bf1942")
     {
-        // For now, return a simple implementation
-        // TODO: Implement actual wins calculation based on round outcomes
-        // When implemented, use subquery: WHERE ServerGuid IN (SELECT Guid FROM Servers WHERE Game = @gameParam)
-        var results = new List<PlayerSliceResultDto>();
+        var groupBy = includeServer ? "pa.MapName, pa.ServerGuid" : "pa.MapName";
+        var selectServerField = includeServer ? "pa.ServerGuid" : "NULL as ServerGuid";
 
-        // This is a simplified implementation - in a real scenario, we'd need to:
-        // 1. Join PlayerMapStats with Rounds table to determine wins/losses
-        // 2. Calculate win percentages
-        // 3. Rank players by wins
+        // Wins are modeled as placement "gold" achievements.
+        // We join to PlayerMapStats (same grouping) to provide rounds for win rate context.
+        var sql = $@"
+            WITH PlayerWins AS (
+                SELECT
+                    pa.MapName,
+                    {selectServerField},
+                    COUNT(*) as Wins
+                FROM PlayerAchievements pa
+                WHERE pa.PlayerName = @p0
+                  AND pa.AchievementType = @p1
+                  AND pa.Tier = 'gold'
+                  AND ((CAST(strftime('%Y', pa.AchievedAt) AS INTEGER) > @p2)
+                       OR (CAST(strftime('%Y', pa.AchievedAt) AS INTEGER) = @p2
+                           AND CAST(strftime('%m', pa.AchievedAt) AS INTEGER) >= @p3))
+                  AND pa.ServerGuid IN (SELECT Guid FROM Servers WHERE Game = @p4)
+                GROUP BY {groupBy}
+            ),
+            PlayerRounds AS (
+                SELECT
+                    pms.MapName,
+                    {(includeServer ? "pms.ServerGuid" : "NULL as ServerGuid")},
+                    SUM(pms.TotalRounds) as TotalRounds
+                FROM PlayerMapStats pms
+                WHERE pms.PlayerName = @p0
+                  AND ((pms.Year > @p2) OR (pms.Year = @p2 AND pms.Month >= @p3))
+                  AND pms.ServerGuid IN (SELECT Guid FROM Servers WHERE Game = @p4)
+                GROUP BY {(includeServer ? "pms.MapName, pms.ServerGuid" : "pms.MapName")}
+            )
+            SELECT
+                w.MapName,
+                w.ServerGuid,
+                w.Wins,
+                COALESCE(r.TotalRounds, 0) as TotalRounds,
+                CASE WHEN COALESCE(r.TotalRounds, 0) > 0
+                     THEN ROUND(CAST(w.Wins AS REAL) / r.TotalRounds * 100, 1)
+                     ELSE 0 END as WinRate
+            FROM PlayerWins w
+            LEFT JOIN PlayerRounds r
+              ON r.MapName = w.MapName
+             AND ((r.ServerGuid IS NULL AND w.ServerGuid IS NULL) OR r.ServerGuid = w.ServerGuid)
+            ORDER BY w.Wins DESC, COALESCE(r.TotalRounds, 0) DESC, w.MapName ASC";
+
+        var winData = await dbContext.Database
+            .SqlQueryRaw<PlayerWinQueryResult>(
+                sql,
+                playerName,
+                AchievementTypes.Placement,
+                cutoffYear,
+                cutoffMonth,
+                game)
+            .ToListAsync();
+
+        var results = new List<PlayerSliceResultDto>();
+        var rank = (page - 1) * pageSize + 1;
+
+        foreach (var data in winData.Skip((page - 1) * pageSize).Take(pageSize))
+        {
+            var sliceKey = data.MapName;
+            var subKey = includeServer ? data.ServerGuid : null;
+            var sliceLabel = includeServer && serverNameLookup != null && data.ServerGuid != null
+                ? $"{data.MapName} on {serverNameLookup.GetValueOrDefault(data.ServerGuid, "Unknown Server")}"
+                : data.MapName;
+
+            results.Add(new PlayerSliceResultDto(
+                SliceKey: sliceKey,
+                SubKey: subKey,
+                SliceLabel: sliceLabel,
+                PrimaryValue: data.Wins,
+                SecondaryValue: data.TotalRounds,
+                Percentage: data.WinRate,
+                Rank: rank++,
+                TotalPlayers: 1,
+                AdditionalData: new Dictionary<string, object>
+                {
+                    ["losses"] = Math.Max(0, data.TotalRounds - data.Wins)
+                }
+            ));
+        }
 
         return results;
     }
@@ -1869,22 +1942,27 @@ public class DataExplorerService(
             SELECT
                 s.MapName,
                 s.ServerGuid,
-                s.Team1Victories + s.Team2Victories as TotalRounds,
-                s.Team1Victories,
-                s.Team2Victories,
-                CASE WHEN s.Team1Victories + s.Team2Victories > 0
-                     THEN ROUND(CAST(s.Team1Victories AS REAL) / (s.Team1Victories + s.Team2Victories) * 100, 1)
+                SUM(s.Team1Victories + s.Team2Victories) as TotalRounds,
+                SUM(s.Team1Victories) as Team1Victories,
+                SUM(s.Team2Victories) as Team2Victories,
+                MAX(s.Team1Label) as Team1Label,
+                MAX(s.Team2Label) as Team2Label,
+                CASE WHEN SUM(s.Team1Victories + s.Team2Victories) > 0
+                     THEN ROUND(CAST(SUM(s.Team1Victories) AS REAL) / SUM(s.Team1Victories + s.Team2Victories) * 100, 1)
                      ELSE 0 END as Team1WinRate
             FROM ServerMapStats s
             WHERE ((s.Year > @p0) OR (s.Year = @p0 AND s.Month >= @p1))
               AND s.ServerGuid IN (SELECT Guid FROM Servers WHERE Game = @p2)
-            ORDER BY s.Team1Victories + s.Team2Victories DESC" : @"
+            GROUP BY s.MapName, s.ServerGuid
+            ORDER BY SUM(s.Team1Victories + s.Team2Victories) DESC" : @"
             SELECT
                 MapName,
                 NULL as ServerGuid,
                 SUM(Team1Victories + Team2Victories) as TotalRounds,
                 SUM(Team1Victories) as Team1Victories,
                 SUM(Team2Victories) as Team2Victories,
+                MAX(Team1Label) as Team1Label,
+                MAX(Team2Label) as Team2Label,
                 CASE WHEN SUM(Team1Victories + Team2Victories) > 0
                      THEN ROUND(CAST(SUM(Team1Victories) AS REAL) / SUM(Team1Victories + Team2Victories) * 100, 1)
                      ELSE 0 END as Team1WinRate
@@ -1908,6 +1986,8 @@ public class DataExplorerService(
             var sliceLabel = includeServer && serverNameLookup != null 
                 ? $"{data.MapName} on {serverNameLookup.GetValueOrDefault(data.ServerGuid ?? "", "Unknown Server")}"
                 : data.MapName;
+            var team1Label = NormalizeTeamLabel(data.Team1Label, game, 1);
+            var team2Label = NormalizeTeamLabel(data.Team2Label, game, 2);
 
             results.Add(new PlayerSliceResultDto(
                 SliceKey: sliceKey,
@@ -1920,6 +2000,8 @@ public class DataExplorerService(
                 TotalPlayers: 1, // Not applicable for team wins
                 AdditionalData: new Dictionary<string, object>
                 {
+                    ["team1Label"] = team1Label,
+                    ["team2Label"] = team2Label,
                     ["team2Victories"] = data.Team2Victories,
                     ["team2WinRate"] = Math.Round(100 - data.Team1WinRate, 1)
                 }
@@ -2079,7 +2161,18 @@ public class DataExplorerService(
         public int TotalRounds { get; set; }
         public int Team1Victories { get; set; }
         public int Team2Victories { get; set; }
+        public string? Team1Label { get; set; }
+        public string? Team2Label { get; set; }
         public double Team1WinRate { get; set; }
+    }
+
+    private class PlayerWinQueryResult
+    {
+        public string MapName { get; set; } = "";
+        public string? ServerGuid { get; set; }
+        public int Wins { get; set; }
+        public int TotalRounds { get; set; }
+        public double WinRate { get; set; }
     }
 
     private class PlayerScoreQueryResult
@@ -2090,6 +2183,24 @@ public class DataExplorerService(
         public int TotalKills { get; set; }
         public int TotalDeaths { get; set; }
         public int TotalRounds { get; set; }
+    }
+
+    private static string NormalizeTeamLabel(string? rawLabel, string game, int teamNumber)
+    {
+        if (!string.IsNullOrWhiteSpace(rawLabel) &&
+            !rawLabel.Equals($"Team{teamNumber}Label", StringComparison.OrdinalIgnoreCase) &&
+            !rawLabel.Equals($"Team {teamNumber}", StringComparison.OrdinalIgnoreCase))
+        {
+            return rawLabel;
+        }
+
+        // BF1942 defaults are the most expected fallback for empty/placeholder labels.
+        if (game.Equals("bf1942", StringComparison.OrdinalIgnoreCase))
+        {
+            return teamNumber == 1 ? "Axis" : "Allied";
+        }
+
+        return teamNumber == 1 ? "Team 1" : "Team 2";
     }
 
     #endregion

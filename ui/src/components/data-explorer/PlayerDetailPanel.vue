@@ -161,8 +161,21 @@
             
             <!-- Additional Stats -->
             <div v-if="Object.keys(result.additionalData).length > 0" class="mt-3 pt-3 border-t border-slate-700/50">
+              <div
+                v-if="isTeamWinSlice() && (getTeamLabel(result.additionalData, 'team1Label') || getTeamLabel(result.additionalData, 'team2Label'))"
+                class="grid grid-cols-2 gap-4 text-sm mb-3"
+              >
+                <div class="text-center">
+                  <div class="font-semibold text-slate-300">{{ getTeamLabel(result.additionalData, 'team1Label') || 'Team 1' }}</div>
+                  <div class="text-xs text-slate-500">Team 1 Name</div>
+                </div>
+                <div class="text-center">
+                  <div class="font-semibold text-slate-300">{{ getTeamLabel(result.additionalData, 'team2Label') || 'Team 2' }}</div>
+                  <div class="text-xs text-slate-500">Team 2 Name</div>
+                </div>
+              </div>
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-                <div v-for="(value, key) in result.additionalData" :key="key" class="text-center">
+                <div v-for="(value, key) in getRenderableAdditionalData(result.additionalData)" :key="key" class="text-center">
                   <div class="font-semibold text-slate-300">{{ formatAdditionalValue(value) }}</div>
                   <div class="text-xs text-slate-500 capitalize">{{ formatAdditionalKey(key) }}</div>
                 </div>
@@ -421,7 +434,10 @@ const getAveragePercentage = () => {
 };
 
 const formatAdditionalKey = (key: string) => {
-  return key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+  return key
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([a-zA-Z])(\d+)/g, '$1 $2')
+    .replace(/^./, str => str.toUpperCase());
 };
 
 const formatAdditionalValue = (value: any) => {
@@ -434,6 +450,23 @@ const formatAdditionalValue = (value: any) => {
 const getServerName = (serverGuid: string) => {
   // This would need to be populated from server data
   return serverGuid.substring(0, 8) + '...';
+};
+
+const isTeamWinSlice = () => selectedSliceType.value.includes('TeamWins');
+
+const getTeamLabel = (additionalData: Record<string, any>, key: 'team1Label' | 'team2Label') => {
+  const value = additionalData?.[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+};
+
+const getRenderableAdditionalData = (additionalData: Record<string, any>) => {
+  if (!isTeamWinSlice()) {
+    return additionalData;
+  }
+
+  return Object.fromEntries(
+    Object.entries(additionalData).filter(([key]) => key !== 'team1Label' && key !== 'team2Label')
+  );
 };
 
 const getVisiblePages = () => {

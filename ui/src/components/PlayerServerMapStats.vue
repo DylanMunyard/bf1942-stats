@@ -198,7 +198,14 @@
                 class="border-b border-slate-700/30 hover:bg-slate-700/20 transition-colors"
               >
                 <td class="p-3">
-                  <span v-if="map.rank !== null" :class="getRankClass(map.rank)">{{ map.rank }}</span>
+                  <button
+                    v-if="map.rank !== null"
+                    :class="[getRankClass(map.rank), 'cursor-pointer hover:ring-2 hover:ring-cyan-400/40 transition-all']"
+                    :title="`View full rankings for ${map.mapName}`"
+                    @click.stop="handleRankClick(map.mapName, map.rank)"
+                  >
+                    {{ map.rank }}
+                  </button>
                   <span v-else class="text-slate-500 text-xs">-</span>
                 </td>
                 <td class="p-3">
@@ -286,6 +293,16 @@ const props = defineProps<{
   serverGuid?: string;
   game?: GameType;
 }>();
+
+const emit = defineEmits<{
+  (e: 'open-rankings', mapName: string): void;
+}>();
+
+const handleRankClick = (mapName: string, rank: number | null) => {
+  if (rank !== null) {
+    emit('open-rankings', mapName);
+  }
+};
 
 const playerData = ref<PlayerMapRankingsResponse | null>(null);
 const isLoading = ref(false);

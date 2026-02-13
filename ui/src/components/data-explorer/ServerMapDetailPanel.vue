@@ -155,7 +155,16 @@
 
       <!-- Leaderboards Section -->
       <div>
-        <h3 class="text-sm font-medium text-slate-300 mb-3">Top Players</h3>
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-sm font-medium text-slate-300">Top Players</h3>
+          <button
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 hover:border-cyan-500/40 rounded-lg transition-colors"
+            @click="emit('open-rankings', mapName)"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
+            Full Rankings
+          </button>
+        </div>
 
         <!-- Leaderboard Grid -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -229,6 +238,7 @@ const emit = defineEmits<{
   navigateToServer: [serverGuid: string];
   navigateToMap: [mapName: string];
   close: [];
+  'open-rankings': [mapName: string];
 }>();
 
 const getMapDetailsRoute = (mapName: string) => ({

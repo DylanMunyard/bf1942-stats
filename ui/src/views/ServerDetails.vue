@@ -12,6 +12,7 @@ import ServerLeaderboards from '../components/ServerLeaderboards.vue';
 import RecentSessionsList from '../components/data-explorer/RecentSessionsList.vue';
 import MapRotationTable from '../components/data-explorer/MapRotationTable.vue';
 import ServerMapDetailPanel from '../components/data-explorer/ServerMapDetailPanel.vue';
+import MapRankingsPanel from '../components/MapRankingsPanel.vue';
 import { formatDate } from '../utils/date';
 import HeroBackButton from '../components/HeroBackButton.vue';
 import ForecastModal from '../components/ForecastModal.vue';
@@ -66,6 +67,10 @@ const showMapRotation = ref(true);
 // Server-map detail panel state
 const selectedMapName = ref<string | null>(null);
 const showMapDetailPanel = ref(false);
+
+// Rankings drill-down panel state (nested inside map detail panel)
+const showRankingsInPanel = ref(false);
+const rankingsMapNameForPanel = ref<string | null>(null);
 
 // Busy indicator state
 const serverBusyIndicator = ref<ServerBusyIndicator | null>(null);
@@ -499,6 +504,20 @@ const handleMapNavigate = (mapName: string) => {
 const handleCloseMapDetailPanel = () => {
   showMapDetailPanel.value = false;
   selectedMapName.value = null;
+  showRankingsInPanel.value = false;
+  rankingsMapNameForPanel.value = null;
+};
+
+// Handle opening rankings from map detail panel
+const handleOpenRankingsFromMap = (mapName: string) => {
+  rankingsMapNameForPanel.value = mapName;
+  showRankingsInPanel.value = true;
+};
+
+// Handle closing rankings back to map detail
+const handleCloseRankingsInPanel = () => {
+  showRankingsInPanel.value = false;
+  rankingsMapNameForPanel.value = null;
 };
 
 // Handle navigation from map detail panel
@@ -1037,7 +1056,7 @@ const closeForecastOverlay = () => {
       <div class="sticky top-0 z-20 bg-neutral-950/95 border-b border-neutral-800 p-4 flex justify-between items-center">
         <div class="flex flex-col min-w-0 flex-1 mr-4">
           <h2 class="text-xl font-bold text-neutral-200 truncate">
-            {{ selectedMapName }}
+            {{ showRankingsInPanel ? `Rankings: ${rankingsMapNameForPanel}` : selectedMapName }}
           </h2>
           <p class="text-sm text-neutral-400 mt-1 truncate">
             on {{ serverName }}
@@ -1068,12 +1087,30 @@ const closeForecastOverlay = () => {
 
       <!-- Content -->
       <div class="flex-1 min-h-0 overflow-y-auto">
+        <!-- Rankings Drill-Down View -->
+        <div v-if="showRankingsInPanel && rankingsMapNameForPanel" class="p-2 sm:p-4">
+          <button
+            class="flex items-center gap-1.5 mb-3 px-2 py-1 text-xs font-medium text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 rounded transition-colors"
+            @click="handleCloseRankingsInPanel"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            Back to Map Detail
+          </button>
+          <MapRankingsPanel
+            :map-name="rankingsMapNameForPanel"
+            :server-guid="serverDetails.serverGuid"
+            :game="(serverDetails.gameId as any) || 'bf1942'"
+          />
+        </div>
+        <!-- Map Detail View -->
         <ServerMapDetailPanel
+          v-else
           :server-guid="serverDetails.serverGuid"
           :map-name="selectedMapName"
           @navigate-to-server="handleNavigateToServerFromMap"
           @navigate-to-map="handleNavigateToMapFromMap"
           @close="handleCloseMapDetailPanel"
+          @open-rankings="handleOpenRankingsFromMap"
         />
       </div>
         </div>
