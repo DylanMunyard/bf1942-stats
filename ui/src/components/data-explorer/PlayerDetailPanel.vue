@@ -57,12 +57,7 @@
         <!-- Current Data Context Banner -->
         <div class="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 rounded-lg p-4 mb-6">
           <div class="flex items-center justify-between">
-            <div class="flex items-center gap-4">
-              <div class="flex-shrink-0">
-                <div class="w-10 h-10 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-lg flex items-center justify-center">
-                  <span class="text-white text-lg">📊</span>
-                </div>
-              </div>
+            <div class="flex items-center">
               <div>
                 <h3 class="text-lg font-semibold text-slate-200">{{ getCurrentSliceName() }}</h3>
                 <p class="text-sm text-slate-400">{{ getCurrentSliceDescription() }}</p>

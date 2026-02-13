@@ -6,7 +6,7 @@ import { TrendDataPoint, PlayerAchievementGroup } from '../types/playerStatsType
 import { Line } from 'vue-chartjs';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import PlayerAchievementSummary from '../components/PlayerAchievementSummary.vue';
-import PlayerRecentSessions from '../components/PlayerRecentSessions.vue';
+import PlayerRecentRoundsCompact from '../components/PlayerRecentRoundsCompact.vue';
 import HeroBackButton from '../components/HeroBackButton.vue';
 import PlayerAchievementHeroBadges from '../components/PlayerAchievementHeroBadges.vue';
 import PlayerServerMapStats from '../components/PlayerServerMapStats.vue';
@@ -631,6 +631,16 @@ onUnmounted(() => {
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 13L2 9l4-6z"/><path d="M11 3 8 9l4 13 4-13-3-6"/></svg>
           Compare
         </router-link>
+
+        <div
+          v-if="playerStats?.recentSessions && playerStats.recentSessions.length > 0"
+          class="ml-auto max-w-full"
+        >
+          <PlayerRecentRoundsCompact
+            :sessions="playerStats.recentSessions"
+            :player-name="playerName"
+          />
+        </div>
       </div>
     </div>
   </div>
@@ -719,29 +729,6 @@ onUnmounted(() => {
           v-else-if="playerStats"
           class="w-full px-1 sm:px-4 pb-6 sm:pb-12 space-y-4 sm:space-y-8"
         >
-
-          <!-- Recent Rounds Section -->
-          <div
-            v-if="playerStats.recentSessions && playerStats.recentSessions.length > 0"
-            class="bg-neutral-900/80 border border-neutral-700/50 rounded-xl overflow-hidden"
-          >
-            <div class="px-3 sm:px-6 py-4 border-b border-neutral-700/50 flex items-center justify-between">
-              <h3 class="text-xl font-semibold text-neutral-200 flex items-center gap-3">
-                🎯 Recent Rounds
-              </h3>
-              <router-link
-                :to="`/players/${encodeURIComponent(playerName)}/sessions`"
-                class="text-neutral-300 hover:text-neutral-200 transition-colors text-sm font-medium px-4 py-2 bg-neutral-700/50 hover:bg-neutral-600/70 rounded-lg border border-neutral-600/50"
-              >
-                View All Sessions
-              </router-link>
-            </div>
-            <div class="p-2 sm:p-6">
-              <PlayerRecentSessions
-                :sessions="playerStats.recentSessions"
-              />
-            </div>
-          </div>
 
           <!-- Data Explorer Player Breakdown -->
           <div class="bg-neutral-900/80 border border-neutral-700/50 rounded-xl overflow-hidden">
