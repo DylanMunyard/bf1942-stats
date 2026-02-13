@@ -18,8 +18,6 @@ import bf1942Icon from '@/assets/bf1942.webp';
 import fh2Icon from '@/assets/fh2.webp';
 import bfvIcon from '@/assets/bfv.webp';
 import defaultIcon from '@/assets/servers.webp';
-import dataExplorerImage from '@/assets/menu-item-data-explorer.webp';
-import { fetchPlayerEngagementStats, type PlayerEngagementStats } from '../services/dataExplorerService';
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
@@ -43,14 +41,6 @@ const achievementGroups = ref<PlayerAchievementGroup[]>([]);
 const achievementGroupsLoading = ref(false);
 const achievementGroupsError = ref<string | null>(null);
 
-// Engagement stats for dynamic content
-const playerEngagementStats = ref<PlayerEngagementStats['stats']>([]);
-const currentEngagementStatIndex = ref(0);
-
-// Computed property for current engagement stat
-const currentEngagementStat = computed(() => {
-  return playerEngagementStats.value[currentEngagementStatIndex.value] || null;
-});
 
 // State for server map stats view
 const selectedServerGuid = ref<string | null>(null);
@@ -231,10 +221,6 @@ const fetchData = async () => {
   fetchAchievementGroups();
   try {
     playerStats.value = await fetchPlayerStats(playerName.value);
-    // Fetch engagement stats after player stats are loaded
-    if (playerStats.value) {
-      fetchEngagementStatsAsync();
-    }
   } catch (err) {
     error.value = `Failed to fetch player stats for ${playerName.value}.`;
     console.error(err);
@@ -259,24 +245,6 @@ const fetchAchievementGroups = async () => {
   }
 };
 
-// Fetch engagement stats for dynamic content
-const fetchEngagementStatsAsync = async () => {
-  try {
-    const response = await fetchPlayerEngagementStats(playerName.value, 'bf1942');
-    playerEngagementStats.value = response.stats;
-
-    // Start rotating through stats every 6 seconds
-    setInterval(() => {
-      currentEngagementStatIndex.value = (currentEngagementStatIndex.value + 1) % playerEngagementStats.value.length;
-    }, 6000);
-  } catch (err) {
-    console.error('Error fetching player engagement stats:', err);
-    // Use minimal fallback
-    playerEngagementStats.value = [
-      { value: '0', label: 'stats available', context: 'Keep playing!', message: 'Break down every map, matchup, and streak in Data Explorer' }
-    ];
-  }
-};
 
 // Format minutes to hours and minutes
 const formatPlayTime = (minutes: number): string => {
@@ -727,50 +695,6 @@ onUnmounted(() => {
           v-else-if="playerStats"
           class="w-full px-1 sm:px-4 pb-6 sm:pb-12 space-y-4 sm:space-y-8"
         >
-          <!-- Data Explorer Call-to-Action Section -->
-          <div class="bg-neutral-900/80 border border-neutral-700/50 rounded-xl overflow-hidden">
-            <div class="p-2 sm:p-6">
-              <div class="flex flex-col lg:flex-row items-center gap-6">
-                <!-- Data Explorer Image -->
-                <div class="flex-shrink-0">
-                  <div class="relative group">
-                    <div class="absolute -inset-2 bg-neutral-600 rounded-xl blur-lg opacity-20 group-hover:opacity-30 transition-opacity duration-300"></div>
-                    <img
-                      :src="dataExplorerImage"
-                      alt="Data Explorer"
-                      class="relative w-20 h-20 lg:w-24 lg:h-24 rounded-xl object-cover shadow-2xl"
-                    />
-                  </div>
-                </div>
-
-                <!-- Content -->
-                <div class="flex-1 text-center lg:text-left">
-                  <h3 class="text-xl font-semibold text-neutral-200 mb-2">
-                    Explore Advanced Analytics
-                  </h3>
-                  <p class="text-neutral-300 text-sm mb-4 transition-all duration-500 ease-in-out">
-                    <span v-if="currentEngagementStat && currentEngagementStat.message">
-                      {{ currentEngagementStat.message }}
-                    </span>
-                    <span v-else>
-                      Break down every map, matchup, and streak in Data Explorer
-                    </span>
-                  </p>
-
-                  <!-- CTA Button -->
-                  <router-link
-                    :to="{ name: 'explore-player-detail', params: { playerName: playerName } }"
-                    class="inline-flex items-center gap-2 px-4 py-2 bg-neutral-800/80 hover:bg-neutral-700 border border-neutral-600 hover:border-neutral-500 text-neutral-300 hover:text-white rounded-md transition-all duration-200 font-medium text-sm shadow-sm hover:shadow-md"
-                  >
-                    <span>View in Data Explorer</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="transition-transform group-hover:translate-x-0.5">
-                      <path d="m9 18 6-6-6-6"/>
-                    </svg>
-                  </router-link>
-                </div>
-              </div>
-            </div>
-          </div>
 
           <!-- Recent Rounds Section -->
           <div

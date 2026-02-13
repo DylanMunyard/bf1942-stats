@@ -14,8 +14,8 @@
     <div v-else-if="error" class="text-center py-8">
       <div class="text-slate-400 mb-4">{{ error }}</div>
       <div class="mb-4">
-        <p class="text-slate-500 text-sm mb-3">Try selecting a different time period:</p>
-        <div class="flex gap-2 justify-center">
+        <p class="text-slate-500 text-sm mb-3">Try selecting a different time period or slice dimension:</p>
+        <div class="flex gap-2 justify-center mb-3">
           <button
             v-for="option in timeRangeOptions"
             :key="option.value"
@@ -38,147 +38,184 @@
     </div>
 
     <!-- Content -->
-    <div v-else-if="filteredPlayerData" class="space-y-6">
+    <div v-else-if="slicedData" class="space-y-6">
       <!-- Header -->
       <div>
         <div class="flex items-center gap-3 mb-4">
           <span class="text-3xl">👤</span>
           <h2 class="text-2xl font-bold">
             <RouterLink
-              :to="{ name: 'player-details', params: { playerName: filteredPlayerData.playerName } }"
+              :to="{ name: 'player-details', params: { playerName: slicedData.playerName } }"
               class="text-slate-200 hover:text-cyan-400 transition-colors"
               title="View full player profile"
             >
-              {{ filteredPlayerData.playerName }}
+              {{ slicedData.playerName }}
             </RouterLink>
           </h2>
         </div>
 
-        <!-- Time Range Selector -->
-        <div class="flex items-center justify-between">
-          <div class="text-sm text-slate-400">
-            {{ gameLabel }} &bull; Last {{ filteredPlayerData.dateRange.days }} days
-          </div>
-          <div class="flex gap-2">
-            <button
-              v-for="option in timeRangeOptions"
-              :key="option.value"
-              :class="[
-                'px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200',
-                selectedTimeRange === option.value
-                  ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg'
-                  : 'bg-slate-700/50 text-slate-300 hover:bg-slate-600/50 border border-slate-600'
-              ]"
-              @click="changeTimeRange(option.value)"
-              :disabled="isLoading"
+        <!-- Controls Row -->
+        <div class="flex flex-col gap-4 mb-6">
+          <!-- Slice Dimension Selector -->
+          <div class="flex items-center gap-3">
+            <label class="text-sm text-slate-400 whitespace-nowrap">Slice by:</label>
+            <select
+              v-model="selectedSliceType"
+              @change="changeSliceType"
+              class="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm text-slate-200 focus:border-cyan-500 focus:outline-none"
             >
-              {{ option.label }}
-            </button>
+              <option
+                v-for="dimension in availableDimensions"
+                :key="dimension.type"
+                :value="dimension.type"
+              >
+                {{ dimension.name }}
+              </option>
+            </select>
+          </div>
+
+          <!-- Time Range Selector -->
+          <div class="flex items-center justify-between">
+            <div class="text-sm text-slate-400">
+              {{ gameLabel }} &bull; Last {{ slicedData.dateRange.days }} days &bull; {{ slicedData.sliceDimension }}
+            </div>
+            <div class="flex gap-2">
+              <button
+                v-for="option in timeRangeOptions"
+                :key="option.value"
+                :class="[
+                  'px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200',
+                  selectedTimeRange === option.value
+                    ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg'
+                    : 'bg-slate-700/50 text-slate-300 hover:bg-slate-600/50 border border-slate-600'
+                ]"
+                @click="changeTimeRange(option.value)"
+                :disabled="isLoading"
+              >
+                {{ option.label }}
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Overall Stats -->
-      <div class="bg-slate-800/30 rounded-lg p-4">
-        <h3 class="text-sm font-medium text-slate-300 mb-3">Overall Statistics</h3>
+      <!-- Summary Stats -->
+      <div v-if="slicedData.results.length > 0" class="bg-slate-800/30 rounded-lg p-4">
+        <h3 class="text-sm font-medium text-slate-300 mb-3">Statistics Summary</h3>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div class="text-center">
-            <div class="text-2xl font-bold text-cyan-400">{{ formatNumber(filteredPlayerData.overallStats.totalScore) }}</div>
-            <div class="text-xs text-slate-400 mt-1">Total Score</div>
+            <div class="text-2xl font-bold text-cyan-400">{{ slicedData.results.length }}</div>
+            <div class="text-xs text-slate-400 mt-1">{{ getResultTypeLabel() }}</div>
           </div>
           <div class="text-center">
-            <div class="text-2xl font-bold text-slate-200">{{ filteredPlayerData.overallStats.kdRatio.toFixed(2) }}</div>
-            <div class="text-xs text-slate-400 mt-1">K/D Ratio</div>
+            <div class="text-2xl font-bold text-slate-200">{{ getTotalPrimaryValue() }}</div>
+            <div class="text-xs text-slate-400 mt-1">{{ getPrimaryMetricLabel() }}</div>
           </div>
           <div class="text-center">
-            <div class="text-2xl font-bold text-slate-200">{{ filteredPlayerData.overallStats.uniqueServers }}</div>
-            <div class="text-xs text-slate-400 mt-1">Servers</div>
+            <div class="text-2xl font-bold text-slate-200">{{ getTotalSecondaryValue() }}</div>
+            <div class="text-xs text-slate-400 mt-1">{{ getSecondaryMetricLabel() }}</div>
           </div>
           <div class="text-center">
-            <div class="text-2xl font-bold text-slate-200">{{ filteredPlayerData.overallStats.uniqueMaps }}</div>
-            <div class="text-xs text-slate-400 mt-1">Maps</div>
+            <div class="text-2xl font-bold text-slate-200">{{ getAveragePercentage() }}%</div>
+            <div class="text-xs text-slate-400 mt-1">{{ getPercentageLabel() }}</div>
           </div>
         </div>
       </div>
 
-      <!-- #1 Rankings Section -->
-      <div v-if="filteredPlayerData.numberOneRankings.length > 0" class="bg-slate-800/30 rounded-lg p-4">
-        <h3 class="text-sm font-medium text-slate-300 mb-3">
-          <span class="text-yellow-400">#1</span> Rankings
-        </h3>
-        <div class="flex flex-wrap gap-2">
-          <div
-            v-for="ranking in filteredPlayerData.numberOneRankings"
-            :key="`${ranking.mapName}-${ranking.serverGuid}`"
-            class="px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/30 rounded-full text-sm"
-            :title="`${ranking.mapName} on ${ranking.serverName} - ${formatNumber(ranking.totalScore)} score`"
-          >
-            <span class="text-yellow-300">{{ ranking.mapName }}</span>
-            <button
-              @click="handleNavigateToServer(ranking.serverGuid)"
-              class="text-slate-500 hover:text-cyan-400 text-xs ml-1 transition-colors"
-            >
-              ({{ truncateServerName(ranking.serverName) }})
-            </button>
+      <!-- Results List -->
+      <div v-if="slicedData.results.length > 0">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-sm font-medium text-slate-300">Detailed Results</h3>
+          <div class="text-sm text-slate-400">
+            Page {{ slicedData.pagination.page }} of {{ slicedData.pagination.totalPages }}
+            ({{ slicedData.pagination.totalItems }} total)
           </div>
         </div>
-      </div>
-
-      <!-- Map Rankings -->
-      <div v-if="filteredPlayerData.mapGroups.length > 0">
-        <h3 class="text-sm font-medium text-slate-300 mb-3">Rankings by Map</h3>
+        
         <div class="space-y-3">
-          <details
-            v-for="mapGroup in filteredPlayerData.mapGroups"
-            :key="mapGroup.mapName"
-            class="bg-slate-800/30 rounded-lg overflow-hidden group"
-            :open="expandedMaps.has(mapGroup.mapName)"
+          <div
+            v-for="(result, index) in slicedData.results"
+            :key="`${result.sliceKey}-${result.subKey || 'global'}`"
+            class="bg-slate-800/30 rounded-lg p-4 hover:bg-slate-700/30 transition-colors"
           >
-            <summary
-              @click.prevent="toggleMapExpanded(mapGroup.mapName)"
-              class="px-4 py-3 cursor-pointer hover:bg-slate-700/30 transition-colors flex items-center justify-between"
-            >
+            <div class="flex items-center justify-between mb-2">
               <div class="flex items-center gap-3">
-                <span class="text-slate-200 font-medium">{{ mapGroup.mapName }}</span>
-                <button
-                  @click.stop="handleNavigateToMap(mapGroup.mapName)"
-                  class="ml-2 text-slate-400 hover:text-cyan-400 transition-colors"
-                  title="View map details"
-                >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-                <span
-                  v-if="mapGroup.bestRank === 1"
-                  class="inline-flex items-center justify-center px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 text-xs rounded font-medium"
-                >
-                  #1
-                </span>
+                <div class="flex-shrink-0 w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center text-sm font-bold text-slate-200">
+                  {{ result.rank }}
+                </div>
+                <div>
+                  <div class="text-slate-200 font-medium">{{ result.sliceLabel }}</div>
+                  <div class="text-xs text-slate-500 mt-1">
+                    {{ result.secondaryValue }} {{ getSecondaryMetricLabel().toLowerCase() }}
+                    <span v-if="result.subKey" class="ml-2">
+                      • {{ getServerName(result.subKey) }}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div class="flex items-center gap-3">
-                <span class="text-sm text-cyan-400 group-open:hidden">{{ formatNumber(mapGroup.aggregatedScore) }}</span>
-                <span
-                  v-if="mapGroup.bestRank && mapGroup.bestRank > 1"
-                  class="text-sm text-slate-400 group-open:hidden"
-                >
-                  Best: #{{ mapGroup.bestRank }}
-                </span>
-                <svg class="w-5 h-5 text-slate-400 transform transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-            </summary>
-            <div class="px-4 pb-4 border-t border-slate-700/30">
-              <div class="mt-3">
-                <PlayerMapServerTable
-                  :server-stats="mapGroup.serverStats"
-                  @navigate-to-server="handleNavigateToServer"
-                />
+              <div class="text-right">
+                <div class="text-lg font-bold text-cyan-400">{{ result.primaryValue.toLocaleString() }}</div>
+                <div class="text-sm text-slate-400">{{ result.percentage.toFixed(1) }}{{ getPercentageUnit() }}</div>
               </div>
             </div>
-          </details>
+            
+            <!-- Additional Stats -->
+            <div v-if="Object.keys(result.additionalData).length > 0" class="mt-3 pt-3 border-t border-slate-700/50">
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                <div v-for="(value, key) in result.additionalData" :key="key" class="text-center">
+                  <div class="font-semibold text-slate-300">{{ formatAdditionalValue(value) }}</div>
+                  <div class="text-xs text-slate-500 capitalize">{{ formatAdditionalKey(key) }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+
+        <!-- Pagination Controls -->
+        <div v-if="slicedData.pagination.totalPages > 1" class="flex items-center justify-center gap-4 mt-6">
+          <button
+            @click="changePage(slicedData.pagination.page - 1)"
+            :disabled="!slicedData.pagination.hasPrevious || isLoading"
+            class="px-4 py-2 bg-slate-700/50 text-slate-300 rounded-lg transition-colors hover:bg-slate-600/50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          
+          <div class="flex items-center gap-2">
+            <template v-for="pageNum in getVisiblePages()" :key="pageNum">
+              <button
+                v-if="pageNum !== '...'"
+                @click="changePage(pageNum)"
+                :class="[
+                  'w-8 h-8 rounded text-sm font-medium transition-colors',
+                  pageNum === slicedData.pagination.page
+                    ? 'bg-cyan-500 text-white'
+                    : 'bg-slate-700/50 text-slate-300 hover:bg-slate-600/50'
+                ]"
+                :disabled="isLoading"
+              >
+                {{ pageNum }}
+              </button>
+              <span v-else class="text-slate-500 px-2">...</span>
+            </template>
+          </div>
+          
+          <button
+            @click="changePage(slicedData.pagination.page + 1)"
+            :disabled="!slicedData.pagination.hasNext || isLoading"
+            class="px-4 py-2 bg-slate-700/50 text-slate-300 rounded-lg transition-colors hover:bg-slate-600/50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+
+      <!-- Empty State -->
+      <div v-else class="text-center py-12">
+        <div class="text-6xl mb-4">📊</div>
+        <h3 class="text-xl font-semibold text-slate-300 mb-2">No Data Available</h3>
+        <p class="text-slate-400">No statistics found for this player with the current filters.</p>
+        <p class="text-slate-500 text-sm mt-2">Try adjusting the time range or slice dimension.</p>
       </div>
     </div>
   </div>
@@ -188,12 +225,10 @@
 import { ref, watch, onMounted, computed } from 'vue';
 import { RouterLink } from 'vue-router';
 import { PLAYER_STATS_TIME_RANGE_OPTIONS } from '@/utils/constants';
-import { fetchPlayerMapRankings, type PlayerMapRankingsResponse, type GameType } from '../../services/dataExplorerService';
-import PlayerMapServerTable from './PlayerMapServerTable.vue';
 
 const props = defineProps<{
   playerName: string;
-  game?: GameType;
+  game?: string;
   serverGuid?: string; // Optional: filter to a specific server
 }>();
 
@@ -202,79 +237,123 @@ const emit = defineEmits<{
   'navigate-to-map': [mapName: string];
 }>();
 
-const handleNavigateToServer = (serverGuid: string) => {
-  emit('navigate-to-server', serverGuid);
-};
+// API Types (duplicated for now, should be moved to shared types later)
+interface SliceDimensionOption {
+  type: string;
+  name: string;
+  description: string;
+}
 
-const handleNavigateToMap = (mapName: string) => {
-  emit('navigate-to-map', mapName);
-};
+interface PlayerSlicedStatsResponse {
+  playerName: string;
+  game: string;
+  sliceDimension: string;
+  sliceType: string;
+  results: PlayerSliceResultDto[];
+  dateRange: { days: number; fromDate: string; toDate: string };
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalItems: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+  };
+}
 
-const playerData = ref<PlayerMapRankingsResponse | null>(null);
+interface PlayerSliceResultDto {
+  sliceKey: string;
+  subKey: string | null;
+  sliceLabel: string;
+  primaryValue: number;
+  secondaryValue: number;
+  percentage: number;
+  rank: number;
+  totalPlayers: number;
+  additionalData: Record<string, any>;
+}
+
+const slicedData = ref<PlayerSlicedStatsResponse | null>(null);
+const availableDimensions = ref<SliceDimensionOption[]>([]);
 const isLoading = ref(false);
 const error = ref<string | null>(null);
-const expandedMaps = ref<Set<string>>(new Set());
 
-// Computed property - when serverGuid is provided, API filters server-side, so no client-side filtering needed
-const filteredPlayerData = computed(() => {
-  return playerData.value;
-});
-
-// Time range selection
+// Control states
 const selectedTimeRange = ref<number>(60); // Default to 60 days
+const selectedSliceType = ref<string>('ScoreByMap'); // Default slice type
+const currentPage = ref<number>(1);
+
 const timeRangeOptions = PLAYER_STATS_TIME_RANGE_OPTIONS;
 
 const gameLabel = computed(() => {
-  switch (playerData.value?.game?.toLowerCase()) {
+  switch (slicedData.value?.game?.toLowerCase()) {
     case 'bf1942': return 'Battlefield 1942';
     case 'fh2': return 'Forgotten Hope 2';
     case 'bfvietnam': return 'Battlefield Vietnam';
-    default: return playerData.value?.game || 'Unknown';
+    default: return slicedData.value?.game || 'Unknown';
   }
 });
 
-const loadData = async (days?: number) => {
+// Load available slice dimensions
+const loadSliceDimensions = async () => {
+  try {
+    const response = await fetch('/stats/data-explorer/slice-dimensions');
+    if (!response.ok) throw new Error('Failed to fetch slice dimensions');
+    availableDimensions.value = await response.json();
+  } catch (err) {
+    console.error('Error loading slice dimensions:', err);
+    // Provide fallback dimensions
+    availableDimensions.value = [
+      { type: 'ScoreByMap', name: 'Score by Map', description: 'Total player score per map' },
+      { type: 'ScoreByMapAndServer', name: 'Score by Map + Server', description: 'Player score per map per server' },
+      { type: 'KillsByMap', name: 'Kills by Map', description: 'Total kills per map' },
+      { type: 'KillsByMapAndServer', name: 'Kills by Map + Server', description: 'Kills per map per server' },
+      { type: 'TeamWinsByMap', name: 'Team Wins by Map', description: 'Team win statistics per map' },
+      { type: 'TeamWinsByMapAndServer', name: 'Team Wins by Map + Server', description: 'Team wins per map per server' }
+    ];
+  }
+};
+
+const loadData = async (days?: number, page?: number) => {
   if (!props.playerName) return;
 
   const timeRange = days || selectedTimeRange.value;
+  const pageNum = page || currentPage.value;
+  
   isLoading.value = true;
   error.value = null;
 
   try {
-    console.log(`Loading player data for ${props.playerName} with ${timeRange} days`);
-    // Pass serverGuid to filter on server side if provided
-    playerData.value = await fetchPlayerMapRankings(
-      props.playerName,
-      props.game || 'bf1942',
-      timeRange,
-      props.serverGuid
-    );
+    console.log(`Loading sliced player data for ${props.playerName} with ${timeRange} days, slice: ${selectedSliceType.value}, page: ${pageNum}`);
+    
+    const params = new URLSearchParams({
+      sliceType: selectedSliceType.value,
+      game: props.game || 'bf1942',
+      page: pageNum.toString(),
+      pageSize: '20',
+      days: timeRange.toString()
+    });
 
-    // Clear expanded maps and set up new ones if we have data
-    expandedMaps.value.clear();
-    if (playerData.value && playerData.value.mapGroups.length > 0) {
-      // Auto-expand first map with a #1 ranking, or just the first map
-      const firstNumberOne = playerData.value.mapGroups.find(mg => mg.bestRank === 1);
-      if (firstNumberOne) {
-        expandedMaps.value.add(firstNumberOne.mapName);
+    const response = await fetch(`/stats/data-explorer/players/${encodeURIComponent(props.playerName)}/sliced-stats?${params}`);
+    
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(`No data available for this player in the last ${timeRange} days`);
       } else {
-        expandedMaps.value.add(playerData.value.mapGroups[0].mapName);
+        throw new Error('Failed to load player statistics');
       }
-      // Update document title
-      if (playerData.value?.playerName) {
-        document.title = `${playerData.value.playerName} - Player Explorer | BF Stats`;
-      }
-    } else {
-      error.value = `No data available for this player in the last ${timeRange} days`;
+    }
+
+    slicedData.value = await response.json();
+    currentPage.value = pageNum;
+
+    // Update document title
+    if (slicedData.value?.playerName) {
+      document.title = `${slicedData.value.playerName} - Enhanced Data Explorer | BF Stats`;
     }
   } catch (err: any) {
-    console.error(`Error loading player data for ${timeRange} days:`, err);
-
-    if (err.message === 'PLAYER_NOT_FOUND') {
-      error.value = `No data available for this player in the last ${timeRange} days`;
-    } else {
-      error.value = 'Failed to load player details';
-    }
+    console.error(`Error loading sliced player data:`, err);
+    error.value = err.message || 'Failed to load player details';
   }
 
   isLoading.value = false;
@@ -282,30 +361,123 @@ const loadData = async (days?: number) => {
 
 const changeTimeRange = (days: number) => {
   selectedTimeRange.value = days;
-  loadData(days);
+  currentPage.value = 1;
+  loadData(days, 1);
 };
 
-const toggleMapExpanded = (mapName: string) => {
-  if (expandedMaps.value.has(mapName)) {
-    expandedMaps.value.delete(mapName);
-  } else {
-    expandedMaps.value.add(mapName);
+const changeSliceType = () => {
+  currentPage.value = 1;
+  loadData(selectedTimeRange.value, 1);
+};
+
+const changePage = (page: number) => {
+  if (page < 1 || (slicedData.value && page > slicedData.value.pagination.totalPages)) return;
+  currentPage.value = page;
+  loadData(selectedTimeRange.value, page);
+};
+
+// UI Helper Methods
+const getResultTypeLabel = () => {
+  if (!slicedData.value) return 'Results';
+  return selectedSliceType.value.includes('Server') ? 'Map-Server Combinations' : 'Maps';
+};
+
+const getPrimaryMetricLabel = () => {
+  if (selectedSliceType.value.includes('Score')) return 'Total Score';
+  if (selectedSliceType.value.includes('Kills')) return 'Total Kills';
+  if (selectedSliceType.value.includes('Wins')) return 'Total Wins';
+  return 'Total';
+};
+
+const getSecondaryMetricLabel = () => {
+  return 'Rounds';
+};
+
+const getPercentageLabel = () => {
+  if (selectedSliceType.value.includes('Score') || selectedSliceType.value.includes('Kills')) return 'Avg K/D';
+  if (selectedSliceType.value.includes('Wins')) return 'Win Rate';
+  return 'Rate';
+};
+
+const getPercentageUnit = () => {
+  if (selectedSliceType.value.includes('Wins')) return '%';
+  return '';
+};
+
+const getTotalPrimaryValue = () => {
+  if (!slicedData.value) return 0;
+  return slicedData.value.results.reduce((sum, result) => sum + result.primaryValue, 0).toLocaleString();
+};
+
+const getTotalSecondaryValue = () => {
+  if (!slicedData.value) return 0;
+  return slicedData.value.results.reduce((sum, result) => sum + result.secondaryValue, 0).toLocaleString();
+};
+
+const getAveragePercentage = () => {
+  if (!slicedData.value || slicedData.value.results.length === 0) return 0;
+  const total = slicedData.value.results.reduce((sum, result) => sum + result.percentage, 0);
+  return (total / slicedData.value.results.length).toFixed(1);
+};
+
+const formatAdditionalKey = (key: string) => {
+  return key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+};
+
+const formatAdditionalValue = (value: any) => {
+  if (typeof value === 'number') {
+    return value.toLocaleString();
   }
+  return String(value);
 };
 
-const formatNumber = (num: number): string => {
-  return num.toLocaleString();
+const getServerName = (serverGuid: string) => {
+  // This would need to be populated from server data
+  return serverGuid.substring(0, 8) + '...';
 };
 
-const truncateServerName = (name: string): string => {
-  return name.length > 20 ? name.substring(0, 20) + '...' : name;
+const getVisiblePages = () => {
+  if (!slicedData.value) return [];
+  
+  const { page, totalPages } = slicedData.value.pagination;
+  const pages = [];
+  
+  if (totalPages <= 7) {
+    // Show all pages if total is small
+    for (let i = 1; i <= totalPages; i++) {
+      pages.push(i);
+    }
+  } else {
+    // Show smart pagination with ellipsis
+    if (page <= 4) {
+      pages.push(1, 2, 3, 4, 5, '...', totalPages);
+    } else if (page >= totalPages - 3) {
+      pages.push(1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+    } else {
+      pages.push(1, '...', page - 1, page, page + 1, '...', totalPages);
+    }
+  }
+  
+  return pages;
 };
 
-onMounted(loadData);
-watch(() => props.playerName, () => loadData());
-watch(() => props.game, () => loadData());
+onMounted(async () => {
+  await loadSliceDimensions();
+  await loadData();
+});
+
+watch(() => props.playerName, () => {
+  currentPage.value = 1;
+  loadData();
+});
+
+watch(() => props.game, () => {
+  currentPage.value = 1;
+  loadData();
+});
+
 watch(() => props.serverGuid, () => {
-  // When serverGuid changes, reload data to get server-filtered results
+  currentPage.value = 1;
   loadData();
 });
 </script>
