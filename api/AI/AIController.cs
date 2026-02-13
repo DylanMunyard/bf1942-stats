@@ -21,11 +21,11 @@ namespace api.AI;
 [ApiController]
 [Route("stats/[controller]")]
 public class AIController(
-    IAIService aiService,
     IDiscordWebhookService discordWebhookService,
     PlayerTrackerDbContext dbContext,
     IOptions<AzureOpenAIOptions> aiOptions,
-    ILogger<AIController> logger) : ControllerBase
+    ILogger<AIController> logger,
+    IAIService? aiService = null) : ControllerBase
 {
     /// <summary>
     /// Streams a chat response using Server-Sent Events.
@@ -43,6 +43,15 @@ public class AIController(
         Response.ContentType = "text/event-stream";
         Response.Headers.CacheControl = "no-cache";
         Response.Headers.Connection = "keep-alive";
+
+        if (aiService == null)
+        {
+            var errorData = JsonSerializer.Serialize(new { error = "AI service is not configured." });
+            await Response.WriteAsync($"data: {errorData}\n\n", cancellationToken);
+            await Response.WriteAsync("data: [DONE]\n\n", cancellationToken);
+            await Response.Body.FlushAsync(cancellationToken);
+            return;
+        }
 
         try
         {
