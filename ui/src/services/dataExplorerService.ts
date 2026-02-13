@@ -38,6 +38,10 @@ export interface MapRotationItem {
   playTimePercentage: number;
   avgConcurrentPlayers: number;
   winStats: WinStats;
+  topPlayerByWins?: {
+    playerName: string;
+    wins: number;
+  } | null;
 }
 
 export interface MapRotationResponse {
@@ -226,6 +230,7 @@ export interface LeaderboardEntry {
   playerName: string;
   totalScore: number;
   totalKills: number;
+  totalWins: number;
   totalDeaths: number;
   kdRatio: number;
   killsPerMinute: number;
@@ -240,7 +245,7 @@ export interface DateRange {
 }
 
 // Session types for server-map sessions
-export interface TopPlayer {
+export interface SessionTopPlayer {
   sessionId: number;
   roundId: string;
   playerName: string;
@@ -270,7 +275,7 @@ export interface ServerMapSession {
   team1Points?: number;
   team2Points?: number;
   roundTimeRemain?: number;
-  topPlayers?: TopPlayer[];
+  topPlayers?: SessionTopPlayer[];
 }
 
 // Player Search Types
@@ -349,6 +354,7 @@ export interface ServerMapDetail {
   winStats: WinStats;
   topByScore: LeaderboardEntry[];
   topByKills: LeaderboardEntry[];
+  topByWins: LeaderboardEntry[];
   topByKdRatio: LeaderboardEntry[];
   topByKillRate: LeaderboardEntry[];
   activityPatterns: ActivityPattern[];

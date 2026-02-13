@@ -45,7 +45,7 @@
 import { getRankClass } from '@/utils/statsUtils';
 import type { LeaderboardEntry } from '../../services/dataExplorerService';
 
-export type LeaderboardType = 'score' | 'kills' | 'kdRatio' | 'killRate';
+export type LeaderboardType = 'score' | 'kills' | 'wins' | 'kdRatio' | 'killRate';
 
 const getPlayerDetailsRoute = (playerName: string) => ({
   name: 'explore-player-detail',
@@ -60,6 +60,7 @@ const props = defineProps<{
 const primaryColumnHeader = {
   score: 'Score',
   kills: 'Kills',
+  wins: 'Wins',
   kdRatio: 'K/D',
   killRate: 'Kills/Min'
 }[props.type];
@@ -70,6 +71,8 @@ const formatPrimaryValue = (entry: LeaderboardEntry): string => {
       return entry.totalScore.toLocaleString();
     case 'kills':
       return entry.totalKills.toLocaleString();
+    case 'wins':
+      return (entry.totalWins ?? 0).toLocaleString();
     case 'kdRatio':
       return entry.kdRatio.toFixed(2);
     case 'killRate':

@@ -157,7 +157,7 @@
       <div>
         <h3 class="text-sm font-medium text-slate-300 mb-3">Top Players</h3>
 
-        <!-- 2x2 Leaderboard Grid -->
+        <!-- Leaderboard Grid -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="bg-slate-800/30 rounded-lg p-4">
             <h4 class="text-sm font-medium text-slate-300 mb-3">Top by Score</h4>
@@ -171,6 +171,13 @@
             <LeaderboardTable
               :entries="filteredByKills"
               type="kills"
+            />
+          </div>
+          <div class="bg-slate-800/30 rounded-lg p-4">
+            <h4 class="text-sm font-medium text-slate-300 mb-3">Top by Wins</h4>
+            <LeaderboardTable
+              :entries="filteredByWins"
+              type="wins"
             />
           </div>
           <div class="bg-slate-800/30 rounded-lg p-4">
@@ -219,9 +226,9 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'navigateToServer', serverGuid: string): void;
-  (e: 'navigateToMap', mapName: string): void;
-  (e: 'close'): void;
+  navigateToServer: [serverGuid: string];
+  navigateToMap: [mapName: string];
+  close: [];
 }>();
 
 const getMapDetailsRoute = (mapName: string) => ({
@@ -246,6 +253,7 @@ const filterByMinRounds = (entries: LeaderboardEntry[]): LeaderboardEntry[] => {
 
 const filteredByScore = computed(() => filterByMinRounds(detail.value?.topByScore ?? []));
 const filteredByKills = computed(() => filterByMinRounds(detail.value?.topByKills ?? []));
+const filteredByWins = computed(() => filterByMinRounds(detail.value?.topByWins ?? []));
 const filteredByKdRatio = computed(() => filterByMinRounds(detail.value?.topByKdRatio ?? []));
 const filteredByKillRate = computed(() => filterByMinRounds(detail.value?.topByKillRate ?? []));
 

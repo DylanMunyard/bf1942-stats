@@ -29,6 +29,7 @@
               </div>
             </th>
             <th class="col-win">Win Stats</th>
+            <th class="col-top">Top Wins</th>
           </tr>
         </thead>
         <tbody>
@@ -51,6 +52,13 @@
                 <div class="win-bar-team1" :style="{ width: `${map.winStats.team1WinPercentage}%` }" :title="`${map.winStats.team1Label}: ${map.winStats.team1WinPercentage}%`" />
                 <div class="win-bar-team2" :style="{ width: `${map.winStats.team2WinPercentage}%` }" :title="`${map.winStats.team2Label}: ${map.winStats.team2WinPercentage}%`" />
               </div>
+            </td>
+            <td class="col-top">
+              <div v-if="map.topPlayerByWins" class="top-winner">
+                <span class="top-winner-name">{{ map.topPlayerByWins.playerName }}</span>
+                <span class="top-winner-count">{{ map.topPlayerByWins.wins }}W</span>
+              </div>
+              <span v-else class="top-winner-empty">--</span>
             </td>
           </tr>
         </tbody>
@@ -108,8 +116,8 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'navigate', mapName: string): void;
-  (e: 'pageChange', page: number): void;
+  navigate: [mapName: string];
+  pageChange: [page: number];
 }>();
 
 // Sorting state
@@ -274,6 +282,7 @@ const paginationRange = computed(() => {
 .col-rounds { width: 3.5rem; }
 .col-avg { width: 2.5rem; display: none; }
 .col-win { width: 6rem; display: none; }
+.col-top { width: 8.5rem; display: none; }
 
 @media (min-width: 640px) {
   .col-avg { display: table-cell; }
@@ -281,6 +290,7 @@ const paginationRange = computed(() => {
 
 @media (min-width: 768px) {
   .col-win { display: table-cell; }
+  .col-top { display: table-cell; }
 }
 
 .map-name {
@@ -322,6 +332,34 @@ const paginationRange = computed(() => {
 
 .win-bar-team2 {
   background: #3b82f6;
+}
+
+.top-winner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.top-winner-name {
+  color: var(--portal-text-bright);
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.top-winner-count {
+  color: var(--portal-accent);
+  font-family: ui-monospace, monospace;
+  font-size: 0.68rem;
+  flex-shrink: 0;
+}
+
+.top-winner-empty {
+  color: var(--portal-text);
+  opacity: 0.7;
+  font-size: 0.72rem;
 }
 
 .pagination {
