@@ -29,7 +29,7 @@ spec:
             - name: SEQ_URL
               value: "http://seq-service.seq:5341"
             - name: OTLP_ENDPOINT
-              value: "http://seq-service.seq:5341/ingest/otlp"
+              value: "http://seq-service.seq:5341/ingest/otlp/v1/traces"
             - name: TRACE_SAMPLING_RATIO
               value: "0.5"
             - name: ConnectionStrings__Redis

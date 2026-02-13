@@ -56,8 +56,8 @@ services:
     image: datalust/seq:latest
     container_name: bf1942-seq
     ports:
-      - "5341:80"
-      - "5342:5341"
+      - "5341:80"      # Web UI + API + ingestion (SEQ_URL=http://localhost:5341, OTLP: http://localhost:5341/ingest/otlp/v1/traces)
+      - "5342:5341"    # Ingestion-only port (alternative: http://localhost:5342/ingest/otlp/v1/traces)
     networks:
       - bf1942-dev
     environment:

@@ -43,7 +43,19 @@ var earlyConfig = new ConfigurationBuilder()
     .Build();
 
 var seqUrl = earlyConfig["SEQ_URL"] ?? Environment.GetEnvironmentVariable("SEQ_URL");
-var otlpEndpoint = earlyConfig["OTLP_ENDPOINT"] ?? Environment.GetEnvironmentVariable("OTLP_ENDPOINT") ?? "http://localhost:4318/v1/traces";
+// OTLP endpoint for trace export. Must include the full path for HttpProtobuf protocol.
+// The OpenTelemetry SDK does NOT auto-append /v1/traces when opt.Endpoint is set explicitly.
+//
+// Examples:
+//   Seq (local):  http://localhost:5341/ingest/otlp/v1/traces  (docker-compose: host 5341 → container 80)
+//   Seq (prod):   http://seq-service.seq:5341/ingest/otlp/v1/traces
+//   Tempo:        http://localhost:4318/v1/traces              (docker-compose: tempo:4318)
+//
+// When OTLP_ENDPOINT is not set, traces are sent to Seq if SEQ_URL is available,
+// otherwise to the local Tempo instance.
+var otlpEndpoint = earlyConfig["OTLP_ENDPOINT"]
+    ?? Environment.GetEnvironmentVariable("OTLP_ENDPOINT")
+    ?? (!string.IsNullOrEmpty(seqUrl) ? $"{seqUrl.TrimEnd('/')}/ingest/otlp/v1/traces" : "http://localhost:4318/v1/traces");
 var serviceName = "junie-des-1942stats";
 var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development";
 var samplingRatioEnv = Environment.GetEnvironmentVariable("TRACE_SAMPLING_RATIO");
@@ -173,29 +185,10 @@ try
                         return true;
                     };
                 });
-                tracing.AddEntityFrameworkCoreInstrumentation(options =>
-                {
-                    options.SetDbStatementForStoredProcedure = true;
-                    options.SetDbStatementForText = true;
-                    // Filter out database commands during bulk operations
-                    options.Filter = (connectionString, command) =>
-                    {
-                        // Check if we're in a bulk operation context by looking at current activity
-                        var activity = System.Diagnostics.Activity.Current;
-                        while (activity != null)
-                        {
-                            if (activity.Tags.Any(tag => tag.Key == "bulk_operation" && tag.Value == "true"))
-                            {
-                                return false; // Don't trace this command
-                            }
-                            activity = activity.Parent;
-                        }
-
-                        return true; // Trace this command
-                    };
-                });
-                // SqlClient instrumentation removed to reduce telemetry overhead
-                // EF Core instrumentation above already covers most database operations
+                // EF Core and SqlClient instrumentation removed to reduce telemetry overhead.
+                // Every DB query generates a span with the full SQL statement, which is
+                // very noisy in Seq. ASP.NET Core instrumentation + custom activity sources
+                // provide sufficient request-level and business-logic tracing.
 
                 tracing.AddOtlpExporter(opt =>
                 {
@@ -203,15 +196,21 @@ try
                     opt.Protocol = OtlpExportProtocol.HttpProtobuf;
                 });
 
-                // Only trace API-related activity sources, exclude background service sources
-                tracing.AddSource("junie-des-1942stats.*");
+                // Explicitly register only the activity sources we want to trace.
+                // NOTE: Do NOT use a wildcard like "junie-des-1942stats.*" — it would
+                // match background-service sources (StatsCollection, Gamification) that
+                // we intentionally exclude to reduce telemetry overhead.
                 tracing.AddSource(ActivitySources.PlayerStats.Name);
                 tracing.AddSource(ActivitySources.Database.Name);
                 tracing.AddSource(ActivitySources.BfListApi.Name);
                 tracing.AddSource(ActivitySources.Cache.Name);
-                // Background service sources commented out to reduce telemetry overhead:
-                // tracing.AddSource(ActivitySources.StatsCollection.Name);
                 tracing.AddSource(ActivitySources.RankingCalculation.Name);
+                tracing.AddSource(ActivitySources.AggregateCalculation.Name);
+                tracing.AddSource(ActivitySources.SqliteAnalytics.Name);
+                tracing.AddSource(ActivitySources.Backfill.Name);
+                tracing.AddSource(ActivitySources.AIChat.Name);
+                // Background service sources intentionally excluded:
+                // tracing.AddSource(ActivitySources.StatsCollection.Name);
                 // tracing.AddSource(ActivitySources.Gamification.Name);
             }
         );

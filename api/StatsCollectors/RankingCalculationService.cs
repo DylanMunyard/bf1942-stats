@@ -15,6 +15,10 @@ public class RankingCalculationService(IServiceProvider services, ILogger<Rankin
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Clear any inherited activity context from hosting startup to prevent
+        // background job traces from being correlated with unrelated HTTP requests.
+        Activity.Current = null;
+
         logger.LogInformation("RankingCalculationService started, waiting {Delay} before first run", StartupDelay);
 
         // Delay startup to avoid blocking Kestrel initialization
@@ -22,7 +26,13 @@ public class RankingCalculationService(IServiceProvider services, ILogger<Rankin
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            using var activity = ActivitySources.RankingCalculation.StartActivity("RankingCalculation.Cycle");
+            // Use explicit default parentContext to create a root activity with a fresh traceId.
+            // Without this, StartActivity() inherits Activity.Current from the hosting context,
+            // causing all background cycles to share a traceId with unrelated HTTP requests.
+            using var activity = ActivitySources.RankingCalculation.StartActivity(
+                "RankingCalculation.Cycle",
+                ActivityKind.Internal,
+                parentContext: default);
             activity?.SetTag("bulk_operation", "true");
 
             var cycleStopwatch = Stopwatch.StartNew();

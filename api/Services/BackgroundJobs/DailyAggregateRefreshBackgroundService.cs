@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,6 +18,10 @@ public class DailyAggregateRefreshBackgroundService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Clear any inherited activity context from hosting startup to prevent
+        // background job traces from being correlated with unrelated HTTP requests.
+        Activity.Current = null;
+
         logger.LogInformation("DailyAggregateRefreshJob started");
 
         while (!stoppingToken.IsCancellationRequested)

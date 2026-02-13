@@ -46,9 +46,19 @@ public class StatsCollectionBackgroundService(
             return; // Previous collection still running
         }
 
+        // Clear any inherited activity context to prevent Timer callbacks from
+        // accidentally correlating with unrelated HTTP request traces.
+        Activity.Current = null;
+
         var currentCycle = Interlocked.Increment(ref _cycleCount);
 
-        using var activity = ActivitySources.StatsCollection.StartActivity("StatsCollection.Cycle");
+        // Use explicit default parentContext to create a root activity with a fresh traceId.
+        // Without this, StartActivity() could inherit Activity.Current from the thread pool,
+        // causing background cycles to share a traceId with unrelated HTTP requests.
+        using var activity = ActivitySources.StatsCollection.StartActivity(
+            "StatsCollection.Cycle",
+            ActivityKind.Internal,
+            parentContext: default);
         activity?.SetTag("cycle_number", currentCycle);
         activity?.SetTag("collection_interval_seconds", _collectionInterval.TotalSeconds);
         activity?.SetTag("bulk_operation", "true");

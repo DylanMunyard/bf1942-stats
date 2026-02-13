@@ -22,7 +22,13 @@ var earlyConfig = new ConfigurationBuilder()
     .Build();
 
 var seqUrl = earlyConfig["SEQ_URL"] ?? Environment.GetEnvironmentVariable("SEQ_URL");
-var otlpEndpoint = Environment.GetEnvironmentVariable("OTLP_ENDPOINT") ?? "http://localhost:4318/v1/traces";
+// OTLP endpoint for trace export. Must include the full path for HttpProtobuf protocol.
+// The OpenTelemetry SDK does NOT auto-append /v1/traces when opt.Endpoint is set explicitly.
+// When OTLP_ENDPOINT is not set, traces are sent to Seq if SEQ_URL is available,
+// otherwise to the local Tempo instance.
+var otlpEndpoint = earlyConfig["OTLP_ENDPOINT"]
+    ?? Environment.GetEnvironmentVariable("OTLP_ENDPOINT")
+    ?? (!string.IsNullOrEmpty(seqUrl) ? $"{seqUrl.TrimEnd('/')}/ingest/otlp/v1/traces" : "http://localhost:4318/v1/traces");
 var serviceName = "junie-des-1942stats.Notifications";
 var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development";
 var samplingRatioEnv = Environment.GetEnvironmentVariable("TRACE_SAMPLING_RATIO");
@@ -122,7 +128,8 @@ try
                     opt.Protocol = OtlpExportProtocol.HttpProtobuf;
                 });
                 
-                tracing.AddSource("junie-des-1942stats.Notifications.*");
+                // Explicitly register only the activity sources we want to trace.
+                // Avoid wildcards as they can inadvertently include unwanted sources.
                 tracing.AddSource(ActivitySources.Redis.Name);
                 tracing.AddSource(ActivitySources.Http.Name);
                 tracing.AddSource(ActivitySources.SignalR.Name);
