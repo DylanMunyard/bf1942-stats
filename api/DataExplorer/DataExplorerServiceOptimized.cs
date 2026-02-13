@@ -1941,7 +1941,7 @@ public class DataExplorerService(
         string game = "bf1942")
     {
         // Use ServerMapStats to get team win data
-        // Use subquery to avoid parameter limit when there are many servers
+        // Filter by player existence in PlayerMapStats to only show relevant maps/servers
         var sql = includeServer ? @"
             SELECT
                 s.MapName,
@@ -1957,27 +1957,41 @@ public class DataExplorerService(
             FROM ServerMapStats s
             WHERE ((s.Year > @p0) OR (s.Year = @p0 AND s.Month >= @p1))
               AND s.ServerGuid IN (SELECT Guid FROM Servers WHERE Game = @p2)
+              AND EXISTS (
+                  SELECT 1 FROM PlayerMapStats pms
+                  WHERE pms.PlayerName = @p3
+                    AND pms.MapName = s.MapName
+                    AND pms.ServerGuid = s.ServerGuid
+                    AND ((pms.Year > @p0) OR (pms.Year = @p0 AND pms.Month >= @p1))
+              )
             GROUP BY s.MapName, s.ServerGuid
             ORDER BY SUM(s.Team1Victories + s.Team2Victories) DESC" : @"
             SELECT
-                MapName,
+                s.MapName,
                 NULL as ServerGuid,
-                SUM(Team1Victories + Team2Victories) as TotalRounds,
-                SUM(Team1Victories) as Team1Victories,
-                SUM(Team2Victories) as Team2Victories,
-                MAX(Team1Label) as Team1Label,
-                MAX(Team2Label) as Team2Label,
-                CASE WHEN SUM(Team1Victories + Team2Victories) > 0
-                     THEN ROUND(CAST(SUM(Team1Victories) AS REAL) / SUM(Team1Victories + Team2Victories) * 100, 1)
+                SUM(s.Team1Victories + s.Team2Victories) as TotalRounds,
+                SUM(s.Team1Victories) as Team1Victories,
+                SUM(s.Team2Victories) as Team2Victories,
+                MAX(s.Team1Label) as Team1Label,
+                MAX(s.Team2Label) as Team2Label,
+                CASE WHEN SUM(s.Team1Victories + s.Team2Victories) > 0
+                     THEN ROUND(CAST(SUM(s.Team1Victories) AS REAL) / SUM(s.Team1Victories + s.Team2Victories) * 100, 1)
                      ELSE 0 END as Team1WinRate
-            FROM ServerMapStats
-            WHERE ((Year > @p0) OR (Year = @p0 AND Month >= @p1))
-              AND ServerGuid IN (SELECT Guid FROM Servers WHERE Game = @p2)
-            GROUP BY MapName
-            ORDER BY SUM(Team1Victories + Team2Victories) DESC";
+            FROM ServerMapStats s
+            WHERE ((s.Year > @p0) OR (s.Year = @p0 AND s.Month >= @p1))
+              AND s.ServerGuid IN (SELECT Guid FROM Servers WHERE Game = @p2)
+              AND EXISTS (
+                  SELECT 1 FROM PlayerMapStats pms
+                  WHERE pms.PlayerName = @p3
+                    AND pms.MapName = s.MapName
+                    AND pms.ServerGuid = s.ServerGuid
+                    AND ((pms.Year > @p0) OR (pms.Year = @p0 AND pms.Month >= @p1))
+              )
+            GROUP BY s.MapName
+            ORDER BY SUM(s.Team1Victories + s.Team2Victories) DESC";
 
         var teamWinData = await dbContext.Database
-            .SqlQueryRaw<TeamWinQueryResult>(sql, cutoffYear, cutoffMonth, game)
+            .SqlQueryRaw<TeamWinQueryResult>(sql, cutoffYear, cutoffMonth, game, playerName)
             .ToListAsync();
 
         var results = new List<PlayerSliceResultDto>();
