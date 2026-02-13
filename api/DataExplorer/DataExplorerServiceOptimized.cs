@@ -1884,6 +1884,7 @@ public class DataExplorerService(
             ORDER BY s.Team1Victories + s.Team2Victories DESC" : $@"
             SELECT 
                 MapName,
+                NULL as ServerGuid,
                 SUM(Team1Victories + Team2Victories) as TotalRounds,
                 SUM(Team1Victories) as Team1Victories,
                 SUM(Team2Victories) as Team2Victories,
@@ -1947,7 +1948,7 @@ public class DataExplorerService(
         var guidParams = string.Join(", ", serverGuids.Select((_, i) => $"@p{i + 3}"));
         
         var groupBy = includeServer ? "MapName, ServerGuid" : "MapName";
-        var selectFields = includeServer ? "MapName, ServerGuid," : "MapName,";
+        var selectFields = includeServer ? "MapName, ServerGuid," : "MapName, NULL as ServerGuid,";
         
         var sql = $@"
             SELECT 
@@ -2014,7 +2015,7 @@ public class DataExplorerService(
         var guidParams = string.Join(", ", serverGuids.Select((_, i) => $"@p{i + 3}"));
         
         var groupBy = includeServer ? "MapName, ServerGuid" : "MapName";
-        var selectFields = includeServer ? "MapName, ServerGuid," : "MapName,";
+        var selectFields = includeServer ? "MapName, ServerGuid," : "MapName, NULL as ServerGuid,";
         
         var sql = $@"
             SELECT 
