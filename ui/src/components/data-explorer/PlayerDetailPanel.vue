@@ -210,17 +210,17 @@
                     <div v-if="getTeamLabel(result.additionalData, 'team1Label') || getTeamLabel(result.additionalData, 'team2Label')" class="grid grid-cols-2 gap-3">
                       <div class="text-center p-2 bg-slate-700/30 rounded text-xs">
                         <div class="font-medium text-slate-300">{{ getTeamLabel(result.additionalData, 'team1Label') || 'Team 1' }}</div>
-                        <div class="text-cyan-400 font-bold">{{ formatAdditionalValue(result.additionalData.team1Wins || 0) }}</div>
+                        <div class="text-cyan-400 font-bold">{{ formatAdditionalValue(result.primaryValue) }}</div>
                       </div>
                       <div class="text-center p-2 bg-slate-700/30 rounded text-xs">
                         <div class="font-medium text-slate-300">{{ getTeamLabel(result.additionalData, 'team2Label') || 'Team 2' }}</div>
-                        <div class="text-cyan-400 font-bold">{{ formatAdditionalValue(result.additionalData.team2Wins || 0) }}</div>
+                        <div class="text-cyan-400 font-bold">{{ formatAdditionalValue(result.additionalData.team2Victories || 0) }}</div>
                       </div>
                     </div>
                     <!-- Other additional data for team wins -->
-                    <div v-if="Object.keys(getRenderableAdditionalData(result.additionalData)).length > 0" class="text-xs text-slate-400">
-                      <div v-for="(value, key) in getRenderableAdditionalData(result.additionalData)" :key="key" class="flex justify-between">
-                        <span>{{ formatAdditionalKey(key) }}:</span>
+                    <div v-if="Object.keys(getTeamWinAdditionalData(result.additionalData, result.percentage)).length > 0" class="text-xs text-slate-400">
+                      <div v-for="(value, key) in getTeamWinAdditionalData(result.additionalData, result.percentage)" :key="key" class="flex justify-between">
+                        <span>{{ formatTeamWinKey(key, result.additionalData) }}:</span>
                         <span class="text-slate-300">{{ formatAdditionalValue(value) }}</span>
                       </div>
                     </div>
@@ -512,6 +512,19 @@ const formatAdditionalKey = (key: string) => {
     .replace(/^./, str => str.toUpperCase());
 };
 
+const formatTeamWinKey = (key: string, additionalData: Record<string, any>) => {
+  if (key === 'team1WinRate') {
+    const teamName = getTeamLabel(additionalData, 'team1Label') || 'Team 1';
+    return `${teamName} Win Rate`;
+  }
+  if (key === 'team2WinRate') {
+    const teamName = getTeamLabel(additionalData, 'team2Label') || 'Team 2';
+    return `${teamName} Win Rate`;
+  }
+  // For any other keys, use the regular formatter
+  return formatAdditionalKey(key);
+};
+
 const formatAdditionalValue = (value: any) => {
   if (typeof value === 'number') {
     return value.toLocaleString();
@@ -537,7 +550,31 @@ const getRenderableAdditionalData = (additionalData: Record<string, any>) => {
   }
 
   return Object.fromEntries(
-    Object.entries(additionalData).filter(([key]) => key !== 'team1Label' && key !== 'team2Label')
+    Object.entries(additionalData).filter(([key]) =>
+      key !== 'team1Label' &&
+      key !== 'team2Label' &&
+      key !== 'team1Victories' &&
+      key !== 'team2Victories'
+    )
+  );
+};
+
+const getTeamWinAdditionalData = (additionalData: Record<string, any>, team1WinRate: number) => {
+  if (!isTeamWinSlice()) {
+    return additionalData;
+  }
+
+  // Create a copy and add team1WinRate for display
+  const displayData = { ...additionalData };
+  displayData.team1WinRate = team1WinRate;
+
+  return Object.fromEntries(
+    Object.entries(displayData).filter(([key]) =>
+      key !== 'team1Label' &&
+      key !== 'team2Label' &&
+      key !== 'team1Victories' &&
+      key !== 'team2Victories'
+    )
   );
 };
 
