@@ -1,6 +1,6 @@
 <template>
   <div class="explorer-header">
-    <!-- Terminal Bar -->
+    <!-- Terminal Bar (hidden on mobile) -->
     <div class="terminal-bar">
       <div class="terminal-dots">
         <span class="dot dot-red" />
@@ -16,8 +16,8 @@
 
     <!-- Header Content -->
     <div class="header-content">
-      <!-- Title Row -->
-      <div class="explorer-header-row">
+      <!-- Title Row (hidden on mobile) -->
+      <div class="explorer-header-title-row">
         <div class="explorer-header-left">
           <div class="glitch-wrapper">
             <h1 class="glitch-text" :data-text="modeTitle">
@@ -29,7 +29,10 @@
             <span class="typing-text">{{ modeDescription }}</span>
           </p>
         </div>
+      </div>
 
+      <!-- Compact controls row: mode toggle + search -->
+      <div class="explorer-controls-row">
         <!-- Mode Toggle -->
         <div class="explorer-mode-toggle">
           <button
@@ -54,18 +57,18 @@
             <span class="mode-label">Players</span>
           </button>
         </div>
-      </div>
 
-      <!-- Search Bar -->
-      <div class="explorer-search">
-        <span class="explorer-search-icon">$</span>
-        <input
-          :value="search"
-          @input="emit('update:search', ($event.target as HTMLInputElement).value)"
-          type="text"
-          :placeholder="searchPlaceholder"
-          class="explorer-search-input"
-        >
+        <!-- Search Bar -->
+        <div class="explorer-search">
+          <span class="explorer-search-icon">$</span>
+          <input
+            :value="search"
+            @input="emit('update:search', ($event.target as HTMLInputElement).value)"
+            type="text"
+            :placeholder="searchPlaceholder"
+            class="explorer-search-input"
+          >
+        </div>
       </div>
     </div>
   </div>
@@ -134,14 +137,20 @@ const searchPlaceholder = computed(() => {
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-/* Terminal Bar */
+/* Terminal Bar - hidden on mobile */
 .terminal-bar {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 1rem;
   padding: 0.75rem 1rem;
   background: linear-gradient(180deg, #1a1f26 0%, #0d1117 100%);
   border-bottom: 1px solid var(--border-color, #30363d);
+}
+
+@media (min-width: 768px) {
+  .terminal-bar {
+    display: flex;
+  }
 }
 
 .terminal-dots {
@@ -188,21 +197,24 @@ const searchPlaceholder = computed(() => {
 
 /* Header Content */
 .header-content {
-  padding: 1.25rem;
+  padding: 0.5rem;
 }
 
-.explorer-header-row {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+@media (min-width: 768px) {
+  .header-content {
+    padding: 1.25rem;
+  }
+}
+
+/* Title row - hidden on mobile, shown on desktop */
+.explorer-header-title-row {
+  display: none;
   margin-bottom: 1rem;
 }
 
 @media (min-width: 768px) {
-  .explorer-header-row {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
+  .explorer-header-title-row {
+    display: block;
   }
 }
 
@@ -273,22 +285,43 @@ const searchPlaceholder = computed(() => {
   50% { border-color: transparent; }
 }
 
+/* Controls row: mode toggle + search side-by-side */
+.explorer-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+@media (min-width: 768px) {
+  .explorer-controls-row {
+    gap: 1rem;
+  }
+}
+
 /* Mode Toggle */
 .explorer-mode-toggle {
   display: flex;
-  gap: 0.25rem;
+  gap: 0.125rem;
   background: var(--bg-panel, #0d1117);
   border: 1px solid var(--border-color, #30363d);
   border-radius: 4px;
-  padding: 0.25rem;
+  padding: 0.125rem;
+  flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+  .explorer-mode-toggle {
+    gap: 0.25rem;
+    padding: 0.25rem;
+  }
 }
 
 .explorer-mode-btn {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.75rem;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.7rem;
   font-weight: 600;
   font-family: 'JetBrains Mono', monospace;
   letter-spacing: 0.04em;
@@ -299,6 +332,13 @@ const searchPlaceholder = computed(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   text-transform: uppercase;
+}
+
+@media (min-width: 768px) {
+  .explorer-mode-btn {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+  }
 }
 
 .explorer-mode-btn:hover {
@@ -321,13 +361,14 @@ const searchPlaceholder = computed(() => {
   opacity: 1;
 }
 
+/* On small screens, hide label text, show only icons */
 @media (max-width: 640px) {
   .mode-label {
     display: none;
   }
 
   .explorer-mode-btn {
-    padding: 0.5rem;
+    padding: 0.4rem;
   }
 
   .mode-icon {
@@ -338,7 +379,8 @@ const searchPlaceholder = computed(() => {
 /* Search */
 .explorer-search {
   position: relative;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   max-width: 28rem;
 }
 
@@ -356,14 +398,21 @@ const searchPlaceholder = computed(() => {
 
 .explorer-search-input {
   width: 100%;
-  padding: 0.6rem 0.75rem 0.6rem 2rem;
-  font-size: 0.875rem;
+  padding: 0.5rem 0.75rem 0.5rem 2rem;
+  font-size: 0.8rem;
   font-family: 'JetBrains Mono', monospace;
   background: var(--bg-card, #161b22);
   border: 1px solid var(--border-color, #30363d);
   border-radius: 4px;
   color: var(--text-primary, #e6edf3);
   transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+@media (min-width: 768px) {
+  .explorer-search-input {
+    padding: 0.6rem 0.75rem 0.6rem 2rem;
+    font-size: 0.875rem;
+  }
 }
 
 .explorer-search-input::placeholder {
@@ -375,28 +424,5 @@ const searchPlaceholder = computed(() => {
   outline: none;
   border-color: var(--neon-cyan, #00fff2);
   box-shadow: 0 0 15px rgba(0, 255, 242, 0.2);
-}
-
-/* Mobile */
-@media (max-width: 640px) {
-  .terminal-bar {
-    padding: 0.5rem 0.75rem;
-  }
-
-  .terminal-title {
-    font-size: 0.7rem;
-  }
-
-  .header-content {
-    padding: 1rem;
-  }
-
-  .glitch-text {
-    letter-spacing: 1px;
-  }
-
-  .header-subtitle {
-    font-size: 0.75rem;
-  }
 }
 </style>

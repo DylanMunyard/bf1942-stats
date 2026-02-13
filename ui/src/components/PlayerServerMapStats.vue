@@ -205,7 +205,7 @@
                   <router-link
                     :to="{
                       path: `/players/${encodeURIComponent(playerName)}/sessions`,
-                      query: { map: map.mapName, server: serverGuid }
+                      query: { map: map.mapName, ...(serverGuid ? { server: serverGuid } : {}) }
                     }"
                     class="text-slate-200 hover:text-cyan-400 transition-colors font-medium"
                   >
@@ -283,7 +283,7 @@ interface MapStat {
 
 const props = defineProps<{
   playerName: string;
-  serverGuid: string;
+  serverGuid?: string;
   game?: GameType;
 }>();
 
@@ -296,28 +296,48 @@ const sortDirection = ref<'asc' | 'desc'>('desc');
 const selectedTimeRange = ref<number>(60);
 const timeRangeOptions = PLAYER_STATS_TIME_RANGE_OPTIONS;
 
-// Flatten mapGroups into a single array of map stats for this server
-// Since we're filtering by serverGuid in the API, each mapGroup should only have one serverStat
+// Flatten mapGroups into a single array of map stats
+// When serverGuid is provided, each mapGroup has one serverStat.
+// When serverGuid is omitted (all servers), aggregate across all serverStats per map.
 const mapStats = computed<MapStat[]>(() => {
   if (!playerData.value) return [];
 
   return playerData.value.mapGroups
     .map(mapGroup => {
-      // With server filtering, there should only be one serverStat per mapGroup
-      const serverStat = mapGroup.serverStats[0];
-      
-      if (!serverStat) return null;
+      if (mapGroup.serverStats.length === 0) return null;
 
-      return {
-        mapName: mapGroup.mapName,
-        totalScore: serverStat.totalScore,
-        totalKills: serverStat.totalKills,
-        totalDeaths: serverStat.totalDeaths,
-        sessionsPlayed: serverStat.totalRounds,
-        totalPlayTimeMinutes: 0, // Not available in PlayerMapRankingsResponse
-        rank: serverStat.rank,
-        kdRatio: serverStat.kdRatio
-      };
+      if (props.serverGuid) {
+        // Single server: use the first (and only) serverStat
+        const serverStat = mapGroup.serverStats[0];
+        if (!serverStat) return null;
+        return {
+          mapName: mapGroup.mapName,
+          totalScore: serverStat.totalScore,
+          totalKills: serverStat.totalKills,
+          totalDeaths: serverStat.totalDeaths,
+          sessionsPlayed: serverStat.totalRounds,
+          totalPlayTimeMinutes: 0,
+          rank: serverStat.rank,
+          kdRatio: serverStat.kdRatio
+        };
+      } else {
+        // All servers: aggregate stats across all serverStats
+        const totalScore = mapGroup.serverStats.reduce((s, st) => s + st.totalScore, 0);
+        const totalKills = mapGroup.serverStats.reduce((s, st) => s + st.totalKills, 0);
+        const totalDeaths = mapGroup.serverStats.reduce((s, st) => s + st.totalDeaths, 0);
+        const totalRounds = mapGroup.serverStats.reduce((s, st) => s + st.totalRounds, 0);
+        const kdRatio = totalDeaths > 0 ? totalKills / totalDeaths : totalKills > 0 ? totalKills : 0;
+        return {
+          mapName: mapGroup.mapName,
+          totalScore,
+          totalKills,
+          totalDeaths,
+          sessionsPlayed: totalRounds,
+          totalPlayTimeMinutes: 0,
+          rank: mapGroup.bestRank,
+          kdRatio
+        };
+      }
     })
     .filter((stat): stat is MapStat => stat !== null);
 });
@@ -365,14 +385,14 @@ const changeSort = (field: typeof sortField.value) => {
 
 
 const loadData = async (days?: number) => {
-  if (!props.playerName || !props.serverGuid) return;
+  if (!props.playerName) return;
 
   const timeRange = days || selectedTimeRange.value;
   isLoading.value = true;
   error.value = null;
 
   try {
-    // Pass serverGuid to filter on the server side
+    // Pass serverGuid to filter on the server side (undefined = all servers)
     playerData.value = await fetchPlayerMapRankings(
       props.playerName,
       props.game || 'bf1942',
@@ -380,14 +400,16 @@ const loadData = async (days?: number) => {
       props.serverGuid
     );
 
-    // Check if player has any stats on this server
+    // Check if player has any stats
     if (playerData.value.mapGroups.length === 0) {
-      error.value = `No statistics found for this player on this server for the selected time period`;
+      const scope = props.serverGuid ? 'on this server' : 'across all servers';
+      error.value = `No statistics found for this player ${scope} for the selected time period`;
     }
   } catch (err: any) {
     console.error('Error fetching map rankings:', err);
     if (err.message === 'PLAYER_NOT_FOUND') {
-      error.value = `No statistics found for this player on this server for the selected time period`;
+      const scope = props.serverGuid ? 'on this server' : 'across all servers';
+      error.value = `No statistics found for this player ${scope} for the selected time period`;
     } else {
       error.value = 'Failed to load map statistics';
     }

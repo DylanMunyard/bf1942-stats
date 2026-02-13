@@ -9,7 +9,6 @@ import PlayerAchievementSummary from '../components/PlayerAchievementSummary.vue
 import PlayerRecentSessions from '../components/PlayerRecentSessions.vue';
 import HeroBackButton from '../components/HeroBackButton.vue';
 import PlayerAchievementHeroBadges from '../components/PlayerAchievementHeroBadges.vue';
-import PlayerServerInsights from '../components/PlayerServerInsights.vue';
 import PlayerServerMapStats from '../components/PlayerServerMapStats.vue';
 import { formatRelativeTime } from '@/utils/timeUtils';
 import { calculateKDR } from '@/utils/statsUtils';
@@ -43,7 +42,6 @@ const showLastOnline = ref(false);
 const achievementGroups = ref<PlayerAchievementGroup[]>([]);
 const achievementGroupsLoading = ref(false);
 const achievementGroupsError = ref<string | null>(null);
-const playerServerInsightsRef = ref<InstanceType<typeof PlayerServerInsights> | null>(null);
 
 // Engagement stats for dynamic content
 const playerEngagementStats = ref<PlayerEngagementStats['stats']>([]);
@@ -63,14 +61,6 @@ const isWideScreen = ref(false);
 const updateWideScreen = () => {
   isWideScreen.value = typeof window !== 'undefined' && window.innerWidth >= 1024;
 };
-
-// Server filtering and navigation state
-const serverSearchQuery = ref('');
-const serverFilter = ref<'all' | 'top-performers' | 'most-played' | 'by-game'>('all');
-const selectedGameFilter = ref<string | null>(null);
-const serversViewMode = ref<'detailed' | 'compact'>('detailed');
-const serversPerPage = ref(10);
-const currentServerPage = ref(1);
 
 // Best Scores state
 const selectedBestScoresTab = ref<'allTime' | 'last30Days' | 'thisWeek'>('thisWeek');
@@ -235,11 +225,6 @@ const closeServerMapStats = () => {
   window.scrollTo({ top: scrollPositionBeforeMapStats.value, behavior: 'auto' });
 };
 
-// Reset pagination when filters change
-watch([serverSearchQuery, serverFilter, selectedGameFilter], () => {
-  currentServerPage.value = 1;
-});
-
 const fetchData = async () => {
   isLoading.value = true;
   error.value = null;
@@ -348,15 +333,20 @@ const leaveTrendChartArea = () => {
 
 // Computed property to get the current expanded server's name removed - was unused
 
-// Computed property to get the selected server's name for modal
+// Computed property to get the selected server's name for panel header
 const selectedServerName = computed(() => {
-  if (!selectedServerGuid.value || !playerStats.value?.insights?.serverRankings) return null;
-  
-  const server = playerStats.value.insights.serverRankings.find(
-    ranking => ranking.serverGuid === selectedServerGuid.value
+  if (!selectedServerGuid.value) return null;
+  if (selectedServerGuid.value === '__all__') return 'All Servers';
+
+  // Check server list first
+  const server = playerStats.value?.servers?.find(s => s.serverGuid === selectedServerGuid.value);
+  if (server) return server.serverName;
+
+  // Fallback to rankings
+  const ranking = playerStats.value?.insights?.serverRankings?.find(
+    r => r.serverGuid === selectedServerGuid.value
   );
-  
-  return server?.serverName || null;
+  return ranking?.serverName || null;
 });
 
 // Computed property for current best scores
@@ -396,158 +386,82 @@ const getGameIcon = (gameId: string): string => {
   return gameIcons[gameId.toLowerCase()] || defaultIcon;
 };
 
-// --- Server Cards Computed ---
-const hasServers = computed(() => !!playerStats.value?.servers && playerStats.value.servers.length > 0);
+// --- Server List ---
 
-// Filtered and sorted servers
-const filteredAndSortedServers = computed(() => {
-  if (!playerStats.value?.servers) return [];
-  
-  let servers = [...playerStats.value.servers];
-  
-  // Apply search filter
-  if (serverSearchQuery.value.trim()) {
-    const query = serverSearchQuery.value.toLowerCase().trim();
-    servers = servers.filter(server => 
-      server.serverName.toLowerCase().includes(query) ||
-      server.gameId.toLowerCase().includes(query)
-    );
-  }
-  
-  // Apply quick filters
-  if (serverFilter.value === 'top-performers') {
-    servers = servers.filter(server => {
-      const indicator = getServerPerformanceIndicator(server);
-      return indicator?.type === 'excellent' || indicator?.type === 'good';
-    });
-  } else if (serverFilter.value === 'most-played') {
-    // Already sorted by playtime, just take top ones
-    servers = servers.slice(0, Math.min(5, servers.length));
-  } else if (serverFilter.value === 'by-game' && selectedGameFilter.value) {
-    servers = servers.filter(server => server.gameId.toLowerCase() === selectedGameFilter.value?.toLowerCase());
-  }
-  
-  // Sort based on filter
-  if (serverFilter.value === 'top-performers') {
-    servers.sort((a, b) => {
-      const aKd = typeof a.kdRatio === 'number' ? a.kdRatio : parseFloat(String(a.kdRatio)) || 0;
-      const bKd = typeof b.kdRatio === 'number' ? b.kdRatio : parseFloat(String(b.kdRatio)) || 0;
-      return bKd - aKd;
-    });
-  } else {
-    // Default: sort by totalMinutes descending
-    servers.sort((a, b) => b.totalMinutes - a.totalMinutes);
-  }
-  
-  return servers;
-});
+// Unified server entry type: stats fields are optional because rankings-only entries won't have them
+interface UnifiedServer {
+  serverGuid: string;
+  serverName: string;
+  gameId: string;
+  totalMinutes: number;
+  totalKills: number;
+  totalDeaths: number;
+  kdRatio: number;
+  killsPerMinute: number;
+  totalRounds: number;
+  highestScore: number;
+  ranking: import('../types/playerStatsTypes').ServerRanking | null;
+  hasStats: boolean; // true when playtime/K-D data is available
+}
 
-// Get servers with insights (to filter them out from the server cards list)
-const serversWithInsights = computed(() => {
-  if (!playerServerInsightsRef.value) return [];
-  try {
-    // Access the exposed serversWithInsights from the child component
-    const exposed = playerServerInsightsRef.value as any;
-    return exposed.serversWithInsights || [];
-  } catch {
-    return [];
-  }
-});
+// Unified server list: merges server playtime data with ranking data, sorted by rank
+const unifiedServerList = computed<UnifiedServer[]>(() => {
+  const servers = playerStats.value?.servers ?? [];
+  const rankings = playerStats.value?.insights?.serverRankings ?? [];
 
-// Servers without insights (to show in the server cards list)
-const serversWithoutInsights = computed(() => {
-  if (!playerStats.value?.servers) return [];
-  
-  const insightServerGuids = new Set(
-    serversWithInsights.value.map((s: any) => s.server.serverGuid)
-  );
-  
-  return filteredAndSortedServers.value.filter(
-    server => !insightServerGuids.has(server.serverGuid)
-  );
-});
+  if (servers.length === 0 && rankings.length === 0) return [];
 
-// Paginated servers (only those without insights)
-const paginatedServers = computed(() => {
-  const start = (currentServerPage.value - 1) * serversPerPage.value;
-  const end = start + serversPerPage.value;
-  return serversWithoutInsights.value.slice(start, end);
-});
+  const rankMap = new Map(rankings.map(r => [r.serverGuid, r]));
+  const seenGuids = new Set<string>();
 
-const totalServerPages = computed(() => {
-  return Math.ceil(serversWithoutInsights.value.length / serversPerPage.value);
-});
-
-// Available games for filtering
-const availableGames = computed(() => {
-  if (!playerStats.value?.servers) return [];
-  const games = new Set(playerStats.value.servers.map(s => s.gameId));
-  return Array.from(games);
-});
-
-// Server count by game
-const serverCountByGame = computed(() => {
-  if (!playerStats.value?.servers) return {};
-  const counts: Record<string, number> = {};
-  playerStats.value.servers.forEach(server => {
-    counts[server.gameId] = (counts[server.gameId] || 0) + 1;
+  // Start with servers array (has full stats)
+  const unified: UnifiedServer[] = servers.map(server => {
+    seenGuids.add(server.serverGuid);
+    return {
+      ...server,
+      ranking: rankMap.get(server.serverGuid) || null,
+      hasStats: true,
+    };
   });
-  return counts;
+
+  // Add any ranked servers that aren't in the servers array
+  for (const ranking of rankings) {
+    if (!seenGuids.has(ranking.serverGuid)) {
+      unified.push({
+        serverGuid: ranking.serverGuid,
+        serverName: ranking.serverName,
+        gameId: '',
+        totalMinutes: 0,
+        totalKills: 0,
+        totalDeaths: 0,
+        kdRatio: 0,
+        killsPerMinute: 0,
+        totalRounds: 0,
+        highestScore: 0,
+        ranking,
+        hasStats: false,
+      });
+    }
+  }
+
+  // Sort: ranked servers first by rank ascending, then unranked by playtime descending
+  unified.sort((a, b) => {
+    const aRank = a.ranking ? rankNum(a.ranking) : Infinity;
+    const bRank = b.ranking ? rankNum(b.ranking) : Infinity;
+    if (aRank !== bRank) return aRank - bRank;
+    return b.totalMinutes - a.totalMinutes;
+  });
+
+  return unified;
 });
 
-// Compute overall averages for comparison
-const overallAverages = computed<{ kdRatio: number; killsPerMinute: number; totalMinutes: number }>(() => {
-  if (!playerStats.value?.servers || playerStats.value.servers.length === 0) {
-    return { kdRatio: 0, killsPerMinute: 0, totalMinutes: 0 };
-  }
-  const servers = playerStats.value.servers;
-  const totalKills = servers.reduce((sum, s) => sum + s.totalKills, 0);
-  const totalDeaths = servers.reduce((sum, s) => sum + s.totalDeaths, 0);
-  const totalMinutes = servers.reduce((sum, s) => sum + s.totalMinutes, 0);
-  
-  const kdRatio = calculateKDR(totalKills, totalDeaths);
-  const kdRatioNum = typeof kdRatio === 'number' ? kdRatio : parseFloat(String(kdRatio)) || 0;
-  
-  return {
-    kdRatio: kdRatioNum,
-    killsPerMinute: totalKills / Math.max(totalMinutes, 1) * 60,
-    totalMinutes: totalMinutes / servers.length
-  };
-});
-
-// Helper function to get performance indicator for a server
-const getServerPerformanceIndicator = (server: { kdRatio: number | string; killsPerMinute: number | string }) => {
-  const avg = overallAverages.value;
-  const serverKd = typeof server.kdRatio === 'number' ? server.kdRatio : parseFloat(String(server.kdRatio)) || 0;
-  const serverKpm = typeof server.killsPerMinute === 'number' ? server.killsPerMinute : parseFloat(String(server.killsPerMinute)) || 0;
-  const avgKd = typeof avg.kdRatio === 'number' ? avg.kdRatio : 0;
-  const avgKpm = typeof avg.killsPerMinute === 'number' ? avg.killsPerMinute : 0;
-  const kdMultiplier = avgKd > 0 ? serverKd / avgKd : 1;
-  const kpmMultiplier = avgKpm > 0 ? serverKpm / avgKpm : 1;
-  
-  if (kdMultiplier >= 1.3 || kpmMultiplier >= 1.3) {
-    return { 
-      type: 'excellent', 
-      label: 'Top Performer', 
-      color: 'from-green-500/20 to-emerald-500/20',
-      borderColor: 'border-green-500/50'
-    };
-  } else if (kdMultiplier >= 1.1 || kpmMultiplier >= 1.1) {
-    return { 
-      type: 'good', 
-      label: 'Strong', 
-      color: 'from-emerald-500/20 to-green-500/20',
-      borderColor: 'border-emerald-500/50'
-    };
-  } else if (kdMultiplier < 0.9) {
-    return { 
-      type: 'below', 
-      label: 'Developing', 
-      color: 'from-amber-500/20 to-orange-500/20',
-      borderColor: 'border-amber-500/50'
-    };
-  }
-  return null;
+// Helper: rank badge color based on position
+const getRankBadgeClass = (rank: number): string => {
+  if (rank === 1) return 'text-amber-400 font-bold';
+  if (rank === 2) return 'text-neutral-300 font-bold';
+  if (rank === 3) return 'text-orange-400 font-bold';
+  if (rank <= 10) return 'text-cyan-400 font-semibold';
+  return 'text-neutral-400 font-medium';
 };
 
 // Helper to get playtime percentage
@@ -557,25 +471,18 @@ const getPlaytimePercentage = (serverMinutes: number) => {
   return total > 0 ? (serverMinutes / total) * 100 : 0;
 };
 
-// Helper to get K/D comparison class
-const getKdComparisonClass = (serverKd: number | string, avgKd: number | string) => {
-  const serverKdNum = Number(serverKd);
-  const avgKdNum = Number(avgKd);
-  if (serverKdNum > avgKdNum * 1.1) {
-    return 'bg-green-500/20 text-green-400';
-  } else if (serverKdNum < avgKdNum * 0.9) {
-    return 'bg-amber-500/20 text-amber-400';
+// Show all-servers map rankings
+const showAllServerMaps = () => {
+  scrollPositionBeforeMapStats.value = window.scrollY;
+  selectedServerGuid.value = '__all__';
+  if (isWideScreen.value) {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
-  return 'bg-neutral-700/50 text-neutral-400';
 };
 
-// Helper to get K/D comparison text
-const getKdComparisonText = (serverKd: number | string, avgKd: number | string) => {
-  const serverKdNum = Number(serverKd);
-  const avgKdNum = Number(avgKd);
-  const diff = avgKdNum > 0 ? ((serverKdNum / avgKdNum - 1) * 100) : 0;
-  return `${serverKdNum > avgKdNum ? '+' : ''}${diff.toFixed(0)}%`;
-};
+// Whether the map stats panel is open (specific server or all servers)
+const isMapStatsPanelOpen = computed(() => selectedServerGuid.value !== null);
+const effectiveServerGuid = computed(() => selectedServerGuid.value === '__all__' ? undefined : selectedServerGuid.value);
 
 // Numeric rank for ServerRanking (API may send rankDisplay instead of rank)
 const rankNum = (ranking: { rank?: number; rankDisplay?: string }): number => {
@@ -593,15 +500,6 @@ const rankingsSummary = computed(() => {
   const best = [...rankings].sort((a, b) => rankNum(a) - rankNum(b))[0];
   return { totalRanked: rankings.length, numOnes, numTop10, best };
 });
-
-// Top servers by playtime for compact "favourite battlefields" preview (first 6)
-const topServersPreview = computed(() => {
-  if (!playerStats.value?.servers?.length) return [];
-  const sorted = [...playerStats.value.servers].sort((a, b) => b.totalMinutes - a.totalMinutes);
-  return sorted.slice(0, 6);
-});
-
-
 
 
 
@@ -642,181 +540,105 @@ onUnmounted(() => {
   <div class="portal-page">
     <div class="portal-grid" aria-hidden="true" />
     <div class="portal-inner">
-  <!-- Full-width Hero Section -->
-  <div class="w-full rounded-lg border border-[var(--portal-border)] bg-[var(--portal-surface)] mb-6">
-    <div class="w-full px-2 sm:px-6 lg:px-12 py-6">
-      <div class="flex items-center justify-between mb-6 px-2 sm:px-0">
+  <!-- Full-width Hero Section (slim) -->
+  <div class="w-full rounded-lg border border-[var(--portal-border)] bg-[var(--portal-surface)] mb-3">
+    <div class="w-full px-2 sm:px-4 lg:px-6 py-2.5">
+      <div class="flex flex-wrap items-center gap-2 lg:gap-3">
         <HeroBackButton fallback-route="/players" />
-      </div>
-      
-      <div class="flex flex-col lg:flex-row items-start lg:items-center gap-6 lg:gap-8 px-2 sm:px-0">
-        <!-- Player Avatar Section (hidden on mobile) -->
-        <div class="hidden lg:block flex-shrink-0">
-          <div class="relative group cursor-pointer" @click="showLastOnline = !showLastOnline">
-            <!-- Avatar -->
-            <div class="w-20 h-20 rounded-full p-1 transition-all duration-300 group-hover:scale-105 bg-neutral-800 border border-neutral-700"
-                 :class="playerStats?.isActive ? 'animate-spin-slow' : 'animate-none'">
-              <div class="w-full h-full rounded-full bg-neutral-950 flex items-center justify-center">
-                <div class="w-16 h-16 rounded-full bg-neutral-800 flex items-center justify-center text-xl font-bold text-neutral-200">
-                  {{ playerName?.charAt(0)?.toUpperCase() || '?' }}
-                </div>
-              </div>
-            </div>
-            <!-- Online/Offline Status Indicator -->
-            <div class="absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-neutral-900 flex items-center justify-center"
-                 :class="playerStats?.isActive ? 'bg-green-500' : 'bg-neutral-600'">
-              <div v-if="playerStats?.isActive" class="w-2 h-2 bg-green-300 rounded-full animate-ping" />
-              <div v-else class="w-2 h-2 bg-neutral-400 rounded-full" />
-            </div>
-            <!-- Last Online Tooltip -->
-            <div
-              v-if="showLastOnline"
-              class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-neutral-300 whitespace-nowrap z-50 shadow-lg"
-            >
-              <div class="flex items-center gap-2">
-                <div class="w-2 h-2 rounded-full" :class="playerStats?.isActive ? 'bg-green-400' : 'bg-neutral-500'" />
-                <span>
-                  {{ playerStats?.isActive ? 'Currently Online' : `Last online: ${formatRelativeTime(playerStats?.lastPlayed || '')}` }}
-                </span>
-              </div>
-              <!-- Arrow pointing up -->
-              <div class="absolute -top-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-neutral-950 border-l border-t border-neutral-700 rotate-45" />
-            </div>
+
+        <!-- Player Avatar (compact) -->
+        <div class="relative group cursor-pointer flex-shrink-0" @click="showLastOnline = !showLastOnline">
+          <div class="w-8 h-8 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center text-sm font-bold text-neutral-200"
+               :class="playerStats?.isActive ? 'ring-2 ring-green-500/50' : ''">
+            {{ playerName?.charAt(0)?.toUpperCase() || '?' }}
           </div>
-        </div>
-
-        <!-- Player Info -->
-        <div class="flex-grow min-w-0">
-          <div class="flex items-center gap-4 flex-wrap mb-3">
-            <h1 class="text-3xl md:text-4xl font-bold text-neutral-200">
-              {{ playerName }}
-            </h1>
-            <PlayerAchievementHeroBadges
-              :player-name="playerName"
-            />
-          </div>
-          
-          <!-- Player Stats Summary -->
-          <div class="flex items-center gap-6 text-neutral-300 flex-wrap">
-            <!-- K/D Ratio with Hover Trends -->
-            <div class="relative" @mouseenter="enterTrendChartArea" @mouseleave="leaveTrendChartArea">
-              <div class="flex items-center gap-3 bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2 hover:border-neutral-600 transition-all duration-200 cursor-pointer">
-                <div class="text-center">
-                  <div class="text-2xl font-bold text-neutral-200">
-                    {{ calculateKDR(playerStats?.totalKills || 0, playerStats?.totalDeaths || 0) }}
-                  </div>
-                  <div class="text-xs text-neutral-400 font-medium">K/D</div>
-                </div>
-                <div class="w-px h-8 bg-neutral-600" />
-                <div class="flex gap-4 text-sm">
-                  <div class="text-center">
-                    <div class="font-bold text-green-400">{{ playerStats?.totalKills?.toLocaleString() }}</div>
-                    <div class="text-xs text-neutral-400">K</div>
-                  </div>
-                  <div class="text-center">
-                    <div class="font-bold text-red-400">{{ playerStats?.totalDeaths?.toLocaleString() }}</div>
-                    <div class="text-xs text-neutral-400">D</div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Trend Charts - Show on Hover (stays visible while hovering) -->
-              <div
-                v-if="showTrendCharts"
-                class="absolute left-0 top-full mt-2 bg-neutral-950 border border-neutral-700 rounded-lg p-3 w-80 z-50 shadow-2xl transition-all duration-200"
-                @mouseenter="enterTrendChartArea"
-                @mouseleave="leaveTrendChartArea"
-              >
-                <!-- Chart content wrapper -->
-                <div class="space-y-2">
-                  <!-- Kill Rate Trend Mini -->
-                  <div class="space-y-1">
-                    <div class="text-xs font-semibold text-neutral-300">Kill Rate Trend</div>
-                    <div class="h-10 -mx-1 trend-chart-container">
-                      <Line
-                        :data="killRateTrendChartData"
-                        :options="microChartOptions"
-                      />
-                    </div>
-                  </div>
-                  <!-- K/D Ratio Trend Mini -->
-                  <div class="space-y-1">
-                    <div class="text-xs font-semibold text-neutral-300">K/D Trend</div>
-                    <div class="h-10 -mx-1 trend-chart-container">
-                      <Line
-                        :data="kdRatioTrendChartData"
-                        :options="microChartOptions"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
+          <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[var(--portal-surface)]"
+               :class="playerStats?.isActive ? 'bg-green-500' : 'bg-neutral-600'" />
+          <!-- Last Online Tooltip -->
+          <div
+            v-if="showLastOnline"
+            class="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-neutral-300 whitespace-nowrap z-50 shadow-lg"
+          >
             <div class="flex items-center gap-2">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                class="text-neutral-400"
-              ><circle
-                cx="12"
-                cy="12"
-                r="10"
-              /><polyline points="12,6 12,12 16,14" /></svg>
-              <span class="font-medium">{{ formatPlayTime(playerStats?.totalPlayTimeMinutes || 0) }}</span>
+              <div class="w-2 h-2 rounded-full" :class="playerStats?.isActive ? 'bg-green-400' : 'bg-neutral-500'" />
+              <span>
+                {{ playerStats?.isActive ? 'Currently Online' : `Last online: ${formatRelativeTime(playerStats?.lastPlayed || '')}` }}
+              </span>
             </div>
-            <div class="flex items-center gap-2">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                class="text-green-400"
-              ><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22,4 12,14.01 9,11.01" /></svg>
-              <span>{{ formatRelativeTime(playerStats?.lastPlayed || '') }}</span>
+            <div class="absolute -top-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-neutral-950 border-l border-t border-neutral-700 rotate-45" />
+          </div>
+        </div>
+
+        <h1 class="text-base md:text-lg font-semibold text-neutral-200 truncate max-w-full lg:max-w-[34rem]">
+          {{ playerName }}
+        </h1>
+
+        <PlayerAchievementHeroBadges
+          :player-name="playerName"
+        />
+
+        <!-- K/D badge with hover trends -->
+        <div class="relative" @mouseenter="enterTrendChartArea" @mouseleave="leaveTrendChartArea">
+          <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-neutral-700 bg-neutral-900 text-[11px] text-neutral-300 cursor-pointer hover:border-neutral-600 transition-colors">
+            <span class="font-semibold text-neutral-200">{{ calculateKDR(playerStats?.totalKills || 0, playerStats?.totalDeaths || 0) }}</span>
+            <span class="text-neutral-500">K/D</span>
+            <span class="text-neutral-600 mx-0.5">|</span>
+            <span class="text-green-400 font-medium">{{ playerStats?.totalKills?.toLocaleString() }}</span>
+            <span class="text-neutral-600">/</span>
+            <span class="text-red-400 font-medium">{{ playerStats?.totalDeaths?.toLocaleString() }}</span>
+          </div>
+
+          <!-- Trend Charts - Show on Hover -->
+          <div
+            v-if="showTrendCharts"
+            class="absolute left-0 top-full mt-2 bg-neutral-950 border border-neutral-700 rounded-lg p-3 w-80 z-50 shadow-2xl transition-all duration-200"
+            @mouseenter="enterTrendChartArea"
+            @mouseleave="leaveTrendChartArea"
+          >
+            <div class="space-y-2">
+              <div class="space-y-1">
+                <div class="text-xs font-semibold text-neutral-300">Kill Rate Trend</div>
+                <div class="h-10 -mx-1 trend-chart-container">
+                  <Line
+                    :data="killRateTrendChartData"
+                    :options="microChartOptions"
+                  />
+                </div>
+              </div>
+              <div class="space-y-1">
+                <div class="text-xs font-semibold text-neutral-300">K/D Trend</div>
+                <div class="h-10 -mx-1 trend-chart-container">
+                  <Line
+                    :data="kdRatioTrendChartData"
+                    :options="microChartOptions"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- Actions Section -->
-        <div class="flex flex-col gap-4 items-end">
-          <!-- Quick Actions -->
-          <div class="flex flex-col sm:flex-row gap-3">
-            <router-link
-              :to="{ path: '/players/compare', query: { player1: playerName } }"
-              class="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold text-neutral-900 bg-neutral-200 hover:bg-neutral-100 rounded-lg transition-all duration-200 shadow-lg hover:shadow-neutral-500/40"
-              title="Compare this player with another"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M6 3h12l4 6-10 13L2 9l4-6z" />
-                <path d="M11 3 8 9l4 13 4-13-3-6" />
-              </svg>
-              Compare Player
-            </router-link>
-          </div>
+        <!-- Playtime badge -->
+        <div class="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-neutral-700 bg-neutral-900 text-[11px] text-neutral-300">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-neutral-400"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+          <span>{{ formatPlayTime(playerStats?.totalPlayTimeMinutes || 0) }}</span>
         </div>
+
+        <!-- Last played badge -->
+        <div class="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-neutral-700 bg-neutral-900 text-[11px] text-neutral-300">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-400"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>
+          <span>{{ formatRelativeTime(playerStats?.lastPlayed || '') }}</span>
+        </div>
+
+        <!-- Compare Player button -->
+        <router-link
+          :to="{ path: '/players/compare', query: { player1: playerName } }"
+          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-neutral-600 bg-neutral-200 text-neutral-900 text-[11px] font-semibold hover:bg-neutral-100 transition-colors"
+          title="Compare this player with another"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 13L2 9l4-6z"/><path d="M11 3 8 9l4 13 4-13-3-6"/></svg>
+          Compare
+        </router-link>
       </div>
     </div>
   </div>
@@ -825,7 +647,7 @@ onUnmounted(() => {
   <div class="min-h-screen bg-neutral-950">
     <div
       class="relative flex flex-col min-h-0"
-      :class="{ 'lg:flex-row': selectedServerGuid && playerStats?.servers }"
+      :class="{ 'lg:flex-row': isMapStatsPanelOpen && playerStats?.servers }"
     >
       <div class="flex-1 min-w-0">
         <div class="relative">
@@ -903,7 +725,7 @@ onUnmounted(() => {
         <!-- Main Content -->
         <div
           v-else-if="playerStats"
-          class="w-full px-1 sm:px-4 pb-6 sm:pb-12 space-y-4 sm:space-y-8">
+          class="w-full px-1 sm:px-4 pb-6 sm:pb-12 space-y-4 sm:space-y-8"
         >
           <!-- Data Explorer Call-to-Action Section -->
           <div class="bg-neutral-900/80 border border-neutral-700/50 rounded-xl overflow-hidden">
@@ -1090,151 +912,114 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Favourite Battlefields & Server Rankings – High-level summary (hacker theme) -->
+          <!-- Servers – Unified list sorted by ranking -->
           <div
-            v-if="hasServers || (playerStats?.insights?.serverRankings && playerStats.insights.serverRankings.length > 0)"
-            class="player-servers-section bg-neutral-900/80 border border-neutral-700/50 rounded-xl overflow-hidden mt-8"
+            v-if="unifiedServerList.length > 0"
+            class="bg-neutral-900/80 border border-neutral-700/50 rounded-xl overflow-hidden mt-8"
           >
-            <!-- Hero strip: rankings at a glance -->
-            <div
-              v-if="rankingsSummary"
-              class="player-servers-hero flex flex-wrap items-center gap-4 sm:gap-6 px-3 sm:px-6 py-4 border-b border-neutral-700/50 bg-neutral-800/40"
-            >
-              <div class="flex items-center gap-2">
-                <span class="rankings-hero-accent font-mono">◆</span>
-                <span class="text-neutral-300 font-medium">
-                  <span class="rankings-hero-accent font-bold">{{ rankingsSummary.totalRanked }}</span> server{{ rankingsSummary.totalRanked !== 1 ? 's' : '' }} ranked
-                </span>
-              </div>
-              <div v-if="rankingsSummary.numOnes > 0" class="flex items-center gap-2">
-                <span class="text-amber-400 font-bold">#1</span>
-                <span class="text-neutral-400">on {{ rankingsSummary.numOnes }} server{{ rankingsSummary.numOnes !== 1 ? 's' : '' }}</span>
-              </div>
-              <div v-if="rankingsSummary.numTop10 > 0 && rankingsSummary.numTop10 !== rankingsSummary.numOnes" class="flex items-center gap-2">
-                <span class="text-neutral-300">Top 10 on <span class="text-neutral-200 font-semibold">{{ rankingsSummary.numTop10 }}</span></span>
-              </div>
-              <div v-if="rankingsSummary.best" class="flex items-center gap-2 ml-auto">
-                <span class="text-neutral-400 text-sm">Best:</span>
-                <router-link
-                  :to="`/servers/${encodeURIComponent(rankingsSummary.best.serverName)}`"
-                  class="rankings-hero-accent hover:opacity-90 font-medium text-sm truncate max-w-[180px] sm:max-w-none transition-colors"
+            <!-- Header -->
+            <div class="px-3 sm:px-6 py-4 border-b border-neutral-700/50 flex items-center justify-between">
+              <h3 class="text-xl font-semibold text-neutral-200">
+                Servers
+              </h3>
+              <div class="flex items-center gap-3">
+                <div class="hidden sm:flex items-center gap-2 text-xs text-neutral-500">
+                  <span v-if="rankingsSummary?.numOnes" class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-semibold">
+                    #1 on {{ rankingsSummary.numOnes }}
+                  </span>
+                  <span v-if="rankingsSummary?.numTop10 && rankingsSummary.numTop10 !== rankingsSummary?.numOnes" class="text-neutral-400">
+                    Top 10 on {{ rankingsSummary.numTop10 }}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-neutral-600 text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 hover:border-neutral-500 transition-colors"
+                  @click="showAllServerMaps"
                 >
-                  #{{ rankingsSummary.best.rankDisplay ?? rankingsSummary.best.rank }} {{ rankingsSummary.best.serverName }}
-                </router-link>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                  All Map Rankings
+                </button>
               </div>
             </div>
 
-            <div class="p-2 sm:p-6 space-y-6">
-              <!-- Favourite Battlefields: compact strip (only when player has servers) -->
-              <div v-if="hasServers">
-                <h3 class="text-lg font-bold text-neutral-200 mb-1 flex items-center gap-2">
-                  <span class="text-cyan-400 text-sm font-mono">▸</span>
-                  Favourite Battlefields
-                </h3>
-                <p class="text-neutral-500 text-sm mb-4">
-                  Your top servers by playtime — drill into maps or full rankings from Data Explorer
-                </p>
-
-                <PlayerServerInsights
-                  v-if="playerStats?.servers && playerStats.servers.length > 0"
-                  ref="playerServerInsightsRef"
-                  :player-name="playerName"
-                  :servers="playerStats.servers"
-                  :overall-averages="overallAverages"
-                  :open-map-modal="showServerMapStats"
-                />
-
-                <div v-if="topServersPreview.length > 0" class="space-y-2">
+            <!-- Server List -->
+            <div class="divide-y divide-neutral-800/60">
+              <div
+                v-for="server in unifiedServerList"
+                :key="server.serverGuid"
+                class="group flex items-center gap-3 sm:gap-4 px-3 sm:px-6 py-3 hover:bg-neutral-800/40 transition-colors cursor-pointer"
+                @click="showServerMapStats(server.serverGuid)"
+              >
+                <!-- Rank Badge -->
+                <div class="flex-shrink-0 w-10 text-center">
                   <div
-                    v-for="server in topServersPreview"
-                    :key="server.serverGuid"
-                    class="player-server-strip flex items-center gap-3 sm:gap-4 p-3 rounded-lg border border-neutral-700/50 bg-neutral-800/40 hover:border-cyan-500/30 hover:bg-neutral-800/60 transition-all"
+                    v-if="server.ranking"
+                    class="text-sm"
+                    :class="getRankBadgeClass(rankNum(server.ranking))"
                   >
-                    <div class="flex-shrink-0 w-10 h-10 rounded-lg bg-neutral-700 flex items-center justify-center p-1.5">
-                      <img :src="getGameIcon(server.gameId)" alt="" class="w-full h-full rounded object-cover" />
-                    </div>
-                    <router-link
-                      :to="`/servers/${encodeURIComponent(server.serverName)}`"
-                      class="flex-1 min-w-0 font-medium text-neutral-200 hover:text-cyan-400 truncate"
-                    >
-                      {{ server.serverName }}
-                    </router-link>
-                    <span class="flex-shrink-0 text-sm font-mono text-cyan-400">{{ Number(server.kdRatio).toFixed(2) }} K/D</span>
-                    <span class="flex-shrink-0 text-xs text-neutral-500">{{ getPlaytimePercentage(server.totalMinutes).toFixed(0) }}%</span>
-                    <button
-                      type="button"
-                      class="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium rounded border border-neutral-600 text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors"
-                      @click="showServerMapStats(server.serverGuid)"
-                    >
-                      Maps
-                    </button>
+                    #{{ server.ranking.rankDisplay ?? server.ranking.rank }}
                   </div>
-                </div>
-                <div v-else class="py-4 text-neutral-500 text-sm text-center">
-                  No server data to display
+                  <div v-else class="text-xs text-neutral-600">—</div>
                 </div>
 
-                <router-link
-                  v-if="playerStats?.servers && playerStats.servers.length > 6"
-                  :to="{ name: 'explore-player-detail', params: { playerName } }"
-                  class="mt-4 inline-flex items-center gap-2 text-sm font-medium text-cyan-400 hover:text-cyan-300"
-                >
-                  View all {{ playerStats.servers.length }} servers in Data Explorer
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
-                </router-link>
-              </div>
+                <!-- Game Icon -->
+                <div v-if="server.gameId" class="flex-shrink-0 w-8 h-8 rounded bg-neutral-700/80 flex items-center justify-center p-1">
+                  <img :src="getGameIcon(server.gameId)" alt="" class="w-full h-full rounded object-cover" />
+                </div>
 
-              <!-- Server Rankings: compact strip list -->
-              <div v-if="playerStats?.insights?.serverRankings && playerStats.insights.serverRankings.length > 0">
-                <h3 class="text-lg font-bold text-neutral-200 mb-1 flex items-center gap-2">
-                  <span class="text-amber-400 text-sm font-mono">◆</span>
-                  Server Rankings
-                </h3>
-                <p class="text-neutral-500 text-sm mb-4">
-                  Your standing on each server — open full leaderboards or map stats
-                </p>
-                <div class="space-y-2">
-                  <div
-                    v-for="ranking in playerStats.insights.serverRankings"
-                    :key="ranking.serverGuid"
-                    class="player-ranking-strip flex flex-col gap-2 p-3 rounded-lg border border-neutral-700/50 bg-neutral-800/40 hover:border-neutral-600 transition-all"
-                  >
-                    <router-link
-                      :to="`/servers/${encodeURIComponent(ranking.serverName)}`"
-                      class="w-full font-medium text-neutral-200 hover:text-cyan-400 break-words"
-                    >
-                      {{ ranking.serverName }}
-                    </router-link>
-                    <div class="flex flex-wrap items-center gap-2 sm:gap-4">
-                      <span class="text-neutral-500 text-sm">{{ ranking.rankDisplay ?? ranking.rank }} of {{ ranking.totalRankedPlayers }}</span>
-                      <span
-                        v-if="ranking.averagePing > 0"
-                        class="text-xs font-mono font-medium"
-                        :class="{
-                          'ping-good': ranking.averagePing < 50,
-                          'ping-warning': ranking.averagePing >= 50 && ranking.averagePing < 100,
-                          'ping-bad': ranking.averagePing >= 100
-                        }"
-                      >
-                        {{ ranking.averagePing }}ms
-                      </span>
-                      <div class="flex flex-shrink-0 gap-2 ml-auto">
-                        <router-link
-                          :to="{ name: 'explore-server-detail', params: { serverGuid: ranking.serverGuid } }"
-                          class="rankings-list-btn px-2.5 py-1.5 text-xs font-medium rounded border transition-colors"
-                        >
-                          Rankings
-                        </router-link>
-                        <button
-                          type="button"
-                          class="px-2.5 py-1.5 text-xs font-medium rounded border border-neutral-600 text-neutral-300 hover:bg-neutral-700 transition-colors"
-                          @click="showServerMapStats(ranking.serverGuid)"
-                        >
-                          Maps
-                        </button>
-                      </div>
-                    </div>
+                <!-- Server Name + Rank Details -->
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium text-neutral-200 truncate group-hover:text-cyan-400 transition-colors">
+                    {{ server.serverName }}
                   </div>
+                  <div class="flex items-center gap-2 text-xs text-neutral-500 mt-0.5">
+                    <span v-if="server.ranking">of {{ server.ranking.totalRankedPlayers }} players</span>
+                    <span
+                      v-if="server.ranking?.averagePing > 0"
+                      class="font-mono"
+                      :class="{
+                        'ping-good': server.ranking.averagePing < 50,
+                        'ping-warning': server.ranking.averagePing >= 50 && server.ranking.averagePing < 100,
+                        'ping-bad': server.ranking.averagePing >= 100
+                      }"
+                    >
+                      {{ server.ranking.averagePing }}ms
+                    </span>
+                    <span v-if="server.hasStats && server.totalMinutes > 0" class="text-neutral-600">{{ formatPlayTime(server.totalMinutes) }}</span>
+                    <span v-if="!server.hasStats && server.ranking" class="text-neutral-500">{{ server.ranking.scoreDisplay || server.ranking.totalScore.toLocaleString() }} score</span>
+                  </div>
+                </div>
+
+                <!-- Compact Stats (desktop) - only when we have full stats -->
+                <div v-if="server.hasStats" class="hidden sm:flex items-center gap-5 text-xs flex-shrink-0">
+                  <div class="text-center min-w-[3rem]">
+                    <div class="font-mono font-semibold text-neutral-200">{{ Number(server.kdRatio).toFixed(2) }}</div>
+                    <div class="text-neutral-500">K/D</div>
+                  </div>
+                  <div class="text-center min-w-[4.5rem]">
+                    <div>
+                      <span class="text-green-400 font-semibold">{{ server.totalKills.toLocaleString() }}</span>
+                      <span class="text-neutral-600 mx-0.5">/</span>
+                      <span class="text-red-400 font-semibold">{{ server.totalDeaths.toLocaleString() }}</span>
+                    </div>
+                    <div class="text-neutral-500">K / D</div>
+                  </div>
+                  <div class="text-center min-w-[2.5rem]">
+                    <div class="font-mono text-neutral-300">{{ getPlaytimePercentage(server.totalMinutes).toFixed(0) }}%</div>
+                    <div class="text-neutral-500">time</div>
+                  </div>
+                </div>
+                <!-- Score display for ranking-only entries -->
+                <div v-else-if="server.ranking" class="hidden sm:flex items-center gap-3 text-xs flex-shrink-0">
+                  <div class="text-center">
+                    <div class="font-mono font-semibold text-amber-400">{{ server.ranking.totalScore.toLocaleString() }}</div>
+                    <div class="text-neutral-500">score</div>
+                  </div>
+                </div>
+
+                <!-- Drill-in Arrow -->
+                <div class="flex-shrink-0 text-neutral-600 group-hover:text-cyan-400 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
                 </div>
               </div>
             </div>
@@ -1296,8 +1081,8 @@ onUnmounted(() => {
     </div>
     </div>
 
-      <!-- Server Map Statistics Panel: overlay on mobile, side-by-side on lg when space allows (must be inside flex container) -->
-      <template v-if="selectedServerGuid && playerStats?.servers">
+      <!-- Server Map Statistics Panel: overlay on mobile, side-by-side on lg -->
+      <template v-if="isMapStatsPanelOpen && playerStats?.servers">
       <div
         class="fixed inset-0 bg-black/20 backdrop-blur-sm z-[100] lg:hidden"
         aria-hidden="true"
@@ -1315,7 +1100,7 @@ onUnmounted(() => {
           <div class="sticky top-0 z-20 bg-neutral-950/95 border-b border-neutral-800 p-2 sm:p-4 flex justify-between items-center">
             <div class="flex flex-col min-w-0 flex-1 mr-4">
               <h2 class="text-xl font-bold text-neutral-200 truncate">
-                Map Performance
+                Map Rankings
               </h2>
               <p class="text-sm text-neutral-400 mt-1 truncate">
                 {{ selectedServerName || 'Selected Server' }}
@@ -1348,8 +1133,8 @@ onUnmounted(() => {
           <div class="flex-1 min-h-0 overflow-y-auto">
             <PlayerServerMapStats
               :player-name="playerName"
-              :server-guid="selectedServerGuid"
-              :game="(playerStats?.servers?.find(s => s.serverGuid === selectedServerGuid)?.gameId as any) || 'bf1942'"
+              :server-guid="effectiveServerGuid"
+              :game="(effectiveServerGuid ? playerStats?.servers?.find(s => s.serverGuid === effectiveServerGuid)?.gameId as any : undefined) || 'bf1942'"
             />
           </div>
         </div>

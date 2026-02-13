@@ -43,7 +43,15 @@
       <div>
         <div class="flex items-center gap-3 mb-4">
           <span class="text-3xl">👤</span>
-          <h2 class="text-2xl font-bold text-slate-200">{{ filteredPlayerData.playerName }}</h2>
+          <h2 class="text-2xl font-bold">
+            <RouterLink
+              :to="{ name: 'player-details', params: { playerName: filteredPlayerData.playerName } }"
+              class="text-slate-200 hover:text-cyan-400 transition-colors"
+              title="View full player profile"
+            >
+              {{ filteredPlayerData.playerName }}
+            </RouterLink>
+          </h2>
         </div>
 
         <!-- Time Range Selector -->
@@ -178,6 +186,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, computed } from 'vue';
+import { RouterLink } from 'vue-router';
 import { PLAYER_STATS_TIME_RANGE_OPTIONS } from '@/utils/constants';
 import { fetchPlayerMapRankings, type PlayerMapRankingsResponse, type GameType } from '../../services/dataExplorerService';
 import PlayerMapServerTable from './PlayerMapServerTable.vue';

@@ -2,7 +2,7 @@
   <div class="portal-page">
     <div class="portal-grid" aria-hidden="true" />
     <div class="portal-inner">
-      <div class="data-explorer">
+      <div :class="['data-explorer', { 'has-selection': !!selectedItem || isServerMapView }]">
         <div class="explorer-inner">
           <!-- Header -->
           <DataExplorerHeader
@@ -25,6 +25,15 @@
 
         <!-- Detail Panel (Right Panel) -->
         <div class="explorer-main">
+          <!-- Mobile back button -->
+          <button
+            v-if="selectedItem || isServerMapView"
+            class="explorer-mobile-back"
+            @click="handleBackToList"
+          >
+            <span class="explorer-mobile-back-arrow">&larr;</span>
+            <span>Back to {{ currentMode }}</span>
+          </button>
           <!-- Side-by-side layout for server-map view on large screens -->
           <Transition
             enter-active-class="transition-all duration-300 ease-out"
@@ -317,6 +326,22 @@ onMounted(() => {
     isInitialLoad = false;
   });
 });
+
+// Handle mobile back to list
+const handleBackToList = () => {
+  selectedItem.value = null;
+  isServerMapView.value = false;
+  serverMapGuid.value = null;
+  serverMapMapName.value = null;
+
+  if (currentMode.value === 'servers') {
+    router.push({ name: 'explore-servers' });
+  } else if (currentMode.value === 'maps') {
+    router.push({ name: 'explore-maps' });
+  } else if (currentMode.value === 'players') {
+    router.push({ name: 'explore-players' });
+  }
+};
 
 // Handle selection
 const handleSelect = (item: string | null) => {
