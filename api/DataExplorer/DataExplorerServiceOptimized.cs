@@ -1,7 +1,9 @@
 using api.DataExplorer.Models;
+using api.Gamification.Models;
 using api.PlayerTracking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using NodaTime;
 
 namespace api.DataExplorer;
 
@@ -167,6 +169,11 @@ public class DataExplorerService(
             .SqlQueryRaw<MapRotationQueryResult>(mapRotationSql, serverGuid)
             .ToListAsync();
 
+        var topWinnerByMap = await GetTopPlacementWinnersByMapAsync(
+            serverGuid,
+            mapRotationData.Select(m => m.MapName).ToList()
+        );
+
         var mapRotation = mapRotationData.Select(m => new MapRotationItemDto(
             MapName: m.MapName,
             TotalRounds: m.TotalRounds,
@@ -180,7 +187,8 @@ public class DataExplorerService(
                 Team1WinPercentage: m.Team1WinPercentage,
                 Team2WinPercentage: m.Team2WinPercentage,
                 TotalRounds: m.TotalRounds
-            )
+            ),
+            TopPlayerByWins: topWinnerByMap.TryGetValue(m.MapName, out var winner) ? winner : null
         )).ToList();
 
         // Calculate overall win stats
@@ -347,6 +355,11 @@ public class DataExplorerService(
             .Take(pageSize)
             .ToList();
 
+        var topWinnerByMap = await GetTopPlacementWinnersByMapAsync(
+            serverGuid,
+            paginatedData.Select(m => m.MapName).ToList()
+        );
+
         var mapRotation = paginatedData.Select(m => new MapRotationItemDto(
             MapName: m.MapName,
             TotalRounds: m.TotalRounds,
@@ -360,12 +373,60 @@ public class DataExplorerService(
                 Team1WinPercentage: m.Team1WinPercentage,
                 Team2WinPercentage: m.Team2WinPercentage,
                 TotalRounds: m.TotalRounds
-            )
+            ),
+            TopPlayerByWins: topWinnerByMap.TryGetValue(m.MapName, out var winner) ? winner : null
         )).ToList();
 
         var hasMore = skip + paginatedData.Count < totalCount;
 
         return new MapRotationResponse(mapRotation, totalCount, page, pageSize, hasMore);
+    }
+
+    private async Task<Dictionary<string, TopMapWinnerDto>> GetTopPlacementWinnersByMapAsync(
+        string serverGuid,
+        List<string> mapNames)
+    {
+        var uniqueMaps = mapNames
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (uniqueMaps.Count == 0)
+            return new Dictionary<string, TopMapWinnerDto>(StringComparer.Ordinal);
+
+        var mapParams = string.Join(", ", uniqueMaps.Select((_, i) => $"@p{i + 2}"));
+        var sql = $@"
+            SELECT MapName, PlayerName, Wins
+            FROM (
+                SELECT
+                    MapName,
+                    PlayerName,
+                    COUNT(*) as Wins,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY MapName
+                        ORDER BY COUNT(*) DESC, PlayerName ASC
+                    ) as Rank
+                FROM PlayerAchievements
+                WHERE ServerGuid = @p0
+                  AND AchievementType = @p1
+                  AND Tier = 'gold'
+                  AND MapName IN ({mapParams})
+                GROUP BY MapName, PlayerName
+            )
+            WHERE Rank = 1";
+
+        var sqlParams = new List<object> { serverGuid, AchievementTypes.Placement };
+        sqlParams.AddRange(uniqueMaps.Cast<object>());
+
+        var results = await dbContext.Database
+            .SqlQueryRaw<MapTopWinnerQueryResult>(sql, sqlParams.ToArray())
+            .ToListAsync();
+
+        return results.ToDictionary(
+            r => r.MapName,
+            r => new TopMapWinnerDto(r.PlayerName, r.Wins),
+            StringComparer.Ordinal
+        );
     }
 
     public async Task<MapListResponse> GetMapsAsync(string game = "bf1942")
@@ -618,12 +679,15 @@ public class DataExplorerService(
             PlayerName: p.PlayerName,
             TotalScore: p.TotalScore,
             TotalKills: p.TotalKills,
+            TotalWins: 0,
             TotalDeaths: p.TotalDeaths,
             KdRatio: p.KdRatio,
             KillsPerMinute: p.KillsPerMinute,
             TotalRounds: p.TotalRounds,
             PlayTimeMinutes: p.TotalPlayTimeMinutes
         )).ToList();
+
+        var entryByPlayer = allEntries.ToDictionary(e => e.PlayerName, StringComparer.Ordinal);
 
         // Sort and get top 10 for each category
         var topByScore = allEntries
@@ -634,6 +698,43 @@ public class DataExplorerService(
         var topByKills = allEntries
             .OrderByDescending(e => e.TotalKills)
             .Take(10)
+            .ToList();
+
+        // Top winners from placement achievements (1st place = tier gold) for this server/map/time range
+        var topByWinsRaw = await dbContext.PlayerAchievements
+            .AsNoTracking()
+            .Where(a => a.ServerGuid == serverGuid
+                && a.MapName == mapName
+                && a.AchievementType == AchievementTypes.Placement
+                && a.Tier == "gold"
+                && a.AchievedAt >= Instant.FromDateTimeUtc(DateTime.SpecifyKind(fromDate, DateTimeKind.Utc)))
+            .GroupBy(a => a.PlayerName)
+            .Select(g => new { PlayerName = g.Key, Wins = g.Count() })
+            .OrderByDescending(x => x.Wins)
+            .ThenBy(x => x.PlayerName)
+            .Take(10)
+            .ToListAsync();
+
+        var topByWins = topByWinsRaw
+            .Select(w =>
+            {
+                if (entryByPlayer.TryGetValue(w.PlayerName, out var existing))
+                {
+                    return existing with { TotalWins = w.Wins };
+                }
+
+                return new LeaderboardEntryDto(
+                    PlayerName: w.PlayerName,
+                    TotalScore: 0,
+                    TotalKills: 0,
+                    TotalWins: w.Wins,
+                    TotalDeaths: 0,
+                    KdRatio: 0,
+                    KillsPerMinute: 0,
+                    TotalRounds: 0,
+                    PlayTimeMinutes: 0
+                );
+            })
             .ToList();
 
         var topByKdRatio = allEntries
@@ -676,6 +777,7 @@ public class DataExplorerService(
             WinStats: winStats,
             TopByScore: topByScore,
             TopByKills: topByKills,
+            TopByWins: topByWins,
             TopByKdRatio: topByKdRatio,
             TopByKillRate: topByKillRate,
             ActivityPatterns: activityPatterns,
@@ -1164,6 +1266,13 @@ public class DataExplorerService(
         public int TotalDeaths { get; set; }
         public double KdRatio { get; set; }
         public int Rank { get; set; }
+    }
+
+    private class MapTopWinnerQueryResult
+    {
+        public string MapName { get; set; } = "";
+        public string PlayerName { get; set; } = "";
+        public int Wins { get; set; }
     }
 
     private class MapStatsQueryResult

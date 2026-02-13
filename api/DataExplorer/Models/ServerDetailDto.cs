@@ -23,7 +23,13 @@ public record MapRotationItemDto(
     int TotalRounds,
     double PlayTimePercentage,
     double AvgConcurrentPlayers,
-    WinStatsDto WinStats
+    WinStatsDto WinStats,
+    TopMapWinnerDto? TopPlayerByWins
+);
+
+public record TopMapWinnerDto(
+    string PlayerName,
+    int Wins
 );
 
 /// <summary>
