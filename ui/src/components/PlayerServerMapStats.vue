@@ -1,5 +1,5 @@
 <template>
-  <div class="p-6">
+  <div class="p-3 sm:p-6">
     <!-- Loading State -->
     <div v-if="isLoading" class="space-y-4">
       <div class="animate-pulse">

@@ -210,7 +210,7 @@ watch(() => props.days, (newDays) => {
     <!-- Pinned Player Banner -->
     <div
       v-if="pinnedPlayer && highlightPlayer"
-      class="flex items-center gap-3 px-4 py-3 rounded-lg bg-cyan-500/10 border border-cyan-500/30"
+      class="flex items-center gap-3 px-3 sm:px-4 py-3 rounded-lg bg-cyan-500/10 border border-cyan-500/30"
     >
       <div class="flex-shrink-0">
         <span :class="getRankClass(pinnedPlayer.rank)" class="scale-125">{{ pinnedPlayer.rank }}</span>
@@ -234,7 +234,7 @@ watch(() => props.days, (newDays) => {
         </div>
       </div>
     </div>
-    <div v-else-if="isPinnedLoading && highlightPlayer" class="flex items-center gap-2 px-4 py-3 rounded-lg bg-neutral-800/50 border border-neutral-700/50">
+    <div v-else-if="isPinnedLoading && highlightPlayer" class="flex items-center gap-2 px-3 sm:px-4 py-3 rounded-lg bg-neutral-800/50 border border-neutral-700/50">
       <div class="w-4 h-4 border-2 border-neutral-600 border-t-cyan-400 rounded-full animate-spin" />
       <span class="text-xs text-neutral-400">Finding your rank...</span>
     </div>

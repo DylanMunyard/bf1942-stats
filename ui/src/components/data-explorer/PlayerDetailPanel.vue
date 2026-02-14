@@ -1,304 +1,267 @@
 <template>
-  <div class="p-6">
+  <div class="player-detail-panel">
     <!-- Loading State -->
-    <div v-if="isLoading" class="space-y-4">
-      <div class="animate-pulse">
-        <div class="h-8 bg-slate-700/50 rounded w-1/3 mb-2"></div>
-        <div class="h-4 bg-slate-700/30 rounded w-1/4"></div>
-      </div>
-      <div class="h-32 bg-slate-700/30 rounded-lg animate-pulse"></div>
-      <div class="h-48 bg-slate-700/30 rounded-lg animate-pulse"></div>
+    <div v-if="isLoading" class="space-y-4 p-6">
+      <div class="explorer-skeleton h-8 w-1/3 mb-2"></div>
+      <div class="explorer-skeleton h-4 w-1/4"></div>
+      <div class="explorer-skeleton h-32 mt-4"></div>
+      <div class="explorer-skeleton h-48 mt-4"></div>
     </div>
 
     <!-- Error State -->
-    <div v-else-if="error" class="text-center py-12 bg-slate-800/30 rounded-xl border border-slate-700/50">
-      <div class="text-slate-400 mb-4 text-lg">{{ error }}</div>
-      <div class="mb-6">
-        <p class="text-slate-500 text-sm mb-3">Try selecting a different time period or slice dimension:</p>
-        <div class="flex gap-2 justify-center mb-3">
-          <button
-            v-for="option in timeRangeOptions"
-            :key="option.value"
-            :class="[
-              'px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200',
-              selectedTimeRange === option.value
-                ? `${theme.activeButton} shadow-lg`
-                : 'bg-slate-700/50 text-slate-300 hover:bg-slate-600/50 border border-slate-600'
-            ]"
-            @click="changeTimeRange(option.value)"
-            :disabled="isLoading"
-          >
-            {{ option.label }}
-          </button>
-        </div>
+    <div v-else-if="error" class="explorer-empty">
+      <div class="explorer-empty-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
       </div>
-      <button @click="loadData()" class="text-sm font-medium hover:underline" :class="theme.text">
-        Try again
+      <p class="explorer-empty-title">{{ error }}</p>
+      <p class="explorer-empty-desc mb-4">Try selecting a different time period or slice dimension.</p>
+      <div class="flex gap-2 justify-center mb-4">
+        <button
+          v-for="option in timeRangeOptions"
+          :key="option.value"
+          class="explorer-time-pill"
+          :class="{ 'explorer-time-pill--active': selectedTimeRange === option.value }"
+          @click="changeTimeRange(option.value)"
+          :disabled="isLoading"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+      <button @click="loadData()" class="explorer-btn explorer-btn--ghost explorer-btn--sm">
+        TRY AGAIN
       </button>
     </div>
 
     <!-- Content -->
-    <div v-else-if="slicedData" class="space-y-6">
-      <!-- Header -->
-      <div>
-        <div class="flex items-center gap-3 mb-4">
-          <h2 class="text-2xl font-bold">
-            <RouterLink
-              :to="{ name: 'player-details', params: { playerName: slicedData.playerName } }"
-              class="text-slate-200 hover:text-white transition-colors"
-              title="View full player profile"
-            >
-              {{ slicedData.playerName }}
-            </RouterLink>
-          </h2>
-        </div>
+    <div v-else-if="slicedData" class="space-y-6 p-4 md:p-6">
 
-        <!-- Current Data Context Banner - THEMED -->
-        <div
-          class="relative overflow-hidden rounded-xl border p-6 mb-6 transition-all duration-300 shadow-lg"
-          :class="[
-            theme.bgGradient,
-            theme.borderColor
-          ]"
-        >
-          <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <div class="flex items-center gap-3 mb-2">
-                <h3 class="text-xl font-bold text-white tracking-tight">{{ getCurrentSliceName() }}</h3>
-              </div>
-              <p class="text-slate-200/90 max-w-xl text-sm leading-relaxed">{{ getCurrentSliceDescription() }}</p>
-            </div>
-            <div class="text-right flex flex-col items-end">
-               <div class="text-xs uppercase tracking-wider text-white/60 mb-1 font-semibold">Context</div>
-               <div class="font-mono text-lg font-medium text-white mb-0.5">{{ gameLabel }}</div>
-               <div class="text-sm text-white/80 bg-black/20 px-2 py-0.5 rounded inline-block">Last {{ slicedData.dateRange.days }} days</div>
-            </div>
+      <!-- Context Banner -->
+      <div class="context-banner" :class="themeClass">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h3 class="text-sm font-bold tracking-wider uppercase text-white">{{ getCurrentSliceName() }}</h3>
+            <p class="text-xs mt-1 text-neutral-400">{{ getCurrentSliceDescription() }}</p>
           </div>
-        </div>
-
-        <!-- Controls Row -->
-        <div class="flex flex-col md:flex-row gap-4 mb-6 justify-between items-end md:items-center bg-slate-900/50 p-4 rounded-xl border border-slate-800/50">
-          <!-- Slice Dimension Selector -->
-          <div class="flex flex-col gap-1.5 w-full md:w-auto">
-            <label class="text-xs font-bold text-slate-500 uppercase tracking-wider">Metric Dimension</label>
-            <div class="relative group">
-                <select
-                  v-model="selectedSliceType"
-                  @change="changeSliceType"
-                  class="w-full md:w-72 appearance-none pl-4 pr-10 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-2 transition-all cursor-pointer hover:border-slate-600 hover:bg-slate-750"
-                  :class="theme.focusRing"
-                >
-                  <option
-                    v-for="dimension in availableDimensions"
-                    :key="dimension.type"
-                    :value="dimension.type"
-                  >
-                    {{ dimension.name }}
-                  </option>
-                </select>
-                <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-slate-200 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                </div>
-            </div>
-          </div>
-
-          <!-- Time Range Selector -->
-          <div class="flex flex-col gap-1.5 w-full md:w-auto">
-             <label class="text-xs font-bold text-slate-500 uppercase tracking-wider md:text-right">Time Period</label>
-            <div class="flex bg-slate-800 p-1 rounded-lg border border-slate-700">
-              <button
-                v-for="option in timeRangeOptions"
-                :key="option.value"
-                :class="[
-                  'px-4 py-1.5 rounded-md text-sm font-medium transition-all duration-200 flex-1 md:flex-none',
-                  selectedTimeRange === option.value
-                    ? `${theme.activeButton} shadow-sm`
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
-                ]"
-                @click="changeTimeRange(option.value)"
-                :disabled="isLoading"
-              >
-                {{ option.label }}
-              </button>
-            </div>
+          <div class="text-right flex flex-col items-end gap-1">
+            <span class="explorer-tag">{{ gameLabel }}</span>
+            <span class="text-xs font-mono text-neutral-500">LAST {{ slicedData.dateRange.days }} DAYS</span>
           </div>
         </div>
       </div>
 
-      <!-- Summary Stats - THEMED -->
-      <div v-if="slicedData.results.length > 0" class="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <!-- Card 1: Count -->
-          <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 flex flex-col items-center justify-center hover:bg-slate-800/60 transition-colors group">
-            <div class="text-3xl font-bold text-slate-200 group-hover:text-white transition-colors">{{ slicedData.results.length }}</div>
-            <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">{{ getResultTypeLabel() }}</div>
+      <!-- Controls Row -->
+      <div class="controls-row">
+        <!-- Slice Dimension Selector -->
+        <div class="flex flex-col gap-2 w-full md:w-auto flex-1">
+          <label class="control-label">METRIC DIMENSION</label>
+          <div class="relative">
+            <select
+              v-model="selectedSliceType"
+              @change="changeSliceType"
+              class="explorer-select w-full md:max-w-md h-10"
+            >
+              <option
+                v-for="dimension in availableDimensions"
+                :key="dimension.type"
+                :value="dimension.type"
+              >
+                {{ dimension.name }}
+              </option>
+            </select>
+            <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-neutral-500">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </div>
           </div>
+        </div>
 
-          <!-- Card 2: Primary Metric -->
-          <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 flex flex-col items-center justify-center hover:bg-slate-800/60 transition-colors relative overflow-hidden group">
-             <div class="absolute top-0 left-0 w-full h-1" :class="theme.bg"></div>
-             <div class="text-3xl font-bold transition-transform group-hover:scale-110 duration-200" :class="theme.text">{{ getTotalPrimaryValue() }}</div>
-             <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">{{ getPrimaryMetricLabel() }}</div>
+        <!-- Time Range Selector -->
+        <div class="flex flex-col gap-2 w-full md:w-auto">
+          <label class="control-label md:text-right">TIME PERIOD</label>
+          <div class="explorer-toggle-group h-10">
+            <button
+              v-for="option in timeRangeOptions"
+              :key="option.value"
+              class="explorer-toggle-btn flex-1 md:flex-none px-4"
+              :class="{ 'explorer-toggle-btn--active': selectedTimeRange === option.value }"
+              @click="changeTimeRange(option.value)"
+              :disabled="isLoading"
+            >
+              {{ option.label }}
+            </button>
           </div>
+        </div>
+      </div>
 
-          <!-- Card 3: Secondary Metric -->
-          <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 flex flex-col items-center justify-center hover:bg-slate-800/60 transition-colors group">
-             <div class="text-3xl font-bold text-slate-200 group-hover:text-white transition-colors">{{ getTotalSecondaryValue() }}</div>
-             <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">{{ getSecondaryMetricLabel() }}</div>
-          </div>
+      <!-- Summary Stats -->
+      <div v-if="slicedData.results.length > 0" class="explorer-stats-grid">
+        <!-- Card 1: Count -->
+        <div class="explorer-stat">
+          <div class="explorer-stat-value">{{ slicedData.results.length }}</div>
+          <div class="explorer-stat-label">{{ getResultTypeLabel() }}</div>
+        </div>
 
-          <!-- Card 4: Percentage -->
-          <div class="bg-slate-800/40 border border-slate-700/50 rounded-xl p-4 flex flex-col items-center justify-center hover:bg-slate-800/60 transition-colors group">
-             <div class="text-3xl font-bold text-slate-200 group-hover:text-white transition-colors">{{ getAveragePercentage() }}<span class="text-lg text-slate-500 ml-0.5">%</span></div>
-             <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">{{ getPercentageLabel() }}</div>
-          </div>
+        <!-- Card 2: Primary Metric (themed) -->
+        <div class="explorer-stat">
+          <div class="explorer-stat-value" :class="themeStatClass">{{ getTotalPrimaryValue() }}</div>
+          <div class="explorer-stat-label">{{ getPrimaryMetricLabel() }}</div>
+        </div>
+
+        <!-- Card 3: Secondary Metric -->
+        <div class="explorer-stat">
+          <div class="explorer-stat-value">{{ getTotalSecondaryValue() }}</div>
+          <div class="explorer-stat-label">{{ getSecondaryMetricLabel() }}</div>
+        </div>
+
+        <!-- Card 4: Percentage -->
+        <div class="explorer-stat">
+          <div class="explorer-stat-value">{{ getAveragePercentage() }}<span class="text-sm ml-1 text-neutral-500">{{ getPercentageUnit() || '' }}</span></div>
+          <div class="explorer-stat-label">{{ getPercentageLabel() }}</div>
+        </div>
       </div>
 
       <!-- Results Table -->
-      <div v-if="slicedData.results.length > 0">
+      <div v-if="slicedData.results.length > 0" class="flex flex-col h-full">
         <div class="flex items-center justify-between mb-4 px-1">
-          <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider">Detailed Results</h3>
-          <div class="text-sm text-slate-500 font-mono">
-            Page {{ slicedData.pagination.page }} / {{ slicedData.pagination.totalPages }}
-            <span class="text-slate-600 mx-2">|</span>
-            {{ slicedData.pagination.totalItems }} items
+          <h3 class="explorer-section-title mb-0 text-lg">DETAILED RESULTS</h3>
+          <div class="text-xs font-mono text-neutral-500">
+            PAGE {{ slicedData.pagination.page }}/{{ slicedData.pagination.totalPages }}
+            <span class="mx-2 text-neutral-700">|</span>
+            {{ slicedData.pagination.totalItems }} ITEMS
           </div>
         </div>
 
-        <div class="bg-slate-900/40 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
-          <table class="w-full table-fixed">
-            <!-- Table Header -->
-            <thead class="bg-slate-900/80 border-b border-slate-800">
-              <tr>
-                <th class="w-16 px-4 py-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Rank</th>
-                <th class="px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider min-w-0">{{ getTableHeaderLabel() }}</th>
-                <th class="w-24 px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">{{ getSecondaryMetricLabel() }}</th>
-                <th class="w-28 px-4 py-4 text-right text-xs font-bold uppercase tracking-wider" :class="theme.text">{{ getPrimaryMetricLabel() }}</th>
-                <th class="w-24 px-4 py-4 text-right text-xs font-bold text-slate-500 uppercase tracking-wider">{{ getPercentageLabel() }}</th>
-                <th v-if="hasAdditionalData()" class="w-48 px-4 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Additional Stats</th>
-              </tr>
-            </thead>
+        <div class="explorer-details w-full overflow-hidden rounded-lg border border-[var(--border-color)]">
+          <div class="overflow-x-auto">
+            <table class="explorer-table w-full">
+              <!-- Table Header -->
+              <thead>
+                <tr class="bg-black/20">
+                  <th class="w-16 text-center py-4">RANK</th>
+                  <th class="py-4 text-left pl-4">{{ getTableHeaderLabel() }}</th>
+                  <th class="w-32 text-right py-4">{{ getSecondaryMetricLabel() }}</th>
+                  <th class="w-36 text-right py-4" :class="themeTextClass">{{ getPrimaryMetricLabel() }}</th>
+                  <th class="w-32 text-right py-4 pr-6">{{ getPercentageLabel() }}</th>
+                  <th v-if="hasAdditionalData()" class="w-64 py-4 pr-4">ADDITIONAL STATS</th>
+                </tr>
+              </thead>
 
-            <!-- Table Body -->
-            <tbody class="divide-y divide-slate-800/50">
-              <tr
-                v-for="(result, index) in slicedData.results"
-                :key="`${result.sliceKey}-${result.subKey || 'global'}`"
-                class="group hover:bg-slate-800/30 transition-colors duration-150"
-              >
-                <!-- Rank -->
-                <td class="px-4 py-3">
-                  <div class="flex items-center justify-center">
-                    <div 
-                        class="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold text-white shadow-sm transition-transform group-hover:scale-110"
-                        :class="index < 3 ? theme.bg : 'bg-slate-800 text-slate-400'"
-                    >
+              <!-- Table Body -->
+              <tbody class="divide-y divide-[var(--border-color)]">
+                <tr
+                  v-for="(result, index) in slicedData.results"
+                  :key="`${result.sliceKey}-${result.subKey || 'global'}`"
+                  class="hover:bg-white/5 transition-colors"
+                >
+                  <!-- Rank -->
+                  <td class="text-center py-4">
+                    <div class="rank-badge mx-auto" :class="index < 3 ? `rank-badge--top rank-badge--${index + 1}` : ''">
                       {{ result.rank }}
                     </div>
-                  </div>
-                </td>
+                  </td>
 
-                <!-- Main Label -->
-                <td class="px-4 py-3">
-                  <div 
-                    class="text-slate-200 font-medium group-hover:text-white transition-colors text-base"
-                    :class="{ 'cursor-pointer hover:underline hover:text-cyan-400': isMapSlice() }"
-                    @click="handleSliceClick(result)"
-                  >
-                    {{ result.sliceLabel }}
-                  </div>
-                  <div v-if="result.subKey" class="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-70"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
-                    {{ result.subKeyLabel || getServerName(result.subKey) }}
-                  </div>
-                </td>
-
-                <!-- Secondary Value -->
-                <td class="px-4 py-3 text-right text-slate-400 font-mono text-sm group-hover:text-slate-300">
-                  {{ result.secondaryValue.toLocaleString() }}
-                </td>
-
-                <!-- Primary Value -->
-                <td class="px-4 py-3 text-right">
-                  <div class="text-lg font-bold font-mono" :class="theme.text">{{ result.primaryValue.toLocaleString() }}</div>
-                </td>
-
-                <!-- Percentage -->
-                <td class="px-4 py-3 text-right text-slate-300 font-mono text-sm">
-                  {{ result.percentage.toFixed(1) }}<span class="text-slate-500 text-xs ml-0.5">{{ getPercentageUnit() }}</span>
-                </td>
-
-                <!-- Additional Data -->
-                <td v-if="hasAdditionalData()" class="px-4 py-3">
-                  <div v-if="isTeamWinSlice()" class="space-y-2">
-                    <!-- Visual Win Rate Bar -->
-                    <div v-if="getTeamLabel(result.additionalData, 'team1Label') || getTeamLabel(result.additionalData, 'team2Label')" class="px-2">
-                      <WinStatsBar :winStats="getTeamWinStats(result)" />
+                  <!-- Main Label -->
+                  <td class="py-4 pl-4">
+                    <div
+                      class="font-medium text-base truncate max-w-[200px] md:max-w-xs lg:max-w-md"
+                      :class="{ 'explorer-link cursor-pointer hover:underline': isMapSlice() }"
+                      @click="handleSliceClick(result)"
+                    >
+                      {{ result.sliceLabel }}
                     </div>
-                    <!-- Other additional data for team wins -->
-                    <div v-if="Object.keys(getTeamWinAdditionalData(result.additionalData, result.percentage)).length > 0" class="text-xs text-slate-400">
-                      <div v-for="(value, key) in getTeamWinAdditionalData(result.additionalData, result.percentage)" :key="key" class="flex justify-between">
-                        <span>{{ formatTeamWinKey(key, result.additionalData) }}:</span>
-                        <span class="text-slate-300 font-mono">{{ formatAdditionalValue(value) }}</span>
+                    <div v-if="result.subKey" class="text-xs mt-1.5 flex items-center gap-1.5 text-neutral-400">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-70"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                      {{ result.subKeyLabel || getServerName(result.subKey) }}
+                    </div>
+                  </td>
+
+                  <!-- Secondary Value -->
+                  <td class="text-right py-4 font-mono text-neutral-400">
+                    {{ result.secondaryValue.toLocaleString() }}
+                  </td>
+
+                  <!-- Primary Value -->
+                  <td class="text-right py-4">
+                    <div class="text-lg font-bold font-mono" :class="themeTextClass">{{ result.primaryValue.toLocaleString() }}</div>
+                  </td>
+
+                  <!-- Percentage -->
+                  <td class="text-right py-4 pr-6 font-mono text-white">
+                    {{ result.percentage.toFixed(1) }}<span class="text-xs ml-0.5 text-neutral-500">{{ getPercentageUnit() }}</span>
+                  </td>
+
+                  <!-- Additional Data -->
+                  <td v-if="hasAdditionalData()" class="py-4 pr-4">
+                    <div v-if="isTeamWinSlice()" class="space-y-2">
+                      <!-- Visual Win Rate Bar -->
+                      <div v-if="getTeamLabel(result.additionalData, 'team1Label') || getTeamLabel(result.additionalData, 'team2Label')" class="px-2">
+                        <WinStatsBar :winStats="getTeamWinStats(result)" />
+                      </div>
+                      <!-- Other additional data for team wins -->
+                      <div v-if="Object.keys(getTeamWinAdditionalData(result.additionalData, result.percentage)).length > 0" class="text-xs text-neutral-400">
+                        <div v-for="(value, key) in getTeamWinAdditionalData(result.additionalData, result.percentage)" :key="key" class="flex justify-between">
+                          <span>{{ formatTeamWinKey(key, result.additionalData) }}:</span>
+                          <span class="font-mono text-neutral-300">{{ formatAdditionalValue(value) }}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div v-else class="text-xs text-slate-400 space-y-1">
-                    <div v-for="(value, key) in result.additionalData" :key="key" class="flex justify-between border-b border-slate-800/50 pb-0.5 last:border-0">
-                      <span>{{ formatAdditionalKey(key) }}:</span>
-                      <span class="text-slate-300 font-mono">{{ formatAdditionalValue(value) }}</span>
+                    <div v-else class="text-xs space-y-1.5 text-neutral-400">
+                      <div v-for="(value, key) in result.additionalData" :key="key" class="flex justify-between additional-row">
+                        <span>{{ formatAdditionalKey(key) }}:</span>
+                        <span class="font-mono text-neutral-300">{{ formatAdditionalValue(value) }}</span>
+                      </div>
                     </div>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <!-- Pagination Controls -->
-        <div v-if="slicedData.pagination.totalPages > 1" class="flex items-center justify-center gap-4 mt-8">
-          <button
-            @click="changePage(slicedData.pagination.page - 1)"
-            :disabled="!slicedData.pagination.hasPrevious || isLoading"
-            class="px-4 py-2 bg-slate-800 border border-slate-700 text-slate-300 rounded-lg transition-colors hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:text-white"
-          >
-            Previous
-          </button>
-          
-          <div class="flex items-center gap-2">
+        <div v-if="slicedData.pagination.totalPages > 1" class="explorer-pagination mt-6 justify-center">
+          <div class="text-xs font-mono" style="color: var(--text-secondary)">
+            {{ slicedData.pagination.totalItems }} RESULTS
+          </div>
+          <div class="explorer-pagination-controls">
+            <button
+              @click="changePage(slicedData.pagination.page - 1)"
+              :disabled="!slicedData.pagination.hasPrevious || isLoading"
+              class="explorer-pagination-btn"
+            >
+              &larr;
+            </button>
+
             <template v-for="pageNum in getVisiblePages()" :key="pageNum">
               <button
                 v-if="pageNum !== '...'"
                 @click="changePage(pageNum)"
-                :class="[
-                  'w-9 h-9 rounded-lg text-sm font-bold transition-all',
-                  pageNum === slicedData.pagination.page
-                    ? `${theme.activeButton} shadow-md`
-                    : 'bg-slate-800 border border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white'
-                ]"
+                class="explorer-pagination-btn"
+                :class="{ 'explorer-pagination-btn--active': pageNum === slicedData.pagination.page }"
                 :disabled="isLoading"
               >
                 {{ pageNum }}
               </button>
-              <span v-else class="text-slate-600 px-2 font-bold">...</span>
+              <span v-else class="text-xs font-mono px-1" style="color: var(--text-secondary)">...</span>
             </template>
+
+            <button
+              @click="changePage(slicedData.pagination.page + 1)"
+              :disabled="!slicedData.pagination.hasNext || isLoading"
+              class="explorer-pagination-btn"
+            >
+              &rarr;
+            </button>
           </div>
-          
-          <button
-            @click="changePage(slicedData.pagination.page + 1)"
-            :disabled="!slicedData.pagination.hasNext || isLoading"
-            class="px-4 py-2 bg-slate-800 border border-slate-700 text-slate-300 rounded-lg transition-colors hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:text-white"
-          >
-            Next
-          </button>
         </div>
       </div>
 
       <!-- Empty State -->
-      <div v-else class="text-center py-16 bg-slate-800/20 rounded-xl border border-dashed border-slate-700">
-        <div class="text-6xl mb-6 opacity-50 grayscale hover:grayscale-0 transition-all duration-500 cursor-default">📊</div>
-        <h3 class="text-xl font-bold text-slate-300 mb-2">No Data Available</h3>
-        <p class="text-slate-400 max-w-md mx-auto">No statistics found for this player with the current filters.</p>
-        <p class="text-slate-500 text-sm mt-4">Try adjusting the time range or slice dimension.</p>
+      <div v-else class="explorer-empty">
+        <div class="explorer-empty-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+        </div>
+        <p class="explorer-empty-title">NO DATA AVAILABLE</p>
+        <p class="explorer-empty-desc">No statistics found for this player with the current filters. Try adjusting the time range or slice dimension.</p>
       </div>
     </div>
   </div>
@@ -306,7 +269,6 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, computed } from 'vue';
-import { RouterLink } from 'vue-router';
 import { PLAYER_STATS_TIME_RANGE_OPTIONS } from '@/utils/constants';
 import WinStatsBar from '@/components/data-explorer/WinStatsBar.vue';
 import type { WinStats } from '@/services/dataExplorerService';
@@ -328,13 +290,11 @@ const isMapSlice = () => {
 
 const handleSliceClick = (result: PlayerSliceResultDto) => {
   if (isMapSlice()) {
-    // If it's a map slice, navigate to map stats
-    // sliceKey is the map name
     emit('navigate-to-map', result.sliceKey);
   }
 };
 
-// API Types (duplicated for now, should be moved to shared types later)
+// API Types
 interface SliceDimensionOption {
   type: string;
   name: string;
@@ -377,63 +337,42 @@ const isLoading = ref(false);
 const error = ref<string | null>(null);
 
 // Control states
-const selectedTimeRange = ref<number>(60); // Default to 60 days
-const selectedSliceType = ref<string>('ScoreByMap'); // Default slice type
+const selectedTimeRange = ref<number>(60);
+const selectedSliceType = ref<string>('ScoreByMap');
 const currentPage = ref<number>(1);
-const pageSize = ref<number>(10); // Client-side pagination with 10 rows per page
-const allResults = ref<PlayerSliceResultDto[]>([]); // Store all results for client-side pagination
+const pageSize = ref<number>(10);
+const allResults = ref<PlayerSliceResultDto[]>([]);
 
 const timeRangeOptions = PLAYER_STATS_TIME_RANGE_OPTIONS;
 
-// Computed Theme
-const theme = computed(() => {
+// Theme classes mapped to neon design system
+const themeClass = computed(() => {
   const type = selectedSliceType.value;
-  if (type.includes('Kills')) {
-    return {
-      name: 'kills',
-      icon: '⚔️',
-      text: 'text-rose-400',
-      bg: 'bg-rose-500',
-      border: 'border-rose-500',
-      borderColor: 'border-rose-500/30',
-      bgGradient: 'bg-gradient-to-br from-rose-900/90 to-slate-900',
-      activeButton: 'bg-rose-600 text-white',
-      focusRing: 'focus:border-rose-500 focus:ring-rose-500/20'
-    };
-  } else if (type.includes('Wins')) {
-    return {
-      name: 'wins',
-      icon: '🏆',
-      text: 'text-emerald-400',
-      bg: 'bg-emerald-500',
-      border: 'border-emerald-500',
-      borderColor: 'border-emerald-500/30',
-      bgGradient: 'bg-gradient-to-br from-emerald-900/90 to-slate-900',
-      activeButton: 'bg-emerald-600 text-white',
-      focusRing: 'focus:border-emerald-500 focus:ring-emerald-500/20'
-    };
-  } else {
-    // Score (Default)
-    return {
-      name: 'score',
-      icon: '⭐',
-      text: 'text-cyan-400',
-      bg: 'bg-cyan-500',
-      border: 'border-cyan-500',
-      borderColor: 'border-cyan-500/30',
-      bgGradient: 'bg-gradient-to-br from-cyan-900/90 to-slate-900',
-      activeButton: 'bg-cyan-600 text-white',
-      focusRing: 'focus:border-cyan-500 focus:ring-cyan-500/20'
-    };
-  }
+  if (type.includes('Kills')) return 'theme--kills';
+  if (type.includes('Wins')) return 'theme--wins';
+  return 'theme--score';
+});
+
+const themeTextClass = computed(() => {
+  const type = selectedSliceType.value;
+  if (type.includes('Kills')) return 'text-neon-red';
+  if (type.includes('Wins')) return 'text-neon-green';
+  return 'text-neon-cyan';
+});
+
+const themeStatClass = computed(() => {
+  const type = selectedSliceType.value;
+  if (type.includes('Kills')) return 'explorer-stat-value--pink';
+  if (type.includes('Wins')) return 'explorer-stat-value--green';
+  return 'explorer-stat-value--accent';
 });
 
 const gameLabel = computed(() => {
   switch (slicedData.value?.game?.toLowerCase()) {
-    case 'bf1942': return 'Battlefield 1942';
-    case 'fh2': return 'Forgotten Hope 2';
-    case 'bfvietnam': return 'Battlefield Vietnam';
-    default: return slicedData.value?.game || 'Unknown';
+    case 'bf1942': return 'BF1942';
+    case 'fh2': return 'FH2';
+    case 'bfvietnam': return 'BFV';
+    default: return slicedData.value?.game || 'UNKNOWN';
   }
 });
 
@@ -445,7 +384,6 @@ const loadSliceDimensions = async () => {
     availableDimensions.value = await response.json();
   } catch (err) {
     console.error('Error loading slice dimensions:', err);
-    // Provide fallback dimensions
     availableDimensions.value = [
       { type: 'ScoreByMap', name: 'Score by Map', description: 'Total player score per map' },
       { type: 'ScoreByMapAndServer', name: 'Score by Map + Server', description: 'Player score per map per server' },
@@ -466,14 +404,11 @@ const loadData = async (days?: number) => {
   error.value = null;
 
   try {
-    console.log(`Loading sliced player data for ${props.playerName} with ${timeRange} days, slice: ${selectedSliceType.value}`);
-
-    // Fetch all data for client-side pagination by using a large page size
     const params = new URLSearchParams({
       sliceType: selectedSliceType.value,
       game: props.game || 'bf1942',
       page: '1',
-      pageSize: '1000', // Large page size to get all records for client-side pagination
+      pageSize: '1000',
       days: timeRange.toString()
     });
 
@@ -489,10 +424,8 @@ const loadData = async (days?: number) => {
 
     const responseData = await response.json();
 
-    // Store all results for client-side pagination
     allResults.value = responseData.results || [];
 
-    // Create paginated response structure for compatibility
     slicedData.value = {
       ...responseData,
       results: getPaginatedResults(),
@@ -505,11 +438,6 @@ const loadData = async (days?: number) => {
         hasPrevious: currentPage.value > 1
       }
     };
-
-    // Update document title
-    if (slicedData.value?.playerName) {
-      document.title = `${slicedData.value.playerName} - Enhanced Data Explorer | BF Stats`;
-    }
   } catch (err: any) {
     console.error(`Error loading sliced player data:`, err);
     error.value = err.message || 'Failed to load player details';
@@ -518,7 +446,6 @@ const loadData = async (days?: number) => {
   isLoading.value = false;
 };
 
-// Client-side pagination helper
 const getPaginatedResults = (): PlayerSliceResultDto[] => {
   const startIndex = (currentPage.value - 1) * pageSize.value;
   const endIndex = startIndex + pageSize.value;
@@ -539,7 +466,6 @@ const changeSliceType = () => {
 const changePage = (page: number) => {
   if (page < 1 || page > Math.ceil(allResults.value.length / pageSize.value)) return;
   currentPage.value = page;
-  // Update slicedData with new page results
   if (slicedData.value) {
     slicedData.value = {
       ...slicedData.value,
@@ -569,7 +495,7 @@ const getCurrentSliceDescription = () => {
 
 const getResultTypeLabel = () => {
   if (!slicedData.value) return 'Results';
-  return selectedSliceType.value.includes('Server') ? 'Map-Server Combinations' : 'Maps';
+  return selectedSliceType.value.includes('Server') ? 'Map-Server Combos' : 'Maps';
 };
 
 const getPrimaryMetricLabel = () => {
@@ -635,7 +561,6 @@ const formatTeamWinKey = (key: string, additionalData: Record<string, any>) => {
     const teamName = getTeamLabel(additionalData, 'team2Label') || 'Team 2';
     return `${teamName} Win Rate`;
   }
-  // For any other keys, use the regular formatter
   return formatAdditionalKey(key);
 };
 
@@ -647,7 +572,6 @@ const formatAdditionalValue = (value: any) => {
 };
 
 const getServerName = (serverGuid: string) => {
-  // This would need to be populated from server data
   return serverGuid.substring(0, 8) + '...';
 };
 
@@ -658,27 +582,11 @@ const getTeamLabel = (additionalData: Record<string, any>, key: 'team1Label' | '
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
 };
 
-const getRenderableAdditionalData = (additionalData: Record<string, any>) => {
-  if (!isTeamWinSlice()) {
-    return additionalData;
-  }
-
-  return Object.fromEntries(
-    Object.entries(additionalData).filter(([key]) =>
-      key !== 'team1Label' &&
-      key !== 'team2Label' &&
-      key !== 'team1Victories' &&
-      key !== 'team2Victories'
-    )
-  );
-};
-
 const getTeamWinAdditionalData = (additionalData: Record<string, any>, team1WinRate: number) => {
   if (!isTeamWinSlice()) {
     return additionalData;
   }
 
-  // Create a copy and add team1WinRate for display
   const displayData = { ...additionalData };
   displayData.team1WinRate = team1WinRate;
 
@@ -709,17 +617,15 @@ const getTeamWinStats = (result: PlayerSliceResultDto): WinStats => {
 
 const getVisiblePages = () => {
   if (!slicedData.value) return [];
-  
+
   const { page, totalPages } = slicedData.value.pagination;
   const pages = [];
-  
+
   if (totalPages <= 7) {
-    // Show all pages if total is small
     for (let i = 1; i <= totalPages; i++) {
       pages.push(i);
     }
   } else {
-    // Show smart pagination with ellipsis
     if (page <= 4) {
       pages.push(1, 2, 3, 4, 5, '...', totalPages);
     } else if (page >= totalPages - 3) {
@@ -728,7 +634,7 @@ const getVisiblePages = () => {
       pages.push(1, '...', page - 1, page, page + 1, '...', totalPages);
     }
   }
-  
+
   return pages;
 };
 
@@ -752,3 +658,219 @@ watch(() => props.serverGuid, () => {
   loadData();
 });
 </script>
+
+<style scoped>
+/* Context Banner - terminal style with themed left border */
+.context-banner {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 1rem 1.25rem;
+  border-left: 3px solid var(--neon-cyan);
+  transition: border-color 0.3s ease;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.context-banner.theme--kills {
+  border-left-color: var(--neon-red);
+}
+
+.context-banner.theme--wins {
+  border-left-color: var(--neon-green);
+}
+
+.context-banner.theme--score {
+  border-left-color: var(--neon-cyan);
+}
+
+/* Controls row */
+.controls-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: flex-end;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 1.25rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+@media (min-width: 768px) {
+  .controls-row {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+.control-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+  margin-bottom: 0.25rem;
+  display: block;
+}
+
+/* Rank badges */
+.rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  transition: transform 0.2s ease;
+}
+
+.rank-badge--top {
+  border: none;
+  color: var(--bg-dark);
+}
+
+.rank-badge--1 {
+  background: var(--neon-gold);
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
+}
+
+.rank-badge--2 {
+  background: #c0c0c0;
+  box-shadow: 0 0 15px rgba(192, 192, 192, 0.3);
+}
+
+.rank-badge--3 {
+  background: #cd7f32;
+  box-shadow: 0 0 15px rgba(205, 127, 50, 0.3);
+}
+
+tr:hover .rank-badge {
+  transform: scale(1.1);
+}
+
+/* Additional data rows */
+.additional-row {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.additional-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+/* Neon text colors (matching the data-explorer theme utilities) */
+.text-neon-cyan { color: var(--neon-cyan); text-shadow: 0 0 10px rgba(0, 255, 242, 0.3); }
+.text-neon-green { color: var(--neon-green); text-shadow: 0 0 10px rgba(57, 255, 20, 0.3); }
+.text-neon-red { color: var(--neon-red); text-shadow: 0 0 10px rgba(255, 49, 49, 0.3); }
+
+/* Pagination spacing override - since we're not inside an explorer-card footer */
+.explorer-pagination {
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  padding: 0.75rem;
+}
+
+/* Stats Grid Override */
+.explorer-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .explorer-stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+  }
+}
+
+.explorer-stat {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 1.5rem 1rem;
+  text-align: center;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.explorer-stat::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--border-color), transparent);
+  opacity: 0.5;
+}
+
+.explorer-stat:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.explorer-stat-value {
+  font-size: 1.75rem;
+  font-weight: 800;
+  margin-bottom: 0.25rem;
+  line-height: 1.2;
+}
+
+.explorer-stat-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+/* Table overrides */
+.explorer-table th {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.explorer-table td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.explorer-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* Custom scrollbar for table */
+.explorer-details::-webkit-scrollbar {
+  height: 8px;
+}
+
+.explorer-details::-webkit-scrollbar-track {
+  background: var(--bg-panel);
+}
+
+.explorer-details::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+.explorer-details::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+</style>

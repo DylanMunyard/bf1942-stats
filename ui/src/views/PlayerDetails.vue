@@ -509,6 +509,14 @@ const showAllServerMaps = () => {
 const isMapStatsPanelOpen = computed(() => selectedServerGuid.value !== null);
 const effectiveServerGuid = computed(() => selectedServerGuid.value === '__all__' ? undefined : selectedServerGuid.value);
 
+// Lock body scroll when any modal is open
+const updateBodyScroll = () => {
+  document.body.style.overflow = (isMapStatsPanelOpen.value || selectedMapDetailName.value || selectedServerMapDetail.value) ? 'hidden' : '';
+};
+watch(isMapStatsPanelOpen, updateBodyScroll);
+watch(selectedMapDetailName, updateBodyScroll);
+watch(selectedServerMapDetail, updateBodyScroll);
+
 // Numeric rank for ServerRanking (API may send rankDisplay instead of rank)
 const rankNum = (ranking: { rank?: number; rankDisplay?: string }): number => {
   if (typeof ranking.rank === 'number' && !Number.isNaN(ranking.rank)) return ranking.rank;
@@ -842,7 +850,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Map Stats Panel (Overlay) -->
-    <div v-if="isMapStatsPanelOpen && playerStats?.servers" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4" @click="closeServerMapStats">
+    <div v-if="isMapStatsPanelOpen && playerStats?.servers" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4" @click="closeServerMapStats" @keydown.esc="closeServerMapStats" tabindex="-1">
       <div class="w-full max-w-5xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border-x-0 sm:border border-[var(--border-color)] rounded-none sm:rounded-lg shadow-2xl" @click.stop>
         <!-- Header -->
         <div class="p-3 sm:p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">
@@ -885,7 +893,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Map Detail Panel (Overlay from Data Explorer Breakdown) -->
-    <div v-if="selectedMapDetailName" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4" @click="closeMapDetail">
+    <div v-if="selectedMapDetailName" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4" @click="closeMapDetail" @keydown.esc="closeMapDetail" tabindex="-1">
       <div class="w-full max-w-5xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border-x-0 sm:border border-[var(--border-color)] rounded-none sm:rounded-lg shadow-2xl" @click.stop>
         <!-- Header -->
         <div class="p-3 sm:p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">
@@ -911,7 +919,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Server Map Detail Panel (Overlay from Map Detail Panel) -->
-    <div v-if="selectedServerMapDetail" class="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4" @click="closeServerMapDetail">
+    <div v-if="selectedServerMapDetail" class="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4" @click="closeServerMapDetail" @keydown.esc="closeServerMapDetail" tabindex="-1">
       <div class="w-full max-w-5xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border-x-0 sm:border border-[var(--border-color)] rounded-none sm:rounded-lg shadow-2xl" @click.stop>
         <!-- Header -->
         <div class="p-3 sm:p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">

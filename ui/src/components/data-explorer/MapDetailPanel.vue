@@ -1,5 +1,5 @@
 <template>
-  <div class="detail-content">
+  <div class="detail-content p-3 sm:p-6">
     <!-- Loading State -->
     <div v-if="isLoading" class="detail-loading">
       <div class="detail-skeleton detail-skeleton--title"></div>
@@ -140,7 +140,7 @@ watch(() => props.mapName, loadData);
 
 <style scoped>
 .detail-content {
-  padding: 1.5rem;
+  /* Padding handled by utility classes */
 }
 
 .detail-loading {
@@ -235,7 +235,13 @@ watch(() => props.mapName, loadData);
 .detail-body {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .detail-body {
+    gap: 1.5rem;
+  }
 }
 
 .detail-header {
@@ -287,7 +293,13 @@ watch(() => props.mapName, loadData);
   background: var(--portal-surface-elevated);
   border: 1px solid var(--portal-border);
   border-radius: 2px;
-  padding: 1rem;
+  padding: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .detail-card {
+    padding: 1rem;
+  }
 }
 
 .detail-hint {

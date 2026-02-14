@@ -277,6 +277,13 @@ watch(
   { immediate: true }
 );
 
+// Lock body scroll when any modal is open
+const updateBodyScroll = () => {
+  document.body.style.overflow = (showPlayersModal.value || showMapDetailPanel.value) ? 'hidden' : '';
+};
+watch(showPlayersModal, updateBodyScroll);
+watch(showMapDetailPanel, updateBodyScroll);
+
 onMounted(() => {
   fetchData();
   updateWideScreen();
@@ -285,6 +292,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', updateWideScreen);
+  document.body.style.overflow = '';
   clearContext();
 });
 
@@ -897,23 +905,25 @@ const closeForecastOverlay = () => {
     </div>
 
     <!-- Players Modal (Overlay) -->
-    <div v-if="showPlayersModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" @click="closePlayersModal">
-      <div class="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-[var(--bg-panel)] border border-[var(--border-color)] rounded-lg shadow-2xl" @click.stop>
-        <div class="p-4 border-b border-[var(--border-color)] flex justify-between items-center sticky top-0 bg-[var(--bg-panel)] z-10">
+    <div v-if="showPlayersModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4" @click="closePlayersModal" @keydown.esc="closePlayersModal" tabindex="-1">
+      <div class="w-full max-w-4xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border-x-0 sm:border border-[var(--border-color)] rounded-none sm:rounded-lg shadow-2xl" @click.stop>
+        <div class="p-3 sm:p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">
           <h3 class="explorer-card-title text-lg">ONLINE PLAYERS</h3>
           <button class="explorer-btn explorer-btn--ghost explorer-btn--sm" @click="closePlayersModal">CLOSE</button>
         </div>
-        <PlayersPanel
-          :show="true"
-          :server="liveServerInfo"
-          :inline="true"
-          @close="closePlayersModal"
-        />
+        <div class="flex-1 overflow-y-auto">
+          <PlayersPanel
+            :show="true"
+            :server="liveServerInfo"
+            :inline="true"
+            @close="closePlayersModal"
+          />
+        </div>
       </div>
     </div>
 
     <!-- Map Detail Panel (Overlay) -->
-    <div v-if="showMapDetailPanel && selectedMapName && serverDetails?.serverGuid" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4" @click="handleCloseMapDetailPanel">
+    <div v-if="showMapDetailPanel && selectedMapName && serverDetails?.serverGuid" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4" @click="handleCloseMapDetailPanel" @keydown.esc="handleCloseMapDetailPanel" tabindex="-1">
       <div class="w-full max-w-5xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border-x-0 sm:border border-[var(--border-color)] rounded-none sm:rounded-lg shadow-2xl" @click.stop>
         <!-- Header -->
         <div class="p-3 sm:p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">

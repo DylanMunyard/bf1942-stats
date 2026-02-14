@@ -1,5 +1,5 @@
 <template>
-  <div class="p-6">
+  <div class="p-3 sm:p-6">
     <!-- Initial Loading State (skeleton) - only when no data yet -->
     <div v-if="isLoading && !detail" class="space-y-4">
       <div class="animate-pulse">
@@ -25,7 +25,7 @@
     </div>
 
     <!-- Content (shown even during refresh) -->
-    <div v-else-if="detail" class="space-y-6">
+    <div v-else-if="detail" class="space-y-3 sm:space-y-6">
       <!-- Header -->
       <div>
         <div class="flex items-center gap-3 mb-2">
@@ -86,7 +86,7 @@
       </div>
 
       <!-- Map Activity Stats Grid -->
-      <div class="bg-slate-800/30 rounded-lg p-4">
+      <div class="bg-slate-800/30 rounded-lg p-3 sm:p-4">
         <h3 class="text-sm font-medium text-slate-300 mb-3">Map Activity</h3>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div class="text-center">
@@ -117,20 +117,20 @@
       </div>
 
       <!-- Activity Heatmap -->
-      <div v-if="detail.activityPatterns?.length > 0" class="bg-slate-800/30 rounded-lg p-4">
+      <div v-if="detail.activityPatterns?.length > 0" class="bg-slate-800/30 rounded-lg p-3 sm:p-4">
         <h3 class="text-sm font-medium text-slate-300 mb-3">When is this map played?</h3>
         <p class="text-xs text-slate-500 mb-3">Times shown in your local timezone</p>
         <ActivityHeatmap :patterns="activityPatternsForHeatmap" />
       </div>
 
       <!-- Team Win % -->
-      <div class="bg-slate-800/30 rounded-lg p-4">
+      <div class="bg-slate-800/30 rounded-lg p-3 sm:p-4">
         <h3 class="text-sm font-medium text-slate-300 mb-3">Team Win %</h3>
         <WinStatsBar :win-stats="detail.winStats" />
       </div>
 
       <!-- Leaderboards Section (Replaced with MapRankingsPanel) -->
-      <div class="bg-slate-800/30 rounded-lg p-4">
+      <div class="bg-slate-800/30 rounded-lg p-3 sm:p-4">
         <MapRankingsPanel
           :map-name="mapName"
           :server-guid="serverGuid"

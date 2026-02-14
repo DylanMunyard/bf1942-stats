@@ -247,12 +247,11 @@
   <!-- Overlay: fixed full-screen with backdrop (mobile / when not side-by-side) -->
   <div
     v-else-if="show"
-    class="modal-mobile-safe fixed inset-0 bg-black/20 backdrop-blur-sm z-[100] flex items-center"
+    class="modal-mobile-safe fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-0 sm:p-4"
     @click="$emit('close')"
   >
-    <div 
-      class="bg-neutral-950 w-full max-w-6xl shadow-2xl animate-slide-in-left overflow-hidden flex flex-col border-r border-neutral-700/50 ml-0 mr-0 md:mr-20" 
-      :class="{ 'h-[calc(100vh-4rem)]': true, 'md:h-full': true, 'mt-16': true, 'md:mt-0': true }"
+    <div
+      class="bg-neutral-950 w-full max-w-4xl h-full sm:h-auto sm:max-h-[90vh] shadow-2xl overflow-hidden flex flex-col border-x-0 sm:border border-neutral-700/50 rounded-none sm:rounded-lg"
       @click.stop
     >
       <!-- Header -->
@@ -300,10 +299,10 @@
       </div>
 
       <!-- Content -->
-      <div class="flex-1 overflow-y-auto">
+      <div class="flex-1 min-h-0 overflow-y-auto">
         <div
           v-if="server?.teams"
-          class="p-4 space-y-6"
+          class="p-3 sm:p-4 space-y-4 sm:space-y-6"
         >
           <div
             v-for="team in server.teams"
@@ -311,19 +310,19 @@
             class="bg-gradient-to-r from-neutral-800/60 to-neutral-900/60 backdrop-blur-lg rounded-xl border border-neutral-700/50 overflow-hidden"
           >
             <!-- Team Header -->
-            <div class="bg-gradient-to-r from-neutral-800/95 to-neutral-900/95 backdrop-blur-sm p-4 border-b border-neutral-700/50">
+            <div class="bg-gradient-to-r from-neutral-800/95 to-neutral-900/95 backdrop-blur-sm p-3 sm:p-4 border-b border-neutral-700/50">
               <div class="flex justify-between items-center">
-                <h3 class="text-lg font-bold text-neutral-200">
+                <h3 class="text-base sm:text-lg font-bold text-neutral-200">
                   {{ team.label }}
                 </h3>
-                <div class="px-3 py-1 bg-neutral-700/50 backdrop-blur-sm rounded-full text-sm text-neutral-300 border border-neutral-600/50 font-mono">
+                <div class="px-2 sm:px-3 py-1 bg-neutral-700/50 backdrop-blur-sm rounded-full text-xs sm:text-sm text-neutral-300 border border-neutral-600/50 font-mono">
                   {{ team.tickets }} tickets
                 </div>
               </div>
             </div>
 
             <!-- Team Table -->
-            <div class="overflow-hidden">
+            <div class="overflow-x-auto">
               <table class="w-full border-collapse">
                 <!-- Table Header -->
                 <thead class="sticky top-0 z-10">
@@ -392,7 +391,7 @@
                     @click="navigateToPlayerProfile(player.name)"
                   >
                     <td class="p-1.5">
-                      <div class="font-mono font-bold text-neutral-200 group-hover:text-cyan-400 transition-colors truncate">
+                      <div class="font-mono font-bold text-neutral-200 group-hover:text-cyan-400 transition-colors truncate max-w-[10rem] sm:max-w-xs">
                         {{ player.name }}
                       </div>
                     </td>
@@ -533,16 +532,4 @@ const getSortedTeamPlayers = (teamIndex: number) => {
 </script>
 
 <style scoped>
-@keyframes slideInLeft {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
-.animate-slide-in-left {
-  animation: slideInLeft 0.3s ease-out;
-}
 </style>
