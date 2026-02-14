@@ -33,21 +33,24 @@ tbody tr.selected {
 /* Responsive table */
 @media (max-width: 1024px) {
   table {
-    min-width: 800px;
+    min-width: 600px;
   }
 }
 
 @media (max-width: 768px) {
   table {
-    min-width: 700px;
+    min-width: 0;
   }
 
   th, td {
     padding: 0.5rem 0.25rem;
   }
 
+  /* Hide MAP (inline in name cell), TIME, MODE, and IP on mobile */
   th:nth-child(4), td:nth-child(4),
-  th:nth-child(6), td:nth-child(6) {
+  th:nth-child(5), td:nth-child(5),
+  th:nth-child(6), td:nth-child(6),
+  th:nth-child(7), td:nth-child(7) {
     display: none;
   }
 }

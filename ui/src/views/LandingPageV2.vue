@@ -504,9 +504,13 @@
                           {{ server.name }}
                         </div>
                       </div>
-                      
-                      <!-- Mobile: Server time and timeline on second line -->
+
+                      <!-- Mobile: Map name, server time, and timeline on second line -->
                       <div class="flex items-center gap-2">
+                        <div class="text-orange-400 text-xs font-mono font-bold uppercase truncate max-w-[120px]">
+                          {{ server.mapName }}
+                        </div>
+                        <span class="text-neutral-600">·</span>
                         <div
                           v-if="getTimezoneDisplay(server.timezone)"
                           class="text-xs text-neutral-400 font-mono"

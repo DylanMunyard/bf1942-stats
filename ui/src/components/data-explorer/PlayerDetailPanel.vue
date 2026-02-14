@@ -1,42 +1,44 @@
 <template>
   <div class="player-detail-panel">
     <!-- Loading State -->
-    <div v-if="isLoading" class="detail-loading p-6">
-      <div class="detail-skeleton detail-skeleton--title"></div>
-      <div class="detail-skeleton detail-skeleton--subtitle"></div>
-      <div class="detail-skeleton detail-skeleton--block"></div>
+    <div v-if="isLoading" class="flex flex-col gap-4 p-6">
+      <div class="explorer-skeleton" style="height: 2rem; width: 33%"></div>
+      <div class="explorer-skeleton" style="height: 1rem; width: 25%"></div>
+      <div class="explorer-skeleton" style="height: 12rem"></div>
     </div>
 
     <!-- Error State -->
-    <div v-else-if="error" class="detail-empty">
-      <div class="detail-empty-icon text-neon-red">!</div>
-      <p class="detail-empty-title text-neon-red">{{ error }}</p>
-      <p class="detail-empty-desc">Try selecting a different time period or slice dimension.</p>
+    <div v-else-if="error" class="explorer-empty">
+      <div class="explorer-empty-icon text-neon-red">!</div>
+      <p class="explorer-empty-title text-neon-red">{{ error }}</p>
+      <p class="explorer-empty-desc">Try selecting a different time period or slice dimension.</p>
       <div class="flex gap-2 justify-center mt-4">
-        <button @click="loadData()" class="detail-retry text-neon-cyan hover:text-white">
+        <button @click="loadData()" class="explorer-btn explorer-btn--ghost explorer-btn--sm">
           Try again
         </button>
       </div>
     </div>
 
     <!-- Content -->
-    <div v-else-if="slicedData" class="detail-content">
-      
+    <div v-else-if="slicedData" class="p-4">
+
       <!-- Header / Controls -->
-      <div class="detail-header mb-6">
+      <div class="mb-6">
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <h2 class="detail-title text-neon-cyan">{{ getCurrentSliceName() }}</h2>
-            <p class="detail-meta">{{ getCurrentSliceDescription() }}</p>
+            <h2 class="explorer-section-title" style="font-size: 1.25rem; margin: 0">{{ getCurrentSliceName() }}</h2>
+            <p class="text-xs mt-1" style="color: var(--text-secondary)">{{ getCurrentSliceDescription() }}</p>
           </div>
-          
+
           <div class="flex flex-col sm:flex-row gap-4 items-end sm:items-center">
-             <!-- Slice Dimension Selector -->
-            <div class="relative min-w-[200px]">
+            <!-- Slice Dimension Selector -->
+            <div class="slice-select-wrap relative min-w-[240px]">
+              <label class="slice-select-label">SLICE BY</label>
               <select
                 v-model="selectedSliceType"
                 @change="changeSliceType"
-                class="search-input appearance-none cursor-pointer focus:border-neon-cyan"
+                class="explorer-select appearance-none cursor-pointer w-full"
+                style="padding: 0.6rem 2.5rem 0.6rem 1rem"
               >
                 <option
                   v-for="dimension in availableDimensions"
@@ -46,18 +48,18 @@
                   {{ dimension.name }}
                 </option>
               </select>
-              <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-neon-cyan opacity-70">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+              <div class="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-neon-cyan">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
               </div>
             </div>
 
-            <!-- Time Range Tabs -->
-            <div class="rankings-tabs">
+            <!-- Time Range Pills -->
+            <div class="explorer-time-pills">
               <button
                 v-for="option in timeRangeOptions"
                 :key="option.value"
-                class="rankings-tab"
-                :class="{ 'rankings-tab--active': selectedTimeRange === option.value }"
+                class="explorer-time-pill"
+                :class="{ 'explorer-time-pill--active': selectedTimeRange === option.value }"
                 @click="changeTimeRange(option.value)"
                 :disabled="isLoading"
               >
@@ -69,48 +71,48 @@
       </div>
 
       <!-- Summary Stats -->
-      <div v-if="slicedData.results.length > 0" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div v-if="slicedData.results.length > 0" class="explorer-stats-grid mb-8">
         <!-- Card 1: Count -->
-        <div class="detail-card text-center py-4 border-t-2 border-t-transparent hover:border-t-neon-cyan transition-colors">
-          <div class="stat-value text-white">{{ slicedData.results.length }}</div>
-          <div class="stat-label">{{ getResultTypeLabel() }}</div>
+        <div class="explorer-stat">
+          <div class="explorer-stat-value">{{ slicedData.results.length }}</div>
+          <div class="explorer-stat-label">{{ getResultTypeLabel() }}</div>
         </div>
 
         <!-- Card 2: Primary Metric -->
-        <div class="detail-card text-center py-4 border-t-2 border-t-transparent hover:border-t-current transition-colors" :class="themeColorClass">
-          <div class="stat-value" :class="themeColorClass">{{ getTotalPrimaryValue() }}</div>
-          <div class="stat-label">{{ getPrimaryMetricLabel() }}</div>
+        <div class="explorer-stat">
+          <div class="explorer-stat-value" :class="themeStatClass">{{ getTotalPrimaryValue() }}</div>
+          <div class="explorer-stat-label">{{ getPrimaryMetricLabel() }}</div>
         </div>
 
         <!-- Card 3: Secondary Metric -->
-        <div class="detail-card text-center py-4 border-t-2 border-t-transparent hover:border-t-neutral-400 transition-colors">
-          <div class="stat-value text-neutral-300">{{ getTotalSecondaryValue() }}</div>
-          <div class="stat-label">{{ getSecondaryMetricLabel() }}</div>
+        <div class="explorer-stat">
+          <div class="explorer-stat-value">{{ getTotalSecondaryValue() }}</div>
+          <div class="explorer-stat-label">{{ getSecondaryMetricLabel() }}</div>
         </div>
 
         <!-- Card 4: Percentage -->
-        <div class="detail-card text-center py-4 border-t-2 border-t-transparent hover:border-t-current transition-colors" :class="percentageColorClass">
-          <div class="stat-value" :class="percentageColorClass">{{ getAveragePercentage() }}<span class="text-sm ml-1 opacity-50">{{ getPercentageUnit() || '' }}</span></div>
-          <div class="stat-label">{{ getPercentageLabel() }}</div>
+        <div class="explorer-stat">
+          <div class="explorer-stat-value" :class="percentageStatClass">{{ getAveragePercentage() }}<span class="text-sm ml-1 opacity-50">{{ getPercentageUnit() || '' }}</span></div>
+          <div class="explorer-stat-label">{{ getPercentageLabel() }}</div>
         </div>
       </div>
 
       <!-- Results Table -->
-      <div v-if="slicedData.results.length > 0" class="detail-section">
-        <h3 class="detail-section-title mb-2 text-neon-cyan">DETAILED RESULTS</h3>
-        
-        <div class="detail-card p-0 overflow-hidden">
+      <div v-if="slicedData.results.length > 0">
+        <h3 class="explorer-section-title mb-2">DETAILED RESULTS</h3>
+
+        <div class="explorer-card" style="padding: 0">
           <div class="overflow-x-auto">
-            <table class="server-table w-full">
+            <table class="explorer-table">
               <!-- Table Header -->
               <thead>
                 <tr>
-                  <th class="w-12 text-center text-neon-cyan">#</th>
-                  <th class="text-left pl-4 text-neon-cyan">{{ getTableHeaderLabel() }}</th>
-                  <th class="text-right text-neutral-400">{{ getSecondaryMetricLabel() }}</th>
+                  <th class="w-12 text-center">#</th>
+                  <th class="text-left pl-4">{{ getTableHeaderLabel() }}</th>
+                  <th class="text-right">{{ getSecondaryMetricLabel() }}</th>
                   <th class="text-right" :class="themeColorClass">{{ getPrimaryMetricLabel() }}</th>
                   <th class="text-right pr-6" :class="percentageColorClass">{{ getPercentageLabel() }}</th>
-                  <th v-if="hasAdditionalData()" class="text-left pl-4 text-neutral-400">Additional Stats</th>
+                  <th v-if="hasAdditionalData()" class="text-left pl-4">Additional Stats</th>
                 </tr>
               </thead>
 
@@ -119,38 +121,38 @@
                 <tr
                   v-for="(result, index) in slicedData.results"
                   :key="`${result.sliceKey}-${result.subKey || 'global'}`"
-                  class="cursor-pointer transition-colors hover:bg-white/5"
+                  class="cursor-pointer"
                   @click="handleSliceClick(result)"
                 >
                   <!-- Rank -->
-                  <td class="text-center font-mono">
+                  <td class="text-center explorer-mono">
                     <span :class="getRankClass(result.rank)">{{ result.rank }}</span>
                   </td>
 
                   <!-- Main Label -->
                   <td class="pl-4">
-                    <div class="server-name">
-                      <span class="font-bold text-neutral-200 group-hover:text-white transition-colors" :class="{ 'text-neon-cyan': isMapSlice() }">
+                    <div>
+                      <span class="font-bold" :class="{ 'text-neon-cyan': isMapSlice() }" style="color: var(--text-primary)">
                         {{ result.sliceLabel }}
                       </span>
-                      <span v-if="result.subKey" class="game-tag ml-2 text-neutral-400 border-neutral-700">
+                      <span v-if="result.subKey" class="explorer-tag ml-2">
                         {{ result.subKeyLabel || getServerName(result.subKey) }}
                       </span>
                     </div>
                   </td>
 
                   <!-- Secondary Value -->
-                  <td class="text-right font-mono text-neutral-400">
+                  <td class="text-right explorer-mono explorer-table-muted">
                     {{ result.secondaryValue.toLocaleString() }}
                   </td>
 
                   <!-- Primary Value -->
-                  <td class="text-right font-mono font-bold" :class="themeColorClass">
+                  <td class="text-right explorer-mono font-bold" :class="themeColorClass">
                     {{ result.primaryValue.toLocaleString() }}
                   </td>
 
                   <!-- Percentage -->
-                  <td class="text-right pr-6 font-mono" :class="percentageColorClass">
+                  <td class="text-right pr-6 explorer-mono" :class="percentageColorClass">
                     {{ result.percentage.toFixed(1) }}<span class="text-xs ml-0.5 opacity-70">{{ getPercentageUnit() }}</span>
                   </td>
 
@@ -162,10 +164,10 @@
                         <WinStatsBar :winStats="getTeamWinStats(result)" />
                       </div>
                     </div>
-                    <div v-else class="text-xs space-y-1 text-neutral-400">
+                    <div v-else class="text-xs space-y-1" style="color: var(--text-secondary)">
                       <div v-for="(value, key) in result.additionalData" :key="key" class="flex gap-2">
                         <span class="opacity-70">{{ formatAdditionalKey(key) }}:</span>
-                        <span class="font-mono text-neutral-300">{{ formatAdditionalValue(value) }}</span>
+                        <span class="explorer-mono" style="color: var(--text-primary)">{{ formatAdditionalValue(value) }}</span>
                       </div>
                     </div>
                   </td>
@@ -173,37 +175,39 @@
               </tbody>
             </table>
           </div>
-        </div>
 
-        <!-- Pagination Controls -->
-        <div v-if="slicedData.pagination.totalPages > 1" class="flex justify-center items-center gap-2 mt-4">
-          <button
-            @click="changePage(slicedData.pagination.page - 1)"
-            :disabled="!slicedData.pagination.hasPrevious || isLoading"
-            class="pagination-btn hover:border-neon-cyan hover:text-neon-cyan"
-          >
-            &larr;
-          </button>
+          <!-- Pagination Controls -->
+          <div v-if="slicedData.pagination.totalPages > 1" class="explorer-pagination">
+            <span class="text-xs explorer-mono" style="color: var(--text-secondary)">
+              PAGE <span style="color: var(--text-primary)">{{ slicedData.pagination.page }}</span> OF <span style="color: var(--text-primary)">{{ slicedData.pagination.totalPages }}</span>
+            </span>
 
-          <span class="text-xs font-mono text-neutral-400">
-            PAGE <span class="text-white">{{ slicedData.pagination.page }}</span> OF <span class="text-white">{{ slicedData.pagination.totalPages }}</span>
-          </span>
+            <div class="explorer-pagination-controls">
+              <button
+                @click="changePage(slicedData.pagination.page - 1)"
+                :disabled="!slicedData.pagination.hasPrevious || isLoading"
+                class="explorer-pagination-btn"
+              >
+                &larr;
+              </button>
 
-          <button
-            @click="changePage(slicedData.pagination.page + 1)"
-            :disabled="!slicedData.pagination.hasNext || isLoading"
-            class="pagination-btn hover:border-neon-cyan hover:text-neon-cyan"
-          >
-            &rarr;
-          </button>
+              <button
+                @click="changePage(slicedData.pagination.page + 1)"
+                :disabled="!slicedData.pagination.hasNext || isLoading"
+                class="explorer-pagination-btn"
+              >
+                &rarr;
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- Empty State -->
-      <div v-else class="detail-empty">
-        <div class="detail-empty-icon text-neutral-600">{ }</div>
-        <p class="detail-empty-title text-neutral-300">NO DATA AVAILABLE</p>
-        <p class="detail-empty-desc text-neutral-500">No statistics found for this player with the current filters.</p>
+      <div v-else class="explorer-empty">
+        <div class="explorer-empty-icon">{ }</div>
+        <p class="explorer-empty-title">NO DATA AVAILABLE</p>
+        <p class="explorer-empty-desc">No statistics found for this player with the current filters.</p>
       </div>
     </div>
   </div>
@@ -296,7 +300,7 @@ const gameLabel = computed(() => {
   }
 });
 
-// Theme Logic
+// Theme Logic - classes for neon text utilities (defined in DataExplorer.vue.css)
 const themeColorClass = computed(() => {
   const type = selectedSliceType.value;
   if (type.includes('Kills')) return 'text-neon-red';
@@ -306,16 +310,31 @@ const themeColorClass = computed(() => {
 
 const percentageColorClass = computed(() => {
   const type = selectedSliceType.value;
-  if (type.includes('Kills')) return 'text-neon-pink'; // K/D
-  if (type.includes('Wins')) return 'text-neon-green'; // Win Rate
-  return 'text-neon-gold'; // Score/min or similar
+  if (type.includes('Kills')) return 'text-neon-pink';
+  if (type.includes('Wins')) return 'text-neon-green';
+  return 'text-neon-gold';
+});
+
+// Stat value classes with text-shadow glow effects
+const themeStatClass = computed(() => {
+  const type = selectedSliceType.value;
+  if (type.includes('Kills')) return 'explorer-stat-value--pink';
+  if (type.includes('Wins')) return 'explorer-stat-value--green';
+  return 'explorer-stat-value--accent';
+});
+
+const percentageStatClass = computed(() => {
+  const type = selectedSliceType.value;
+  if (type.includes('Kills')) return 'explorer-stat-value--pink';
+  if (type.includes('Wins')) return 'explorer-stat-value--green';
+  return 'explorer-stat-value--gold';
 });
 
 const getRankClass = (rank: number) => {
-  if (rank === 1) return 'text-neon-gold font-bold scale-110 inline-block';
-  if (rank === 2) return 'text-neutral-300 font-bold';
-  if (rank === 3) return 'text-orange-400 font-bold';
-  return 'text-neutral-500';
+  if (rank === 1) return 'explorer-rank-1';
+  if (rank === 2) return 'explorer-rank-2';
+  if (rank === 3) return 'explorer-rank-3';
+  return '';
 };
 
 // Load available slice dimensions
@@ -549,243 +568,387 @@ watch(() => props.serverGuid, () => {
 </script>
 
 <style scoped>
-.player-detail-panel {
-  /* Inherit fonts from parent */
-}
+/* ===== Styles mirroring DataExplorer.vue.css explorer-* patterns =====
+   The parent CSS is <style scoped>, so child components don't inherit it.
+   These replicate the explorer theme using the same variables & effects. */
 
-/* Header Styles */
-.detail-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--portal-text-bright);
-  margin: 0;
-}
-
-.detail-meta {
-  font-size: 0.8rem;
-  color: var(--portal-text);
-  margin-top: 0.25rem;
-}
-
-/* Card Styles */
-.detail-card {
-  background: var(--portal-surface-elevated);
-  border: 1px solid var(--portal-border);
-  border-radius: 2px;
-  padding: 1rem;
-}
-
-/* Section Title */
-.detail-section-title {
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  color: var(--portal-accent);
-  margin: 0;
-  font-family: ui-monospace, monospace;
-}
-
-/* Stats */
-.stat-value {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: var(--portal-text-bright);
-  line-height: 1.2;
-  font-family: ui-monospace, monospace;
-}
-
-.stat-label {
+/* --- Section Title --- */
+.explorer-section-title {
   font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--portal-text);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--neon-cyan);
+  margin: 0 0 0.75rem;
+  font-family: 'JetBrains Mono', monospace;
   text-transform: uppercase;
-  margin-top: 0.25rem;
+  text-shadow: 0 0 10px rgba(0, 255, 242, 0.3);
 }
 
-/* Table Styles (Matching ServerRotationTable) */
-.server-table {
-  width: 100%;
-  font-size: 0.8rem;
-  border-collapse: collapse;
-  table-layout: auto;
-}
-
-.server-table th {
-  text-align: left;
-  padding: 0.5rem 0.5rem;
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--portal-accent);
-  font-family: ui-monospace, monospace;
-  border-bottom: 1px solid var(--portal-border);
-  white-space: nowrap;
-}
-
-.server-table td {
-  padding: 0.5rem;
-  border-bottom: 1px solid var(--portal-border);
-  color: var(--portal-text-bright);
-}
-
-.server-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.game-tag {
-  display: inline-block;
-  padding: 0.125rem 0.375rem;
-  font-size: 0.55rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  font-family: ui-monospace, monospace;
-  background: var(--portal-surface);
-  border: 1px solid var(--portal-border);
-  border-radius: 2px;
-  color: var(--portal-text);
-}
-
-/* Search Input Style for Select */
-.search-input {
-  width: 100%;
-  padding: 0.35rem 0.5rem 0.35rem 0.75rem;
-  font-size: 0.8rem;
-  background: var(--portal-surface);
-  border: 1px solid var(--portal-border);
-  border-radius: 2px;
-  color: var(--portal-text-bright);
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.search-input:focus {
-  outline: none;
-  border-color: var(--portal-accent);
-  box-shadow: 0 0 0 3px var(--portal-accent-dim);
-}
-
-/* Tabs */
-.rankings-tabs {
-  display: flex;
-  gap: 0;
-  border-bottom: 1px solid var(--portal-border);
-}
-
-.rankings-tab {
-  padding: 0.5rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  color: var(--portal-text);
-  cursor: pointer;
-  transition: color 0.2s, border-color 0.2s;
-}
-
-.rankings-tab:hover:not(:disabled) {
-  color: var(--portal-text-bright);
-}
-
-.rankings-tab--active {
-  color: var(--portal-accent);
-  border-bottom-color: var(--portal-accent);
-}
-
-.rankings-tab:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Pagination */
-.pagination-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 2px;
-  background: var(--portal-surface);
-  border: 1px solid var(--portal-border);
-  color: var(--portal-text);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.pagination-btn:hover:not(:disabled) {
-  border-color: var(--portal-accent);
-  color: var(--portal-accent);
-}
-
-.pagination-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Empty State */
-.detail-empty {
-  text-align: center;
-  padding: 2rem;
-}
-
-.detail-empty-icon {
-  font-size: 1.5rem;
-  color: var(--portal-accent);
-  opacity: 0.5;
-  margin-bottom: 0.5rem;
-  font-family: ui-monospace, monospace;
-}
-
-.detail-empty-title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--portal-text-bright);
-  margin: 0;
-}
-
-.detail-empty-desc {
-  font-size: 0.8rem;
-  color: var(--portal-text);
-  margin-top: 0.35rem;
-}
-
-.detail-retry {
-  font-size: 0.8rem;
-  color: var(--portal-accent);
-  background: none;
-  border: none;
-  cursor: pointer;
-  text-decoration: underline;
-}
-
-/* Loading Skeleton */
-.detail-loading {
-  display: flex;
-  flex-direction: column;
+/* --- Stats Grid --- */
+.explorer-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 1rem;
 }
 
-.detail-skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--portal-surface-elevated) 0%,
-    var(--portal-border) 50%,
-    var(--portal-surface-elevated) 100%
-  );
-  background-size: 200% 100%;
-  animation: skeleton-pulse 1.5s ease-in-out infinite;
-  border-radius: 2px;
+@media (min-width: 640px) {
+  .explorer-stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
-.detail-skeleton--title { height: 2rem; width: 33%; }
-.detail-skeleton--subtitle { height: 1rem; width: 25%; }
-.detail-skeleton--block { height: 12rem; }
+.explorer-stat {
+  text-align: center;
+  padding: 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
 
-@keyframes skeleton-pulse {
+.explorer-stat:hover {
+  border-color: rgba(0, 255, 242, 0.3);
+  box-shadow: 0 0 20px rgba(0, 255, 242, 0.1);
+}
+
+.explorer-stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.explorer-stat-value--accent {
+  color: var(--neon-cyan);
+  text-shadow: 0 0 10px rgba(0, 255, 242, 0.5);
+}
+
+.explorer-stat-value--green {
+  color: var(--neon-green);
+  text-shadow: 0 0 10px rgba(57, 255, 20, 0.5);
+}
+
+.explorer-stat-value--pink {
+  color: var(--neon-pink);
+  text-shadow: 0 0 10px rgba(255, 0, 255, 0.5);
+}
+
+.explorer-stat-value--gold {
+  color: var(--neon-gold);
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+.explorer-stat-label {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* --- Card --- */
+.explorer-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.explorer-card:hover {
+  border-color: rgba(0, 255, 242, 0.3);
+  box-shadow: 0 0 30px rgba(0, 255, 242, 0.1);
+}
+
+/* --- Table --- */
+.explorer-table {
+  width: 100%;
+  font-size: 0.8rem;
+  border-collapse: collapse;
+}
+
+.explorer-table th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-card);
+  color: var(--neon-cyan);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  font-family: 'JetBrains Mono', monospace;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.explorer-table th.text-right {
+  text-align: right;
+}
+
+.explorer-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.explorer-table td.text-right {
+  text-align: right;
+}
+
+.explorer-table tbody tr {
+  transition: all 0.2s ease;
+}
+
+.explorer-table tbody tr:hover td {
+  background: rgba(0, 255, 242, 0.08);
+}
+
+.explorer-table-muted {
+  color: var(--text-secondary);
+}
+
+/* --- Tag --- */
+.explorer-tag {
+  display: inline-block;
+  padding: 0.125rem 0.375rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+
+/* --- Select --- */
+.explorer-select {
+  padding: 0.35rem 0.5rem;
+  font-size: 0.8rem;
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.explorer-select:focus {
+  outline: none;
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 15px rgba(0, 255, 242, 0.2);
+}
+
+/* --- Time Pills --- */
+.explorer-time-pills {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.explorer-time-pill {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+}
+
+.explorer-time-pill:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: rgba(0, 255, 242, 0.3);
+}
+
+.explorer-time-pill--active {
+  background: var(--neon-cyan);
+  color: var(--bg-dark);
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 10px rgba(0, 255, 242, 0.4);
+}
+
+.explorer-time-pill:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- Pagination --- */
+.explorer-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-card);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.explorer-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.explorer-pagination-btn {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 1.5rem;
+  text-align: center;
+}
+
+.explorer-pagination-btn:hover:not(:disabled) {
+  background: rgba(0, 255, 242, 0.1);
+  color: var(--neon-cyan);
+  border-color: rgba(0, 255, 242, 0.3);
+}
+
+.explorer-pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- Buttons --- */
+.explorer-btn {
+  padding: 0.5rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-family: 'JetBrains Mono', monospace;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  text-transform: uppercase;
+}
+
+.explorer-btn--ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border-color);
+}
+
+.explorer-btn--ghost:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--neon-cyan);
+  background: rgba(0, 255, 242, 0.1);
+  box-shadow: 0 0 15px rgba(0, 255, 242, 0.2);
+}
+
+.explorer-btn--sm {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.75rem;
+}
+
+/* --- Empty State --- */
+.explorer-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem;
+  text-align: center;
+}
+
+.explorer-empty-icon {
+  font-size: 2.5rem;
+  color: var(--neon-cyan);
+  opacity: 0.5;
+  margin-bottom: 0.75rem;
+  font-family: 'JetBrains Mono', monospace;
+  text-shadow: 0 0 20px rgba(0, 255, 242, 0.3);
+}
+
+.explorer-empty-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+}
+
+.explorer-empty-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-top: 0.35rem;
+  max-width: 20rem;
+}
+
+/* --- Skeleton Loading --- */
+.explorer-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-card) 0%,
+    var(--border-color) 50%,
+    var(--bg-card) 100%
+  );
+  background-size: 200% 100%;
+  animation: explorer-skeleton 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+@keyframes explorer-skeleton {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
+}
+
+/* --- Rank Colors --- */
+.explorer-rank-1 {
+  color: var(--neon-gold);
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+.explorer-rank-2 {
+  color: #c0c0c0;
+  font-weight: 600;
+  text-shadow: 0 0 10px rgba(192, 192, 192, 0.3);
+}
+
+.explorer-rank-3 {
+  color: #cd7f32;
+  font-weight: 600;
+  text-shadow: 0 0 10px rgba(205, 127, 50, 0.3);
+}
+
+/* --- Monospace --- */
+.explorer-mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* --- Neon text utilities --- */
+.text-neon-cyan { color: var(--neon-cyan); }
+.text-neon-green { color: var(--neon-green); }
+.text-neon-pink { color: var(--neon-pink); }
+.text-neon-gold { color: var(--neon-gold); }
+.text-neon-red { color: var(--neon-red); }
+
+/* --- Floating label for slice selector --- */
+.slice-select-wrap .slice-select-label {
+  position: absolute;
+  top: -0.625rem;
+  left: 0.75rem;
+  padding: 0 0.25rem;
+  background: var(--bg-card);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--neon-cyan);
+  font-family: 'JetBrains Mono', monospace;
+  z-index: 10;
 }
 </style>
