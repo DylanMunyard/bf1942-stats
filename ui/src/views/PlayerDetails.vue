@@ -842,15 +842,15 @@ onUnmounted(() => {
     </div>
 
     <!-- Map Stats Panel (Overlay) -->
-    <div v-if="isMapStatsPanelOpen && playerStats?.servers" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" @click="closeServerMapStats">
-      <div class="w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border border-[var(--border-color)] rounded-lg shadow-2xl" @click.stop>
+    <div v-if="isMapStatsPanelOpen && playerStats?.servers" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4" @click="closeServerMapStats">
+      <div class="w-full max-w-5xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border-x-0 sm:border border-[var(--border-color)] rounded-none sm:rounded-lg shadow-2xl" @click.stop>
         <!-- Header -->
-        <div class="p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">
+        <div class="p-3 sm:p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">
           <div>
-            <h2 class="text-lg font-bold text-neon-cyan font-mono">
+            <h2 class="text-base sm:text-lg font-bold text-neon-cyan font-mono">
               {{ rankingsMapName ? `RANKINGS: ${rankingsMapName}` : 'MAP RANKINGS' }}
             </h2>
-            <p class="text-xs text-neutral-400 font-mono mt-1">
+            <p class="text-[10px] sm:text-xs text-neutral-400 font-mono mt-1">
               {{ selectedServerName || 'SELECTED SERVER' }}
             </p>
           </div>
@@ -858,7 +858,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Content -->
-        <div class="flex-1 overflow-y-auto p-4">
+        <div class="flex-1 overflow-y-auto p-2 sm:p-4">
           <div v-if="rankingsMapName">
             <button
               class="explorer-btn explorer-btn--ghost explorer-btn--sm mb-4 flex items-center gap-2"
@@ -885,15 +885,15 @@ onUnmounted(() => {
     </div>
 
     <!-- Map Detail Panel (Overlay from Data Explorer Breakdown) -->
-    <div v-if="selectedMapDetailName" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" @click="closeMapDetail">
-      <div class="w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border border-[var(--border-color)] rounded-lg shadow-2xl" @click.stop>
+    <div v-if="selectedMapDetailName" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4" @click="closeMapDetail">
+      <div class="w-full max-w-5xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border-x-0 sm:border border-[var(--border-color)] rounded-none sm:rounded-lg shadow-2xl" @click.stop>
         <!-- Header -->
-        <div class="p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">
+        <div class="p-3 sm:p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">
           <div>
-            <h2 class="text-lg font-bold text-neon-cyan font-mono">
+            <h2 class="text-base sm:text-lg font-bold text-neon-cyan font-mono">
               MAP DETAILS
             </h2>
-            <p class="text-xs text-neutral-400 font-mono mt-1">
+            <p class="text-[10px] sm:text-xs text-neutral-400 font-mono mt-1">
               {{ selectedMapDetailName }}
             </p>
           </div>
@@ -901,7 +901,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Content -->
-        <div class="flex-1 overflow-y-auto p-4 bg-[var(--bg-panel)]">
+        <div class="flex-1 overflow-y-auto p-2 sm:p-4 bg-[var(--bg-panel)]">
           <MapDetailPanel 
             :map-name="selectedMapDetailName" 
             @navigate-to-server="openServerMapDetail"
@@ -911,15 +911,15 @@ onUnmounted(() => {
     </div>
 
     <!-- Server Map Detail Panel (Overlay from Map Detail Panel) -->
-    <div v-if="selectedServerMapDetail" class="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" @click="closeServerMapDetail">
-      <div class="w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border border-[var(--border-color)] rounded-lg shadow-2xl" @click.stop>
+    <div v-if="selectedServerMapDetail" class="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4" @click="closeServerMapDetail">
+      <div class="w-full max-w-5xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border-x-0 sm:border border-[var(--border-color)] rounded-none sm:rounded-lg shadow-2xl" @click.stop>
         <!-- Header -->
-        <div class="p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">
+        <div class="p-3 sm:p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">
           <div>
-            <h2 class="text-lg font-bold text-neon-cyan font-mono">
+            <h2 class="text-base sm:text-lg font-bold text-neon-cyan font-mono">
               SERVER MAP DETAILS
             </h2>
-            <p class="text-xs text-neutral-400 font-mono mt-1">
+            <p class="text-[10px] sm:text-xs text-neutral-400 font-mono mt-1">
               {{ selectedServerMapDetail.mapName }}
             </p>
           </div>

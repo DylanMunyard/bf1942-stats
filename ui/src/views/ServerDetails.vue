@@ -913,21 +913,21 @@ const closeForecastOverlay = () => {
     </div>
 
     <!-- Map Detail Panel (Overlay) -->
-    <div v-if="showMapDetailPanel && selectedMapName && serverDetails?.serverGuid" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" @click="handleCloseMapDetailPanel">
-      <div class="w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border border-[var(--border-color)] rounded-lg shadow-2xl" @click.stop>
+    <div v-if="showMapDetailPanel && selectedMapName && serverDetails?.serverGuid" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4" @click="handleCloseMapDetailPanel">
+      <div class="w-full max-w-5xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border-x-0 sm:border border-[var(--border-color)] rounded-none sm:rounded-lg shadow-2xl" @click.stop>
         <!-- Header -->
-        <div class="p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">
+        <div class="p-3 sm:p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">
           <div>
-            <h2 class="text-lg font-bold text-neon-cyan font-mono">
+            <h2 class="text-base sm:text-lg font-bold text-neon-cyan font-mono">
               {{ showRankingsInPanel ? `RANKINGS: ${rankingsMapNameForPanel}` : selectedMapName }}
             </h2>
-            <p class="text-xs text-neutral-400 font-mono mt-1">ON {{ serverName }}</p>
+            <p class="text-[10px] sm:text-xs text-neutral-400 font-mono mt-1">ON {{ serverName }}</p>
           </div>
           <button class="explorer-btn explorer-btn--ghost explorer-btn--sm" aria-label="Close map detail panel" @click="handleCloseMapDetailPanel">CLOSE</button>
         </div>
 
         <!-- Content -->
-        <div class="flex-1 overflow-y-auto p-4">
+        <div class="flex-1 overflow-y-auto p-2 sm:p-4">
           <div v-if="showRankingsInPanel && rankingsMapNameForPanel">
             <button
               class="explorer-btn explorer-btn--ghost explorer-btn--sm mb-4 flex items-center gap-2"
