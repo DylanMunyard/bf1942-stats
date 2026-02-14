@@ -38,13 +38,24 @@
 
     <!-- Content -->
     <div v-else-if="mapStats.length > 0" class="space-y-4">
-      <!-- Time Range Selector -->
+      <!-- Header Row with Back Button -->
       <div class="flex items-center justify-between">
-        <div class="text-sm text-slate-400">
-          {{ mapStats.length }} map{{ mapStats.length !== 1 ? 's' : '' }} played
-          <span v-if="playerData" class="text-slate-500">
-            &bull; Last {{ playerData.dateRange.days }} days
-          </span>
+        <div class="flex items-center gap-3">
+          <button
+            @click="emit('close')"
+            class="flex items-center justify-center w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
+            title="Close"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <div class="text-sm text-slate-400">
+            {{ mapStats.length }} map{{ mapStats.length !== 1 ? 's' : '' }} played
+            <span v-if="playerData" class="text-slate-500">
+              &bull; Last {{ playerData.dateRange.days }} days
+            </span>
+          </div>
         </div>
         <div class="flex gap-2">
           <button
@@ -296,6 +307,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'open-rankings', mapName: string): void;
+  (e: 'close'): void;
 }>();
 
 const handleRankClick = (mapName: string, rank: number | null) => {

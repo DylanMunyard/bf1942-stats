@@ -853,16 +853,16 @@ onUnmounted(() => {
     <div v-if="isMapStatsPanelOpen && playerStats?.servers" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4" @click="closeServerMapStats" @keydown.esc="closeServerMapStats" tabindex="-1">
       <div class="w-full max-w-5xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border-x-0 sm:border border-[var(--border-color)] rounded-none sm:rounded-lg shadow-2xl" @click.stop>
         <!-- Header -->
-        <div class="p-3 sm:p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">
-          <div>
-            <h2 class="text-base sm:text-lg font-bold text-neon-cyan font-mono">
+        <div class="p-3 sm:p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)] sticky top-0 z-10">
+          <div class="flex-1 min-w-0 mr-4">
+            <h2 class="text-base sm:text-lg font-bold text-neon-cyan font-mono truncate">
               {{ rankingsMapName ? `RANKINGS: ${rankingsMapName}` : 'MAP RANKINGS' }}
             </h2>
-            <p class="text-[10px] sm:text-xs text-neutral-400 font-mono mt-1">
+            <p class="text-[10px] sm:text-xs text-neutral-400 font-mono mt-1 truncate">
               {{ selectedServerName || 'SELECTED SERVER' }}
             </p>
           </div>
-          <button class="explorer-btn explorer-btn--ghost explorer-btn--sm" aria-label="Close map rankings panel" @click="closeServerMapStats">CLOSE</button>
+          <button class="explorer-btn explorer-btn--ghost explorer-btn--sm flex-shrink-0" aria-label="Close map rankings panel" @click="closeServerMapStats">CLOSE</button>
         </div>
 
         <!-- Content -->
@@ -887,6 +887,7 @@ onUnmounted(() => {
             :server-guid="effectiveServerGuid"
             :game="(effectiveServerGuid ? playerStats?.servers?.find(s => s.serverGuid === effectiveServerGuid)?.gameId as any : undefined) || 'bf1942'"
             @open-rankings="openRankingsPanel"
+            @close="closeServerMapStats"
           />
         </div>
       </div>
@@ -896,16 +897,16 @@ onUnmounted(() => {
     <div v-if="selectedMapDetailName" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4" @click="closeMapDetail" @keydown.esc="closeMapDetail" tabindex="-1">
       <div class="w-full max-w-5xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border-x-0 sm:border border-[var(--border-color)] rounded-none sm:rounded-lg shadow-2xl" @click.stop>
         <!-- Header -->
-        <div class="p-3 sm:p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">
-          <div>
-            <h2 class="text-base sm:text-lg font-bold text-neon-cyan font-mono">
+        <div class="p-3 sm:p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)] sticky top-0 z-10">
+          <div class="flex-1 min-w-0 mr-4">
+            <h2 class="text-base sm:text-lg font-bold text-neon-cyan font-mono truncate">
               MAP DETAILS
             </h2>
-            <p class="text-[10px] sm:text-xs text-neutral-400 font-mono mt-1">
+            <p class="text-[10px] sm:text-xs text-neutral-400 font-mono mt-1 truncate">
               {{ selectedMapDetailName }}
             </p>
           </div>
-          <button class="explorer-btn explorer-btn--ghost explorer-btn--sm" aria-label="Close map detail panel" @click="closeMapDetail">CLOSE</button>
+          <button class="explorer-btn explorer-btn--ghost explorer-btn--sm flex-shrink-0" aria-label="Close map detail panel" @click="closeMapDetail">CLOSE</button>
         </div>
 
         <!-- Content -->
@@ -913,6 +914,7 @@ onUnmounted(() => {
           <MapDetailPanel 
             :map-name="selectedMapDetailName" 
             @navigate-to-server="openServerMapDetail"
+            @close="closeMapDetail"
           />
         </div>
       </div>
@@ -922,16 +924,16 @@ onUnmounted(() => {
     <div v-if="selectedServerMapDetail" class="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4" @click="closeServerMapDetail" @keydown.esc="closeServerMapDetail" tabindex="-1">
       <div class="w-full max-w-5xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border-x-0 sm:border border-[var(--border-color)] rounded-none sm:rounded-lg shadow-2xl" @click.stop>
         <!-- Header -->
-        <div class="p-3 sm:p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">
-          <div>
-            <h2 class="text-base sm:text-lg font-bold text-neon-cyan font-mono">
+        <div class="p-3 sm:p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)] sticky top-0 z-10">
+          <div class="flex-1 min-w-0 mr-4">
+            <h2 class="text-base sm:text-lg font-bold text-neon-cyan font-mono truncate">
               SERVER MAP DETAILS
             </h2>
-            <p class="text-[10px] sm:text-xs text-neutral-400 font-mono mt-1">
+            <p class="text-[10px] sm:text-xs text-neutral-400 font-mono mt-1 truncate">
               {{ selectedServerMapDetail.mapName }}
             </p>
           </div>
-          <button class="explorer-btn explorer-btn--ghost explorer-btn--sm" aria-label="Close server map detail panel" @click="closeServerMapDetail">CLOSE</button>
+          <button class="explorer-btn explorer-btn--ghost explorer-btn--sm flex-shrink-0" aria-label="Close server map detail panel" @click="closeServerMapDetail">CLOSE</button>
         </div>
 
         <!-- Content -->

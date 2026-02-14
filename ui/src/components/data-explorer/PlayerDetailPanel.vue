@@ -33,7 +33,7 @@
     </div>
 
     <!-- Content -->
-    <div v-else-if="slicedData" class="space-y-6 p-4 md:p-6">
+    <div v-else-if="slicedData" class="space-y-6 p-2 md:p-6">
 
       <!-- Context Banner -->
       <div class="context-banner" :class="themeClass">
@@ -136,12 +136,12 @@
               <!-- Table Header -->
               <thead>
                 <tr class="bg-black/20">
-                  <th class="w-16 text-center py-4">RANK</th>
-                  <th class="py-4 text-left pl-4">{{ getTableHeaderLabel() }}</th>
-                  <th class="w-32 text-right py-4">{{ getSecondaryMetricLabel() }}</th>
-                  <th class="w-36 text-right py-4" :class="themeTextClass">{{ getPrimaryMetricLabel() }}</th>
-                  <th class="w-32 text-right py-4 pr-6">{{ getPercentageLabel() }}</th>
-                  <th v-if="hasAdditionalData()" class="w-64 py-4 pr-4">ADDITIONAL STATS</th>
+                  <th class="w-16 text-center py-3 md:py-4">RANK</th>
+                  <th class="py-3 md:py-4 text-left pl-4">{{ getTableHeaderLabel() }}</th>
+                  <th class="w-32 text-right py-3 md:py-4">{{ getSecondaryMetricLabel() }}</th>
+                  <th class="w-36 text-right py-3 md:py-4" :class="themeTextClass">{{ getPrimaryMetricLabel() }}</th>
+                  <th class="w-32 text-right py-3 md:py-4 pr-6">{{ getPercentageLabel() }}</th>
+                  <th v-if="hasAdditionalData()" class="w-64 py-3 md:py-4 pr-4">ADDITIONAL STATS</th>
                 </tr>
               </thead>
 
@@ -153,14 +153,14 @@
                   class="hover:bg-white/5 transition-colors"
                 >
                   <!-- Rank -->
-                  <td class="text-center py-4">
+                  <td class="text-center py-3 md:py-4">
                     <div class="rank-badge mx-auto" :class="index < 3 ? `rank-badge--top rank-badge--${index + 1}` : ''">
                       {{ result.rank }}
                     </div>
                   </td>
 
                   <!-- Main Label -->
-                  <td class="py-4 pl-4">
+                  <td class="py-3 md:py-4 pl-4">
                     <div
                       class="font-medium text-base truncate max-w-[200px] md:max-w-xs lg:max-w-md"
                       :class="{ 'explorer-link cursor-pointer hover:underline': isMapSlice() }"
@@ -175,22 +175,22 @@
                   </td>
 
                   <!-- Secondary Value -->
-                  <td class="text-right py-4 font-mono text-neutral-400">
+                  <td class="text-right py-3 md:py-4 font-mono text-neutral-400">
                     {{ result.secondaryValue.toLocaleString() }}
                   </td>
 
                   <!-- Primary Value -->
-                  <td class="text-right py-4">
+                  <td class="text-right py-3 md:py-4">
                     <div class="text-lg font-bold font-mono" :class="themeTextClass">{{ result.primaryValue.toLocaleString() }}</div>
                   </td>
 
                   <!-- Percentage -->
-                  <td class="text-right py-4 pr-6 font-mono text-white">
+                  <td class="text-right py-3 md:py-4 pr-6 font-mono text-white">
                     {{ result.percentage.toFixed(1) }}<span class="text-xs ml-0.5 text-neutral-500">{{ getPercentageUnit() }}</span>
                   </td>
 
                   <!-- Additional Data -->
-                  <td v-if="hasAdditionalData()" class="py-4 pr-4">
+                  <td v-if="hasAdditionalData()" class="py-3 md:py-4 pr-4">
                     <div v-if="isTeamWinSlice()" class="space-y-2">
                       <!-- Visual Win Rate Bar -->
                       <div v-if="getTeamLabel(result.additionalData, 'team1Label') || getTeamLabel(result.additionalData, 'team2Label')" class="px-2">
@@ -691,7 +691,7 @@ watch(() => props.serverGuid, () => {
   justify-content: space-between;
   align-items: flex-end;
   background: rgba(255, 255, 255, 0.02);
-  padding: 1.25rem;
+  padding: 0.75rem;
   border-radius: 6px;
   border: 1px solid var(--border-color);
 }
@@ -700,6 +700,7 @@ watch(() => props.serverGuid, () => {
   .controls-row {
     flex-direction: row;
     align-items: center;
+    padding: 1.25rem;
   }
 }
 
@@ -799,11 +800,17 @@ tr:hover .rank-badge {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  padding: 1.5rem 1rem;
+  padding: 1rem 0.5rem;
   text-align: center;
   transition: all 0.2s ease;
   position: relative;
   overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .explorer-stat {
+    padding: 1.5rem 1rem;
+  }
 }
 
 .explorer-stat::before {

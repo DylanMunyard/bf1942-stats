@@ -28,10 +28,19 @@
       <!-- Header -->
       <div class="detail-header">
         <div class="detail-header-row">
+          <button
+            @click="emit('close')"
+            class="flex items-center justify-center w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors mr-3"
+            title="Close"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
           <span class="detail-icon">{ }</span>
           <h2 class="detail-title">{{ mapDetail.mapName }}</h2>
         </div>
-        <div class="detail-meta">
+        <div class="detail-meta ml-11">
           Played on {{ mapDetail.servers.length }} server{{ mapDetail.servers.length !== 1 ? 's' : '' }}
         </div>
       </div>
@@ -94,6 +103,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'navigateToServer', serverGuid: string): void;
+  (e: 'close'): void;
 }>();
 
 const mapDetail = ref<MapDetail | null>(null);
