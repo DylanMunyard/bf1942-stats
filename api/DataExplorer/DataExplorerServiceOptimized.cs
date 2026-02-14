@@ -1103,24 +1103,39 @@ public class DataExplorerService(
         var (sortColumn, orderByClause) = sortBy.ToLowerInvariant() switch
         {
             "kills" => ("TotalKills", "TotalKills DESC"),
-            "kdratio" => ("KdRatio", "KdRatio DESC"),
-            "killrate" => ("KillsPerMinute", "KillsPerMinute DESC"),
+            "kdratio" => ("KdRatio", "CalcKdRatio DESC"),
+            "killrate" => ("KillsPerMinute", "CalcKillsPerMinute DESC"),
+            "wins" => ("TotalWins", "COALESCE(pw.Wins, 0) DESC"),
             _ => ("TotalScore", "TotalScore DESC") // default to score
         };
 
         // Query player rankings with pagination
+        // Use CTE for wins calculation from PlayerAchievements
         var rankingsSql = $@"
+            WITH PlayerWins AS (
+                SELECT PlayerName, COUNT(*) as Wins
+                FROM PlayerAchievements
+                WHERE MapName = @p0
+                  AND AchievementType = '{AchievementTypes.Placement}'
+                  AND Tier = 'gold'
+                  AND ((CAST(strftime('%Y', AchievedAt) AS INTEGER) > @p1)
+                       OR (CAST(strftime('%Y', AchievedAt) AS INTEGER) = @p1
+                           AND CAST(strftime('%m', AchievedAt) AS INTEGER) >= @p2))
+                  AND ServerGuid IN ({guidParams})
+                GROUP BY PlayerName
+            )
             SELECT
                 ROW_NUMBER() OVER (ORDER BY {orderByClause}) as Rank,
-                PlayerName,
+                t.PlayerName,
                 TotalScore,
                 TotalKills,
                 TotalDeaths,
-                KdRatio,
-                KillsPerMinute,
+                CalcKdRatio as KdRatio,
+                CalcKillsPerMinute as KillsPerMinute,
                 TotalRounds,
                 TotalPlayTimeMinutes as PlayTimeMinutes,
-                UniqueServers
+                UniqueServers,
+                COALESCE(pw.Wins, 0) as TotalWins
             FROM (
                 SELECT
                     PlayerName,
@@ -1129,10 +1144,10 @@ public class DataExplorerService(
                     SUM(TotalDeaths) as TotalDeaths,
                     CASE WHEN SUM(TotalDeaths) > 0
                          THEN ROUND(CAST(SUM(TotalKills) AS REAL) / SUM(TotalDeaths), 2)
-                         ELSE CAST(SUM(TotalKills) AS REAL) END as KdRatio,
+                         ELSE CAST(SUM(TotalKills) AS REAL) END as CalcKdRatio,
                     CASE WHEN SUM(TotalPlayTimeMinutes) > 0
                          THEN ROUND(CAST(SUM(TotalKills) AS REAL) / SUM(TotalPlayTimeMinutes), 3)
-                         ELSE 0 END as KillsPerMinute,
+                         ELSE 0 END as CalcKillsPerMinute,
                     SUM(TotalRounds) as TotalRounds,
                     SUM(TotalPlayTimeMinutes) as TotalPlayTimeMinutes,
                     COUNT(DISTINCT ServerGuid) as UniqueServers
@@ -1143,7 +1158,8 @@ public class DataExplorerService(
                   {playerFilter}
                 GROUP BY PlayerName
                 HAVING SUM(TotalRounds) >= 3
-            )
+            ) t
+            LEFT JOIN PlayerWins pw ON t.PlayerName = pw.PlayerName
             ORDER BY {orderByClause}
             LIMIT @p{paramOffset} OFFSET @p{paramOffset + 1}";
 
@@ -1164,7 +1180,8 @@ public class DataExplorerService(
             KillsPerMinute: r.KillsPerMinute,
             TotalRounds: r.TotalRounds,
             PlayTimeMinutes: r.PlayTimeMinutes,
-            UniqueServers: r.UniqueServers
+            UniqueServers: r.UniqueServers,
+            TotalWins: r.TotalWins
         )).ToList();
 
         var dateRange = new DateRangeDto(
@@ -1363,6 +1380,7 @@ public class DataExplorerService(
         public int TotalRounds { get; set; }
         public double PlayTimeMinutes { get; set; }
         public int UniqueServers { get; set; }
+        public int TotalWins { get; set; }
     }
 
     /// <inheritdoc/>

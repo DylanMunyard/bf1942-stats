@@ -262,7 +262,7 @@ public class DataExplorerController(
         page = Math.Max(1, page);
 
         // Validate sortBy
-        var validSortFields = new[] { "score", "kills", "kdRatio", "killRate" };
+        var validSortFields = new[] { "score", "kills", "kdRatio", "killRate", "wins" };
         if (!validSortFields.Contains(sortBy.ToLowerInvariant()))
             sortBy = "score";
 

@@ -9,6 +9,7 @@ const props = defineProps<{
   game?: GameType;
   serverGuid?: string;
   highlightPlayer?: string;
+  days?: number;
 }>();
 
 const router = useRouter();
@@ -17,6 +18,7 @@ const router = useRouter();
 const tabs = [
   { id: 'score' as const, label: 'Score', title: 'Top by Score' },
   { id: 'kills' as const, label: 'Kills', title: 'Top by Kills' },
+  { id: 'wins' as const, label: 'Wins', title: 'Top by Wins' },
   { id: 'kdRatio' as const, label: 'K/D', title: 'Top by K/D Ratio' },
   { id: 'killRate' as const, label: 'Kill Rate', title: 'Top by Kill Rate' },
 ];
@@ -57,7 +59,7 @@ const loadRankings = async () => {
       pageSize,
       debouncedSearch.value || undefined,
       props.serverGuid,
-      60,
+      props.days || 60,
       activeTab.value
     );
 
@@ -86,7 +88,7 @@ const loadPinnedPlayer = async () => {
       1,
       props.highlightPlayer,
       props.serverGuid,
-      60,
+      props.days || 60,
       activeTab.value
     );
     pinnedPlayer.value = response.rankings.length > 0 ? response.rankings[0] : null;
@@ -128,6 +130,7 @@ const primaryColumnHeader = computed(() => {
   switch (activeTab.value) {
     case 'score': return 'Score';
     case 'kills': return 'Kills';
+    case 'wins': return 'Wins';
     case 'kdRatio': return 'K/D';
     case 'killRate': return 'Kills/Min';
     default: return 'Score';
@@ -138,6 +141,7 @@ const formatPrimaryValue = (entry: MapPlayerRanking): string => {
   switch (activeTab.value) {
     case 'score': return entry.totalScore.toLocaleString();
     case 'kills': return entry.totalKills.toLocaleString();
+    case 'wins': return (entry.totalWins || 0).toLocaleString();
     case 'kdRatio': return entry.kdRatio.toFixed(2);
     case 'killRate': return entry.killsPerMinute.toFixed(3);
     default: return entry.totalScore.toLocaleString();
@@ -177,6 +181,12 @@ watch(() => props.serverGuid, () => {
   currentPage.value = 1;
   rankings.value = [];
   pinnedPlayer.value = null;
+  loadRankings();
+  loadPinnedPlayer();
+});
+
+watch(() => props.days, () => {
+  currentPage.value = 1;
   loadRankings();
   loadPinnedPlayer();
 });

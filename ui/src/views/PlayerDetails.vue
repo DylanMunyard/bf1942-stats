@@ -12,6 +12,8 @@ import PlayerAchievementHeroBadges from '../components/PlayerAchievementHeroBadg
 import PlayerServerMapStats from '../components/PlayerServerMapStats.vue';
 import MapRankingsPanel from '../components/MapRankingsPanel.vue';
 import PlayerDetailPanel from '../components/data-explorer/PlayerDetailPanel.vue';
+import MapDetailPanel from '../components/data-explorer/MapDetailPanel.vue';
+import ServerMapDetailPanel from '../components/data-explorer/ServerMapDetailPanel.vue';
 import { formatRelativeTime } from '@/utils/timeUtils';
 import { calculateKDR } from '@/utils/statsUtils';
 import { useAIContext } from '@/composables/useAIContext';
@@ -51,6 +53,12 @@ const scrollPositionBeforeMapStats = ref(0);
 // State for rankings drill-down panel
 const rankingsMapName = ref<string | null>(null);
 const rankingsServerGuid = ref<string | null>(null);
+
+// State for map detail panel (from data explorer breakdown)
+const selectedMapDetailName = ref<string | null>(null);
+
+// State for server map detail panel (drill-down from map detail)
+const selectedServerMapDetail = ref<{ serverGuid: string; mapName: string } | null>(null);
 
 // Wide viewport: show slide-out panel side-by-side (lg: 1024px+)
 const isWideScreen = ref(false);
@@ -233,6 +241,33 @@ const openRankingsPanel = (mapName: string) => {
 const closeRankingsPanel = () => {
   rankingsMapName.value = null;
   rankingsServerGuid.value = null;
+};
+
+// Function to open map detail from data explorer breakdown
+const openMapDetail = (mapName: string) => {
+  scrollPositionBeforeMapStats.value = window.scrollY;
+  selectedMapDetailName.value = mapName;
+};
+
+// Function to close map detail
+const closeMapDetail = () => {
+  selectedMapDetailName.value = null;
+  window.scrollTo({ top: scrollPositionBeforeMapStats.value, behavior: 'auto' });
+};
+
+// Function to open server map detail (drill-down from map detail)
+const openServerMapDetail = (serverGuid: string) => {
+  if (selectedMapDetailName.value) {
+    selectedServerMapDetail.value = {
+      serverGuid,
+      mapName: selectedMapDetailName.value
+    };
+  }
+};
+
+// Function to close server map detail
+const closeServerMapDetail = () => {
+  selectedServerMapDetail.value = null;
 };
 
 const fetchData = async () => {
@@ -662,6 +697,7 @@ onUnmounted(() => {
                     <PlayerDetailPanel
                       :player-name="playerName"
                       :game="playerPanelGame"
+                      @navigate-to-map="openMapDetail"
                     />
                   </div>
                 </div>
@@ -843,6 +879,59 @@ onUnmounted(() => {
             :server-guid="effectiveServerGuid"
             :game="(effectiveServerGuid ? playerStats?.servers?.find(s => s.serverGuid === effectiveServerGuid)?.gameId as any : undefined) || 'bf1942'"
             @open-rankings="openRankingsPanel"
+          />
+        </div>
+      </div>
+    </div>
+
+    <!-- Map Detail Panel (Overlay from Data Explorer Breakdown) -->
+    <div v-if="selectedMapDetailName" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" @click="closeMapDetail">
+      <div class="w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border border-[var(--border-color)] rounded-lg shadow-2xl" @click.stop>
+        <!-- Header -->
+        <div class="p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">
+          <div>
+            <h2 class="text-lg font-bold text-neon-cyan font-mono">
+              MAP DETAILS
+            </h2>
+            <p class="text-xs text-neutral-400 font-mono mt-1">
+              {{ selectedMapDetailName }}
+            </p>
+          </div>
+          <button class="explorer-btn explorer-btn--ghost explorer-btn--sm" aria-label="Close map detail panel" @click="closeMapDetail">CLOSE</button>
+        </div>
+
+        <!-- Content -->
+        <div class="flex-1 overflow-y-auto p-4 bg-[var(--bg-panel)]">
+          <MapDetailPanel 
+            :map-name="selectedMapDetailName" 
+            @navigate-to-server="openServerMapDetail"
+          />
+        </div>
+      </div>
+    </div>
+
+    <!-- Server Map Detail Panel (Overlay from Map Detail Panel) -->
+    <div v-if="selectedServerMapDetail" class="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" @click="closeServerMapDetail">
+      <div class="w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col bg-[var(--bg-panel)] border border-[var(--border-color)] rounded-lg shadow-2xl" @click.stop>
+        <!-- Header -->
+        <div class="p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-panel)]">
+          <div>
+            <h2 class="text-lg font-bold text-neon-cyan font-mono">
+              SERVER MAP DETAILS
+            </h2>
+            <p class="text-xs text-neutral-400 font-mono mt-1">
+              {{ selectedServerMapDetail.mapName }}
+            </p>
+          </div>
+          <button class="explorer-btn explorer-btn--ghost explorer-btn--sm" aria-label="Close server map detail panel" @click="closeServerMapDetail">CLOSE</button>
+        </div>
+
+        <!-- Content -->
+        <div class="flex-1 overflow-y-auto p-0 bg-[var(--bg-panel)]">
+          <ServerMapDetailPanel
+            :server-guid="selectedServerMapDetail.serverGuid"
+            :map-name="selectedServerMapDetail.mapName"
+            @close="closeServerMapDetail"
           />
         </div>
       </div>

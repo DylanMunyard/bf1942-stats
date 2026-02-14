@@ -83,30 +83,6 @@
           </svg>
           <span>Updating...</span>
         </div>
-        <div class="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded p-0.5">
-          <button
-            @click="showRegularsOnly = false"
-            :class="[
-              'px-3 py-1 text-sm rounded transition-colors',
-              !showRegularsOnly
-                ? 'bg-cyan-600 text-white'
-                : 'text-slate-400 hover:text-slate-200'
-            ]"
-          >
-            All (3+ rounds)
-          </button>
-          <button
-            @click="showRegularsOnly = true"
-            :class="[
-              'px-3 py-1 text-sm rounded transition-colors',
-              showRegularsOnly
-                ? 'bg-cyan-600 text-white'
-                : 'text-slate-400 hover:text-slate-200'
-            ]"
-          >
-            Regulars (10+)
-          </button>
-        </div>
       </div>
 
       <!-- Map Activity Stats Grid -->
@@ -153,57 +129,14 @@
         <WinStatsBar :win-stats="detail.winStats" />
       </div>
 
-      <!-- Leaderboards Section -->
-      <div>
-        <div class="flex items-center justify-between mb-3">
-          <h3 class="text-sm font-medium text-slate-300">Top Players</h3>
-          <button
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 hover:border-cyan-500/40 rounded-lg transition-colors"
-            @click="emit('open-rankings', mapName)"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
-            Full Rankings
-          </button>
-        </div>
-
-        <!-- Leaderboard Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="bg-slate-800/30 rounded-lg p-4">
-            <h4 class="text-sm font-medium text-slate-300 mb-3">Top by Score</h4>
-            <LeaderboardTable
-              :entries="filteredByScore"
-              type="score"
-            />
-          </div>
-          <div class="bg-slate-800/30 rounded-lg p-4">
-            <h4 class="text-sm font-medium text-slate-300 mb-3">Top by Kills</h4>
-            <LeaderboardTable
-              :entries="filteredByKills"
-              type="kills"
-            />
-          </div>
-          <div class="bg-slate-800/30 rounded-lg p-4">
-            <h4 class="text-sm font-medium text-slate-300 mb-3">Top by Wins</h4>
-            <LeaderboardTable
-              :entries="filteredByWins"
-              type="wins"
-            />
-          </div>
-          <div class="bg-slate-800/30 rounded-lg p-4">
-            <h4 class="text-sm font-medium text-slate-300 mb-3">Top by K/D Ratio</h4>
-            <LeaderboardTable
-              :entries="filteredByKdRatio"
-              type="kdRatio"
-            />
-          </div>
-          <div class="bg-slate-800/30 rounded-lg p-4">
-            <h4 class="text-sm font-medium text-slate-300 mb-3">Top by Kill Rate</h4>
-            <LeaderboardTable
-              :entries="filteredByKillRate"
-              type="killRate"
-            />
-          </div>
-        </div>
+      <!-- Leaderboards Section (Replaced with MapRankingsPanel) -->
+      <div class="bg-slate-800/30 rounded-lg p-4">
+        <MapRankingsPanel
+          :map-name="mapName"
+          :server-guid="serverGuid"
+          :game="(detail.game as any)"
+          :days="selectedDays"
+        />
       </div>
 
       <!-- Recent Sessions Section -->
@@ -223,11 +156,11 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
-import { fetchServerMapDetail, type ServerMapDetail, type LeaderboardEntry } from '../../services/dataExplorerService';
+import { fetchServerMapDetail, type ServerMapDetail } from '../../services/dataExplorerService';
 import WinStatsBar from './WinStatsBar.vue';
-import LeaderboardTable from './LeaderboardTable.vue';
 import ActivityHeatmap from './ActivityHeatmap.vue';
 import RecentSessionsList from './RecentSessionsList.vue';
+import MapRankingsPanel from '../MapRankingsPanel.vue';
 
 const props = defineProps<{
   serverGuid: string;
@@ -251,21 +184,6 @@ const isLoading = ref(false);
 const isRefreshing = ref(false);
 const error = ref<string | null>(null);
 const selectedDays = ref(60);
-const showRegularsOnly = ref(false);
-
-
-const REGULARS_MIN_ROUNDS = 10;
-
-const filterByMinRounds = (entries: LeaderboardEntry[]): LeaderboardEntry[] => {
-  if (!showRegularsOnly.value) return entries;
-  return entries.filter(e => e.totalRounds >= REGULARS_MIN_ROUNDS);
-};
-
-const filteredByScore = computed(() => filterByMinRounds(detail.value?.topByScore ?? []));
-const filteredByKills = computed(() => filterByMinRounds(detail.value?.topByKills ?? []));
-const filteredByWins = computed(() => filterByMinRounds(detail.value?.topByWins ?? []));
-const filteredByKdRatio = computed(() => filterByMinRounds(detail.value?.topByKdRatio ?? []));
-const filteredByKillRate = computed(() => filterByMinRounds(detail.value?.topByKillRate ?? []));
 
 // Activity patterns for heatmap (already in correct format from API)
 const activityPatternsForHeatmap = computed(() => detail.value?.activityPatterns ?? []);

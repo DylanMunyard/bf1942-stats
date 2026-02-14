@@ -26,5 +26,6 @@ public record MapPlayerRankingDto(
     double KillsPerMinute,
     int TotalRounds,
     double PlayTimeMinutes,
-    int UniqueServers
+    int UniqueServers,
+    int TotalWins = 0
 );

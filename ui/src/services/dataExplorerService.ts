@@ -475,9 +475,10 @@ export interface MapPlayerRanking {
   totalRounds: number;
   playTimeMinutes: number;
   uniqueServers: number;
+  totalWins: number;
 }
 
-export type MapRankingSortBy = 'score' | 'kills' | 'kdRatio' | 'killRate';
+export type MapRankingSortBy = 'score' | 'kills' | 'kdRatio' | 'killRate' | 'wins';
 
 export interface MapPlayerRankingsResponse {
   mapName: string;

@@ -199,7 +199,13 @@
 
                 <!-- Main Label -->
                 <td class="px-4 py-3">
-                  <div class="text-slate-200 font-medium group-hover:text-white transition-colors text-base">{{ result.sliceLabel }}</div>
+                  <div 
+                    class="text-slate-200 font-medium group-hover:text-white transition-colors text-base"
+                    :class="{ 'cursor-pointer hover:underline hover:text-cyan-400': isMapSlice() }"
+                    @click="handleSliceClick(result)"
+                  >
+                    {{ result.sliceLabel }}
+                  </div>
                   <div v-if="result.subKey" class="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-70"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
                     {{ result.subKeyLabel || getServerName(result.subKey) }}
@@ -315,6 +321,18 @@ const emit = defineEmits<{
   'navigate-to-server': [serverGuid: string];
   'navigate-to-map': [mapName: string];
 }>();
+
+const isMapSlice = () => {
+  return selectedSliceType.value.includes('Map');
+};
+
+const handleSliceClick = (result: PlayerSliceResultDto) => {
+  if (isMapSlice()) {
+    // If it's a map slice, navigate to map stats
+    // sliceKey is the map name
+    emit('navigate-to-map', result.sliceKey);
+  }
+};
 
 // API Types (duplicated for now, should be moved to shared types later)
 interface SliceDimensionOption {
