@@ -5,8 +5,8 @@
       <!-- Hero Section -->
       <div class="w-full rounded-lg border border-[var(--portal-border)] bg-[var(--portal-surface)] mb-6">
         <div class="w-full max-w-screen-2xl mx-auto px-0 sm:px-8 lg:px-12 py-8">
-        <!-- Search Form -->
-        <form class="flex justify-center px-4 sm:px-0" @submit.prevent="executeSearch">
+        <!-- Search Input -->
+        <div class="flex justify-center px-4 sm:px-0">
           <div class="relative w-full max-w-xl">
             <!-- Search Icon -->
             <div class="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
@@ -29,24 +29,36 @@
 
             <!-- Search Input -->
             <input
+              ref="searchInputRef"
               v-model="searchQuery"
               type="text"
               placeholder="Search players..."
-              class="w-full pl-12 pr-24 py-3.5 bg-[var(--portal-surface-elevated)] border border-[var(--portal-border)] rounded-lg text-[var(--portal-text-bright)] placeholder-[var(--portal-text)] focus:outline-none focus:border-[var(--portal-accent)] transition-colors"
-              @keydown.enter.prevent="executeSearch"
+              class="w-full pl-12 pr-12 py-3.5 bg-[var(--portal-surface-elevated)] border border-[var(--portal-border)] rounded-lg text-[var(--portal-text-bright)] placeholder-[var(--portal-text)] focus:outline-none focus:border-[var(--portal-accent)] transition-colors"
+              @input="onInput"
+              @keydown.enter.prevent="executeSearchNow"
             >
 
-            <!-- Search Button -->
-            <button
-              type="submit"
-              :disabled="!searchQuery.trim() || isSearching"
-              class="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-2 bg-[var(--portal-accent)] hover:opacity-90 disabled:bg-[var(--portal-border)] disabled:text-[var(--portal-text)] text-[var(--portal-bg)] font-semibold text-sm rounded-md transition-colors disabled:cursor-not-allowed"
-            >
-              <span v-if="isSearching">...</span>
-              <span v-else>Search</span>
-            </button>
+            <!-- Clear Button / Loading Spinner -->
+            <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
+              <div
+                v-if="isLoading"
+                class="w-5 h-5 border-2 border-slate-600 border-t-cyan-400 rounded-full animate-spin"
+              />
+              <button
+                v-else-if="searchQuery.trim()"
+                type="button"
+                class="p-1 text-slate-500 hover:text-slate-300 transition-colors"
+                title="Clear search"
+                @click="clearSearch"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 6 6 18"/>
+                  <path d="m6 6 12 12"/>
+                </svg>
+              </button>
+            </div>
           </div>
-        </form>
+        </div>
         </div>
       </div>
 
@@ -63,7 +75,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PlayersPage from '../components/PlayersPage.vue'
 
@@ -72,8 +84,11 @@ const router = useRouter()
 
 const searchQuery = ref('')
 const activeSearchQuery = ref('')
-const isSearching = ref(false)
+const searchInputRef = ref<HTMLInputElement | null>(null)
 const playersPageRef = ref<InstanceType<typeof PlayersPage> | null>(null)
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+const isLoading = computed(() => playersPageRef.value?.loading ?? false)
 
 function initFromRoute() {
   const q = route.query.q
@@ -84,20 +99,41 @@ function initFromRoute() {
   }
 }
 
-onMounted(initFromRoute)
+onMounted(() => {
+  initFromRoute()
+  searchInputRef.value?.focus()
+})
+
 watch(() => route.query.q, () => initFromRoute())
 
-const executeSearch = async () => {
-  if (!searchQuery.value.trim()) return
-
-  const trimmed = searchQuery.value.trim()
-  isSearching.value = true
+const triggerSearch = (query: string) => {
+  const trimmed = query.trim()
+  if (!trimmed) {
+    activeSearchQuery.value = ''
+    router.replace({ path: '/players', query: {} })
+    return
+  }
   activeSearchQuery.value = trimmed
-
   router.replace({ path: '/players', query: { ...route.query, q: trimmed } })
+}
 
-  await new Promise(resolve => setTimeout(resolve, 100))
-  isSearching.value = false
+const onInput = () => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    triggerSearch(searchQuery.value)
+  }, 350)
+}
+
+const executeSearchNow = () => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  triggerSearch(searchQuery.value)
+}
+
+const clearSearch = () => {
+  searchQuery.value = ''
+  if (debounceTimer) clearTimeout(debounceTimer)
+  triggerSearch('')
+  searchInputRef.value?.focus()
 }
 </script>
 

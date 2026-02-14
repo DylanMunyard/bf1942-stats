@@ -62,6 +62,18 @@ const pageSize = ref(50);
 const totalItems = ref(0);
 const totalPages = ref(0);
 
+// Expose loading state to parent
+defineExpose({ loading });
+
+// Highlight matching text in player names
+const highlightMatch = (name: string): string => {
+  const query = props.searchQuery?.trim();
+  if (!query) return name;
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escaped})`, 'gi');
+  return name.replace(regex, '<mark class="bg-cyan-500/30 text-cyan-300 rounded px-0.5">$1</mark>');
+};
+
 // Sort players function
 const sortPlayers = (field: string) => {
   if (sortBy.value === field) {
@@ -179,13 +191,36 @@ onMounted(() => {
 
 <template>
   <div>
-    <!-- Loading State -->
-    <div
-      v-if="loading"
-      class="flex flex-col items-center justify-center py-20 text-slate-400"
-    >
-      <div class="w-12 h-12 border-4 border-slate-600 border-t-cyan-400 rounded-full animate-spin mb-4" />
-      <p class="text-lg text-slate-300">Searching players...</p>
+    <!-- Skeleton Loading State -->
+    <div v-if="loading" class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div class="h-4 w-48 rounded hacker-skeleton" />
+        <div class="h-4 w-32 rounded hacker-skeleton" />
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div
+          v-for="n in 8"
+          :key="n"
+          class="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 space-y-3"
+        >
+          <!-- Skeleton avatar + name -->
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg hacker-skeleton" />
+            <div class="flex-1 space-y-2">
+              <div class="h-4 w-3/4 rounded hacker-skeleton" />
+              <div class="h-3 w-1/2 rounded hacker-skeleton" />
+            </div>
+          </div>
+          <!-- Skeleton stats row -->
+          <div class="flex items-center gap-3">
+            <div class="h-3 w-16 rounded hacker-skeleton" />
+            <div class="h-3 w-12 rounded hacker-skeleton" />
+            <div class="h-3 w-20 rounded hacker-skeleton" />
+          </div>
+          <!-- Skeleton extra row -->
+          <div class="h-3 w-2/3 rounded hacker-skeleton" />
+        </div>
+      </div>
     </div>
 
     <!-- Error State -->
@@ -193,16 +228,29 @@ onMounted(() => {
       v-else-if="error"
       class="bg-slate-800/70 backdrop-blur-sm border border-red-500/30 rounded-xl p-8 text-center"
     >
-      <div class="text-6xl mb-4">⚠️</div>
+      <div class="mb-4 flex justify-center">
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-red-400">
+          <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+          <path d="M12 9v4"/>
+          <path d="M12 17h.01"/>
+        </svg>
+      </div>
       <p class="text-red-400 text-lg font-medium">{{ error }}</p>
     </div>
 
     <!-- Welcome State (before first search) -->
     <div
       v-else-if="!hasSearched && props.manualSearch"
-      class="py-16 text-center"
+      class="py-16 text-center space-y-3"
     >
-      <p class="text-slate-500 text-sm">Enter a player name to search</p>
+      <div class="flex justify-center mb-2">
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-slate-600">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="m21 21-4.35-4.35"/>
+        </svg>
+      </div>
+      <p class="text-slate-400 text-lg font-medium">Search for a player</p>
+      <p class="text-slate-500 text-sm">Start typing a name — results appear as you type</p>
     </div>
 
     <!-- No Results State -->
@@ -261,9 +309,10 @@ onMounted(() => {
               {{ player.playerName.charAt(0).toUpperCase() }}
             </div>
             <div class="min-w-0 flex-1">
-              <h4 class="font-bold text-slate-200 group-hover:text-cyan-400 transition-colors truncate">
-                {{ player.playerName }}
-              </h4>
+              <h4
+                class="font-bold text-slate-200 group-hover:text-cyan-400 transition-colors truncate"
+                v-html="highlightMatch(player.playerName)"
+              />
               <div class="text-xs text-slate-500">
                 {{ formatLastSeen(player.lastSeen) }}
               </div>
@@ -273,7 +322,10 @@ onMounted(() => {
           <!-- Stats Row -->
           <div class="flex flex-wrap items-center gap-2 text-xs">
             <div class="flex items-center gap-1" title="Total playtime">
-              <span class="text-slate-500">⏱️</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
               <span class="text-slate-300 font-medium">{{ formatPlayTime(player.totalPlayTimeMinutes) }}</span>
             </div>
             <template v-if="player.totalKills !== undefined && player.totalKills !== null">
@@ -298,7 +350,9 @@ onMounted(() => {
           <div v-if="player.favoriteServer || player.recentActivity" class="flex flex-wrap items-center gap-2 mt-2 text-xs">
             <template v-if="player.favoriteServer">
               <div class="flex items-center gap-1" title="Most played server">
-                <span class="text-slate-500">⭐</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
                 <span class="text-slate-400 truncate max-w-[140px]">{{ player.favoriteServer }}</span>
               </div>
             </template>
