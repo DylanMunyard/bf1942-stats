@@ -195,52 +195,80 @@ const barWidth = (value: number, maxValue: number): string => {
       <div v-if="currentTopPlacements.length > 0" class="space-y-3">
 
         <!-- #1 Featured Champion — ambient spotlight -->
-        <div class="relative rounded-lg overflow-hidden bg-neutral-800/30">
-          <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(255,255,255,0.04)_0%,_transparent_70%)]" />
+        <div class="relative rounded-lg overflow-hidden bg-gradient-to-b from-yellow-900/10 to-neutral-900/50 border border-yellow-600/20 shadow-[0_0_15px_-3px_rgba(234,179,8,0.1)]">
+          <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(234,179,8,0.15)_0%,_transparent_60%)]" />
           <div class="relative text-center py-6 px-4">
+            <div class="mb-2 text-[10px] font-bold uppercase tracking-widest text-yellow-500/80">Current Champion</div>
             <router-link
               :to="`/players/${encodeURIComponent(currentTopPlacements[0].playerName)}`"
               class="inline-block group/champ"
             >
-              <span class="text-xl sm:text-2xl font-bold tracking-tight text-neutral-50 group-hover/champ:text-white transition-colors duration-300">
+              <span class="text-xl sm:text-3xl font-black tracking-tight text-white drop-shadow-[0_0_10px_rgba(234,179,8,0.3)] group-hover/champ:text-yellow-100 transition-colors duration-300">
                 <PlayerName :name="currentTopPlacements[0].playerName" source="server-leaderboards" />
               </span>
             </router-link>
             <!-- Points -->
-            <div class="mt-3 text-sm font-mono tabular-nums text-neutral-300 font-semibold">
-              {{ currentTopPlacements[0].placementPoints }} <span class="text-neutral-500 text-xs font-normal">pts</span>
+            <div class="mt-3 text-lg font-mono tabular-nums text-yellow-400 font-bold">
+              {{ currentTopPlacements[0].placementPoints }} <span class="text-yellow-600/80 text-xs font-normal uppercase">pts</span>
             </div>
             <!-- Medal breakdown with labels -->
-            <div class="mt-2 flex items-center justify-center gap-4 text-[11px] font-mono tabular-nums">
-              <span class="text-neutral-300">{{ currentTopPlacements[0].firstPlaces }} <span class="text-neutral-500 text-[10px]">1st</span></span>
-              <span class="text-neutral-400">{{ currentTopPlacements[0].secondPlaces }} <span class="text-neutral-500 text-[10px]">2nd</span></span>
-              <span class="text-neutral-400">{{ currentTopPlacements[0].thirdPlaces }} <span class="text-neutral-500 text-[10px]">3rd</span></span>
+            <div class="mt-3 flex items-center justify-center gap-4 text-[11px] font-mono tabular-nums">
+              <span class="flex items-center gap-1 text-yellow-200 bg-yellow-500/10 px-2 py-0.5 rounded border border-yellow-500/20">
+                <span class="font-bold">{{ currentTopPlacements[0].firstPlaces }}</span> <span class="text-yellow-500/80 text-[9px] uppercase">Gold</span>
+              </span>
+              <span class="flex items-center gap-1 text-slate-300">
+                <span>{{ currentTopPlacements[0].secondPlaces }}</span> <span class="text-slate-500 text-[9px] uppercase">Silv</span>
+              </span>
+              <span class="flex items-center gap-1 text-amber-600">
+                <span>{{ currentTopPlacements[0].thirdPlaces }}</span> <span class="text-amber-800 text-[9px] uppercase">Brnz</span>
+              </span>
             </div>
           </div>
         </div>
 
         <!-- #2 and #3 side by side -->
         <div v-if="currentTopPlacements.length > 1" class="grid grid-cols-2 gap-3">
+          <!-- #2 Silver -->
           <div
-            v-for="(player, idx) in currentTopPlacements.slice(1, 3)"
-            :key="player.playerName"
-            class="bg-neutral-800/30 rounded-lg py-3.5 px-4 border border-neutral-700/20"
+            v-if="currentTopPlacements[1]"
+            class="relative overflow-hidden bg-gradient-to-br from-slate-800/30 to-neutral-900/50 rounded-lg py-3.5 px-4 border border-slate-500/20"
           >
-            <div class="flex items-baseline gap-3 min-w-0">
-              <span class="text-xs font-mono text-neutral-500 tabular-nums shrink-0 w-4 text-right">{{ idx + 2 }}</span>
-              <router-link
-                :to="`/players/${encodeURIComponent(player.playerName)}`"
-                class="text-sm text-neutral-200 truncate hover:text-white transition-colors font-medium"
-              >
-                <PlayerName :name="player.playerName" source="server-leaderboards" />
-              </router-link>
+            <div class="absolute top-0 right-0 p-2 opacity-10">
+              <span class="text-4xl font-black text-slate-400">2</span>
             </div>
-            <div class="mt-2 ml-7 flex items-center gap-3 text-[10px] font-mono tabular-nums text-neutral-500">
-              <span>{{ player.placementPoints }} pts</span>
-              <span class="text-neutral-600">&middot;</span>
-              <span>{{ player.firstPlaces }} 1st</span>
-              <span>{{ player.secondPlaces }} 2nd</span>
-              <span>{{ player.thirdPlaces }} 3rd</span>
+            <div class="relative z-10">
+               <div class="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1">Runner Up</div>
+               <router-link
+                :to="`/players/${encodeURIComponent(currentTopPlacements[1].playerName)}`"
+                class="block text-sm sm:text-base text-slate-200 truncate hover:text-white transition-colors font-bold"
+              >
+                <PlayerName :name="currentTopPlacements[1].playerName" source="server-leaderboards" />
+              </router-link>
+              <div class="mt-1 text-xs font-mono text-slate-400">
+                <span class="text-slate-300 font-bold">{{ currentTopPlacements[1].placementPoints }}</span> pts
+              </div>
+            </div>
+          </div>
+
+          <!-- #3 Bronze -->
+          <div
+            v-if="currentTopPlacements[2]"
+            class="relative overflow-hidden bg-gradient-to-br from-amber-900/20 to-neutral-900/50 rounded-lg py-3.5 px-4 border border-amber-700/20"
+          >
+             <div class="absolute top-0 right-0 p-2 opacity-10">
+              <span class="text-4xl font-black text-amber-600">3</span>
+            </div>
+            <div class="relative z-10">
+               <div class="text-[9px] font-bold uppercase tracking-widest text-amber-700 mb-1">Third Place</div>
+               <router-link
+                :to="`/players/${encodeURIComponent(currentTopPlacements[2].playerName)}`"
+                class="block text-sm sm:text-base text-amber-200/90 truncate hover:text-amber-100 transition-colors font-bold"
+              >
+                <PlayerName :name="currentTopPlacements[2].playerName" source="server-leaderboards" />
+              </router-link>
+              <div class="mt-1 text-xs font-mono text-amber-500/80">
+                <span class="text-amber-500 font-bold">{{ currentTopPlacements[2].placementPoints }}</span> pts
+              </div>
             </div>
           </div>
         </div>
@@ -280,34 +308,37 @@ const barWidth = (value: number, maxValue: number): string => {
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
 
       <!-- Most Active -->
-      <div class="bg-neutral-800/30 rounded-lg p-4 border border-neutral-700/20">
-        <div class="text-[10px] font-semibold uppercase tracking-[0.15em] text-neutral-400 mb-3">Most Active</div>
+      <div class="bg-neutral-900/40 rounded-lg p-4 border border-cyan-900/30 relative overflow-hidden group/card hover:border-cyan-700/30 transition-colors">
+        <div class="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-cyan-500/50 to-transparent"></div>
+        <div class="text-[10px] font-bold uppercase tracking-[0.15em] text-cyan-500/80 mb-3 flex items-center gap-2">
+          <span class="w-1.5 h-1.5 rounded-full bg-cyan-500"></span> Most Active
+        </div>
         <template v-if="currentMostActivePlayers.length > 0">
           <div
             v-for="(player, i) in currentMostActivePlayers.slice(0, TOP_N)"
             :key="player.playerName"
-            class="relative grid grid-cols-[1.75rem_1fr_auto] items-center gap-x-3 py-2 px-2 rounded group/row"
+            class="relative grid grid-cols-[1.5rem_1fr_auto] items-center gap-x-3 py-1.5 px-2 rounded group/row z-10"
           >
             <!-- Performance bar -->
             <div
-              class="absolute inset-y-0 left-0 rounded transition-all duration-500"
-              :class="i === 0 ? 'bg-white/[0.06]' : 'bg-white/[0.025]'"
+              class="absolute inset-y-0 left-0 rounded-sm transition-all duration-500 opacity-20 group-hover/row:opacity-30"
+              :class="i === 0 ? 'bg-cyan-400' : 'bg-cyan-900'"
               :style="{ width: barWidth(player.minutesPlayed, currentMostActivePlayers[0].minutesPlayed) }"
             />
             <span
-              class="relative text-right text-xs font-mono tabular-nums"
-              :class="i === 0 ? 'text-neutral-300 font-bold' : 'text-neutral-500'"
+              class="relative text-right text-[10px] font-mono tabular-nums"
+              :class="i === 0 ? 'text-cyan-300 font-bold' : 'text-neutral-600'"
             >{{ i + 1 }}</span>
             <router-link
               :to="`/players/${encodeURIComponent(player.playerName)}`"
-              class="relative text-[13px] truncate transition-colors duration-200"
-              :class="i === 0 ? 'text-neutral-100 font-medium' : 'text-neutral-300 group-hover/row:text-neutral-100'"
+              class="relative text-[13px] truncate transition-colors duration-200 font-medium"
+              :class="i === 0 ? 'text-cyan-100' : 'text-neutral-400 group-hover/row:text-neutral-200'"
             >
               <PlayerName :name="player.playerName" source="server-leaderboards" />
             </router-link>
             <span
-              class="relative text-xs font-mono tabular-nums whitespace-nowrap"
-              :class="i === 0 ? 'text-neutral-200' : 'text-neutral-400'"
+              class="relative text-[11px] font-mono tabular-nums whitespace-nowrap"
+              :class="i === 0 ? 'text-cyan-200' : 'text-neutral-500'"
             >{{ player.minutesPlayed }}m</span>
           </div>
         </template>
@@ -315,33 +346,36 @@ const barWidth = (value: number, maxValue: number): string => {
       </div>
 
       <!-- Top Scores -->
-      <div class="bg-neutral-800/30 rounded-lg p-4 border border-neutral-700/20">
-        <div class="text-[10px] font-semibold uppercase tracking-[0.15em] text-neutral-400 mb-3">Top Scores</div>
+      <div class="bg-neutral-900/40 rounded-lg p-4 border border-emerald-900/30 relative overflow-hidden group/card hover:border-emerald-700/30 transition-colors">
+        <div class="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-emerald-500/50 to-transparent"></div>
+        <div class="text-[10px] font-bold uppercase tracking-[0.15em] text-emerald-500/80 mb-3 flex items-center gap-2">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Top Scores
+        </div>
         <template v-if="currentTopScores.length > 0">
           <div
             v-for="(entry, i) in currentTopScores.slice(0, TOP_N)"
             :key="`${entry.playerName}-${entry.score}-${i}`"
-            class="relative grid grid-cols-[1.75rem_1fr_auto] items-center gap-x-3 py-2 px-2 rounded group/row"
+            class="relative grid grid-cols-[1.5rem_1fr_auto] items-center gap-x-3 py-1.5 px-2 rounded group/row z-10"
           >
             <div
-              class="absolute inset-y-0 left-0 rounded transition-all duration-500"
-              :class="i === 0 ? 'bg-white/[0.06]' : 'bg-white/[0.025]'"
+              class="absolute inset-y-0 left-0 rounded-sm transition-all duration-500 opacity-20 group-hover/row:opacity-30"
+              :class="i === 0 ? 'bg-emerald-400' : 'bg-emerald-900'"
               :style="{ width: barWidth(entry.score, currentTopScores[0].score) }"
             />
             <span
-              class="relative text-right text-xs font-mono tabular-nums"
-              :class="i === 0 ? 'text-neutral-300 font-bold' : 'text-neutral-500'"
+              class="relative text-right text-[10px] font-mono tabular-nums"
+              :class="i === 0 ? 'text-emerald-300 font-bold' : 'text-neutral-600'"
             >{{ i + 1 }}</span>
             <router-link
               :to="`/players/${encodeURIComponent(entry.playerName)}`"
-              class="relative text-[13px] truncate transition-colors duration-200"
-              :class="i === 0 ? 'text-neutral-100 font-medium' : 'text-neutral-300 group-hover/row:text-neutral-100'"
+              class="relative text-[13px] truncate transition-colors duration-200 font-medium"
+              :class="i === 0 ? 'text-emerald-100' : 'text-neutral-400 group-hover/row:text-neutral-200'"
             >
               <PlayerName :name="entry.playerName" source="server-leaderboards" />
             </router-link>
             <span
-              class="relative text-xs font-mono tabular-nums whitespace-nowrap"
-              :class="i === 0 ? 'text-neutral-200' : 'text-neutral-400'"
+              class="relative text-[11px] font-mono tabular-nums whitespace-nowrap"
+              :class="i === 0 ? 'text-emerald-200' : 'text-neutral-500'"
             >{{ entry.score.toLocaleString() }}</span>
           </div>
         </template>
@@ -349,12 +383,15 @@ const barWidth = (value: number, maxValue: number): string => {
       </div>
 
       <!-- Elite K/D -->
-      <div class="bg-neutral-800/30 rounded-lg p-4 border border-neutral-700/20">
-        <div class="flex items-center justify-between gap-2 mb-3">
-          <div class="text-[10px] font-semibold uppercase tracking-[0.15em] text-neutral-400">Elite K/D</div>
+      <div class="bg-neutral-900/40 rounded-lg p-4 border border-purple-900/30 relative overflow-hidden group/card hover:border-purple-700/30 transition-colors">
+        <div class="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-purple-500/50 to-transparent"></div>
+        <div class="flex items-center justify-between gap-2 mb-3 relative z-10">
+          <div class="text-[10px] font-bold uppercase tracking-[0.15em] text-purple-500/80 flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-purple-500"></span> Elite K/D
+          </div>
           <select
             :value="localMinRoundsForKillBoards"
-            class="text-[10px] text-neutral-400 rounded px-1.5 py-0.5 cursor-pointer border border-neutral-700/50 bg-black/30 outline-none focus:border-neutral-500"
+            class="text-[9px] text-purple-400/80 rounded px-1.5 py-0.5 cursor-pointer border border-purple-900/50 bg-purple-900/10 outline-none focus:border-purple-500/50 hover:bg-purple-900/20 transition-colors"
             aria-label="Minimum rounds"
             @change="updateMinRoundsForKillBoards(parseInt(($event.target as HTMLSelectElement).value))"
           >
@@ -365,27 +402,27 @@ const barWidth = (value: number, maxValue: number): string => {
           <div
             v-for="(entry, i) in currentTopKDRatios.slice(0, TOP_N)"
             :key="`${entry.playerName}-${entry.kdRatio}-${i}`"
-            class="relative grid grid-cols-[1.75rem_1fr_auto] items-center gap-x-3 py-2 px-2 rounded group/row"
+            class="relative grid grid-cols-[1.5rem_1fr_auto] items-center gap-x-3 py-1.5 px-2 rounded group/row z-10"
           >
             <div
-              class="absolute inset-y-0 left-0 rounded transition-all duration-500"
-              :class="i === 0 ? 'bg-white/[0.06]' : 'bg-white/[0.025]'"
+              class="absolute inset-y-0 left-0 rounded-sm transition-all duration-500 opacity-20 group-hover/row:opacity-30"
+              :class="i === 0 ? 'bg-purple-400' : 'bg-purple-900'"
               :style="{ width: barWidth(entry.kdRatio ?? 0, currentTopKDRatios[0].kdRatio ?? 0) }"
             />
             <span
-              class="relative text-right text-xs font-mono tabular-nums"
-              :class="i === 0 ? 'text-neutral-300 font-bold' : 'text-neutral-500'"
+              class="relative text-right text-[10px] font-mono tabular-nums"
+              :class="i === 0 ? 'text-purple-300 font-bold' : 'text-neutral-600'"
             >{{ i + 1 }}</span>
             <router-link
               :to="`/players/${encodeURIComponent(entry.playerName)}`"
-              class="relative text-[13px] truncate transition-colors duration-200"
-              :class="i === 0 ? 'text-neutral-100 font-medium' : 'text-neutral-300 group-hover/row:text-neutral-100'"
+              class="relative text-[13px] truncate transition-colors duration-200 font-medium"
+              :class="i === 0 ? 'text-purple-100' : 'text-neutral-400 group-hover/row:text-neutral-200'"
             >
               <PlayerName :name="entry.playerName" source="server-leaderboards" />
             </router-link>
             <span
-              class="relative text-xs font-mono tabular-nums whitespace-nowrap"
-              :class="i === 0 ? 'text-neutral-200' : 'text-neutral-400'"
+              class="relative text-[11px] font-mono tabular-nums whitespace-nowrap"
+              :class="i === 0 ? 'text-purple-200' : 'text-neutral-500'"
             >{{ (entry.kdRatio ?? 0).toFixed(2) }}</span>
           </div>
         </template>
@@ -393,12 +430,15 @@ const barWidth = (value: number, maxValue: number): string => {
       </div>
 
       <!-- Kill Rate -->
-      <div class="bg-neutral-800/30 rounded-lg p-4 border border-neutral-700/20">
-        <div class="flex items-center justify-between gap-2 mb-3">
-          <div class="text-[10px] font-semibold uppercase tracking-[0.15em] text-neutral-400">Kill Rate</div>
+      <div class="bg-neutral-900/40 rounded-lg p-4 border border-rose-900/30 relative overflow-hidden group/card hover:border-rose-700/30 transition-colors">
+        <div class="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-rose-500/50 to-transparent"></div>
+        <div class="flex items-center justify-between gap-2 mb-3 relative z-10">
+          <div class="text-[10px] font-bold uppercase tracking-[0.15em] text-rose-500/80 flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Kill Rate
+          </div>
           <select
             :value="localMinRoundsForKillBoards"
-            class="text-[10px] text-neutral-400 rounded px-1.5 py-0.5 cursor-pointer border border-neutral-700/50 bg-black/30 outline-none focus:border-neutral-500"
+            class="text-[9px] text-rose-400/80 rounded px-1.5 py-0.5 cursor-pointer border border-rose-900/50 bg-rose-900/10 outline-none focus:border-rose-500/50 hover:bg-rose-900/20 transition-colors"
             aria-label="Minimum rounds"
             @change="updateMinRoundsForKillBoards(parseInt(($event.target as HTMLSelectElement).value))"
           >
@@ -409,27 +449,27 @@ const barWidth = (value: number, maxValue: number): string => {
           <div
             v-for="(entry, i) in currentTopKillRates.slice(0, TOP_N)"
             :key="`${entry.playerName}-${entry.killRate}-${i}`"
-            class="relative grid grid-cols-[1.75rem_1fr_auto] items-center gap-x-3 py-2 px-2 rounded group/row"
+            class="relative grid grid-cols-[1.5rem_1fr_auto] items-center gap-x-3 py-1.5 px-2 rounded group/row z-10"
           >
             <div
-              class="absolute inset-y-0 left-0 rounded transition-all duration-500"
-              :class="i === 0 ? 'bg-white/[0.06]' : 'bg-white/[0.025]'"
+              class="absolute inset-y-0 left-0 rounded-sm transition-all duration-500 opacity-20 group-hover/row:opacity-30"
+              :class="i === 0 ? 'bg-rose-400' : 'bg-rose-900'"
               :style="{ width: barWidth(entry.killRate ?? 0, currentTopKillRates[0].killRate ?? 0) }"
             />
             <span
-              class="relative text-right text-xs font-mono tabular-nums"
-              :class="i === 0 ? 'text-neutral-300 font-bold' : 'text-neutral-500'"
+              class="relative text-right text-[10px] font-mono tabular-nums"
+              :class="i === 0 ? 'text-rose-300 font-bold' : 'text-neutral-600'"
             >{{ i + 1 }}</span>
             <router-link
               :to="`/players/${encodeURIComponent(entry.playerName)}`"
-              class="relative text-[13px] truncate transition-colors duration-200"
-              :class="i === 0 ? 'text-neutral-100 font-medium' : 'text-neutral-300 group-hover/row:text-neutral-100'"
+              class="relative text-[13px] truncate transition-colors duration-200 font-medium"
+              :class="i === 0 ? 'text-rose-100' : 'text-neutral-400 group-hover/row:text-neutral-200'"
             >
               <PlayerName :name="entry.playerName" source="server-leaderboards" />
             </router-link>
             <span
-              class="relative text-xs font-mono tabular-nums whitespace-nowrap"
-              :class="i === 0 ? 'text-neutral-200' : 'text-neutral-400'"
+              class="relative text-[11px] font-mono tabular-nums whitespace-nowrap"
+              :class="i === 0 ? 'text-rose-200' : 'text-neutral-500'"
             >{{ (entry.killRate ?? 0).toFixed(2) }}/m</span>
           </div>
         </template>
