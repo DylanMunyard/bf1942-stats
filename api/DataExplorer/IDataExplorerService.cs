@@ -23,7 +23,8 @@ public interface IDataExplorerService
     /// <param name="serverGuid">The server GUID</param>
     /// <param name="page">Page number (1-based)</param>
     /// <param name="pageSize">Number of results per page</param>
-    Task<MapRotationResponse?> GetServerMapRotationAsync(string serverGuid, int page = 1, int pageSize = 10);
+    /// <param name="days">Number of days to look back (default 60)</param>
+    Task<MapRotationResponse?> GetServerMapRotationAsync(string serverGuid, int page = 1, int pageSize = 10, int days = 60);
 
     /// <summary>
     /// Get all maps with summary information, filtered by game.

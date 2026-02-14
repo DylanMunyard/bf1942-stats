@@ -61,18 +61,20 @@ public class DataExplorerController(
     /// <param name="serverGuid">The server GUID</param>
     /// <param name="page">Page number (1-based, default 1)</param>
     /// <param name="pageSize">Number of results per page (default 10, max 100)</param>
+    /// <param name="days">Number of days to look back (default 60)</param>
     [HttpGet("servers/{serverGuid}/map-rotation")]
     [ProducesResponseType(typeof(MapRotationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<MapRotationResponse>> GetServerMapRotation(
         string serverGuid,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10)
+        [FromQuery] int pageSize = 10,
+        [FromQuery] int days = 60)
     {
-        logger.LogDebug("Getting map rotation for server {ServerGuid}, page: {Page}, pageSize: {PageSize}",
-            serverGuid, page, pageSize);
+        logger.LogDebug("Getting map rotation for server {ServerGuid}, page: {Page}, pageSize: {PageSize}, days: {Days}",
+            serverGuid, page, pageSize, days);
 
-        var result = await dataExplorerService.GetServerMapRotationAsync(serverGuid, page, pageSize);
+        var result = await dataExplorerService.GetServerMapRotationAsync(serverGuid, page, pageSize, days);
 
         if (result == null)
         {

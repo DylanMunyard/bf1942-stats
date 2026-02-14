@@ -41,6 +41,8 @@ const totalCount = ref(0);
 const pinnedPlayer = ref<MapPlayerRanking | null>(null);
 const isPinnedLoading = ref(false);
 
+const selectedDays = ref(props.days || 60);
+
 const loadRankings = async () => {
   if (!props.mapName) return;
 
@@ -59,7 +61,7 @@ const loadRankings = async () => {
       pageSize,
       debouncedSearch.value || undefined,
       props.serverGuid,
-      props.days || 60,
+      selectedDays.value,
       activeTab.value
     );
 
@@ -88,7 +90,7 @@ const loadPinnedPlayer = async () => {
       1,
       props.highlightPlayer,
       props.serverGuid,
-      props.days || 60,
+      selectedDays.value,
       activeTab.value
     );
     pinnedPlayer.value = response.rankings.length > 0 ? response.rankings[0] : null;
@@ -97,6 +99,14 @@ const loadPinnedPlayer = async () => {
   } finally {
     isPinnedLoading.value = false;
   }
+};
+
+const handleDaysChange = (days: number) => {
+  if (days === selectedDays.value || isRefreshing.value) return;
+  selectedDays.value = days;
+  currentPage.value = 1;
+  loadRankings();
+  loadPinnedPlayer();
 };
 
 const selectTab = (tabId: MapRankingSortBy) => {
@@ -185,10 +195,13 @@ watch(() => props.serverGuid, () => {
   loadPinnedPlayer();
 });
 
-watch(() => props.days, () => {
-  currentPage.value = 1;
-  loadRankings();
-  loadPinnedPlayer();
+watch(() => props.days, (newDays) => {
+  if (newDays) {
+    selectedDays.value = newDays;
+    currentPage.value = 1;
+    loadRankings();
+    loadPinnedPlayer();
+  }
 });
 </script>
 
@@ -227,13 +240,29 @@ watch(() => props.days, () => {
     </div>
 
     <!-- Header with Search -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-      <div class="flex items-center gap-2">
-        <h3 class="text-sm font-semibold text-neutral-200">Full Rankings</h3>
-        <span v-if="totalCount > 0" class="text-xs text-neutral-500">({{ totalCount.toLocaleString() }} players)</span>
-        <div v-if="isRefreshing" class="w-3.5 h-3.5 border-2 border-neutral-600 border-t-cyan-400 rounded-full animate-spin" />
+    <div class="flex flex-col gap-3">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <h3 class="text-sm font-semibold text-neutral-200">Full Rankings</h3>
+          <span v-if="totalCount > 0" class="text-xs text-neutral-500">({{ totalCount.toLocaleString() }} players)</span>
+          <div v-if="isRefreshing" class="w-3.5 h-3.5 border-2 border-neutral-600 border-t-cyan-400 rounded-full animate-spin" />
+        </div>
+        
+        <!-- Period Selector -->
+        <div class="flex items-center gap-2 bg-neutral-800/50 rounded p-0.5 border border-neutral-700/50 self-start sm:self-auto">
+          <button
+            v-for="days in [30, 60, 90, 365]"
+            :key="days"
+            class="px-2 py-0.5 text-[10px] font-mono rounded transition-colors"
+            :class="selectedDays === days ? 'bg-cyan-500/20 text-cyan-400' : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'"
+            @click="handleDaysChange(days)"
+          >
+            {{ days === 365 ? '1Y' : `${days}D` }}
+          </button>
+        </div>
       </div>
-      <div class="relative w-full sm:w-48">
+
+      <div class="relative w-full">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-500"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         <input
           v-model="searchQuery"

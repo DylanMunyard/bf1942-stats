@@ -293,7 +293,7 @@ public class DataExplorerService(
         );
     }
 
-    public async Task<MapRotationResponse?> GetServerMapRotationAsync(string serverGuid, int page = 1, int pageSize = 10)
+    public async Task<MapRotationResponse?> GetServerMapRotationAsync(string serverGuid, int page = 1, int pageSize = 10, int days = 60)
     {
         // Verify server exists
         var server = await dbContext.Servers
@@ -305,6 +305,12 @@ public class DataExplorerService(
 
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
+
+        // Calculate date range
+        var toDate = DateTime.UtcNow;
+        var fromDate = toDate.AddDays(-days);
+        var cutoffYear = fromDate.Year;
+        var cutoffMonth = fromDate.Month;
 
         // Use raw SQL to aggregate map rotation data with window function for percentage
         // All computation happens in SQLite - no in-memory grouping
@@ -340,12 +346,13 @@ public class DataExplorerService(
                     SUM(SUM(TotalPlayTimeMinutes)) OVER () as ServerTotalPlayTime
                 FROM ServerMapStats
                 WHERE ServerGuid = @p0
+                  AND ((Year > @p1) OR (Year = @p1 AND Month >= @p2))
                 GROUP BY MapName
             )
             ORDER BY PlayTimePercentage DESC";
 
         var mapRotationData = await dbContext.Database
-            .SqlQueryRaw<MapRotationQueryResult>(mapRotationSql, serverGuid)
+            .SqlQueryRaw<MapRotationQueryResult>(mapRotationSql, serverGuid, cutoffYear, cutoffMonth)
             .ToListAsync();
 
         var totalCount = mapRotationData.Count;
@@ -1103,8 +1110,8 @@ public class DataExplorerService(
         var (sortColumn, orderByClause) = sortBy.ToLowerInvariant() switch
         {
             "kills" => ("TotalKills", "TotalKills DESC"),
-            "kdratio" => ("KdRatio", "CalcKdRatio DESC"),
-            "killrate" => ("KillsPerMinute", "CalcKillsPerMinute DESC"),
+            "kdratio" => ("KdRatio", "CAST(CalcKdRatio AS REAL) DESC"),
+            "killrate" => ("KillsPerMinute", "CAST(CalcKillsPerMinute AS REAL) DESC"),
             "wins" => ("TotalWins", "COALESCE(pw.Wins, 0) DESC"),
             _ => ("TotalScore", "TotalScore DESC") // default to score
         };

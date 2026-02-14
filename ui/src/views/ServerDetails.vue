@@ -59,6 +59,7 @@ const mapRotationPage = ref(1);
 const mapRotationPageSize = ref(10);
 const mapRotationTotalCount = ref(0);
 const mapRotationTotalPages = computed(() => Math.max(1, Math.ceil(mapRotationTotalCount.value / mapRotationPageSize.value)));
+const mapRotationDays = ref(60);
 const isMapsLoading = ref(false);
 const mapsError = ref<string | null>(null);
 const hasLoadedMaps = ref(false);
@@ -227,7 +228,8 @@ const fetchMapRotationAsync = async (page: number = 1) => {
     const response = await fetchServerMapRotation(
       serverDetails.value.serverGuid,
       page,
-      mapRotationPageSize.value
+      mapRotationPageSize.value,
+      mapRotationDays.value
     );
     mapRotation.value = response.maps;
     mapRotationPage.value = response.page;
@@ -245,6 +247,13 @@ const handleMapRotationPageChange = (page: number) => {
   if (page >= 1 && page <= mapRotationTotalPages.value) {
     fetchMapRotationAsync(page);
   }
+};
+
+const handleMapRotationDaysChange = (days: number) => {
+  if (days === mapRotationDays.value) return;
+  mapRotationDays.value = days;
+  mapRotationPage.value = 1;
+  fetchMapRotationAsync(1);
 };
 
 watch(
@@ -762,6 +771,24 @@ const closeForecastOverlay = () => {
                   </div>
                   
                   <div v-if="showMapRotation" class="explorer-card-body border-t border-[var(--border-color)] p-0">
+                    <!-- Map Rotation Period Selector -->
+                    <div class="px-4 py-3 border-b border-[var(--border-color)] flex justify-end">
+                      <div class="flex items-center gap-2">
+                        <span class="text-[10px] text-neutral-500 font-mono uppercase">Period:</span>
+                        <div class="flex bg-[var(--bg-panel)] border border-[var(--border-color)] rounded overflow-hidden">
+                          <button
+                            v-for="days in [30, 60, 90, 365]"
+                            :key="days"
+                            class="px-2 py-1 text-[10px] font-mono transition-colors border-r border-[var(--border-color)] last:border-r-0"
+                            :class="mapRotationDays === days ? 'bg-white/10 text-neon-cyan' : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'"
+                            @click="handleMapRotationDaysChange(days)"
+                          >
+                            {{ days === 365 ? '1Y' : `${days}D` }}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
                     <div v-if="isMapsLoading && mapRotation.length === 0" class="p-8 flex justify-center">
                       <div class="explorer-spinner"></div>
                     </div>

@@ -160,13 +160,14 @@ export async function fetchServerDetail(serverGuid: string): Promise<ServerDetai
 export async function fetchServerMapRotation(
   serverGuid: string,
   page: number = 1,
-  pageSize: number = 10
+  pageSize: number = 10,
+  days: number = 60
 ): Promise<MapRotationResponse> {
   try {
     const response = await axios.get<MapRotationResponse>(
       `/stats/data-explorer/servers/${encodeURIComponent(serverGuid)}/map-rotation`,
       {
-        params: { page, pageSize }
+        params: { page, pageSize, days }
       }
     );
     return response.data;
