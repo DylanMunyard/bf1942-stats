@@ -64,9 +64,14 @@ var samplingRatio = double.TryParse(samplingRatioEnv, out var ratio) && ratio is
 
 var loggerConfig = new LoggerConfiguration()
     .MinimumLevel.Debug()
-    // Suppress Microsoft and System framework logs — only show warnings and above
+    // Suppress most Microsoft and System framework logs — only show warnings and above
     .MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning)
     .MinimumLevel.Override("System", Serilog.Events.LogEventLevel.Warning)
+    // Allow ASP.NET Core request/response logging (HTTP requests hitting the API)
+    .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Information)
+    // Suppress specific noisy namespaces while keeping request logs
+    .MinimumLevel.Override("Microsoft.AspNetCore.Routing.EndpointMiddleware", Serilog.Events.LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.AspNetCore.Mvc.Infrastructure", Serilog.Events.LogEventLevel.Warning)
     // Filter to suppress EF Core SQL logs only during bulk operations
     .Filter.ByExcluding(logEvent =>
     {
