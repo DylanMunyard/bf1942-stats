@@ -72,17 +72,25 @@ var loggerConfig = new LoggerConfiguration()
     // Suppress specific noisy namespaces while keeping request logs
     .MinimumLevel.Override("Microsoft.AspNetCore.Routing.EndpointMiddleware", Serilog.Events.LogEventLevel.Warning)
     .MinimumLevel.Override("Microsoft.AspNetCore.Mvc.Infrastructure", Serilog.Events.LogEventLevel.Warning)
+    // Enable EF Core SQL statement logging
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", Serilog.Events.LogEventLevel.Information)
     // Filter to suppress EF Core SQL logs only during bulk operations
     .Filter.ByExcluding(logEvent =>
     {
         // Suppress EF Core SQL logs when they're part of bulk operations
         if (logEvent.Properties.ContainsKey("bulk_operation") &&
-                logEvent.Properties["bulk_operation"].ToString() == "True" &&
-            logEvent.Properties.ContainsKey("SourceContext") &&
-            (logEvent.Properties["SourceContext"].ToString().Contains("Microsoft.EntityFrameworkCore.Database.Command") ||
-             logEvent.Properties["SourceContext"].ToString().Contains("Microsoft.EntityFrameworkCore.Infrastructure")))
+            logEvent.Properties.ContainsKey("SourceContext"))
         {
-            return true; // Exclude this log
+            var bulkOpValue = logEvent.Properties["bulk_operation"].ToString().Trim('"');
+            var sourceContext = logEvent.Properties["SourceContext"].ToString();
+            
+            // Check if bulk_operation is true (case-insensitive) and source is EF Core
+            if (bulkOpValue.Equals("true", StringComparison.OrdinalIgnoreCase) &&
+                (sourceContext.Contains("Microsoft.EntityFrameworkCore.Database.Command") ||
+                 sourceContext.Contains("Microsoft.EntityFrameworkCore.Infrastructure")))
+            {
+                return true; // Exclude this log
+            }
         }
         return false; // Include this log
     })
@@ -126,6 +134,28 @@ try
 
     // Use the static Log.Logger configured earlier (with Seq + Console)
     builder.Host.UseSerilog();
+
+    // Configure logging filters to suppress EF Core SQL logs during background operations
+    builder.Logging.AddFilter((category, level) =>
+    {
+        // Suppress EF Core Database.Command logs when inside a bulk operation (background service)
+        if (category != null && category.Contains("Microsoft.EntityFrameworkCore.Database.Command"))
+        {
+            // Check if we're currently in a bulk operation by examining the current Activity
+            var activity = System.Diagnostics.Activity.Current;
+            if (activity != null)
+            {
+                foreach (var tag in activity.Tags)
+                {
+                    if (tag.Key == "bulk_operation" && tag.Value == "true")
+                    {
+                        return false; // Suppress this log
+                    }
+                }
+            }
+        }
+        return true; // Allow all other logs
+    });
 
     // Configure OpenTelemetry
     builder.Services.AddOpenTelemetry()
@@ -434,6 +464,7 @@ try
     builder.Services.AddDbContext<PlayerTrackerDbContext>((serviceProvider, options) =>
     {
         var interceptor = serviceProvider.GetRequiredService<SqliteConnectionInterceptor>();
+        var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
 
         options.UseSqlite(connectionString, sqliteOptions =>
         {
@@ -441,7 +472,7 @@ try
         })
         .AddInterceptors(interceptor)
         .EnableSensitiveDataLogging(false)
-        .LogTo(message => { }, LogLevel.Warning);
+        .UseLoggerFactory(loggerFactory); // Use ILoggerFactory to enable LogContext property filtering
     });
 
     // Register bot detection service

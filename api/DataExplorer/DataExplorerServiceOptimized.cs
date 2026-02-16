@@ -1802,8 +1802,6 @@ public class DataExplorerService(
         {
             SliceDimensionType.WinsByMap => await GetWinsByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, false, null, normalizedGame),
             SliceDimensionType.WinsByMapAndServer => await GetWinsByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, true, serverNameLookup, normalizedGame),
-            SliceDimensionType.TeamWinsByMap => await GetTeamWinsByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, false, null, normalizedGame),
-            SliceDimensionType.TeamWinsByMapAndServer => await GetTeamWinsByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, true, serverNameLookup, normalizedGame),
             SliceDimensionType.ScoreByMap => await GetScoreByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, false, null, normalizedGame),
             SliceDimensionType.ScoreByMapAndServer => await GetScoreByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, true, serverNameLookup, normalizedGame),
             SliceDimensionType.KillsByMap => await GetKillsByMapAsync(playerName, serverGuids, cutoffYear, cutoffMonth, page, pageSize, false, null, normalizedGame),
@@ -1841,10 +1839,8 @@ public class DataExplorerService(
     {
         return await Task.FromResult(new List<SliceDimensionOption>
         {
-            new(SliceDimensionType.WinsByMap, "Wins by Map", "Player wins aggregated across all servers per map"),
-            new(SliceDimensionType.WinsByMapAndServer, "Wins by Map + Server", "Player wins per map per server combination"),
-            new(SliceDimensionType.TeamWinsByMap, "Team Wins by Map", "Wins for the team the player was on, by map"),
-            new(SliceDimensionType.TeamWinsByMapAndServer, "Team Wins by Map + Server", "Team wins per map per server"),
+            new(SliceDimensionType.WinsByMap, "Wins by Map", "Player wins (1st place finishes) aggregated across all servers per map"),
+            new(SliceDimensionType.WinsByMapAndServer, "Wins by Map + Server", "Player wins (1st place finishes) per map per server combination"),
             new(SliceDimensionType.ScoreByMap, "Score by Map", "Total player score aggregated per map"),
             new(SliceDimensionType.ScoreByMapAndServer, "Score by Map + Server", "Player score per map per server"),
             new(SliceDimensionType.KillsByMap, "Kills by Map", "Total player kills aggregated per map"),
@@ -1954,109 +1950,7 @@ public class DataExplorerService(
         return results;
     }
 
-    private async Task<List<PlayerSliceResultDto>> GetTeamWinsByMapAsync(
-        string playerName,
-        List<string> serverGuids,
-        int cutoffYear,
-        int cutoffMonth,
-        int page,
-        int pageSize,
-        bool includeServer,
-        Dictionary<string, string>? serverNameLookup = null,
-        string game = "bf1942")
-    {
-        // Use ServerMapStats to get team win data
-        // Filter by player existence in PlayerMapStats to only show relevant maps/servers
-        var sql = includeServer ? @"
-            SELECT
-                s.MapName,
-                s.ServerGuid,
-                SUM(s.Team1Victories + s.Team2Victories) as TotalRounds,
-                SUM(s.Team1Victories) as Team1Victories,
-                SUM(s.Team2Victories) as Team2Victories,
-                MAX(s.Team1Label) as Team1Label,
-                MAX(s.Team2Label) as Team2Label,
-                CASE WHEN SUM(s.Team1Victories + s.Team2Victories) > 0
-                     THEN ROUND(CAST(SUM(s.Team1Victories) AS REAL) / SUM(s.Team1Victories + s.Team2Victories) * 100, 1)
-                     ELSE 0 END as Team1WinRate
-            FROM ServerMapStats s
-            WHERE ((s.Year > @p0) OR (s.Year = @p0 AND s.Month >= @p1))
-              AND s.ServerGuid IN (SELECT Guid FROM Servers WHERE Game = @p2)
-              AND EXISTS (
-                  SELECT 1 FROM PlayerMapStats pms
-                  WHERE pms.PlayerName = @p3
-                    AND pms.MapName = s.MapName
-                    AND pms.ServerGuid = s.ServerGuid
-                    AND ((pms.Year > @p0) OR (pms.Year = @p0 AND pms.Month >= @p1))
-              )
-            GROUP BY s.MapName, s.ServerGuid
-            ORDER BY SUM(s.Team1Victories + s.Team2Victories) DESC" : @"
-            SELECT
-                s.MapName,
-                NULL as ServerGuid,
-                SUM(s.Team1Victories + s.Team2Victories) as TotalRounds,
-                SUM(s.Team1Victories) as Team1Victories,
-                SUM(s.Team2Victories) as Team2Victories,
-                MAX(s.Team1Label) as Team1Label,
-                MAX(s.Team2Label) as Team2Label,
-                CASE WHEN SUM(s.Team1Victories + s.Team2Victories) > 0
-                     THEN ROUND(CAST(SUM(s.Team1Victories) AS REAL) / SUM(s.Team1Victories + s.Team2Victories) * 100, 1)
-                     ELSE 0 END as Team1WinRate
-            FROM ServerMapStats s
-            WHERE ((s.Year > @p0) OR (s.Year = @p0 AND s.Month >= @p1))
-              AND s.ServerGuid IN (SELECT Guid FROM Servers WHERE Game = @p2)
-              AND EXISTS (
-                  SELECT 1 FROM PlayerMapStats pms
-                  WHERE pms.PlayerName = @p3
-                    AND pms.MapName = s.MapName
-                    AND pms.ServerGuid = s.ServerGuid
-                    AND ((pms.Year > @p0) OR (pms.Year = @p0 AND pms.Month >= @p1))
-              )
-            GROUP BY s.MapName
-            ORDER BY SUM(s.Team1Victories + s.Team2Victories) DESC";
 
-        var teamWinData = await dbContext.Database
-            .SqlQueryRaw<TeamWinQueryResult>(sql, cutoffYear, cutoffMonth, game, playerName)
-            .ToListAsync();
-
-        var results = new List<PlayerSliceResultDto>();
-        var rank = (page - 1) * pageSize + 1;
-
-        foreach (var data in teamWinData.Skip((page - 1) * pageSize).Take(pageSize))
-        {
-            var sliceKey = data.MapName;
-            var subKey = includeServer ? data.ServerGuid : null;
-            var subKeyLabel = includeServer && serverNameLookup != null
-                ? serverNameLookup.GetValueOrDefault(data.ServerGuid ?? "", "Unknown Server")
-                : null;
-            var sliceLabel = includeServer && subKeyLabel != null
-                ? $"{data.MapName} on {subKeyLabel}"
-                : data.MapName;
-            var team1Label = NormalizeTeamLabel(data.Team1Label, game, 1);
-            var team2Label = NormalizeTeamLabel(data.Team2Label, game, 2);
-
-            results.Add(new PlayerSliceResultDto(
-                SliceKey: sliceKey,
-                SubKey: subKey,
-                SubKeyLabel: subKeyLabel,
-                SliceLabel: sliceLabel,
-                PrimaryValue: data.Team1Victories,
-                SecondaryValue: data.TotalRounds,
-                Percentage: data.Team1WinRate,
-                Rank: rank++,
-                TotalPlayers: 1, // Not applicable for team wins
-                AdditionalData: new Dictionary<string, object>
-                {
-                    ["team1Label"] = team1Label,
-                    ["team2Label"] = team2Label,
-                    ["team2Victories"] = data.Team2Victories,
-                    ["team2WinRate"] = Math.Round(100 - data.Team1WinRate, 1)
-                }
-            ));
-        }
-
-        return results;
-    }
 
     private async Task<List<PlayerSliceResultDto>> GetScoreByMapAsync(
         string playerName,
@@ -2199,8 +2093,6 @@ public class DataExplorerService(
         {
             SliceDimensionType.WinsByMap => "Wins by Map",
             SliceDimensionType.WinsByMapAndServer => "Wins by Map + Server",
-            SliceDimensionType.TeamWinsByMap => "Team Wins by Map",
-            SliceDimensionType.TeamWinsByMapAndServer => "Team Wins by Map + Server",
             SliceDimensionType.ScoreByMap => "Score by Map",
             SliceDimensionType.ScoreByMapAndServer => "Score by Map + Server",
             SliceDimensionType.KillsByMap => "Kills by Map",
@@ -2209,18 +2101,6 @@ public class DataExplorerService(
         };
 
     // Additional query result classes for new functionality
-    private class TeamWinQueryResult
-    {
-        public string MapName { get; set; } = "";
-        public string? ServerGuid { get; set; }
-        public int TotalRounds { get; set; }
-        public int Team1Victories { get; set; }
-        public int Team2Victories { get; set; }
-        public string? Team1Label { get; set; }
-        public string? Team2Label { get; set; }
-        public double Team1WinRate { get; set; }
-    }
-
     private class PlayerWinQueryResult
     {
         public string MapName { get; set; } = "";
@@ -2238,24 +2118,6 @@ public class DataExplorerService(
         public int TotalKills { get; set; }
         public int TotalDeaths { get; set; }
         public int TotalRounds { get; set; }
-    }
-
-    private static string NormalizeTeamLabel(string? rawLabel, string game, int teamNumber)
-    {
-        if (!string.IsNullOrWhiteSpace(rawLabel) &&
-            !rawLabel.Equals($"Team{teamNumber}Label", StringComparison.OrdinalIgnoreCase) &&
-            !rawLabel.Equals($"Team {teamNumber}", StringComparison.OrdinalIgnoreCase))
-        {
-            return rawLabel;
-        }
-
-        // BF1942 defaults are the most expected fallback for empty/placeholder labels.
-        if (game.Equals("bf1942", StringComparison.OrdinalIgnoreCase))
-        {
-            return teamNumber == 1 ? "Axis" : "Allied";
-        }
-
-        return teamNumber == 1 ? "Team 1" : "Team 2";
     }
 
     #endregion

@@ -85,7 +85,7 @@ public class SqlitePlayerStatsService(PlayerTrackerDbContext dbContext) : ISqlit
                 FirstRoundTime = g.Min(p => p.FirstRoundTime),
                 LastRoundTime = g.Max(p => p.LastRoundTime)
             })
-            .FirstOrDefaultAsync();
+            .SingleOrDefaultAsync();
 
         stopwatch.Stop();
         activity?.SetTag("result.row_count", stats != null ? 1 : 0);

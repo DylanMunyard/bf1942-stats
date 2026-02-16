@@ -46,10 +46,8 @@ public record PaginationDto(
 /// </summary>
 public enum SliceDimensionType
 {
-    WinsByMap,           // Player wins by map (cross-server)
-    WinsByMapAndServer,  // Player wins by map+server combination
-    TeamWinsByMap,       // Team wins by map (based on ServerMapStats)
-    TeamWinsByMapAndServer, // Team wins by map+server
+    WinsByMap,           // Player wins by map (1st place finishes, cross-server)
+    WinsByMapAndServer,  // Player wins by map+server combination (1st place finishes)
     ScoreByMap,          // Traditional score ranking by map
     ScoreByMapAndServer, // Traditional score ranking by map+server
     KillsByMap,          // Kills by map
