@@ -20,10 +20,10 @@
     </div>
 
     <!-- Content -->
-    <div v-else-if="slicedData" class="p-4">
+    <div v-else-if="slicedData">
 
       <!-- Header / Controls -->
-      <div class="mb-6">
+      <div class="mb-4 sm:mb-6">
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <h2 class="explorer-section-title" style="font-size: 1.25rem; margin: 0">{{ getCurrentSliceName() }}</h2>
@@ -71,7 +71,7 @@
       </div>
 
       <!-- Summary Stats -->
-      <div v-if="slicedData.results.length > 0" class="explorer-stats-grid mb-8">
+      <div v-if="slicedData.results.length > 0" class="explorer-stats-grid mb-4 sm:mb-8">
         <!-- Card 1: Count -->
         <div class="explorer-stat">
           <div class="explorer-stat-value">{{ slicedData.results.length }}</div>
@@ -99,7 +99,7 @@
 
       <!-- Results Table -->
       <div v-if="slicedData.results.length > 0">
-        <h3 class="explorer-section-title mb-2">DETAILED RESULTS</h3>
+        <h3 class="explorer-section-title mb-2 sm:mb-3">DETAILED RESULTS</h3>
 
         <div class="explorer-card" style="padding: 0">
           <div class="overflow-x-auto">
@@ -599,11 +599,17 @@ watch(() => props.serverGuid, () => {
 
 .explorer-stat {
   text-align: center;
-  padding: 1rem;
+  padding: 0.75rem 0.5rem;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   transition: all 0.3s ease;
+}
+
+@media (min-width: 640px) {
+  .explorer-stat {
+    padding: 1rem;
+  }
 }
 
 .explorer-stat:hover {
@@ -669,7 +675,7 @@ watch(() => props.serverGuid, () => {
 
 .explorer-table th {
   text-align: left;
-  padding: 0.5rem 0.75rem;
+  padding: 0.5rem 0.5rem;
   background: var(--bg-card);
   color: var(--neon-cyan);
   font-weight: 600;
@@ -681,14 +687,26 @@ watch(() => props.serverGuid, () => {
   white-space: nowrap;
 }
 
+@media (min-width: 640px) {
+  .explorer-table th {
+    padding: 0.5rem 0.75rem;
+  }
+}
+
 .explorer-table th.text-right {
   text-align: right;
 }
 
 .explorer-table td {
-  padding: 0.5rem 0.75rem;
+  padding: 0.5rem 0.5rem;
   border-bottom: 1px solid var(--border-color);
   color: var(--text-primary);
+}
+
+@media (min-width: 640px) {
+  .explorer-table td {
+    padding: 0.5rem 0.75rem;
+  }
 }
 
 .explorer-table td.text-right {
@@ -783,12 +801,19 @@ watch(() => props.serverGuid, () => {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  padding: 0.6rem 0.75rem;
+  gap: 0.5rem;
+  padding: 0.5rem 0.5rem;
   border-top: 1px solid var(--border-color);
   background: var(--bg-card);
   font-size: 0.75rem;
   color: var(--text-secondary);
+}
+
+@media (min-width: 640px) {
+  .explorer-pagination {
+    gap: 0.75rem;
+    padding: 0.6rem 0.75rem;
+  }
 }
 
 .explorer-pagination-controls {

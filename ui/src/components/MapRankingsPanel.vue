@@ -206,55 +206,57 @@ watch(() => props.days, (newDays) => {
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div class="map-rankings-panel space-y-3">
     <!-- Pinned Player Banner -->
     <div
       v-if="pinnedPlayer && highlightPlayer"
-      class="flex items-center gap-3 px-3 sm:px-4 py-3 rounded-lg bg-cyan-500/10 border border-cyan-500/30"
+      class="flex items-center gap-3 px-3 sm:px-4 py-3 rounded bg-[var(--bg-card)] border border-[var(--neon-cyan)] shadow-[0_0_20px_rgba(0,255,242,0.2)]"
     >
       <div class="flex-shrink-0">
         <span :class="getRankClass(pinnedPlayer.rank)" class="scale-125">{{ pinnedPlayer.rank }}</span>
       </div>
       <div class="flex-1 min-w-0">
-        <div class="text-sm font-semibold text-cyan-300 truncate">{{ pinnedPlayer.playerName }}</div>
-        <div class="text-xs text-neutral-400">Your position on {{ mapName }}</div>
+        <div class="text-sm font-bold text-[var(--neon-cyan)] truncate font-mono">{{ pinnedPlayer.playerName }}</div>
+        <div class="text-xs text-[var(--text-secondary)] font-mono">Your position on {{ mapName }}</div>
       </div>
       <div class="hidden sm:flex items-center gap-4 text-xs">
         <div class="text-center">
-          <div class="font-mono font-semibold text-neutral-200">{{ pinnedPlayer.totalScore.toLocaleString() }}</div>
-          <div class="text-neutral-500">Score</div>
+          <div class="font-mono font-bold text-[var(--text-primary)]">{{ pinnedPlayer.totalScore.toLocaleString() }}</div>
+          <div class="text-[var(--text-secondary)] text-[10px] uppercase tracking-wider">Score</div>
         </div>
         <div class="text-center">
-          <div class="font-mono font-semibold text-green-400">{{ pinnedPlayer.kdRatio.toFixed(2) }}</div>
-          <div class="text-neutral-500">K/D</div>
+          <div class="font-mono font-bold text-[var(--neon-green)]">{{ pinnedPlayer.kdRatio.toFixed(2) }}</div>
+          <div class="text-[var(--text-secondary)] text-[10px] uppercase tracking-wider">K/D</div>
         </div>
         <div class="text-center">
-          <div class="font-mono text-neutral-300">{{ pinnedPlayer.totalRounds }}</div>
-          <div class="text-neutral-500">Rounds</div>
+          <div class="font-mono text-[var(--text-primary)]">{{ pinnedPlayer.totalRounds }}</div>
+          <div class="text-[var(--text-secondary)] text-[10px] uppercase tracking-wider">Rounds</div>
         </div>
       </div>
     </div>
-    <div v-else-if="isPinnedLoading && highlightPlayer" class="flex items-center gap-2 px-3 sm:px-4 py-3 rounded-lg bg-neutral-800/50 border border-neutral-700/50">
-      <div class="w-4 h-4 border-2 border-neutral-600 border-t-cyan-400 rounded-full animate-spin" />
-      <span class="text-xs text-neutral-400">Finding your rank...</span>
+    <div v-else-if="isPinnedLoading && highlightPlayer" class="flex items-center gap-2 px-3 sm:px-4 py-3 rounded bg-[var(--bg-card)] border border-[var(--border-color)]">
+      <div class="w-4 h-4 border-2 border-[var(--border-color)] border-t-[var(--neon-cyan)] rounded-full animate-spin" />
+      <span class="text-xs text-[var(--text-secondary)] font-mono">Finding your rank...</span>
     </div>
 
     <!-- Header with Search -->
     <div class="flex flex-col gap-3">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div class="flex items-center gap-2">
-          <h3 class="text-sm font-semibold text-neutral-200">Full Rankings</h3>
-          <span v-if="totalCount > 0" class="text-xs text-neutral-500">({{ totalCount.toLocaleString() }} players)</span>
-          <div v-if="isRefreshing" class="w-3.5 h-3.5 border-2 border-neutral-600 border-t-cyan-400 rounded-full animate-spin" />
+          <h3 class="text-sm font-bold text-[var(--neon-cyan)] uppercase tracking-wider font-mono">Full Rankings</h3>
+          <span v-if="totalCount > 0" class="text-xs text-[var(--text-secondary)] font-mono">({{ totalCount.toLocaleString() }} players)</span>
+          <div v-if="isRefreshing" class="w-3.5 h-3.5 border-2 border-[var(--border-color)] border-t-[var(--neon-cyan)] rounded-full animate-spin" />
         </div>
         
         <!-- Period Selector -->
-        <div class="flex items-center gap-2 bg-neutral-800/50 rounded p-0.5 border border-neutral-700/50 self-start sm:self-auto">
+        <div class="flex items-center gap-0 bg-[var(--bg-panel)] rounded border border-[var(--border-color)] p-0.5 self-start sm:self-auto">
           <button
             v-for="days in [30, 60, 90, 365]"
             :key="days"
-            class="px-2 py-0.5 text-[10px] font-mono rounded transition-colors"
-            :class="selectedDays === days ? 'bg-cyan-500/20 text-cyan-400' : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'"
+            class="px-2.5 py-1 text-[10px] font-mono rounded transition-all font-semibold uppercase tracking-wider"
+            :class="selectedDays === days 
+              ? 'bg-[var(--neon-cyan)] text-[var(--bg-dark)] shadow-[0_0_10px_rgba(0,255,242,0.4)]' 
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5'"
             @click="handleDaysChange(days)"
           >
             {{ days === 365 ? '1Y' : `${days}D` }}
@@ -263,28 +265,28 @@ watch(() => props.days, (newDays) => {
       </div>
 
       <div class="relative w-full">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-500"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--neon-green)] opacity-80"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
         <input
           v-model="searchQuery"
           type="text"
           placeholder="Search players..."
-          class="w-full pl-8 pr-3 py-1.5 text-xs bg-neutral-800 border border-neutral-700 rounded-lg text-neutral-200 placeholder:text-neutral-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20"
+          class="w-full pl-8 pr-3 py-1.5 text-xs font-mono rounded transition-all"
           @input="handleSearchInput"
         />
       </div>
     </div>
 
     <!-- Sort Tabs -->
-    <div class="flex gap-0 border-b border-neutral-700/50">
+    <div class="flex gap-0 border-b border-[var(--border-color)]">
       <button
         v-for="tab in tabs"
         :key="tab.id"
         :disabled="isRefreshing"
         :class="[
-          'px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors',
+          'px-3 py-2 text-xs font-semibold uppercase tracking-wider font-mono border-b-2 -mb-px transition-all',
           activeTab === tab.id
-            ? 'border-cyan-400 text-cyan-400'
-            : 'border-transparent text-neutral-500 hover:text-neutral-300'
+            ? 'border-[var(--neon-cyan)] text-[var(--neon-cyan)] shadow-[0_0_10px_rgba(0,255,242,0.3)]'
+            : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
         ]"
         @click="selectTab(tab.id)"
       >
@@ -293,27 +295,28 @@ watch(() => props.days, (newDays) => {
     </div>
 
     <!-- Loading -->
-    <div v-if="isLoading && rankings.length === 0" class="flex items-center justify-center py-12">
-      <div class="w-6 h-6 border-2 border-neutral-600 border-t-cyan-400 rounded-full animate-spin" />
+    <div v-if="isLoading && rankings.length === 0" class="flex flex-col items-center justify-center py-12 gap-3">
+      <div class="w-6 h-6 border-2 border-[var(--border-color)] border-t-[var(--neon-cyan)] rounded-full animate-spin" />
+      <span class="text-xs text-[var(--text-secondary)] font-mono uppercase tracking-wider">Loading rankings...</span>
     </div>
 
     <!-- Error -->
-    <div v-else-if="error && rankings.length === 0" class="text-center py-8">
-      <div class="text-sm text-red-400 mb-2">{{ error }}</div>
-      <button class="text-xs text-cyan-400 hover:text-cyan-300" @click="loadRankings">Try again</button>
+    <div v-else-if="error && rankings.length === 0" class="text-center py-8 bg-[var(--bg-card)] rounded border border-[var(--neon-red)] shadow-[0_0_20px_rgba(255,49,49,0.2)]">
+      <div class="text-sm text-[var(--neon-red)] mb-2 font-mono">{{ error }}</div>
+      <button class="text-xs text-[var(--neon-cyan)] hover:text-[var(--neon-cyan)]/80 font-mono uppercase tracking-wider font-semibold" @click="loadRankings">Try again</button>
     </div>
 
     <!-- Rankings Table -->
     <div v-else-if="rankings.length > 0" :class="{ 'opacity-50 pointer-events-none': isRefreshing }">
-      <div class="overflow-x-auto">
+      <div class="overflow-x-auto bg-[var(--bg-card)] rounded border border-[var(--border-color)]">
         <table class="w-full text-sm">
           <thead>
-            <tr class="text-neutral-500 text-left border-b border-neutral-700/50">
-              <th class="p-2 text-xs font-medium w-10">#</th>
-              <th class="p-2 text-xs font-medium">Player</th>
-              <th class="p-2 text-xs font-medium text-right">{{ primaryColumnHeader }}</th>
-              <th class="p-2 text-xs font-medium text-right hidden sm:table-cell">K/D</th>
-              <th class="p-2 text-xs font-medium text-right hidden sm:table-cell">Rounds</th>
+            <tr class="text-left border-b border-[var(--border-color)]">
+              <th class="p-2 sm:p-3 text-xs w-10">#</th>
+              <th class="p-2 sm:p-3 text-xs">Player</th>
+              <th class="p-2 sm:p-3 text-xs text-right">{{ primaryColumnHeader }}</th>
+              <th class="p-2 sm:p-3 text-xs text-right hidden sm:table-cell">K/D</th>
+              <th class="p-2 sm:p-3 text-xs text-right hidden sm:table-cell">Rounds</th>
             </tr>
           </thead>
           <tbody>
@@ -321,30 +324,30 @@ watch(() => props.days, (newDays) => {
               v-for="entry in rankings"
               :key="entry.playerName"
               :class="[
-                'border-b border-neutral-800/50 transition-colors',
+                'border-b border-[var(--border-color)] transition-colors cursor-pointer',
                 isHighlighted(entry.playerName)
-                  ? 'bg-cyan-500/10 border-l-2 border-l-cyan-400'
-                  : 'hover:bg-neutral-800/40'
+                  ? 'bg-[var(--neon-cyan)]/10 border-l-2 border-l-[var(--neon-cyan)]'
+                  : ''
               ]"
             >
-              <td class="p-2">
+              <td class="p-2 sm:p-3">
                 <span :class="getRankClass(entry.rank)">{{ entry.rank }}</span>
               </td>
-              <td class="p-2 max-w-[140px] truncate">
+              <td class="p-2 sm:p-3 max-w-[140px] truncate">
                 <button
-                  class="text-neutral-200 hover:text-cyan-400 transition-colors font-medium text-left"
+                  class="text-[var(--text-primary)] hover:text-[var(--neon-cyan)] transition-colors font-medium text-left"
                   @click="navigateToPlayer(entry.playerName)"
                 >
                   {{ entry.playerName }}
                 </button>
               </td>
-              <td class="p-2 text-right font-mono text-cyan-400 font-medium">
+              <td class="p-2 sm:p-3 text-right font-mono text-[var(--neon-cyan)] font-bold">
                 {{ formatPrimaryValue(entry) }}
               </td>
-              <td class="p-2 text-right font-mono text-green-400 hidden sm:table-cell">
+              <td class="p-2 sm:p-3 text-right font-mono text-[var(--neon-green)] hidden sm:table-cell">
                 {{ entry.kdRatio.toFixed(2) }}
               </td>
-              <td class="p-2 text-right font-mono text-neutral-400 hidden sm:table-cell">
+              <td class="p-2 sm:p-3 text-right font-mono text-[var(--text-secondary)] hidden sm:table-cell">
                 {{ entry.totalRounds }}
               </td>
             </tr>
@@ -353,22 +356,23 @@ watch(() => props.days, (newDays) => {
       </div>
 
       <!-- Pagination -->
-      <div v-if="totalPages > 1" class="flex items-center justify-center gap-1 pt-3 mt-3 border-t border-neutral-800/50">
+      <div v-if="totalPages > 1" class="flex items-center justify-center gap-1 pt-3 mt-3 border-t border-[var(--border-color)]">
         <button
-          class="px-2 py-1 text-xs font-medium text-neutral-400 hover:text-neutral-200 bg-neutral-800 border border-neutral-700 rounded disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          class="px-2.5 py-1 text-xs font-semibold font-mono uppercase bg-[var(--bg-panel)] border border-[var(--border-color)] rounded disabled:opacity-40 disabled:cursor-not-allowed transition-all hover:bg-white/5 hover:border-[var(--neon-cyan)] hover:text-[var(--neon-cyan)]"
+          :class="currentPage === 1 || isRefreshing ? 'text-[var(--text-secondary)]' : 'text-[var(--text-primary)]'"
           :disabled="currentPage === 1 || isRefreshing"
           @click="goToPage(currentPage - 1)"
         >
-          Prev
+          &larr;
         </button>
         <button
           v-for="pageNum in paginationRange"
           :key="pageNum"
           :class="[
-            'px-2 py-1 text-xs font-medium rounded border transition-colors min-w-[1.5rem]',
+            'px-2.5 py-1 text-xs font-semibold font-mono rounded border transition-all min-w-[1.75rem]',
             pageNum === currentPage
-              ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
-              : 'text-neutral-400 hover:text-neutral-200 bg-neutral-800 border-neutral-700'
+              ? 'bg-[var(--neon-cyan)] text-[var(--bg-dark)] border-[var(--neon-cyan)] shadow-[0_0_10px_rgba(0,255,242,0.4)]'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-panel)] border-[var(--border-color)] hover:border-[var(--neon-cyan)]'
           ]"
           :disabled="isRefreshing"
           @click="goToPage(pageNum)"
@@ -376,18 +380,95 @@ watch(() => props.days, (newDays) => {
           {{ pageNum }}
         </button>
         <button
-          class="px-2 py-1 text-xs font-medium text-neutral-400 hover:text-neutral-200 bg-neutral-800 border border-neutral-700 rounded disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          class="px-2.5 py-1 text-xs font-semibold font-mono uppercase bg-[var(--bg-panel)] border border-[var(--border-color)] rounded disabled:opacity-40 disabled:cursor-not-allowed transition-all hover:bg-white/5 hover:border-[var(--neon-cyan)] hover:text-[var(--neon-cyan)]"
+          :class="currentPage === totalPages || isRefreshing ? 'text-[var(--text-secondary)]' : 'text-[var(--text-primary)]'"
           :disabled="currentPage === totalPages || isRefreshing"
           @click="goToPage(currentPage + 1)"
         >
-          Next
+          &rarr;
         </button>
       </div>
     </div>
 
     <!-- Empty -->
-    <div v-else class="text-center py-8 text-sm text-neutral-400">
-      No rankings data available
+    <div v-else class="text-center py-8 bg-[var(--bg-card)] rounded border border-[var(--border-color)]">
+      <div class="text-2xl text-[var(--neon-cyan)] opacity-50 mb-2 font-mono">{ }</div>
+      <div class="text-sm text-[var(--text-secondary)] font-mono">No rankings data available</div>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Match DataExplorer.vue.css theme */
+.map-rankings-panel {
+  --neon-cyan: #00fff2;
+  --neon-green: #39ff14;
+  --neon-pink: #ff00ff;
+  --neon-gold: #ffd700;
+  --neon-red: #ff3131;
+  --bg-dark: #0a0a0f;
+  --bg-panel: #0d1117;
+  --bg-card: #161b22;
+  --border-color: #30363d;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+}
+
+.map-rankings-panel input {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.map-rankings-panel input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.5;
+}
+
+.map-rankings-panel input:focus {
+  outline: none;
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 15px rgba(0, 255, 242, 0.2);
+}
+
+.map-rankings-panel table {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.map-rankings-panel th {
+  background: var(--bg-card);
+  color: var(--neon-cyan);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  font-size: 0.7rem;
+  text-shadow: 0 0 10px rgba(0, 255, 242, 0.3);
+}
+
+.map-rankings-panel tbody tr {
+  border-color: var(--border-color);
+}
+
+.map-rankings-panel tbody tr:hover {
+  background: rgba(0, 255, 242, 0.08);
+}
+
+/* Rank badge styling */
+.map-rankings-panel tbody tr td:first-child span {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+/* Add glow effect to active tab */
+.map-rankings-panel button:not(:disabled):hover {
+  cursor: pointer;
+}
+
+.map-rankings-panel button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+</style>

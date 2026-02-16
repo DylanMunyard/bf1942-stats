@@ -39,7 +39,7 @@
     <!-- Content -->
     <div v-else-if="mapStats.length > 0" class="space-y-4">
       <!-- Header Row with Back Button -->
-      <div class="flex items-center justify-between">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div class="flex items-center gap-3">
           <button
             @click="emit('close')"
@@ -50,11 +50,16 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <div class="text-sm text-slate-400">
-            {{ mapStats.length }} map{{ mapStats.length !== 1 ? 's' : '' }} played
-            <span v-if="playerData" class="text-slate-500">
-              &bull; Last {{ playerData.dateRange.days }} days
-            </span>
+          <div>
+            <div class="text-sm text-slate-400">
+              {{ mapStats.length }} map{{ mapStats.length !== 1 ? 's' : '' }} played
+              <span v-if="playerData" class="text-slate-500">
+                &bull; Last {{ playerData.dateRange.days }} days
+              </span>
+            </div>
+            <div class="text-xs text-slate-500 mt-0.5">
+              Click a map row to see detailed stats
+            </div>
           </div>
         </div>
         <div class="flex gap-2">
@@ -206,7 +211,8 @@
               <tr
                 v-for="(map, index) in sortedMapStats"
                 :key="map.mapName"
-                class="border-b border-slate-700/30 hover:bg-slate-700/20 transition-colors"
+                class="border-b border-slate-700/30 hover:bg-slate-700/20 transition-colors cursor-pointer"
+                @click="handleMapClick(map.mapName)"
               >
                 <td class="p-3">
                   <button
@@ -226,6 +232,7 @@
                       query: { map: map.mapName, ...(serverGuid ? { server: serverGuid } : {}) }
                     }"
                     class="text-slate-200 hover:text-cyan-400 transition-colors font-medium"
+                    @click.stop
                   >
                     {{ map.mapName }}
                   </router-link>
@@ -307,6 +314,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'open-rankings', mapName: string): void;
+  (e: 'open-map-detail', mapName: string): void;
   (e: 'close'): void;
 }>();
 
@@ -314,6 +322,10 @@ const handleRankClick = (mapName: string, rank: number | null) => {
   if (rank !== null) {
     emit('open-rankings', mapName);
   }
+};
+
+const handleMapClick = (mapName: string) => {
+  emit('open-map-detail', mapName);
 };
 
 const playerData = ref<PlayerMapRankingsResponse | null>(null);

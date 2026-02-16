@@ -54,9 +54,13 @@
           </router-link>
         </div>
         <!-- Breadcrumb / Context -->
-        <div class="flex items-center gap-2 text-sm text-slate-400 ml-11">
+        <div class="flex flex-wrap items-center gap-2 text-sm text-slate-400 ml-11">
+          <span v-if="playerName" class="px-2 py-0.5 bg-cyan-900/30 border border-cyan-700/50 rounded text-cyan-400 font-medium">
+            {{ playerName }}
+          </span>
+          <span v-if="playerName" class="text-slate-500">on</span>
           <span class="px-2 py-0.5 bg-slate-700 rounded">{{ getGameLabel(detail.game) }}</span>
-          <span class="text-slate-500">on</span>
+          <span class="text-slate-500">•</span>
           <span class="text-slate-300">{{ detail.serverName }}</span>
         </div>
       </div>
@@ -136,6 +140,7 @@
           :server-guid="serverGuid"
           :game="(detail.game as any)"
           :days="selectedDays"
+          :highlight-player="playerName"
         />
       </div>
 
@@ -165,6 +170,7 @@ import MapRankingsPanel from '../MapRankingsPanel.vue';
 const props = defineProps<{
   serverGuid: string;
   mapName: string;
+  playerName?: string; // Optional: filter/highlight specific player
 }>();
 
 const emit = defineEmits<{

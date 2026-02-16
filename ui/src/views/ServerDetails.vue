@@ -937,8 +937,8 @@ const closeForecastOverlay = () => {
         </div>
 
         <!-- Content -->
-        <div class="flex-1 overflow-y-auto p-2 sm:p-4">
-          <div v-if="showRankingsInPanel && rankingsMapNameForPanel">
+        <div class="flex-1 overflow-y-auto">
+          <div v-if="showRankingsInPanel && rankingsMapNameForPanel" class="p-3 sm:p-4">
             <button
               class="explorer-btn explorer-btn--ghost explorer-btn--sm mb-4 flex items-center gap-2"
               @click="handleCloseRankingsInPanel"

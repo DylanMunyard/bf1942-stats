@@ -270,6 +270,16 @@ const closeServerMapDetail = () => {
   selectedServerMapDetail.value = null;
 };
 
+// Function to open server map detail from server map stats panel (with player context)
+const openPlayerServerMapDetail = (mapName: string) => {
+  if (selectedServerGuid.value && selectedServerGuid.value !== '__all__') {
+    selectedServerMapDetail.value = {
+      serverGuid: selectedServerGuid.value,
+      mapName: mapName
+    };
+  }
+};
+
 const fetchData = async () => {
   isLoading.value = true;
   error.value = null;
@@ -701,7 +711,7 @@ onUnmounted(() => {
                     <h3 class="explorer-card-title">DATA EXPLORER BREAKDOWN</h3>
                     <p class="text-[10px] text-neutral-500 font-mono mt-1">EXPANDED MAP AND SERVER SLICING</p>
                   </div>
-                  <div class="explorer-card-body p-0">
+                  <div class="explorer-card-body">
                     <PlayerDetailPanel
                       :player-name="playerName"
                       :game="playerPanelGame"
@@ -752,14 +762,14 @@ onUnmounted(() => {
                     </div>
                   </div>
                   <div class="explorer-card-body p-0">
-                    <div v-if="currentBestScores.length === 0" class="p-6 text-center text-neutral-500 text-sm font-mono">
+                    <div v-if="currentBestScores.length === 0" class="p-4 sm:p-6 text-center text-neutral-500 text-sm font-mono">
                       NO SCORES RECORDED
                     </div>
                     <div v-else class="divide-y divide-[var(--border-color)]">
                       <div
                         v-for="(score, index) in currentBestScores.slice(0, 5)"
                         :key="`${score.roundId}-${index}`"
-                        class="p-3 hover:bg-white/5 transition-colors cursor-pointer flex items-center gap-3"
+                        class="p-2 sm:p-3 hover:bg-white/5 transition-colors cursor-pointer flex items-center gap-2 sm:gap-3"
                         @click="navigateToRoundReport(score.roundId)"
                       >
                         <div class="w-6 h-6 rounded bg-[var(--bg-panel)] border border-[var(--border-color)] flex items-center justify-center text-xs font-bold text-neon-gold font-mono">
@@ -799,7 +809,7 @@ onUnmounted(() => {
                       <div
                         v-for="server in unifiedServerList"
                         :key="server.serverGuid"
-                        class="group p-3 hover:bg-white/5 transition-colors cursor-pointer flex items-center gap-3"
+                        class="group p-2 sm:p-3 hover:bg-white/5 transition-colors cursor-pointer flex items-center gap-2 sm:gap-3"
                         @click="showServerMapStats(server.serverGuid)"
                       >
                         <!-- Rank -->
@@ -866,8 +876,8 @@ onUnmounted(() => {
         </div>
 
         <!-- Content -->
-        <div class="flex-1 overflow-y-auto p-2 sm:p-4">
-          <div v-if="rankingsMapName">
+        <div class="flex-1 overflow-y-auto">
+          <div v-if="rankingsMapName" class="p-3 sm:p-4">
             <button
               class="explorer-btn explorer-btn--ghost explorer-btn--sm mb-4 flex items-center gap-2"
               @click="closeRankingsPanel"
@@ -887,6 +897,7 @@ onUnmounted(() => {
             :server-guid="effectiveServerGuid"
             :game="(effectiveServerGuid ? playerStats?.servers?.find(s => s.serverGuid === effectiveServerGuid)?.gameId as any : undefined) || 'bf1942'"
             @open-rankings="openRankingsPanel"
+            @open-map-detail="openPlayerServerMapDetail"
             @close="closeServerMapStats"
           />
         </div>
@@ -910,7 +921,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Content -->
-        <div class="flex-1 overflow-y-auto p-2 sm:p-4 bg-[var(--bg-panel)]">
+        <div class="flex-1 overflow-y-auto bg-[var(--bg-panel)]">
           <MapDetailPanel 
             :map-name="selectedMapDetailName" 
             @navigate-to-server="openServerMapDetail"
@@ -941,6 +952,7 @@ onUnmounted(() => {
           <ServerMapDetailPanel
             :server-guid="selectedServerMapDetail.serverGuid"
             :map-name="selectedServerMapDetail.mapName"
+            :player-name="playerName"
             @close="closeServerMapDetail"
           />
         </div>

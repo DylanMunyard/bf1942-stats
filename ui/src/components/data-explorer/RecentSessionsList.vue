@@ -140,14 +140,14 @@ watch(() => [props.serverGuid, props.mapName], () => {
 <template>
   <div>
     <!-- Loading Sessions State -->
-    <div v-if="isLoadingSessions" class="bg-neutral-800/30 rounded-lg p-6">
-      <div class="flex items-center justify-center py-8">
+    <div v-if="isLoadingSessions" class="bg-neutral-800/30 rounded-lg p-4 sm:p-6">
+      <div class="flex items-center justify-center py-6 sm:py-8">
         <div class="w-8 h-8 border-4 border-neutral-600 border-t-cyan-400 rounded-full animate-spin" />
       </div>
     </div>
 
     <!-- Sessions Error State -->
-    <div v-else-if="sessionsError" class="bg-neutral-800/30 rounded-lg p-6">
+    <div v-else-if="sessionsError" class="bg-neutral-800/30 rounded-lg p-4 sm:p-6">
       <div class="text-center py-4">
         <div class="text-red-400 mb-2">{{ sessionsError }}</div>
         <button @click="loadSessions" class="text-cyan-400 hover:text-cyan-300 text-sm">
@@ -162,19 +162,19 @@ watch(() => [props.serverGuid, props.mapName], () => {
         <table class="w-full">
           <thead>
             <tr class="border-b border-neutral-700/50">
-              <th class="text-left py-3 px-4 text-xs font-semibold text-neutral-400 uppercase tracking-wider">
+              <th class="text-left py-2 sm:py-3 px-2 sm:px-4 text-xs font-semibold text-neutral-400 uppercase tracking-wider">
                 Map & Server
               </th>
-              <th class="text-left py-3 px-4 text-xs font-semibold text-neutral-400 uppercase tracking-wider hidden md:table-cell">
+              <th class="text-left py-2 sm:py-3 px-2 sm:px-4 text-xs font-semibold text-neutral-400 uppercase tracking-wider hidden md:table-cell">
                 Team Matchup
               </th>
-              <th class="text-left py-3 px-4 text-xs font-semibold text-neutral-400 uppercase tracking-wider">
+              <th class="text-left py-2 sm:py-3 px-2 sm:px-4 text-xs font-semibold text-neutral-400 uppercase tracking-wider">
                 Top Players
               </th>
-              <th class="text-center py-3 px-4 text-xs font-semibold text-neutral-400 uppercase tracking-wider hidden lg:table-cell">
+              <th class="text-center py-2 sm:py-3 px-2 sm:px-4 text-xs font-semibold text-neutral-400 uppercase tracking-wider hidden lg:table-cell">
                 Participants
               </th>
-              <th class="text-center py-3 px-4 text-xs font-semibold text-neutral-400 uppercase tracking-wider hidden lg:table-cell">
+              <th class="text-center py-2 sm:py-3 px-2 sm:px-4 text-xs font-semibold text-neutral-400 uppercase tracking-wider hidden lg:table-cell">
                 Duration
               </th>
             </tr>
@@ -188,7 +188,7 @@ watch(() => [props.serverGuid, props.mapName], () => {
               @click="navigateToRoundReport(session)"
             >
               <!-- Map & Server Column -->
-              <td class="py-4 px-4">
+              <td class="py-3 sm:py-4 px-2 sm:px-4">
                 <div class="flex flex-col gap-1">
                   <div class="flex items-center gap-2">
                     <span
@@ -211,7 +211,7 @@ watch(() => [props.serverGuid, props.mapName], () => {
               </td>
 
               <!-- Team Matchup Column (hidden on mobile) -->
-              <td class="py-4 px-4 hidden md:table-cell">
+              <td class="py-3 sm:py-4 px-2 sm:px-4 hidden md:table-cell">
                 <div
                   v-if="session.team1Label && session.team2Label && session.team1Points !== undefined && session.team2Points !== undefined"
                   class="space-y-1"
@@ -244,7 +244,7 @@ watch(() => [props.serverGuid, props.mapName], () => {
               </td>
 
               <!-- Top Players Column -->
-              <td class="py-4 px-4">
+              <td class="py-3 sm:py-4 px-2 sm:px-4">
                 <div
                   v-if="session.topPlayers && session.topPlayers.length > 0"
                   class="space-y-1.5"
@@ -288,14 +288,14 @@ watch(() => [props.serverGuid, props.mapName], () => {
               </td>
 
               <!-- Participants Column (hidden on mobile/tablet) -->
-              <td class="py-4 px-4 text-center hidden lg:table-cell">
+              <td class="py-3 sm:py-4 px-2 sm:px-4 text-center hidden lg:table-cell">
                 <span class="text-sm text-neutral-400">
                   {{ session.participantCount }}
                 </span>
               </td>
 
               <!-- Duration Column (hidden on mobile/tablet) -->
-              <td class="py-4 px-4 text-center hidden lg:table-cell">
+              <td class="py-3 sm:py-4 px-2 sm:px-4 text-center hidden lg:table-cell">
                 <span class="text-sm text-neutral-400 font-mono">
                   {{ formatPlayTime(session.durationMinutes) }}
                 </span>
@@ -358,8 +358,8 @@ watch(() => [props.serverGuid, props.mapName], () => {
     </div>
 
     <!-- Empty Sessions State -->
-    <div v-else class="bg-neutral-800/30 rounded-lg p-6">
-      <div class="text-center py-4 text-neutral-500">
+    <div v-else class="bg-neutral-800/30 rounded-lg p-4 sm:p-6">
+      <div class="text-center py-3 sm:py-4 text-neutral-500">
         {{ emptyMessage || 'No recent sessions found' }}
       </div>
     </div>
