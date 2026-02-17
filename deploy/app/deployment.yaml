@@ -281,6 +281,8 @@ spec:
               value: "neo4j/bf1942stats"
             - name: NEO4J_PLUGINS
               value: '["apoc"]'
+            - name: NEO4J_server_config_strict__validation_enabled
+              value: "false"
             - name: NEO4J_dbms_memory_pagecache_size
               value: "512M"
             - name: NEO4J_dbms_memory_heap_initial__size
