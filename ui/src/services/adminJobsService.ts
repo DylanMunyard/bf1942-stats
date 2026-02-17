@@ -85,3 +85,84 @@ export function triggerMapHourlyPatternsBackfill(): Promise<{ message?: string; 
 export function triggerRunAll(): Promise<{ message?: string; error?: string }> {
   return request('/run-all');
 }
+
+/** Sync player relationships to Neo4j for the last N days. Runs to completion. */
+export function triggerNeo4jSync(days: number): Promise<{ 
+  success: boolean;
+  relationshipsProcessed?: number;
+  durationMs?: number;
+  fromDate?: string;
+  toDate?: string;
+  errorMessage?: string;
+}> {
+  return fetch('/stats/admin/data/neo4j/sync', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+    },
+    body: JSON.stringify({ days }),
+  }).then(async (res) => {
+    if (res.status === 401) {
+      const { authService } = await import('./authService');
+      const refreshed = await authService.refreshToken();
+      if (refreshed) {
+        const retry = await fetch('/stats/admin/data/neo4j/sync', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          },
+          body: JSON.stringify({ days }),
+        });
+        if (!retry.ok) {
+          const err = await retry.json().catch(() => ({}));
+          throw new Error(err.errorMessage || err.error || `HTTP ${retry.status}`);
+        }
+        return retry.json();
+      }
+      await authService.logout();
+      throw new Error('Session expired. Please login again.');
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.errorMessage || err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  });
+}
+
+/** Check Neo4j migration status. */
+export function getNeo4jMigrationStatus(): Promise<{
+  appliedCount: number;
+  pendingCount: number;
+  isUpToDate: boolean;
+  appliedMigrations: string[];
+  pendingMigrations: string[];
+}> {
+  return fetch('/stats/admin/data/neo4j/migrations', {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+    },
+  }).then(async (res) => {
+    if (res.status === 401) {
+      const { authService } = await import('./authService');
+      const refreshed = await authService.refreshToken();
+      if (refreshed) {
+        const retry = await fetch('/stats/admin/data/neo4j/migrations', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          },
+        });
+        if (!retry.ok) throw new Error(`HTTP ${retry.status}`);
+        return retry.json();
+      }
+      await authService.logout();
+      throw new Error('Session expired');
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  });
+}

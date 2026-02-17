@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using api.PlayerTracking;
 using api.Telemetry;
+using api.PlayerRelationships;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -46,6 +47,7 @@ public class DailyAggregateRefreshJob(
                 results["mapServerHourlyPatterns"] = await RefreshMapServerHourlyPatternsAsync(dbContext, ct);
                 results["bestScores"] = await concurrency.ExecuteWithPlayerAggregatesLockAsync(
                     async (c) => await RefreshBestScoresAsync(dbContext, c), ct);
+                results["neo4jRelationships"] = await RefreshNeo4jRelationshipsAsync(scope, ct);
 
                 stopwatch.Stop();
 
@@ -54,11 +56,11 @@ public class DailyAggregateRefreshJob(
                 activity?.SetTag("result.total_records", totalRecords);
 
                 logger.LogInformation(
-                    "Daily aggregate refresh completed: {TotalRecords} records in {Duration}ms (patterns={Patterns}, predictions={Predictions}, activity={Activity}, mapAvg={MapAvg}, serverMap={ServerMap}, mapHourly={MapHourly}, bestScores={BestScores})",
+                    "Daily aggregate refresh completed: {TotalRecords} records in {Duration}ms (patterns={Patterns}, predictions={Predictions}, activity={Activity}, mapAvg={MapAvg}, serverMap={ServerMap}, mapHourly={MapHourly}, bestScores={BestScores}, neo4j={Neo4j})",
                     totalRecords, stopwatch.ElapsedMilliseconds,
                     results["serverHourlyPatterns"], results["hourlyPlayerPredictions"], results["hourlyActivityPatterns"],
                     results["mapGlobalAverages"], results["serverMapStats"], results["mapServerHourlyPatterns"],
-                    results["bestScores"]);
+                    results["bestScores"], results["neo4jRelationships"]);
             }
             catch (Exception ex)
             {
@@ -664,6 +666,44 @@ public class DailyAggregateRefreshJob(
         stopwatch.Stop();
         logger.LogInformation("Backfilled {Count} map-server hourly patterns from all historical data in {Duration}ms",
             rowsAffected, stopwatch.ElapsedMilliseconds);
+    }
+
+    /// <summary>
+    /// Refreshes Neo4j player relationships by syncing co-play sessions from the last 7 days.
+    /// Uses incremental upsert pattern to add new relationships and update existing ones.
+    /// </summary>
+    private async Task<int> RefreshNeo4jRelationshipsAsync(IServiceScope scope, CancellationToken ct)
+    {
+        try
+        {
+            var relationshipEtl = scope.ServiceProvider.GetRequiredService<PlayerRelationshipEtlService>();
+            
+            // Sync last 7 days of data daily (catches new rounds + late arrivals)
+            var toTime = DateTime.UtcNow;
+            var fromTime = toTime.AddDays(-7);
+            
+            logger.LogInformation("Syncing Neo4j relationships from {FromTime} to {ToTime}", fromTime, toTime);
+            
+            // Sync player co-play relationships
+            var result = await relationshipEtl.SyncRelationshipsAsync(fromTime, toTime, ct);
+            
+            // Also sync player-server relationships
+            await relationshipEtl.SyncPlayerServerRelationshipsAsync(fromTime, toTime, ct);
+            
+            logger.LogInformation(
+                "Neo4j sync completed: {RelationshipsProcessed} relationships from {RoundsProcessed} rounds in {Duration}s",
+                result.RelationshipsProcessed,
+                result.RoundsProcessed,
+                result.Duration.TotalSeconds);
+            
+            return result.RelationshipsProcessed;
+        }
+        catch (Exception ex)
+        {
+            // Don't fail the entire daily refresh if Neo4j sync fails
+            logger.LogError(ex, "Failed to sync Neo4j relationships - continuing with other aggregates");
+            return 0;
+        }
     }
 
     private static List<double> ParseAndSortValues(string? commaSeparatedValues)

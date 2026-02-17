@@ -629,6 +629,17 @@ try
     builder.Services.AddScoped<api.AdminData.AdminDataService>();
     builder.Services.AddScoped<api.AdminData.IAdminDataService>(sp => sp.GetRequiredService<api.AdminData.AdminDataService>());
 
+    // Register Neo4j Player Relationships services (optional, only if configured)
+    var neo4jConfig = builder.Configuration.GetSection("Neo4j").Get<api.PlayerRelationships.Neo4jConfiguration>();
+    if (neo4jConfig != null && !string.IsNullOrEmpty(neo4jConfig.Uri))
+    {
+        builder.Services.AddSingleton(neo4jConfig);
+        builder.Services.AddSingleton<api.PlayerRelationships.Neo4jService>();
+        builder.Services.AddSingleton<api.PlayerRelationships.Neo4jMigrationService>();
+        builder.Services.AddScoped<api.PlayerRelationships.PlayerRelationshipEtlService>();
+        builder.Logging.AddConsole().SetMinimumLevel(LogLevel.Information);
+    }
+
     // Register AI services (Azure OpenAI + Semantic Kernel)
     builder.Services.AddAIServices(builder.Configuration);
 
@@ -649,6 +660,22 @@ try
     });
 
     var host = builder.Build();
+
+    // Run Neo4j migrations if enabled
+    var neo4jMigrationService = host.Services.GetService<api.PlayerRelationships.Neo4jMigrationService>();
+    if (neo4jMigrationService != null)
+    {
+        try
+        {
+            await neo4jMigrationService.MigrateAsync();
+        }
+        catch (Exception ex)
+        {
+            // Log but don't crash - allow app to start even if Neo4j migrations fail
+            var logger = host.Services.GetRequiredService<ILogger<Program>>();
+            logger.LogError(ex, "Failed to run Neo4j migrations. Neo4j features may not work correctly.");
+        }
+    }
 
     // Initialize RequestEnricher with HttpContextAccessor
     var httpContextAccessor = host.Services.GetRequiredService<IHttpContextAccessor>();

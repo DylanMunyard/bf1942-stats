@@ -1,5 +1,6 @@
 using api.AdminData.Models;
 using api.Authorization;
+using api.PlayerRelationships;
 using api.PlayerTracking;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,7 +11,11 @@ namespace api.AdminData;
 [ApiController]
 [Route("stats/admin/data")]
 [Authorize(Policy = "Support")]
-public class AdminDataController(IAdminDataService adminDataService, PlayerTrackerDbContext dbContext) : ControllerBase
+public class AdminDataController(
+    IAdminDataService adminDataService, 
+    PlayerTrackerDbContext dbContext,
+    PlayerRelationshipEtlService? relationshipEtlService = null,
+    Neo4jMigrationService? neo4jMigrationService = null) : ControllerBase
 {
     [HttpPost("sessions/query")]
     public async Task<ActionResult<PagedResult<SuspiciousSessionResponse>>> QuerySuspiciousSessions(
@@ -188,6 +193,124 @@ public class AdminDataController(IAdminDataService adminDataService, PlayerTrack
         await adminDataService.DeleteAppDataAsync(key);
         return NoContent();
     }
+
+    /// <summary>
+    /// Get Neo4j migration status.
+    /// Shows which migrations are applied and which are pending.
+    /// </summary>
+    [HttpGet("neo4j/migrations")]
+    [Authorize(Policy = "Admin")]
+    public async Task<ActionResult<MigrationStatus>> GetNeo4jMigrationStatus()
+    {
+        if (neo4jMigrationService == null)
+        {
+            return BadRequest(new
+            {
+                error = "Neo4j integration is not enabled. Configure Neo4j settings in appsettings.json."
+            });
+        }
+
+        var status = await neo4jMigrationService.GetStatusAsync();
+        return Ok(status);
+    }
+
+    /// <summary>
+    /// Manually run Neo4j migrations.
+    /// Normally migrations run on startup, but this allows re-running if needed.
+    /// </summary>
+    [HttpPost("neo4j/migrations/run")]
+    [Authorize(Policy = "Admin")]
+    public async Task<ActionResult> RunNeo4jMigrations()
+    {
+        if (neo4jMigrationService == null)
+        {
+            return BadRequest(new
+            {
+                error = "Neo4j integration is not enabled. Configure Neo4j settings in appsettings.json."
+            });
+        }
+
+        try
+        {
+            await neo4jMigrationService.MigrateAsync();
+            var status = await neo4jMigrationService.GetStatusAsync();
+            return Ok(new
+            {
+                message = "Migrations completed successfully",
+                status
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new
+            {
+                error = $"Migration failed: {ex.Message}"
+            });
+        }
+    }
+
+    /// <summary>
+    /// Sync player relationships to Neo4j for the last N days.
+    /// This detects co-play sessions and updates the graph database.
+    /// </summary>
+    [HttpPost("neo4j/sync")]
+    [Authorize(Policy = "Admin")]
+    public async Task<ActionResult<Neo4jSyncResponse>> SyncPlayerRelationships(
+        [FromBody] Neo4jSyncRequest? request)
+    {
+        if (relationshipEtlService == null)
+        {
+            return BadRequest(new Neo4jSyncResponse
+            {
+                Success = false,
+                ErrorMessage = "Neo4j integration is not enabled. Configure Neo4j settings in appsettings.json."
+            });
+        }
+
+        var days = request?.Days ?? 7;
+        if (days < 1 || days > 365)
+        {
+            return BadRequest(new Neo4jSyncResponse
+            {
+                Success = false,
+                ErrorMessage = "Days must be between 1 and 365"
+            });
+        }
+
+        var toTimestamp = DateTime.UtcNow;
+        var fromTimestamp = toTimestamp.AddDays(-days);
+
+        try
+        {
+            // Sync player-player relationships
+            var relationshipResult = await relationshipEtlService.SyncRelationshipsAsync(
+                fromTimestamp,
+                toTimestamp);
+
+            // Sync player-server relationships
+            await relationshipEtlService.SyncPlayerServerRelationshipsAsync(
+                fromTimestamp,
+                toTimestamp);
+
+            return Ok(new Neo4jSyncResponse
+            {
+                Success = true,
+                RelationshipsProcessed = relationshipResult.RelationshipsProcessed,
+                RoundsProcessed = relationshipResult.RoundsProcessed,
+                DurationMs = (int)relationshipResult.Duration.TotalMilliseconds,
+                FromDate = fromTimestamp,
+                ToDate = toTimestamp
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new Neo4jSyncResponse
+            {
+                Success = false,
+                ErrorMessage = $"Sync failed: {ex.Message}"
+            });
+        }
+    }
 }
 
 public class SetAppDataRequest
@@ -204,3 +327,20 @@ public record AuditLogEntry(
     string AdminEmail,
     NodaTime.Instant Timestamp
 );
+
+public class Neo4jSyncRequest
+{
+    /// <summary>Number of days to sync (default: 7, max: 365)</summary>
+    public int Days { get; set; } = 7;
+}
+
+public class Neo4jSyncResponse
+{
+    public bool Success { get; set; }
+    public int RelationshipsProcessed { get; set; }
+    public int RoundsProcessed { get; set; }
+    public int DurationMs { get; set; }
+    public DateTime? FromDate { get; set; }
+    public DateTime? ToDate { get; set; }
+    public string? ErrorMessage { get; set; }
+}

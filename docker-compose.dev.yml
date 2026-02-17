@@ -142,6 +142,50 @@ services:
       timeout: 10s
       retries: 3
 
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: bf1942-neo4j
+    ports:
+      - "7474:7474"   # HTTP web interface
+      - "7687:7687"   # Bolt protocol
+    networks:
+      - bf1942-dev
+    environment:
+      # Authentication
+      - NEO4J_AUTH=neo4j/bf1942stats
+      
+      # Performance tuning - adjust based on available RAM
+      # Rule of thumb: allocate 50% of available RAM to Neo4j
+      # These are conservative defaults for 8GB RAM system
+      - NEO4J_server_memory_heap_initial__size=1G
+      - NEO4J_server_memory_heap_max__size=2G
+      - NEO4J_server_memory_pagecache_size=1G
+      
+      # Query performance
+      - NEO4J_server_memory_query__cache_per__db__cache__num__entries=1000
+      
+      # Connection pooling
+      - NEO4J_server_bolt_thread__pool__min__size=5
+      - NEO4J_server_bolt_thread__pool__max__size=400
+      
+      # APOC plugins for advanced graph algorithms
+      - NEO4J_PLUGINS=["apoc"]
+      
+      # Logging
+      - NEO4J_db_logs_query_enabled=INFO  # Query logging level
+      
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+      - neo4j-import:/var/lib/neo4j/import
+      - neo4j-plugins:/plugins
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
 networks:
   bf1942-dev:
     driver: bridge
@@ -152,3 +196,7 @@ volumes:
   tempo-data:
   seq-data:
   grafana-data:
+  neo4j-data:
+  neo4j-logs:
+  neo4j-import:
+  neo4j-plugins:

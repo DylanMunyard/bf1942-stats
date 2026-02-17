@@ -58,6 +58,12 @@ spec:
               value: "30"
             - name: REDIS_CONNECTION_STRING
               value: "redis-service.bf42-stats:6379"
+            - name: NEO4J_URI
+              value: "bolt://neo4j-service.bf42-stats:7687"
+            - name: NEO4J_USERNAME
+              value: "neo4j"
+            - name: NEO4J_PASSWORD
+              value: "bf1942stats"
             - name: ENABLE_GAMIFICATION_PROCESSING
               value: "true"
             - name: GAMIFICATION_MAX_CONCURRENT_ROUNDS
@@ -240,6 +246,99 @@ spec:
     - port: 6379
       targetPort: 6379
       name: redis
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neo4j
+  namespace: bf42-stats
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: neo4j
+  template:
+    metadata:
+      labels:
+        app: neo4j
+    spec:
+      priorityClassName: 1942-services
+      securityContext:
+        fsGroup: 7474
+        runAsUser: 7474
+        runAsGroup: 7474
+      containers:
+        - name: neo4j
+          image: neo4j:5-community
+          ports:
+            - containerPort: 7474
+              name: http
+            - containerPort: 7687
+              name: bolt
+          env:
+            - name: NEO4J_AUTH
+              value: "neo4j/bf1942stats"
+            - name: NEO4J_PLUGINS
+              value: '["apoc"]'
+            - name: NEO4J_dbms_memory_pagecache_size
+              value: "512M"
+            - name: NEO4J_dbms_memory_heap_initial__size
+              value: "512M"
+            - name: NEO4J_dbms_memory_heap_max__size
+              value: "1G"
+          volumeMounts:
+            - name: neo4j-data
+              mountPath: /data
+            - name: neo4j-logs
+              mountPath: /logs
+          resources:
+            requests:
+              memory: "1.5Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+      volumes:
+        - name: neo4j-data
+          persistentVolumeClaim:
+            claimName: neo4j-pvc
+        - name: neo4j-logs
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: neo4j-pvc
+  namespace: bf42-stats
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: neo4j-service
+  namespace: bf42-stats
+  labels:
+    app: neo4j
+spec:
+  selector:
+    app: neo4j
+  type: ClusterIP
+  ports:
+    - port: 7474
+      targetPort: 7474
+      name: http
+    - port: 7687
+      targetPort: 7687
+      name: bolt
 
 ---
 apiVersion: apps/v1
