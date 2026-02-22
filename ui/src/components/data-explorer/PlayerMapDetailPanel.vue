@@ -84,78 +84,7 @@
           </div>
           
           <div v-else-if="rankings && rankings.length > 0">
-            <!-- Player's Position - Always Visible -->
-            <div class="player-position-sticky mb-4">
-              <!-- Show player ranking if found -->
-              <div v-if="playerRanking" class="player-position-card">
-                <div class="player-position-header">
-                  <span class="text-xs font-mono text-neutral-400 uppercase tracking-wider">Your Position</span>
-                </div>
-                <div class="player-position-content">
-                  <div class="flex items-center gap-4">
-                    <div class="rank-display">
-                      <div class="rank-badge-large" :class="getRankBadgeClass(playerRanking.rank)">
-                        #{{ playerRanking.rank }}
-                      </div>
-                      <div class="rank-context">
-                        <span class="text-neon-cyan font-bold">of {{ totalRankedPlayers }}</span>
-                        <span class="text-neutral-400">players</span>
-                      </div>
-                    </div>
-                    <div class="flex-1">
-                      <div class="flex items-center justify-between mb-2">
-                        <div class="font-mono text-lg font-bold text-neon-cyan">{{ playerName }}</div>
-                        <div class="percentile-badge" :class="getPercentileBadgeClass(playerRanking.rank, totalRankedPlayers)">
-                          TOP {{ ((1 - (playerRanking.rank - 1) / totalRankedPlayers) * 100).toFixed(1) }}%
-                        </div>
-                      </div>
-                      <div class="flex items-center justify-between">
-                        <div class="text-sm text-neutral-400">{{ getMetricLabel() }}</div>
-                        <div class="font-mono text-xl font-bold">{{ formatMetricValue(playerRanking) }}</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                <!-- Navigation buttons to jump to player's position -->
-                <div class="flex items-center justify-center gap-2 mt-3">
-                <button
-                  v-if="!isPlayerVisible"
-                  @click="jumpToPlayer"
-                  class="jump-to-player-btn"
-                >
-                  <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                  </svg>
-                  Jump to Your Position
-                </button>
-                <div v-else class="text-xs text-neutral-500 font-mono">
-                  <svg class="w-4 h-4 inline mr-1 text-neon-green" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                  </svg>
-                  You're visible below
-                </div>
-                </div>
-              </div>
-              
-              <!-- No ranking case -->
-              <div v-else class="player-position-card">
-                <div class="player-position-header">
-                  <span class="text-xs font-mono text-neutral-400 uppercase tracking-wider">Your Position</span>
-                </div>
-                <div class="player-position-content text-center py-4">
-                  <div class="text-neutral-500 mb-2">
-                    <svg class="w-12 h-12 mx-auto opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-                    </svg>
-                  </div>
-                  <div class="font-mono text-lg font-bold text-neon-cyan mb-1">{{ playerName }}</div>
-                  <div class="text-sm text-neutral-400">Not yet ranked on this map</div>
-                  <div class="text-xs text-neutral-500 mt-2">Play more rounds to establish a ranking</div>
-                </div>
-              </div>
-            </div>
+
 
             <!-- Server Filter (if player plays on multiple servers) -->
             <div v-if="serverOptions.length > 1" class="mb-4">
@@ -363,7 +292,6 @@ const playerRanking = ref<MapPlayerRanking | null>(null);
 const totalRankedPlayers = ref(0);
 const isRankingsLoading = ref(false);
 const isPlayerVisible = ref(false);
-const playerPageNumber = ref<number | null>(null);
 const contextPlayers = ref<MapPlayerRanking[]>([]);
 const showContextPlayers = ref(false);
 
@@ -456,13 +384,9 @@ const loadRankings = async () => {
     if (playerSearchResponse.rankings.length > 0) {
       playerRanking.value = playerSearchResponse.rankings[0];
       totalRankedPlayers.value = playerSearchResponse.totalCount;
-      
-      // Calculate which page the player is on
-      playerPageNumber.value = Math.ceil(playerRanking.value.rank / pageSize);
       console.log('Player ranking found:', playerRanking.value);
     } else {
       playerRanking.value = null;
-      playerPageNumber.value = null;
       console.log('No ranking found for player:', props.playerName, 'on map:', props.mapName);
     }
 
@@ -530,22 +454,7 @@ const loadContextPlayers = async () => {
   }
 };
 
-const jumpToPlayer = async () => {
-  if (playerPageNumber.value && playerPageNumber.value !== currentPage.value) {
-    currentPage.value = playerPageNumber.value;
-    await loadRankings();
-    
-    // Scroll to the player's row after page loads
-    setTimeout(() => {
-      const playerRow = document.querySelector(`[data-player="${props.playerName}"]`);
-      if (playerRow) {
-        playerRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        // Add a highlight animation
-        playerRow.classList.add('highlight-animation');
-      }
-    }, 100);
-  }
-};
+
 
 const formatMetricValue = (player: MapPlayerRanking): string => {
   switch (activeRankingTab.value) {
@@ -585,14 +494,7 @@ const getRankBadgeClass = (rank: number): string => {
   return '';
 };
 
-const getPercentileBadgeClass = (rank: number, total: number): string => {
-  const percentile = (1 - (rank - 1) / total) * 100;
-  if (percentile >= 99) return 'percentile-elite';
-  if (percentile >= 95) return 'percentile-master';
-  if (percentile >= 90) return 'percentile-expert';
-  if (percentile >= 75) return 'percentile-veteran';
-  return 'percentile-regular';
-};
+
 
 const formatPlayTime = (minutes: number): string => {
   const hours = Math.floor(minutes / 60);
@@ -907,112 +809,7 @@ watch([activeRankingTab, selectedServerGuid], () => {
   color: var(--bg-dark);
 }
 
-.player-position-sticky {
-  position: sticky;
-  top: -1px;
-  z-index: 10;
-  background: var(--bg-card);
-  padding-bottom: 0.5rem;
-  margin-bottom: 1rem;
-}
 
-.player-position-card {
-  background: linear-gradient(135deg, rgba(0, 255, 242, 0.1) 0%, rgba(0, 255, 242, 0.02) 100%);
-  border: 1px solid rgba(0, 255, 242, 0.3);
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 0 30px rgba(0, 255, 242, 0.1);
-}
-
-.player-position-header {
-  background: rgba(0, 255, 242, 0.05);
-  padding: 0.5rem 1rem;
-  border-bottom: 1px solid rgba(0, 255, 242, 0.2);
-}
-
-.player-position-content {
-  padding: 1rem;
-}
-
-.rank-display {
-  text-align: center;
-  padding-right: 1rem;
-  border-right: 1px solid var(--border-color);
-}
-
-.rank-badge-large {
-  font-size: 2rem;
-  font-weight: 700;
-  line-height: 1;
-  margin-bottom: 0.25rem;
-}
-
-.rank-context {
-  font-size: 0.625rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.percentile-badge {
-  padding: 0.25rem 0.75rem;
-  font-size: 0.625rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  border-radius: 20px;
-  text-transform: uppercase;
-}
-
-.percentile-elite {
-  background: var(--neon-gold);
-  color: var(--bg-dark);
-  box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
-}
-
-.percentile-master {
-  background: var(--neon-cyan);
-  color: var(--bg-dark);
-  box-shadow: 0 0 15px rgba(0, 255, 242, 0.5);
-}
-
-.percentile-expert {
-  background: var(--neon-pink);
-  color: var(--bg-dark);
-  box-shadow: 0 0 15px rgba(255, 0, 255, 0.5);
-}
-
-.percentile-veteran {
-  background: var(--bg-panel);
-  color: var(--text-primary);
-  border: 1px solid var(--neon-cyan);
-}
-
-.percentile-regular {
-  background: var(--bg-panel);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-color);
-}
-
-.jump-to-player-btn {
-  display: flex;
-  align-items: center;
-  padding: 0.375rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  background: var(--bg-panel);
-  border: 1px solid var(--neon-cyan);
-  border-radius: 4px;
-  color: var(--neon-cyan);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.jump-to-player-btn:hover {
-  background: rgba(0, 255, 242, 0.1);
-  box-shadow: 0 0 15px rgba(0, 255, 242, 0.3);
-  transform: translateY(-1px);
-}
 
 .player-row-highlight td {
   background: rgba(0, 255, 242, 0.08) !important;

@@ -1111,15 +1111,23 @@
 /* Mobile optimizations */
 @media (max-width: 640px) {
   .data-explorer .explorer-inner {
-    padding: 0.5rem;
+    padding: 0.25rem;
+  }
+
+  .data-explorer .explorer-card {
+    margin-bottom: 0.5rem;
   }
 
   .data-explorer .explorer-card-header {
-    padding: 0.5rem 0.75rem;
+    padding: 0.4rem 0.6rem;
+  }
+
+  .data-explorer .explorer-card-title {
+    font-size: 0.65rem;
   }
 
   .data-explorer .explorer-card-body {
-    padding: 0.5rem;
+    padding: 0.4rem;
   }
 
   .data-explorer .explorer-mode-btn {
@@ -1133,5 +1141,10 @@
 
   .data-explorer .explorer-stat-value {
     font-size: 1.25rem;
+  }
+  
+  /* Reduce gaps on mobile */
+  .data-explorer .grid {
+    gap: 0.5rem;
   }
 }

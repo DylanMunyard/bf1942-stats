@@ -176,11 +176,11 @@ onMounted(() => {
             <div class="lg:col-span-3 space-y-4 sm:space-y-6">
 
               <!-- Network Graph -->
-              <div class="explorer-card">
-                <div class="explorer-card-header">
+              <div class="explorer-card network-graph-card">
+                <div class="explorer-card-header hidden sm:block">
                   <h2 class="explorer-card-title">NETWORK VISUALIZATION</h2>
                 </div>
-                <div class="explorer-card-body p-0 sm:p-0">
+                <div class="explorer-card-body p-0">
                   <PlayerNetworkGraph :player-name="playerName" />
                 </div>
               </div>
@@ -263,3 +263,63 @@ onMounted(() => {
 
 <style src="./portal-layout.css"></style>
 <style scoped src="./DataExplorer.vue.css"></style>
+<style scoped>
+/* Mobile optimizations for network view */
+@media (max-width: 767px) {
+  /* Remove all padding on mobile */
+  .portal-page .portal-inner {
+    padding: 0;
+  }
+  
+  .explorer-inner {
+    padding: 0.5rem;
+    padding-bottom: 1rem;
+  }
+  
+  /* Stack layout on mobile */
+  .grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  /* Compact sidebar cards on mobile */
+  .lg\\:col-span-1 .explorer-card {
+    margin-bottom: 0.5rem;
+  }
+  
+  .lg\\:col-span-1 .explorer-card-header {
+    padding: 0.5rem 0.75rem;
+  }
+  
+  .lg\\:col-span-1 .explorer-card-title {
+    font-size: 0.65rem;
+  }
+  
+  .lg\\:col-span-1 .explorer-card-body {
+    max-height: 120px;
+    overflow-y: auto;
+    padding: 0.5rem;
+  }
+  
+  /* Network graph takes remaining space */
+  .network-graph-card {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    margin: 0 -0.5rem;
+  }
+  
+  .network-graph-card .explorer-card-body {
+    min-height: 450px;
+    padding: 0;
+  }
+}
+
+/* Tablet optimizations */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .network-graph-card .explorer-card-body {
+    min-height: 500px;
+  }
+}
+</style>

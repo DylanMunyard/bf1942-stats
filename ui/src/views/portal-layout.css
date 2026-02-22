@@ -42,11 +42,17 @@
   width: 100%;
   max-width: none;
   margin: 0;
-  padding: 0.75rem 0.75rem 3rem;
+  padding: 0.5rem 0.5rem 2rem;
 }
 
 /* Responsive padding for better mobile utilization */
 @media (min-width: 640px) {
+  .portal-page .portal-inner {
+    padding: 0.75rem 0.75rem 3rem;
+  }
+}
+
+@media (min-width: 768px) {
   .portal-page .portal-inner {
     padding: 1.5rem 1.5rem 3rem;
   }
