@@ -247,6 +247,12 @@ const barWidth = (value: number, maxValue: number): string => {
               <div class="mt-1 text-xs font-mono text-slate-400">
                 <span class="text-slate-300 font-bold">{{ currentTopPlacements[1].placementPoints }}</span> pts
               </div>
+              <!-- Medal breakdown -->
+              <div class="mt-2 flex items-center gap-2 text-[10px] font-mono tabular-nums">
+                <span class="text-yellow-500">{{ currentTopPlacements[1].firstPlaces }}</span>
+                <span class="text-slate-400">{{ currentTopPlacements[1].secondPlaces }}</span>
+                <span class="text-amber-600">{{ currentTopPlacements[1].thirdPlaces }}</span>
+              </div>
             </div>
           </div>
 
@@ -269,6 +275,12 @@ const barWidth = (value: number, maxValue: number): string => {
               <div class="mt-1 text-xs font-mono text-amber-500/80">
                 <span class="text-amber-500 font-bold">{{ currentTopPlacements[2].placementPoints }}</span> pts
               </div>
+              <!-- Medal breakdown -->
+              <div class="mt-2 flex items-center gap-2 text-[10px] font-mono tabular-nums">
+                <span class="text-yellow-500">{{ currentTopPlacements[2].firstPlaces }}</span>
+                <span class="text-slate-400">{{ currentTopPlacements[2].secondPlaces }}</span>
+                <span class="text-amber-600">{{ currentTopPlacements[2].thirdPlaces }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -280,7 +292,19 @@ const barWidth = (value: number, maxValue: number): string => {
             :key="player.playerName"
             class="grid grid-cols-[2rem_1fr_auto] items-center gap-x-3 py-2 px-2 rounded hover:bg-neutral-800/30 transition-colors border-b border-neutral-800/40 last:border-b-0"
           >
-            <span class="text-right text-xs font-mono text-neutral-500 tabular-nums">{{ idx + 4 }}</span>
+            <span 
+              class="text-right text-xs font-mono tabular-nums"
+              :class="{
+                'text-orange-400 font-semibold': idx + 4 === 4,
+                'text-purple-400': idx + 4 === 5,
+                'text-blue-400': idx + 4 === 6,
+                'text-green-400': idx + 4 === 7,
+                'text-pink-400': idx + 4 === 8,
+                'text-teal-400': idx + 4 === 9,
+                'text-indigo-400': idx + 4 === 10,
+                'text-neutral-500': idx + 4 > 10
+              }"
+            >{{ idx + 4 }}</span>
             <router-link
               :to="`/players/${encodeURIComponent(player.playerName)}`"
               class="text-sm text-neutral-300 truncate hover:text-neutral-100 transition-colors"
@@ -289,7 +313,9 @@ const barWidth = (value: number, maxValue: number): string => {
             </router-link>
             <span class="text-xs font-mono text-neutral-500 tabular-nums whitespace-nowrap">
               {{ player.placementPoints }} pts
-              <span class="text-neutral-600 hidden sm:inline ml-2">{{ player.firstPlaces }}-{{ player.secondPlaces }}-{{ player.thirdPlaces }}</span>
+              <span class="text-neutral-600 hidden sm:inline ml-2">
+                <span :class="player.firstPlaces > 0 ? 'text-yellow-500' : ''">{{ player.firstPlaces }}</span>-<span :class="player.secondPlaces > 0 ? 'text-slate-400' : ''">{{ player.secondPlaces }}</span>-<span :class="player.thirdPlaces > 0 ? 'text-amber-600' : ''">{{ player.thirdPlaces }}</span>
+              </span>
             </span>
           </div>
         </div>

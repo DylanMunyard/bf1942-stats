@@ -387,4 +387,107 @@ public class DataExplorerController(
         var result = await dataExplorerService.GetAvailableSliceDimensionsAsync();
         return Ok(result);
     }
+
+    /// <summary>
+    /// Get player's competitive rankings across all maps.
+    /// Shows rank position, percentile, and comparison to other players.
+    /// </summary>
+    /// <param name="playerName">The player name</param>
+    /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
+    /// <param name="days">Number of days to look back (default 60)</param>
+    [HttpGet("players/{playerName}/competitive-rankings")]
+    [ProducesResponseType(typeof(PlayerCompetitiveRankingsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PlayerCompetitiveRankingsResponse>> GetPlayerCompetitiveRankings(
+        string playerName,
+        [FromQuery] string game = "bf1942",
+        [FromQuery] int days = 60)
+    {
+        // URL decode the player name
+        playerName = Uri.UnescapeDataString(playerName);
+
+        logger.LogDebug("Getting competitive rankings for player {PlayerName} in game {Game} for last {Days} days",
+            playerName, game, days);
+
+        var result = await dataExplorerService.GetPlayerCompetitiveRankingsAsync(playerName, game, days);
+
+        if (result == null)
+        {
+            logger.LogWarning("No competitive ranking data found for player: {PlayerName}", playerName);
+            return NotFound($"No ranking data found for player '{playerName}'");
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Get player's ranking history over time for trend visualization.
+    /// Returns monthly snapshots showing rank progression.
+    /// </summary>
+    /// <param name="playerName">The player name</param>
+    /// <param name="mapName">Optional: specific map to filter by</param>
+    /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
+    /// <param name="months">Number of months to look back (default 12)</param>
+    [HttpGet("players/{playerName}/ranking-timeline")]
+    [ProducesResponseType(typeof(RankingTimelineResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<RankingTimelineResponse>> GetPlayerRankingTimeline(
+        string playerName,
+        [FromQuery] string? mapName = null,
+        [FromQuery] string game = "bf1942",
+        [FromQuery] int months = 12)
+    {
+        // URL decode parameters
+        playerName = Uri.UnescapeDataString(playerName);
+        if (!string.IsNullOrEmpty(mapName))
+            mapName = Uri.UnescapeDataString(mapName);
+
+        logger.LogDebug("Getting ranking timeline for player {PlayerName} in game {Game}, map: {MapName}, months: {Months}",
+            playerName, game, mapName ?? "all", months);
+
+        var result = await dataExplorerService.GetPlayerRankingTimelineAsync(playerName, mapName, game, months);
+
+        if (result == null)
+        {
+            logger.LogWarning("No ranking timeline data found for player: {PlayerName}", playerName);
+            return NotFound($"No historical ranking data found for player '{playerName}'");
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Get player's detailed statistics for a specific map.
+    /// Shows aggregated stats and server breakdown.
+    /// </summary>
+    /// <param name="playerName">The player name</param>
+    /// <param name="mapName">The map name</param>
+    /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
+    /// <param name="days">Number of days to look back (default 60)</param>
+    [HttpGet("players/{playerName}/map-stats/{mapName}")]
+    [ProducesResponseType(typeof(PlayerMapDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PlayerMapDetailResponse>> GetPlayerMapStats(
+        string playerName,
+        string mapName,
+        [FromQuery] string game = "bf1942",
+        [FromQuery] int days = 60)
+    {
+        // URL decode parameters
+        playerName = Uri.UnescapeDataString(playerName);
+        mapName = Uri.UnescapeDataString(mapName);
+
+        logger.LogDebug("Getting map stats for player {PlayerName} on map {MapName} in game {Game} for last {Days} days",
+            playerName, mapName, game, days);
+
+        var result = await dataExplorerService.GetPlayerMapStatsAsync(playerName, mapName, game, days);
+
+        if (result == null)
+        {
+            logger.LogWarning("No map stats found for player: {PlayerName} on map: {MapName}", playerName, mapName);
+            return NotFound($"No stats found for player '{playerName}' on map '{mapName}'");
+        }
+
+        return Ok(result);
+    }
 }

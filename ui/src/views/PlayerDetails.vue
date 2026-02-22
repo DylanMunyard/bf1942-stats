@@ -13,7 +13,9 @@ import PlayerServerMapStats from '../components/PlayerServerMapStats.vue';
 import MapRankingsPanel from '../components/MapRankingsPanel.vue';
 import PlayerDetailPanel from '../components/data-explorer/PlayerDetailPanel.vue';
 import MapDetailPanel from '../components/data-explorer/MapDetailPanel.vue';
+import PlayerMapDetailPanel from '../components/data-explorer/PlayerMapDetailPanel.vue';
 import ServerMapDetailPanel from '../components/data-explorer/ServerMapDetailPanel.vue';
+import PlayerCompetitiveRankings from '../components/data-explorer/PlayerCompetitiveRankings.vue';
 import { formatRelativeTime } from '@/utils/timeUtils';
 import { calculateKDR } from '@/utils/statsUtils';
 import { useAIContext } from '@/composables/useAIContext';
@@ -704,7 +706,7 @@ onUnmounted(() => {
             <!-- Main Grid Layout -->
             <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
               
-              <!-- Left Column: Data Explorer Breakdown -->
+              <!-- Left Column: Data Explorer Breakdown + Competitive Rankings -->
               <div class="xl:col-span-7 space-y-6">
                 <div class="explorer-card">
                   <div class="explorer-card-header">
@@ -716,6 +718,20 @@ onUnmounted(() => {
                       :player-name="playerName"
                       :game="playerPanelGame"
                       @navigate-to-map="openMapDetail"
+                    />
+                  </div>
+                </div>
+
+                <!-- Competitive Rankings -->
+                <div class="explorer-card">
+                  <div class="explorer-card-header">
+                    <h3 class="explorer-card-title">COMPETITIVE RANKINGS</h3>
+                    <p class="text-[10px] text-neutral-500 font-mono mt-1">YOUR POSITION AMONG ALL PLAYERS</p>
+                  </div>
+                  <div class="explorer-card-body">
+                    <PlayerCompetitiveRankings
+                      :player-name="playerName"
+                      :game="playerPanelGame"
                     />
                   </div>
                 </div>
@@ -922,8 +938,10 @@ onUnmounted(() => {
 
         <!-- Content -->
         <div class="flex-1 overflow-y-auto bg-[var(--bg-panel)]">
-          <MapDetailPanel 
-            :map-name="selectedMapDetailName" 
+          <PlayerMapDetailPanel 
+            :map-name="selectedMapDetailName"
+            :player-name="playerName"
+            :game="playerPanelGame"
             @navigate-to-server="openServerMapDetail"
             @close="closeMapDetail"
           />

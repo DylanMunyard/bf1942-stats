@@ -950,7 +950,7 @@ public class DataExplorerService(
 
         var rankingLookup = rankings.ToDictionary(
             r => (r.MapName, r.ServerGuid),
-            r => r.Rank
+            r => (int)r.Rank
         );
 
         // Build map groups with server stats
@@ -1062,6 +1062,12 @@ public class DataExplorerService(
         var targetServerGuids = !string.IsNullOrWhiteSpace(serverGuid)
             ? servers.Where(g => g == serverGuid).ToList()
             : servers;
+
+        // Always include empty string for global stats unless filtering by specific server
+        if (string.IsNullOrWhiteSpace(serverGuid))
+        {
+            targetServerGuids = targetServerGuids.Concat(new[] { "" }).ToList();
+        }
 
         if (targetServerGuids.Count == 0)
             return null;
@@ -1369,10 +1375,17 @@ public class DataExplorerService(
 
     private class PlayerRankingQueryResult
     {
+        public string PlayerName { get; set; } = "";
         public string MapName { get; set; } = "";
         public string ServerGuid { get; set; } = "";
-        public int Rank { get; set; }
-        public int TotalScore { get; set; }
+        public int Score { get; set; }
+        public int Kills { get; set; }
+        public int Deaths { get; set; }
+        public int Rounds { get; set; }
+        public double PlayTime { get; set; }
+        public long Rank { get; set; }
+        public long TotalPlayers { get; set; }
+        public int TotalScore { get; set; } // For backward compatibility
     }
 
     private class MapPlayerRankingQueryResult
@@ -2118,6 +2131,425 @@ public class DataExplorerService(
         public int TotalKills { get; set; }
         public int TotalDeaths { get; set; }
         public int TotalRounds { get; set; }
+    }
+
+    private class MapRankResult
+    {
+        public string MapName { get; set; } = "";
+        public int Rank { get; set; }
+    }
+
+    private class MonthlyRankingResult
+    {
+        public int Rank { get; set; }
+        public int TotalPlayers { get; set; }
+        public int Score { get; set; }
+        public int Kills { get; set; }
+        public int Deaths { get; set; }
+    }
+
+    private class CompetitiveRankingResult
+    {
+        public string PlayerName { get; set; } = "";
+        public string MapName { get; set; } = "";
+        public int Score { get; set; }
+        public int Kills { get; set; }
+        public int Deaths { get; set; }
+        public int Rounds { get; set; }
+        public double PlayTime { get; set; }
+        public long Rank { get; set; }
+        public long TotalPlayers { get; set; }
+    }
+
+    #endregion
+
+    #region Competitive Rankings
+
+    public async Task<PlayerCompetitiveRankingsResponse?> GetPlayerCompetitiveRankingsAsync(
+        string playerName, 
+        string game = "bf1942", 
+        int days = 60)
+    {
+        var normalizedGame = NormalizeGame(game);
+        // Note: Currently we don't filter by game in the rankings query since PlayerMapStats
+        // doesn't have game info and joining with Servers table would be complex.
+        // This returns rankings across all games.
+        var cutoffDate = DateTime.UtcNow.AddDays(-days);
+        var startYear = cutoffDate.Year;
+        var startMonth = cutoffDate.Month;
+
+        // First check if player exists
+        var playerExists = await dbContext.PlayerMapStats
+            .AsNoTracking()
+            .Where(p => p.PlayerName == playerName)
+            .AnyAsync();
+
+        if (!playerExists)
+            return null;
+
+        // Get current rankings for all maps the player has played
+        var playerMapStats = await dbContext.Database
+            .SqlQueryRaw<CompetitiveRankingResult>(@"
+                WITH PlayerScores AS (
+                    SELECT 
+                        pms.PlayerName,
+                        pms.MapName,
+                        SUM(pms.TotalScore) as Score,
+                        SUM(pms.TotalKills) as Kills,
+                        SUM(pms.TotalDeaths) as Deaths,
+                        SUM(pms.TotalRounds) as Rounds,
+                        SUM(pms.TotalPlayTimeMinutes) as PlayTime
+                    FROM PlayerMapStats pms
+                    WHERE pms.ServerGuid = ''  -- Global stats only
+                        AND ((pms.Year > {0}) OR (pms.Year = {0} AND pms.Month >= {1}))
+                    GROUP BY pms.PlayerName, pms.MapName
+                    HAVING SUM(pms.TotalScore) > 0
+                ),
+                RankedPlayers AS (
+                    SELECT 
+                        PlayerName,
+                        MapName,
+                        Score,
+                        Kills,
+                        Deaths,
+                        Rounds,
+                        PlayTime,
+                        RANK() OVER (PARTITION BY MapName ORDER BY Score DESC) as Rank,
+                        COUNT(*) OVER (PARTITION BY MapName) as TotalPlayers
+                    FROM PlayerScores
+                )
+                SELECT * FROM RankedPlayers
+                WHERE PlayerName = {2}
+                ORDER BY Rank ASC, Score DESC",
+                startYear, startMonth, playerName)
+            .ToListAsync();
+
+        if (!playerMapStats.Any())
+            return null;
+
+        // Get previous month's rankings for trend calculation
+        var previousCutoff = cutoffDate.AddDays(-30);
+        var prevYear = previousCutoff.Year;
+        var prevMonth = previousCutoff.Month;
+
+        // Query previous rankings separately with a simple result class
+        var previousRankQuery = @"
+            WITH PlayerScores AS (
+                SELECT 
+                    pms.PlayerName,
+                    pms.MapName,
+                    SUM(pms.TotalScore) as Score
+                FROM PlayerMapStats pms
+                WHERE pms.ServerGuid = ''
+                    AND ((pms.Year > {0}) OR (pms.Year = {0} AND pms.Month >= {1}))
+                    AND ((pms.Year < {2}) OR (pms.Year = {2} AND pms.Month < {3}))
+                GROUP BY pms.PlayerName, pms.MapName
+            ),
+            RankedPlayers AS (
+                SELECT 
+                    PlayerName,
+                    MapName,
+                    RANK() OVER (PARTITION BY MapName ORDER BY Score DESC) as Rank
+                FROM PlayerScores
+            )
+            SELECT MapName, CAST(Rank AS INT) as Rank
+            FROM RankedPlayers
+            WHERE PlayerName = {4}";
+
+        var previousRankingsData = await dbContext.Database
+            .SqlQueryRaw<MapRankResult>(previousRankQuery,
+                prevYear, prevMonth, startYear, startMonth, playerName)
+            .ToListAsync();
+
+        var previousRankings = previousRankingsData.ToDictionary(r => r.MapName, r => r.Rank);
+
+        // Build response
+        var mapRankings = playerMapStats.Select(stat =>
+        {
+            var percentile = 100.0 * (stat.TotalPlayers - stat.Rank + 1) / stat.TotalPlayers;
+            var kdRatio = stat.Deaths > 0 ? (double)stat.Kills / stat.Deaths : stat.Kills;
+            
+            var trend = "new";
+            int? previousRank = null;
+            
+            if (previousRankings.TryGetValue(stat.MapName, out var prevRank))
+            {
+                previousRank = prevRank;
+                if ((int)stat.Rank < prevRank) trend = "up";
+                else if ((int)stat.Rank > prevRank) trend = "down";
+                else trend = "stable";
+            }
+
+            return new MapRankingDto(
+                MapName: stat.MapName,
+                Rank: (int)stat.Rank,
+                TotalPlayers: (int)stat.TotalPlayers,
+                Percentile: Math.Round(percentile, 1),
+                TotalScore: stat.Score,
+                TotalKills: stat.Kills,
+                TotalDeaths: stat.Deaths,
+                KdRatio: Math.Round(kdRatio, 2),
+                TotalRounds: stat.Rounds,
+                PlayTimeMinutes: Math.Round(stat.PlayTime, 1),
+                Trend: trend,
+                PreviousRank: previousRank
+            );
+        }).ToList();
+
+        // Calculate summary
+        var avgPercentile = mapRankings.Average(r => r.Percentile);
+        var bestRank = mapRankings.Min(r => r.Rank);
+        var bestMap = mapRankings.FirstOrDefault(r => r.Rank == bestRank)?.MapName;
+
+        var percentileCategory = avgPercentile switch
+        {
+            >= 99 => "elite",
+            >= 95 => "master",
+            >= 90 => "expert",
+            >= 75 => "veteran",
+            _ => "regular"
+        };
+
+        var summary = new RankingSummaryDto(
+            TotalMapsPlayed: mapRankings.Count,
+            Top1Rankings: mapRankings.Count(r => r.Rank == 1),
+            Top10Rankings: mapRankings.Count(r => r.Rank <= 10),
+            Top25Rankings: mapRankings.Count(r => r.Rank <= 25),
+            Top100Rankings: mapRankings.Count(r => r.Rank <= 100),
+            AveragePercentile: Math.Round(avgPercentile, 1),
+            BestRankedMap: bestMap,
+            BestRank: bestRank,
+            PercentileCategory: percentileCategory
+        );
+
+        return new PlayerCompetitiveRankingsResponse(
+            PlayerName: playerName,
+            Game: normalizedGame,
+            MapRankings: mapRankings,
+            Summary: summary,
+            DateRange: new DateRangeDto(days, cutoffDate, DateTime.UtcNow)
+        );
+    }
+
+    public async Task<RankingTimelineResponse?> GetPlayerRankingTimelineAsync(
+        string playerName,
+        string? mapName = null,
+        string game = "bf1942",
+        int months = 12)
+    {
+        var normalizedGame = NormalizeGame(game);
+        // Note: Currently we don't filter by game in the timeline query since PlayerMapStats
+        // doesn't have game info. This returns timeline across all games.
+        var currentDate = DateTime.UtcNow;
+
+        // Build timeline going back N months
+        var timeline = new List<RankingSnapshotDto>();
+
+        for (int i = 0; i < months; i++)
+        {
+            var targetDate = currentDate.AddMonths(-i);
+            var year = targetDate.Year;
+            var month = targetDate.Month;
+            var monthLabel = targetDate.ToString("MMM yyyy");
+
+            // Query rankings for this specific month
+            var query = @"
+                WITH PlayerScores AS (
+                    SELECT 
+                        pms.PlayerName,
+                        pms.MapName,
+                        SUM(pms.TotalScore) as Score,
+                        SUM(pms.TotalKills) as Kills,
+                        SUM(pms.TotalDeaths) as Deaths
+                    FROM PlayerMapStats pms
+                    WHERE pms.ServerGuid = ''
+                        AND pms.Year = {0}
+                        AND pms.Month = {1}";
+
+            if (!string.IsNullOrEmpty(mapName))
+            {
+                query += " AND pms.MapName = {2}";
+            }
+
+            query += @"
+                    GROUP BY pms.PlayerName, pms.MapName
+                    HAVING SUM(pms.TotalScore) > 0
+                ),
+                RankedPlayers AS (
+                    SELECT 
+                        PlayerName,
+                        Score,
+                        Kills,
+                        Deaths,
+                        RANK() OVER (ORDER BY Score DESC) as Rank,
+                        COUNT(*) OVER () as TotalPlayers
+                    FROM PlayerScores
+                )
+                SELECT 
+                    CAST(Rank AS INT) as Rank,
+                    CAST(TotalPlayers AS INT) as TotalPlayers,
+                    CAST(Score AS INT) as Score,
+                    CAST(Kills AS INT) as Kills,
+                    CAST(Deaths AS INT) as Deaths
+                FROM RankedPlayers
+                WHERE PlayerName = {3}";
+
+            var parameters = string.IsNullOrEmpty(mapName)
+                ? new object[] { year, month, playerName }
+                : new object[] { year, month, mapName, playerName };
+
+            var monthData = await dbContext.Database
+                .SqlQueryRaw<MonthlyRankingResult>(query, parameters)
+                .FirstOrDefaultAsync();
+
+            if (monthData != null)
+            {
+                var percentile = 100.0 * (monthData.TotalPlayers - monthData.Rank + 1) / monthData.TotalPlayers;
+                var kdRatio = monthData.Deaths > 0 ? (double)monthData.Kills / monthData.Deaths : monthData.Kills;
+
+                timeline.Add(new RankingSnapshotDto(
+                    Year: year,
+                    Month: month,
+                    MonthLabel: monthLabel,
+                    Rank: monthData.Rank,
+                    TotalPlayers: monthData.TotalPlayers,
+                    Percentile: Math.Round(percentile, 1),
+                    TotalScore: monthData.Score,
+                    KdRatio: Math.Round(kdRatio, 2),
+                    HasData: true
+                ));
+            }
+            else
+            {
+                // No data for this month
+                timeline.Add(new RankingSnapshotDto(
+                    Year: year,
+                    Month: month,
+                    MonthLabel: monthLabel,
+                    Rank: 0,
+                    TotalPlayers: 0,
+                    Percentile: 0,
+                    TotalScore: 0,
+                    KdRatio: 0,
+                    HasData: false
+                ));
+            }
+        }
+
+        // Return null if no data at all
+        if (timeline.All(t => !t.HasData))
+            return null;
+
+        return new RankingTimelineResponse(
+            PlayerName: playerName,
+            MapName: mapName,
+            Game: normalizedGame,
+            Timeline: timeline
+        );
+    }
+
+    #endregion
+
+    #region Player Map Details
+
+    public async Task<PlayerMapDetailResponse?> GetPlayerMapStatsAsync(
+        string playerName,
+        string mapName,
+        string game = "bf1942",
+        int days = 60)
+    {
+        var normalizedGame = NormalizeGame(game);
+        var cutoffDate = DateTime.UtcNow.AddDays(-days);
+        var cutoffYear = cutoffDate.Year;
+        var cutoffMonth = cutoffDate.Month;
+
+        // Get aggregated stats for the map - try global first, then aggregate from servers
+        var globalStats = await dbContext.PlayerMapStats
+            .Where(pms => pms.PlayerName == playerName
+                && pms.MapName == mapName
+                && pms.ServerGuid == "" // Global stats
+                && ((pms.Year > cutoffYear) || (pms.Year == cutoffYear && pms.Month >= cutoffMonth)))
+            .GroupBy(pms => new { pms.PlayerName, pms.MapName })
+            .Select(g => new PlayerMapAggregatedStats(
+                TotalScore: g.Sum(x => x.TotalScore),
+                TotalKills: g.Sum(x => x.TotalKills),
+                TotalDeaths: g.Sum(x => x.TotalDeaths),
+                TotalRounds: g.Sum(x => x.TotalRounds),
+                PlayTimeMinutes: g.Sum(x => x.TotalPlayTimeMinutes)
+            ))
+            .FirstOrDefaultAsync();
+
+        // If no global stats, try aggregating from server-specific stats
+        var aggregatedStats = globalStats;
+        if (aggregatedStats == null)
+        {
+            aggregatedStats = await dbContext.PlayerMapStats
+                .Where(pms => pms.PlayerName == playerName
+                    && pms.MapName == mapName
+                    && pms.ServerGuid != "" // Server-specific stats
+                    && ((pms.Year > cutoffYear) || (pms.Year == cutoffYear && pms.Month >= cutoffMonth)))
+                .GroupBy(pms => new { pms.PlayerName, pms.MapName })
+                .Select(g => new PlayerMapAggregatedStats(
+                    TotalScore: g.Sum(x => x.TotalScore),
+                    TotalKills: g.Sum(x => x.TotalKills),
+                    TotalDeaths: g.Sum(x => x.TotalDeaths),
+                    TotalRounds: g.Sum(x => x.TotalRounds),
+                    PlayTimeMinutes: g.Sum(x => x.TotalPlayTimeMinutes)
+                ))
+                .FirstOrDefaultAsync();
+        }
+
+        if (aggregatedStats == null)
+        {
+            return null;
+        }
+
+        // Get breakdown by server
+        var serverBreakdown = await dbContext.PlayerMapStats
+            .Where(pms => pms.PlayerName == playerName
+                && pms.MapName == mapName
+                && pms.ServerGuid != "" // Exclude global stats
+                && ((pms.Year > cutoffYear) || (pms.Year == cutoffYear && pms.Month >= cutoffMonth)))
+            .GroupBy(pms => pms.ServerGuid)
+            .Select(g => new
+            {
+                ServerGuid = g.Key,
+                Score = g.Sum(x => x.TotalScore),
+                Kills = g.Sum(x => x.TotalKills),
+                Deaths = g.Sum(x => x.TotalDeaths),
+                Rounds = g.Sum(x => x.TotalRounds),
+                PlayTime = g.Sum(x => x.TotalPlayTimeMinutes)
+            })
+            .ToListAsync();
+
+        // Get server names
+        var serverGuids = serverBreakdown.Select(s => s.ServerGuid).ToList();
+        var serverNames = await dbContext.Servers
+            .Where(s => serverGuids.Contains(s.Guid))
+            .Select(s => new { s.Guid, s.Name })
+            .ToDictionaryAsync(s => s.Guid, s => s.Name);
+
+        var serverBreakdownList = serverBreakdown
+            .Select(s => new PlayerMapServerBreakdown(
+                ServerGuid: s.ServerGuid,
+                ServerName: serverNames.GetValueOrDefault(s.ServerGuid, s.ServerGuid),
+                Score: s.Score,
+                Kills: s.Kills,
+                Deaths: s.Deaths,
+                Rounds: s.Rounds,
+                PlayTime: s.PlayTime
+            ))
+            .OrderByDescending(s => s.Score)
+            .ToList();
+
+        return new PlayerMapDetailResponse(
+            PlayerName: playerName,
+            MapName: mapName,
+            Game: normalizedGame,
+            AggregatedStats: aggregatedStats,
+            ServerBreakdown: serverBreakdownList,
+            DateRange: new DateRangeDto(days, cutoffDate, DateTime.UtcNow)
+        );
     }
 
     #endregion

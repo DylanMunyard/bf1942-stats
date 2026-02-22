@@ -58,11 +58,11 @@ spec:
               value: "30"
             - name: REDIS_CONNECTION_STRING
               value: "redis-service.bf42-stats:6379"
-            - name: NEO4J_URI
+            - name: Neo4j__Uri
               value: "bolt://neo4j-service.bf42-stats:7687"
-            - name: NEO4J_USERNAME
+            - name: Neo4j__Username
               value: "neo4j"
-            - name: NEO4J_PASSWORD
+            - name: Neo4j__Password
               value: "bf1942stats"
             - name: ENABLE_GAMIFICATION_PROCESSING
               value: "true"
