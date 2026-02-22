@@ -936,7 +936,7 @@ public class DataExplorerService(
                   AND ServerGuid IN ({rankingGuidParams})
                 GROUP BY MapName, ServerGuid, PlayerName
             )
-            SELECT MapName, ServerGuid, Rank, TotalScore
+            SELECT MapName, ServerGuid, Rank
             FROM PlayerRankings
             WHERE PlayerName = @p{playerNameParamIndex}";
 
@@ -945,7 +945,7 @@ public class DataExplorerService(
         rankingParams.Add(playerName);
 
         var rankings = await dbContext.Database
-            .SqlQueryRaw<PlayerRankingQueryResult>(rankingSql, rankingParams.ToArray())
+            .SqlQueryRaw<PlayerMapRankingQueryResult>(rankingSql, rankingParams.ToArray())
             .ToListAsync();
 
         var rankingLookup = rankings.ToDictionary(
@@ -1401,6 +1401,13 @@ public class DataExplorerService(
         public double PlayTimeMinutes { get; set; }
         public int UniqueServers { get; set; }
         public int TotalWins { get; set; }
+    }
+
+    private class PlayerMapRankingQueryResult
+    {
+        public string MapName { get; set; } = "";
+        public string ServerGuid { get; set; } = "";
+        public long Rank { get; set; }
     }
 
     /// <inheritdoc/>
