@@ -732,6 +732,7 @@ onUnmounted(() => {
                     <PlayerCompetitiveRankings
                       :player-name="playerName"
                       :game="playerPanelGame"
+                      @navigate-to-map="openMapDetail"
                     />
                   </div>
                 </div>

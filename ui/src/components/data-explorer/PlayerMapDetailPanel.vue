@@ -435,11 +435,10 @@ const loadRankings = async () => {
 
   try {
     // First, fetch to find player's position
-    // Don't filter by server when searching for the player - they might only have global stats
     console.log('Searching for player ranking:', {
       mapName: props.mapName,
       playerName: props.playerName,
-      serverGuid: 'all servers (not filtering for player search)',
+      serverGuid: selectedServerGuid.value || 'all servers',
       sortBy: activeRankingTab.value
     });
     
@@ -449,7 +448,7 @@ const loadRankings = async () => {
       1,
       1,
       props.playerName,
-      undefined, // Don't filter by server for player search
+      selectedServerGuid.value || undefined,
       60,
       activeRankingTab.value
     );

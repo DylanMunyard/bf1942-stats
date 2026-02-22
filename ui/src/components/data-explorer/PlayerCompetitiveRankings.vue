@@ -167,6 +167,10 @@ const props = defineProps<{
   game?: string;
 }>();
 
+const emit = defineEmits<{
+  navigateToMap: [mapName: string];
+}>();
+
 const router = useRouter();
 
 // Types
@@ -461,10 +465,8 @@ const formatPlayTime = (minutes: number): string => {
 };
 
 const navigateToMapRankings = (mapName: string) => {
-  router.push({
-    path: `/maps/${encodeURIComponent(mapName)}`,
-    query: { game: props.game || 'bf1942', highlight: props.playerName }
-  });
+  // Emit event to parent component instead of navigating
+  emit('navigateToMap', mapName);
 };
 
 const getRankBadgeClass = (rank: number): string => {
