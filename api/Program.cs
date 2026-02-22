@@ -637,6 +637,8 @@ try
         builder.Services.AddSingleton<api.PlayerRelationships.Neo4jService>();
         builder.Services.AddSingleton<api.PlayerRelationships.Neo4jMigrationService>();
         builder.Services.AddScoped<api.PlayerRelationships.PlayerRelationshipEtlService>();
+        builder.Services.AddScoped<api.PlayerRelationships.PlayerRelationshipService>();
+        builder.Services.AddScoped<api.PlayerRelationships.IPlayerRelationshipService>(sp => sp.GetRequiredService<api.PlayerRelationships.PlayerRelationshipService>());
         builder.Logging.AddConsole().SetMinimumLevel(LogLevel.Information);
     }
 

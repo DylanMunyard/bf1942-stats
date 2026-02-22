@@ -196,6 +196,16 @@ const routes: RouteRecordRaw[] = [
       }
     },
     {
+      path: '/players/:playerName/network',
+      name: 'player-network',
+      component: () => import('../views/PlayerNetworkView.vue'),
+      props: route => ({ playerName: route.params.playerName }),
+      meta: {
+        title: (route: RouteLocationNormalized) => `${route.params.playerName} Network & Connections - BF Stats`,
+        description: (route: RouteLocationNormalized) => `Player network visualization for ${route.params.playerName}. Explore connections, teammates, and social relationships in the Battlefield community.`
+      }
+    },
+    {
       path: '/explore',
       name: 'explore',
       component: DataExplorer,

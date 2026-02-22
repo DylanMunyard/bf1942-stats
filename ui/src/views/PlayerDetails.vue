@@ -682,7 +682,13 @@ onUnmounted(() => {
                       <span>{{ formatRelativeTime(playerStats?.lastPlayed || '') }}</span>
                     </div>
 
-                    <!-- Compare Button -->
+                    <router-link
+                      :to="`/players/${encodeURIComponent(playerName)}/network`"
+                      class="explorer-btn explorer-btn--ghost explorer-btn--sm"
+                      title="View player network"
+                    >
+                      NETWORK
+                    </router-link>
                     <router-link
                       :to="{ path: '/players/compare', query: { player1: playerName } }"
                       class="explorer-btn explorer-btn--ghost explorer-btn--sm"
