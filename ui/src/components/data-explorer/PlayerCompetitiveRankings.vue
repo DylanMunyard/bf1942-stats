@@ -57,7 +57,7 @@
       <!-- Current Rankings Tab -->
       <div v-if="activeTab === 'current'" class="space-y-2">
         <div 
-          v-for="ranking in sortedRankings"
+          v-for="ranking in paginatedRankings"
           :key="ranking.mapName"
           class="ranking-item"
           @click="navigateToMapRankings(ranking.mapName)"
@@ -109,6 +109,35 @@
         <!-- Empty state for no rankings -->
         <div v-if="rankingsData.mapRankings.length === 0" class="explorer-empty">
           <p class="text-neutral-500">No competitive rankings available for this time period.</p>
+        </div>
+
+        <!-- Pagination Controls -->
+        <div v-if="totalPages > 1" class="pagination-controls">
+          <button
+            class="pagination-btn"
+            :disabled="currentPage === 1"
+            @click="goToPage(currentPage - 1)"
+          >
+            &larr;
+          </button>
+          
+          <button
+            v-for="pageNum in paginationRange"
+            :key="pageNum"
+            class="pagination-btn"
+            :class="{ 'pagination-btn--active': pageNum === currentPage }"
+            @click="goToPage(pageNum)"
+          >
+            {{ pageNum }}
+          </button>
+          
+          <button
+            class="pagination-btn"
+            :disabled="currentPage === totalPages"
+            @click="goToPage(currentPage + 1)"
+          >
+            &rarr;
+          </button>
         </div>
       </div>
 
@@ -248,6 +277,10 @@ const selectedTimelineMap = ref('');
 const timelineCanvas = ref<HTMLCanvasElement | null>(null);
 let timelineChart: Chart | null = null;
 
+// Pagination state
+const currentPage = ref(1);
+const itemsPerPage = 10;
+
 // Computed
 const sortedRankings = computed(() => {
   if (!rankingsData.value) return [];
@@ -257,6 +290,28 @@ const sortedRankings = computed(() => {
 const availableMaps = computed(() => {
   if (!rankingsData.value) return [];
   return rankingsData.value.mapRankings.map(r => r.mapName).sort();
+});
+
+// Pagination computed properties
+const totalPages = computed(() => {
+  if (!sortedRankings.value.length) return 0;
+  return Math.ceil(sortedRankings.value.length / itemsPerPage);
+});
+
+const paginatedRankings = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage;
+  const end = start + itemsPerPage;
+  return sortedRankings.value.slice(start, end);
+});
+
+const paginationRange = computed(() => {
+  const range: number[] = [];
+  const maxVisible = 5;
+  let start = Math.max(1, currentPage.value - Math.floor(maxVisible / 2));
+  const end = Math.min(totalPages.value, start + maxVisible - 1);
+  if (end === totalPages.value) start = Math.max(1, end - maxVisible + 1);
+  for (let i = start; i <= end; i++) range.push(i);
+  return range;
 });
 
 // Methods
@@ -278,12 +333,18 @@ const loadData = async () => {
     }
 
     rankingsData.value = await response.json();
+    currentPage.value = 1; // Reset to first page when data loads
   } catch (err: any) {
     console.error('Error loading competitive rankings:', err);
     error.value = err.message || 'Failed to load rankings';
   } finally {
     isLoading.value = false;
   }
+};
+
+const goToPage = (page: number) => {
+  if (page < 1 || page > totalPages.value) return;
+  currentPage.value = page;
 };
 
 const loadTimeline = async () => {
@@ -527,6 +588,8 @@ onUnmounted(() => {
 watch(activeTab, (newTab) => {
   if (newTab === 'timeline' && !timelineData.value) {
     loadTimeline();
+  } else if (newTab === 'current') {
+    currentPage.value = 1; // Reset to first page when switching back to current rankings
   }
 });
 
@@ -950,6 +1013,54 @@ watch(() => props.playerName, () => {
 .text-neutral-500 { color: var(--text-secondary); }
 .text-xs { font-size: 0.625rem; }
 .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+/* Pagination */
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding-top: 1rem;
+  margin-top: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.pagination-btn {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 2rem;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--neon-cyan);
+  background: rgba(0, 255, 242, 0.1);
+}
+
+.pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pagination-btn--active {
+  background: var(--neon-cyan);
+  color: var(--bg-dark);
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 10px rgba(0, 255, 242, 0.4);
+}
+
+.pagination-btn--active:hover {
+  background: var(--neon-cyan);
+  color: var(--bg-dark);
+}
 
 /* Responsive */
 @media (max-width: 640px) {

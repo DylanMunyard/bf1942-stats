@@ -37,9 +37,7 @@ const currentPage = ref(1);
 const totalPages = ref(0);
 const totalCount = ref(0);
 
-// Pinned player data (fetched separately)
-const pinnedPlayer = ref<MapPlayerRanking | null>(null);
-const isPinnedLoading = ref(false);
+
 
 const selectedDays = ref(props.days || 60);
 
@@ -77,36 +75,13 @@ const loadRankings = async () => {
   }
 };
 
-// Fetch the highlighted player's rank separately so it's always visible
-const loadPinnedPlayer = async () => {
-  if (!props.highlightPlayer || !props.mapName) return;
 
-  isPinnedLoading.value = true;
-  try {
-    const response = await fetchMapPlayerRankings(
-      props.mapName,
-      props.game || 'bf1942',
-      1,
-      1,
-      props.highlightPlayer,
-      props.serverGuid,
-      selectedDays.value,
-      activeTab.value
-    );
-    pinnedPlayer.value = response.rankings.length > 0 ? response.rankings[0] : null;
-  } catch {
-    pinnedPlayer.value = null;
-  } finally {
-    isPinnedLoading.value = false;
-  }
-};
 
 const handleDaysChange = (days: number) => {
   if (days === selectedDays.value || isRefreshing.value) return;
   selectedDays.value = days;
   currentPage.value = 1;
   loadRankings();
-  loadPinnedPlayer();
 };
 
 const selectTab = (tabId: MapRankingSortBy) => {
@@ -114,7 +89,6 @@ const selectTab = (tabId: MapRankingSortBy) => {
   activeTab.value = tabId;
   currentPage.value = 1;
   loadRankings();
-  loadPinnedPlayer();
 };
 
 const goToPage = (page: number) => {
@@ -174,7 +148,6 @@ const paginationRange = computed(() => {
 
 onMounted(() => {
   loadRankings();
-  loadPinnedPlayer();
 });
 
 watch(() => props.mapName, () => {
@@ -182,17 +155,13 @@ watch(() => props.mapName, () => {
   searchQuery.value = '';
   debouncedSearch.value = '';
   rankings.value = [];
-  pinnedPlayer.value = null;
   loadRankings();
-  loadPinnedPlayer();
 });
 
 watch(() => props.serverGuid, () => {
   currentPage.value = 1;
   rankings.value = [];
-  pinnedPlayer.value = null;
   loadRankings();
-  loadPinnedPlayer();
 });
 
 watch(() => props.days, (newDays) => {
@@ -200,44 +169,13 @@ watch(() => props.days, (newDays) => {
     selectedDays.value = newDays;
     currentPage.value = 1;
     loadRankings();
-    loadPinnedPlayer();
   }
 });
 </script>
 
 <template>
   <div class="map-rankings-panel space-y-3">
-    <!-- Pinned Player Banner -->
-    <div
-      v-if="pinnedPlayer && highlightPlayer"
-      class="flex items-center gap-3 px-3 sm:px-4 py-3 rounded bg-[var(--bg-card)] border border-[var(--neon-cyan)] shadow-[0_0_20px_rgba(0,255,242,0.2)]"
-    >
-      <div class="flex-shrink-0">
-        <span :class="getRankClass(pinnedPlayer.rank)" class="scale-125">{{ pinnedPlayer.rank }}</span>
-      </div>
-      <div class="flex-1 min-w-0">
-        <div class="text-sm font-bold text-[var(--neon-cyan)] truncate font-mono">{{ pinnedPlayer.playerName }}</div>
-        <div class="text-xs text-[var(--text-secondary)] font-mono">Your position on {{ mapName }}</div>
-      </div>
-      <div class="hidden sm:flex items-center gap-4 text-xs">
-        <div class="text-center">
-          <div class="font-mono font-bold text-[var(--text-primary)]">{{ pinnedPlayer.totalScore.toLocaleString() }}</div>
-          <div class="text-[var(--text-secondary)] text-[10px] uppercase tracking-wider">Score</div>
-        </div>
-        <div class="text-center">
-          <div class="font-mono font-bold text-[var(--neon-green)]">{{ pinnedPlayer.kdRatio.toFixed(2) }}</div>
-          <div class="text-[var(--text-secondary)] text-[10px] uppercase tracking-wider">K/D</div>
-        </div>
-        <div class="text-center">
-          <div class="font-mono text-[var(--text-primary)]">{{ pinnedPlayer.totalRounds }}</div>
-          <div class="text-[var(--text-secondary)] text-[10px] uppercase tracking-wider">Rounds</div>
-        </div>
-      </div>
-    </div>
-    <div v-else-if="isPinnedLoading && highlightPlayer" class="flex items-center gap-2 px-3 sm:px-4 py-3 rounded bg-[var(--bg-card)] border border-[var(--border-color)]">
-      <div class="w-4 h-4 border-2 border-[var(--border-color)] border-t-[var(--neon-cyan)] rounded-full animate-spin" />
-      <span class="text-xs text-[var(--text-secondary)] font-mono">Finding your rank...</span>
-    </div>
+
 
     <!-- Header with Search -->
     <div class="flex flex-col gap-3">
