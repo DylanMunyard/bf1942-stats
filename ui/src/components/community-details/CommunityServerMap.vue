@@ -52,6 +52,7 @@ const renderVisualization = () => {
 
   svg = d3.select(svgElement.value)
   svg.selectAll('*').remove()
+  svg.attr('viewBox', `0 0 ${width} ${height}`)
 
   // Create all nodes combined for simulation
   const allNodes = [
@@ -69,10 +70,7 @@ const renderVisualization = () => {
   simulation = d3.forceSimulation(allNodes)
     .force('link', d3.forceLink(links)
       .id((d: any) => d.id)
-      .distance((d: any) => {
-        // Servers pull harder on players based on session count
-        return 120
-      })
+      .distance(120)
       .strength(0.8)
     )
     .force('charge', d3.forceManyBody().strength(-800))
@@ -212,19 +210,23 @@ const renderVisualization = () => {
   }
 
   function zoomToFit(group: any) {
-    const bounds = group.node().getBBox()
-    const fullWidth = width
-    const fullHeight = height
-    const midX = bounds.x + bounds.width / 2
-    const midY = bounds.y + bounds.height / 2
+    try {
+      const bounds = group.node().getBBox()
+      const fullWidth = width
+      const fullHeight = height
+      const midX = bounds.x + bounds.width / 2
+      const midY = bounds.y + bounds.height / 2
 
-    if (bounds.width > 0 && bounds.height > 0) {
-      const scale = 0.85 / Math.max(bounds.width / fullWidth, bounds.height / fullHeight)
-      const translate = [fullWidth / 2 - scale * midX, fullHeight / 2 - scale * midY]
+      if (bounds.width > 0 && bounds.height > 0) {
+        const scale = 0.85 / Math.max(bounds.width / fullWidth, bounds.height / fullHeight)
+        const translate = [fullWidth / 2 - scale * midX, fullHeight / 2 - scale * midY]
 
-      svg!.transition()
-        .duration(750)
-        .attr('transform', `translate(${translate})scale(${scale})`)
+        group.transition()
+          .duration(750)
+          .attr('transform', `translate(${translate[0]},${translate[1]})scale(${scale})`)
+      }
+    } catch (e) {
+      // Silent fail if bounds can't be calculated
     }
   }
 
