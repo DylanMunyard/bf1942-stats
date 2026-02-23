@@ -24,6 +24,8 @@ const PublicTournamentStats = () => import('../views/PublicTournamentStats.vue')
 const PublicTournamentFiles = () => import('../views/PublicTournamentFiles.vue')
 const DataExplorer = () => import('../views/DataExplorer.vue')
 const AdminDataManagement = () => import('../views/AdminDataManagement.vue')
+const CommunitiesView = () => import('../views/CommunitiesView.vue')
+const CommunityDetailsView = () => import('../views/CommunityDetailsView.vue')
 
 const routes: RouteRecordRaw[] = [
     {
@@ -447,6 +449,25 @@ const routes: RouteRecordRaw[] = [
       meta: {
         title: 'Discord Authentication - BF Stats',
         description: 'Completing Discord authentication...'
+      }
+    },
+    {
+      path: '/communities',
+      name: 'communities',
+      component: CommunitiesView,
+      meta: {
+        title: 'Player Communities - BF Stats',
+        description: 'Explore detected player communities in Battlefield. View community connections, cohesion scores, and player relationships.'
+      }
+    },
+    {
+      path: '/communities/:id',
+      name: 'community-details',
+      component: CommunityDetailsView,
+      props: true,
+      meta: {
+        title: (route: RouteLocationNormalized) => `Community ${route.params.id} - BF Stats`,
+        description: (route: RouteLocationNormalized) => `Detailed view of player community ${route.params.id}. See all members, servers, network connections, and activity trends.`
       }
     }
 ]

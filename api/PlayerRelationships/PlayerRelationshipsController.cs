@@ -21,7 +21,19 @@ public class PlayerRelationshipsController(
         try
         {
             var teammates = await relationshipService.GetMostFrequentCoPlayersAsync(playerName, limit);
-            return Ok(teammates);
+            // Transform to only show the other player (not the requested player)
+            var transformed = teammates.Select(t => new PlayerRelationship
+            {
+                Player1Name = playerName,
+                Player2Name = t.Player2Name,
+                SessionCount = t.SessionCount,
+                FirstPlayedTogether = t.FirstPlayedTogether,
+                LastPlayedTogether = t.LastPlayedTogether,
+                ServerGuids = t.ServerGuids,
+                TotalMinutes = t.TotalMinutes,
+                AvgScoreDiff = t.AvgScoreDiff
+            }).ToList();
+            return Ok(transformed);
         }
         catch (Exception ex)
         {
@@ -170,7 +182,7 @@ public class PlayerRelationshipsController(
     {
         try
         {
-            var stats = await GetServerSocialStatsAsync(serverGuid);
+            var stats = await relationshipService.GetServerSocialStatsAsync(serverGuid);
             return Ok(stats);
         }
         catch (Exception ex)
@@ -178,24 +190,5 @@ public class PlayerRelationshipsController(
             logger.LogError(ex, "Error getting social stats for server {ServerGuid}", serverGuid);
             return StatusCode(500, "An error occurred while fetching server social statistics");
         }
-    }
-
-    private async Task<ServerSocialStats> GetServerSocialStatsAsync(string serverGuid)
-    {
-        // TODO: Implement server social analytics
-        // This would query Neo4j for:
-        // - Number of unique players
-        // - Average connections per player
-        // - Community detection
-        // - Player retention metrics
-        
-        return new ServerSocialStats
-        {
-            ServerGuid = serverGuid,
-            UniquePlayerCount = 0,
-            AverageConnectionsPerPlayer = 0,
-            CommunityCount = 0,
-            RetentionRate = 0
-        };
     }
 }

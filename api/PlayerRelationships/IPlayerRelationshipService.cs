@@ -42,4 +42,46 @@ public interface IPlayerRelationshipService
         int depth = 2,
         int maxNodes = 100,
         CancellationToken cancellationToken = default);
+
+    Task<ServerSocialStats> GetServerSocialStatsAsync(
+        string serverGuid,
+        CancellationToken cancellationToken = default);
+
+    Task<List<PlayerCommunity>> GetCommunitiesAsync(
+        int minSize = 3,
+        bool activeOnly = true,
+        CancellationToken cancellationToken = default);
+
+    Task<PlayerCommunity?> GetCommunityByIdAsync(
+        string communityId,
+        CancellationToken cancellationToken = default);
+
+    Task<List<PlayerCommunity>> GetPlayerCommunitiesAsync(
+        string playerName,
+        CancellationToken cancellationToken = default);
+
+    Task<string> DetectAndStoreCommunities(
+        CancellationToken cancellationToken = default);
+
+    Task<List<SquadRecommendation>> GetSquadRecommendationsAsync(
+        string playerName,
+        int limit = 10,
+        bool onlineOnly = false,
+        CancellationToken cancellationToken = default);
+
+    Task RecordSquadRecommendationFeedback(
+        string playerName,
+        string recommendedPlayer,
+        bool wasHelpful,
+        CancellationToken cancellationToken = default);
+
+    Task<PlayerMigrationFlow> GetPlayerMigrationFlowAsync(
+        DateTime startDate,
+        DateTime endDate,
+        string? game = null,
+        CancellationToken cancellationToken = default);
+
+    Task<List<ServerNode>> GetServerLifecycleAnalysisAsync(
+        int daysBack = 90,
+        CancellationToken cancellationToken = default);
 }

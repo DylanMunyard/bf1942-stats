@@ -638,7 +638,18 @@ try
         builder.Services.AddSingleton<api.PlayerRelationships.Neo4jMigrationService>();
         builder.Services.AddScoped<api.PlayerRelationships.PlayerRelationshipEtlService>();
         builder.Services.AddScoped<api.PlayerRelationships.PlayerRelationshipService>();
-        builder.Services.AddScoped<api.PlayerRelationships.IPlayerRelationshipService>(sp => sp.GetRequiredService<api.PlayerRelationships.PlayerRelationshipService>());
+        
+        // Add caching support
+        builder.Services.AddScoped<api.PlayerRelationships.IRelationshipCacheService, api.PlayerRelationships.RelationshipCacheService>();
+        builder.Services.AddScoped<api.PlayerRelationships.CachedPlayerRelationshipService>();
+        
+        // Register the cached version as the default IPlayerRelationshipService
+        builder.Services.AddScoped<api.PlayerRelationships.IPlayerRelationshipService>(sp => 
+            sp.GetRequiredService<api.PlayerRelationships.CachedPlayerRelationshipService>());
+        
+        // Register community detection background service
+        builder.Services.AddHostedService<api.PlayerRelationships.CommunityDetectionService>();
+        
         builder.Logging.AddConsole().SetMinimumLevel(LogLevel.Information);
     }
 

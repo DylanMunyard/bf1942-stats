@@ -32,6 +32,16 @@ public record PlayerRelationship
     public DateTime LastPlayedTogether { get; init; }
     public List<string> ServerGuids { get; init; } = [];
     public double AvgScoreDiff { get; init; }
+    
+    /// <summary>
+    /// Whether this is a recent connection (e.g., within last 7 days).
+    /// </summary>
+    public bool IsRecent => (DateTime.UtcNow - LastPlayedTogether).TotalDays <= 7;
+    
+    /// <summary>
+    /// Whether this is an active connection (e.g., within last 30 days).
+    /// </summary>
+    public bool IsActive => (DateTime.UtcNow - LastPlayedTogether).TotalDays <= 30;
 }
 
 /// <summary>

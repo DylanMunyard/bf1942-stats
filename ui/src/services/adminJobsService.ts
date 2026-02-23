@@ -132,6 +132,43 @@ export function triggerNeo4jSync(days: number): Promise<{
   });
 }
 
+/** Detect player communities using graph algorithms. Runs to completion. */
+export function triggerCommunityDetection(): Promise<{ message?: string; error?: string }> {
+  return fetch('/stats/communities/detect', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+    },
+  }).then(async (res) => {
+    if (res.status === 401) {
+      const { authService } = await import('./authService');
+      const refreshed = await authService.refreshToken();
+      if (refreshed) {
+        const retry = await fetch('/stats/communities/detect', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          },
+        });
+        if (!retry.ok) {
+          const err = await retry.json().catch(() => ({}));
+          throw new Error((err as any).message || `HTTP ${retry.status}`);
+        }
+        return retry.json();
+      }
+      await authService.logout();
+      throw new Error('Session expired. Please login again.');
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as any).message || `HTTP ${res.status}`);
+    }
+    return res.json();
+  });
+}
+
 /** Check Neo4j migration status. */
 export function getNeo4jMigrationStatus(): Promise<{
   appliedCount: number;

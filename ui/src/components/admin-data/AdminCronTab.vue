@@ -146,6 +146,22 @@
           <span class="portal-cron-item-desc">Neo4j is not enabled in API configuration.</span>
         </div>
       </div>
+      <div v-if="neo4jEnabled" class="portal-cron-item portal-cron-item--neo4j">
+        <div class="portal-cron-item-body">
+          <span class="portal-cron-item-name">Detect Player Communities</span>
+          <span class="portal-cron-item-desc">
+            Run community detection algorithms to identify player squads and social networks. Uses Louvain algorithm for clustering.
+          </span>
+        </div>
+        <button
+          type="button"
+          class="portal-btn portal-btn--primary portal-btn--sm"
+          :disabled="jobRunning !== null"
+          @click="runJob('community-detection', true)"
+        >
+          {{ jobRunning === 'community-detection' ? 'detecting...' : 'Detect' }}
+        </button>
+      </div>
     </div>
   </section>
 </template>
@@ -231,6 +247,9 @@ async function runJob(jobKey: string, _isBlocking: boolean) {
       break;
     case 'run-all':
       fn = adminJobsService.triggerRunAll;
+      break;
+    case 'community-detection':
+      fn = adminJobsService.triggerCommunityDetection;
       break;
     default:
       jobRunning.value = null;

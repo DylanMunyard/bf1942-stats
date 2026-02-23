@@ -105,3 +105,53 @@ export async function fetchPlayerRelationship(
     throw err;
   }
 }
+
+// Community interfaces
+export interface PlayerCommunity {
+  id: string;
+  name: string;
+  members: string[];
+  coreMembers: string[];
+  primaryServers: string[];  // Simplified to just server names
+  formationDate: string;
+  lastActiveDate: string;
+  avgSessionsPerPair: number;
+  cohesionScore: number;
+  memberCount: number;
+  isActive: boolean;
+}
+
+// Community API methods
+const COMMUNITIES_BASE = '/stats/communities';
+
+export async function fetchAllCommunities(
+  minSize = 3,
+  activeOnly = true
+): Promise<PlayerCommunity[]> {
+  const response = await axios.get<PlayerCommunity[]>(
+    COMMUNITIES_BASE,
+    { params: { minSize, activeOnly } }
+  );
+  return response.data;
+}
+
+export async function fetchCommunity(communityId: string): Promise<PlayerCommunity> {
+  const response = await axios.get<PlayerCommunity>(
+    `${COMMUNITIES_BASE}/${encodeURIComponent(communityId)}`
+  );
+  return response.data;
+}
+
+export async function fetchPlayerCommunities(playerName: string): Promise<PlayerCommunity[]> {
+  const response = await axios.get<PlayerCommunity[]>(
+    `${COMMUNITIES_BASE}/players/${encodeURIComponent(playerName)}`
+  );
+  return response.data;
+}
+
+export async function triggerCommunityDetection(): Promise<{ message: string }> {
+  const response = await axios.post<{ message: string }>(
+    `${COMMUNITIES_BASE}/detect`
+  );
+  return response.data;
+}
