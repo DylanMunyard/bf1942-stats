@@ -6,6 +6,8 @@ import CommunityMembersSection from '@/components/community-details/CommunityMem
 import CommunityServersSection from '@/components/community-details/CommunityServersSection.vue'
 import CommunityNetworkGraph from '@/components/community-details/CommunityNetworkGraph.vue'
 import CommunityActivityTimeline from '@/components/community-details/CommunityActivityTimeline.vue'
+import CommunityMetricsVisualization from '@/components/community-details/CommunityMetricsVisualization.vue'
+import CommunityActivityChart from '@/components/community-details/CommunityActivityChart.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -13,7 +15,7 @@ const router = useRouter()
 const community = ref<PlayerCommunity | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
-const activeTab = ref<'overview' | 'members' | 'servers' | 'network' | 'activity'>('overview')
+const activeTab = ref<'overview' | 'metrics' | 'activity' | 'members' | 'servers' | 'network' | 'timeline'>('metrics')
 
 const cohesionPercentage = computed(() =>
   community.value ? Math.round(community.value.cohesionScore * 100) : 0
@@ -113,22 +115,22 @@ onMounted(() => {
               </p>
             </div>
 
-            <!-- Stats Grid -->
+            <!-- Quick Stats Bar -->
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
               <div class="explorer-stat-card">
-                <div class="text-2xl font-bold text-cyan-400 font-mono">{{ community.memberCount }}</div>
-                <div class="text-xs text-neutral-500 uppercase tracking-wider">Total Members</div>
+                <div class="text-xl sm:text-2xl font-bold text-cyan-400 font-mono">{{ community.memberCount }}</div>
+                <div class="text-xs text-neutral-500 uppercase tracking-wider">Members</div>
               </div>
               <div class="explorer-stat-card">
-                <div class="text-2xl font-bold text-purple-400 font-mono">{{ cohesionPercentage }}%</div>
+                <div class="text-xl sm:text-2xl font-bold text-purple-400 font-mono">{{ cohesionPercentage }}%</div>
                 <div class="text-xs text-neutral-500 uppercase tracking-wider">Cohesion</div>
               </div>
               <div class="explorer-stat-card">
-                <div class="text-2xl font-bold text-green-400 font-mono">{{ community.avgSessionsPerPair.toFixed(1) }}</div>
-                <div class="text-xs text-neutral-500 uppercase tracking-wider">Avg Sessions</div>
+                <div class="text-xl sm:text-2xl font-bold text-green-400 font-mono">{{ community.avgSessionsPerPair.toFixed(1) }}</div>
+                <div class="text-xs text-neutral-500 uppercase tracking-wider">Sessions</div>
               </div>
               <div class="explorer-stat-card">
-                <div class="text-2xl font-bold text-yellow-400 font-mono">{{ community.primaryServers.length }}</div>
+                <div class="text-xl sm:text-2xl font-bold text-yellow-400 font-mono">{{ community.primaryServers.length }}</div>
                 <div class="text-xs text-neutral-500 uppercase tracking-wider">Servers</div>
               </div>
             </div>
@@ -154,7 +156,7 @@ onMounted(() => {
               <div class="explorer-card-body">
                 <div class="flex gap-2 whitespace-nowrap">
                   <button
-                    v-for="tab in ['overview', 'members', 'servers', 'network', 'activity']"
+                    v-for="tab in ['metrics', 'activity', 'members', 'servers', 'network', 'timeline']"
                     :key="tab"
                     @click="activeTab = tab as any"
                     class="px-4 py-2 rounded text-sm font-medium transition-colors"
@@ -170,43 +172,11 @@ onMounted(() => {
 
             <!-- Tab Content -->
             <div class="space-y-6">
-              <!-- Overview Tab -->
-              <div v-if="activeTab === 'overview'" class="space-y-6">
-                <div class="explorer-card">
-                  <div class="explorer-card-header">
-                    <h2 class="font-mono font-bold text-cyan-300">CORE MEMBERS</h2>
-                  </div>
-                  <div class="explorer-card-body">
-                    <div class="flex flex-wrap gap-2">
-                      <router-link
-                        v-for="member in community.coreMembers"
-                        :key="member"
-                        :to="`/players/${encodeURIComponent(member)}`"
-                        class="px-3 py-2 bg-neutral-800/50 border border-neutral-700 rounded text-sm text-cyan-400 hover:bg-neutral-700 hover:border-cyan-500 transition-colors"
-                      >
-                        {{ member }}
-                      </router-link>
-                    </div>
-                  </div>
-                </div>
+              <!-- Metrics Tab (NEW - Full screen visualization) -->
+              <CommunityMetricsVisualization v-if="activeTab === 'metrics'" :community="community" />
 
-                <div class="explorer-card">
-                  <div class="explorer-card-header">
-                    <h2 class="font-mono font-bold text-cyan-300">PRIMARY SERVERS</h2>
-                  </div>
-                  <div class="explorer-card-body">
-                    <div class="space-y-2">
-                      <div
-                        v-for="(server, idx) in community.primaryServers.slice(0, 10)"
-                        :key="idx"
-                        class="flex items-center justify-between p-2 bg-neutral-800/30 rounded text-sm"
-                      >
-                        <span class="text-neutral-300">{{ server }}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <!-- Activity Chart Tab (NEW - Full screen chart) -->
+              <CommunityActivityChart v-else-if="activeTab === 'activity'" :community="community" />
 
               <!-- Members Tab -->
               <CommunityMembersSection v-else-if="activeTab === 'members'" :community="community" />
@@ -217,8 +187,8 @@ onMounted(() => {
               <!-- Network Tab -->
               <CommunityNetworkGraph v-else-if="activeTab === 'network'" :community="community" />
 
-              <!-- Activity Tab -->
-              <CommunityActivityTimeline v-else-if="activeTab === 'activity'" :community="community" />
+              <!-- Timeline Tab -->
+              <CommunityActivityTimeline v-else-if="activeTab === 'timeline'" :community="community" />
             </div>
 
           </div>

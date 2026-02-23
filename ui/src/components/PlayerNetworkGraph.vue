@@ -96,6 +96,7 @@ const initializeD3 = () => {
     .force('charge', d3.forceManyBody().strength(-500))
     .force('center', d3.forceCenter(width.value / 2, height.value / 2))
     .force('collision', d3.forceCollide().radius(40))
+    .alphaDecay(0.03) // Settles faster (default is 0.0228)
 }
 
 const updateVisualization = () => {
@@ -212,8 +213,17 @@ const updateVisualization = () => {
     .style('opacity', 0.9)
     .style('text-shadow', '0 0 3px rgba(0, 0, 0, 0.8), 0 0 6px rgba(0, 0, 0, 0.6)')
 
+  // Pre-warm the simulation offline to avoid visible bouncing
+  simulation.nodes(nodes as any)
+  simulation.force<d3.ForceLink<any, any>>('link')!.links(links)
+
+  // Run simulation offline for 100+ iterations so it's mostly settled
+  for (let i = 0; i < 100; i++) {
+    simulation.tick()
+  }
+
   let tickCount = 0
-  simulation.nodes(nodes as any).on('tick', () => {
+  simulation.on('tick', () => {
     tickCount++
 
     link
@@ -231,14 +241,14 @@ const updateVisualization = () => {
       .attr('x', (d: any) => d.x)
       .attr('y', (d: any) => d.y)
 
-    // Auto zoom-to-fit once simulation settles
-    if (tickCount === 150) {
+    // Auto zoom-to-fit after first render
+    if (tickCount === 1) {
       zoomToFit()
     }
   })
 
-  simulation.force<d3.ForceLink<any, any>>('link')!.links(links)
-  simulation.alpha(1).restart()
+  // Continue simulation from warm state
+  simulation.alpha(0.3).restart()
 }
 
 const showLabel = (d: any) => {
