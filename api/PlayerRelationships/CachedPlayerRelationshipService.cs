@@ -264,7 +264,26 @@ public class CachedPlayerRelationshipService(
 
         var result = await innerService.GetServerLifecycleAnalysisAsync(daysBack, cancellationToken);
         await cacheService.SetAsync(cacheKey, result, TimeSpan.FromHours(12), cancellationToken);
-        
+
+        return result;
+    }
+
+    public async Task<CommunityServerMap> GetCommunityServerMapAsync(
+        string communityId,
+        CancellationToken cancellationToken = default)
+    {
+        var cacheKey = $"community:{communityId}:server-map";
+        var cached = await cacheService.GetAsync<CommunityServerMap>(cacheKey, cancellationToken);
+
+        if (cached != null)
+        {
+            logger.LogDebug("Cache hit for server map of community {CommunityId}", communityId);
+            return cached;
+        }
+
+        var result = await innerService.GetCommunityServerMapAsync(communityId, cancellationToken);
+        await cacheService.SetAsync(cacheKey, result, TimeSpan.FromHours(2), cancellationToken);
+
         return result;
     }
 }

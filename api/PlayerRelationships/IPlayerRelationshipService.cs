@@ -84,4 +84,8 @@ public interface IPlayerRelationshipService
     Task<List<ServerNode>> GetServerLifecycleAnalysisAsync(
         int daysBack = 90,
         CancellationToken cancellationToken = default);
+
+    Task<CommunityServerMap> GetCommunityServerMapAsync(
+        string communityId,
+        CancellationToken cancellationToken = default);
 }

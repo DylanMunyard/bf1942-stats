@@ -79,6 +79,29 @@ public class CommunitiesController(
     }
 
     /// <summary>
+    /// Get the server-player network map for a community (for bipartite visualization).
+    /// </summary>
+    [HttpGet("{communityId}/server-map")]
+    public async Task<ActionResult<PlayerRelationships.Models.CommunityServerMap>> GetCommunityServerMap(string communityId)
+    {
+        try
+        {
+            var serverMap = await relationshipService.GetCommunityServerMapAsync(communityId);
+            return Ok(serverMap);
+        }
+        catch (ArgumentException ex)
+        {
+            logger.LogWarning(ex, "Community {CommunityId} not found", communityId);
+            return NotFound($"Community {communityId} not found");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error getting server map for community {CommunityId}", communityId);
+            return StatusCode(500, "An error occurred while fetching server map");
+        }
+    }
+
+    /// <summary>
     /// Manually trigger community detection (admin only).
     /// </summary>
     [HttpPost("detect")]

@@ -155,3 +155,31 @@ export async function triggerCommunityDetection(): Promise<{ message: string }> 
   );
   return response.data;
 }
+
+// Server map (bipartite graph) interfaces
+export interface ServerMapNode {
+  id: string;
+  label: string;
+  type: 'player' | 'server';
+  isCore: boolean;
+}
+
+export interface ServerMapEdge {
+  source: string;
+  target: string;
+  weight: number;
+  lastPlayed: string;
+}
+
+export interface CommunityServerMap {
+  players: ServerMapNode[];
+  servers: ServerMapNode[];
+  edges: ServerMapEdge[];
+}
+
+export async function fetchCommunityServerMap(communityId: string): Promise<CommunityServerMap> {
+  const response = await axios.get<CommunityServerMap>(
+    `${COMMUNITIES_BASE}/${encodeURIComponent(communityId)}/server-map`
+  );
+  return response.data;
+}

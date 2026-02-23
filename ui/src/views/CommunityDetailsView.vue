@@ -8,6 +8,7 @@ import CommunityNetworkGraph from '@/components/community-details/CommunityNetwo
 import CommunityActivityTimeline from '@/components/community-details/CommunityActivityTimeline.vue'
 import CommunityMetricsVisualization from '@/components/community-details/CommunityMetricsVisualization.vue'
 import CommunityActivityChart from '@/components/community-details/CommunityActivityChart.vue'
+import CommunityServerMap from '@/components/community-details/CommunityServerMap.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -15,7 +16,7 @@ const router = useRouter()
 const community = ref<PlayerCommunity | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
-const activeTab = ref<'overview' | 'metrics' | 'activity' | 'members' | 'servers' | 'network' | 'timeline'>('metrics')
+const activeTab = ref<'metrics' | 'activity' | 'server-map' | 'members' | 'servers' | 'network' | 'timeline'>('metrics')
 
 const cohesionPercentage = computed(() =>
   community.value ? Math.round(community.value.cohesionScore * 100) : 0
@@ -156,7 +157,7 @@ onMounted(() => {
               <div class="explorer-card-body">
                 <div class="flex gap-2 whitespace-nowrap">
                   <button
-                    v-for="tab in ['metrics', 'activity', 'members', 'servers', 'network', 'timeline']"
+                    v-for="tab in ['metrics', 'activity', 'server-map', 'members', 'servers', 'network', 'timeline']"
                     :key="tab"
                     @click="activeTab = tab as any"
                     class="px-4 py-2 rounded text-sm font-medium transition-colors"
@@ -164,7 +165,7 @@ onMounted(() => {
                       ? 'bg-cyan-500/30 border border-cyan-500 text-cyan-300'
                       : 'bg-neutral-800/50 border border-neutral-700 text-neutral-400 hover:text-neutral-300'"
                   >
-                    {{ tab.charAt(0).toUpperCase() + tab.slice(1) }}
+                    {{ tab === 'server-map' ? 'Server Map' : tab.charAt(0).toUpperCase() + tab.slice(1) }}
                   </button>
                 </div>
               </div>
@@ -172,11 +173,14 @@ onMounted(() => {
 
             <!-- Tab Content -->
             <div class="space-y-6">
-              <!-- Metrics Tab (NEW - Full screen visualization) -->
+              <!-- Metrics Tab (Full screen visualization) -->
               <CommunityMetricsVisualization v-if="activeTab === 'metrics'" :community="community" />
 
-              <!-- Activity Chart Tab (NEW - Full screen chart) -->
+              <!-- Activity Chart Tab (Full screen chart) -->
               <CommunityActivityChart v-else-if="activeTab === 'activity'" :community="community" />
+
+              <!-- Server Map Tab (Full screen bipartite graph) -->
+              <CommunityServerMap v-else-if="activeTab === 'server-map'" :community="community" />
 
               <!-- Members Tab -->
               <CommunityMembersSection v-else-if="activeTab === 'members'" :community="community" />

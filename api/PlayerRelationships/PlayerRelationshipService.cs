@@ -579,6 +579,102 @@ public class PlayerRelationshipService(
     }
 
     /// <summary>
+    /// Get server-player network map for a community (bipartite graph visualization).
+    /// Shows which players play on which servers with session count weighting.
+    /// </summary>
+    public async Task<CommunityServerMap> GetCommunityServerMapAsync(
+        string communityId,
+        CancellationToken cancellationToken = default)
+    {
+        logger.LogDebug("Getting server map for community {CommunityId}", communityId);
+
+        return await neo4jService.ExecuteReadAsync(async tx =>
+        {
+            // First, get the community to access members list
+            var communityQuery = @"
+                MATCH (c:Community)
+                WHERE c.id = $communityId
+                RETURN c.members AS members, c.coreMembers AS coreMembers";
+
+            var communityCursor = await tx.RunAsync(communityQuery, new { communityId });
+            var communityRecord = await communityCursor.SingleOrDefaultAsync();
+
+            if (communityRecord == null)
+                throw new ArgumentException($"Community {communityId} not found");
+
+            var members = communityRecord["members"].As<List<string>>();
+            var coreMembers = communityRecord["coreMembers"].As<List<string>>() ?? [];
+
+            // Get all player-server relationships for community members
+            var mapQuery = @"
+                UNWIND $members AS memberName
+                MATCH (p:Player {name: memberName})-[ps:PLAYS_ON]->(s:Server)
+                RETURN DISTINCT
+                       p.name AS playerName,
+                       s.guid AS serverGuid,
+                       s.name AS serverName,
+                       ps.sessionCount AS sessionCount,
+                       ps.lastPlayed AS lastPlayed
+                ORDER BY p.name, ps.sessionCount DESC";
+
+            var cursor = await tx.RunAsync(mapQuery, new { members });
+
+            var playerNodes = new Dictionary<string, ServerMapNode>();
+            var serverNodes = new Dictionary<string, ServerMapNode>();
+            var edges = new List<ServerMapEdge>();
+
+            await foreach (var record in cursor)
+            {
+                var playerName = record["playerName"].As<string>();
+                var serverGuid = record["serverGuid"].As<string>();
+                var serverName = record["serverName"].As<string>();
+                var sessionCount = record["sessionCount"].As<int>();
+                var lastPlayed = ToNullableDateTime(record["lastPlayed"]) ?? DateTime.UtcNow;
+
+                // Add player node if not exists
+                if (!playerNodes.ContainsKey(playerName))
+                {
+                    playerNodes[playerName] = new ServerMapNode
+                    {
+                        Id = playerName,
+                        Label = playerName,
+                        Type = "player",
+                        IsCore = coreMembers.Contains(playerName)
+                    };
+                }
+
+                // Add server node if not exists
+                if (!serverNodes.ContainsKey(serverGuid))
+                {
+                    serverNodes[serverGuid] = new ServerMapNode
+                    {
+                        Id = serverGuid,
+                        Label = serverName,
+                        Type = "server",
+                        IsCore = false
+                    };
+                }
+
+                // Add edge
+                edges.Add(new ServerMapEdge
+                {
+                    Source = playerName,
+                    Target = serverGuid,
+                    Weight = sessionCount,
+                    LastPlayed = lastPlayed
+                });
+            }
+
+            return new CommunityServerMap
+            {
+                Players = playerNodes.Values.ToList(),
+                Servers = serverNodes.Values.ToList(),
+                Edges = edges
+            };
+        });
+    }
+
+    /// <summary>
     /// Run community detection algorithm and store results.
     /// Uses pure Cypher-based clustering (no GDS required for Kubernetes deployment).
     /// </summary>
