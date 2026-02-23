@@ -490,16 +490,42 @@ public class PlayerRelationshipService(
     {
         logger.LogDebug("Getting community {CommunityId}", communityId);
 
-        var communities = await GetCommunitiesAsync(minSize: 0, activeOnly: false, cancellationToken);
-        logger.LogDebug("Retrieved {Count} total communities for search", communities.Count);
-
-        var result = communities.FirstOrDefault(c => c.Id == communityId);
-        if (result == null && communities.Count > 0)
+        return await neo4jService.ExecuteReadAsync(async tx =>
         {
-            var availableIds = string.Join(", ", communities.Take(5).Select(c => c.Id));
-            logger.LogWarning("Community {CommunityId} not found. Sample IDs: {SampleIds}", communityId, availableIds);
-        }
-        return result;
+            var query = @"
+                MATCH (c:Community)
+                WHERE c.id = $communityId
+                RETURN c.id AS id,
+                       c.name AS name,
+                       c.members AS members,
+                       c.coreMembers AS coreMembers,
+                       c.formationDate AS formationDate,
+                       c.lastActiveDate AS lastActiveDate,
+                       c.avgSessionsPerPair AS avgSessionsPerPair,
+                       c.cohesionScore AS cohesionScore,
+                       c.primaryServers AS primaryServers";
+
+            var cursor = await tx.RunAsync(query, new { communityId });
+            var record = await cursor.SingleOrDefaultAsync();
+
+            if (record == null)
+                return null;
+
+            var primaryServersData = record["primaryServers"].As<List<string>>() ?? [];
+
+            return new PlayerCommunity
+            {
+                Id = record["id"].As<string>(),
+                Name = record["name"].As<string>(),
+                Members = record["members"].As<List<string>>(),
+                CoreMembers = record["coreMembers"].As<List<string>>(),
+                PrimaryServers = primaryServersData,
+                FormationDate = ToDateTime(record["formationDate"]),
+                LastActiveDate = ToDateTime(record["lastActiveDate"]),
+                AvgSessionsPerPair = record["avgSessionsPerPair"].As<double>(),
+                CohesionScore = record["cohesionScore"].As<double>()
+            };
+        });
     }
 
     /// <summary>

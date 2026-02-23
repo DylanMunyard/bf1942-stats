@@ -38,11 +38,19 @@ public class CommunitiesController(
     {
         try
         {
+            logger.LogInformation("GetCommunity called with ID: {CommunityId}", communityId);
+
             var community = await relationshipService.GetCommunityByIdAsync(communityId);
-            
+
             if (community == null)
-                return NotFound($"Community {communityId} not found");
-                
+            {
+                logger.LogWarning("Community not found: {CommunityId}. Getting all communities for debugging...", communityId);
+                var allCommunities = await relationshipService.GetCommunitiesAsync(minSize: 0, activeOnly: false);
+                var ids = string.Join(", ", allCommunities.Take(10).Select(c => c.Id));
+                logger.LogWarning("Available community IDs (first 10): {Ids}. Total: {Total}", ids, allCommunities.Count);
+                return NotFound($"Community {communityId} not found. Available: {ids}");
+            }
+
             return Ok(community);
         }
         catch (Exception ex)
