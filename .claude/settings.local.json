@@ -29,7 +29,8 @@
       "mcp__serena__replace_symbol_body",
       "mcp__serena__get_symbols_overview",
       "mcp__serena__write_memory",
-      "mcp__serena__edit_memory"
+      "mcp__serena__edit_memory",
+      "Bash(sqlite3:*)"
     ]
   }
 }

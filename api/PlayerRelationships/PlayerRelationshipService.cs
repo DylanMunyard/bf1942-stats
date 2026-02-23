@@ -444,7 +444,7 @@ public class PlayerRelationshipService(
             var query = @"
                 MATCH (c:Community)
                 WHERE SIZE(c.members) >= $minSize
-                  AND c.lastActiveDate > $cutoffDate
+                  AND (c.lastActiveDate IS NULL OR c.lastActiveDate > $cutoffDate)
                 RETURN c.id AS id,
                        c.name AS name,
                        c.members AS members,
@@ -491,7 +491,15 @@ public class PlayerRelationshipService(
         logger.LogDebug("Getting community {CommunityId}", communityId);
 
         var communities = await GetCommunitiesAsync(minSize: 0, activeOnly: false, cancellationToken);
-        return communities.FirstOrDefault(c => c.Id == communityId);
+        logger.LogDebug("Retrieved {Count} total communities for search", communities.Count);
+
+        var result = communities.FirstOrDefault(c => c.Id == communityId);
+        if (result == null && communities.Count > 0)
+        {
+            var availableIds = string.Join(", ", communities.Take(5).Select(c => c.Id));
+            logger.LogWarning("Community {CommunityId} not found. Sample IDs: {SampleIds}", communityId, availableIds);
+        }
+        return result;
     }
 
     /// <summary>
