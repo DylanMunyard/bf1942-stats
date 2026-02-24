@@ -1,46 +1,93 @@
 <template>
-  <div class="alias-detection-container">
-    <div class="detection-header">
-      <div class="header-content">
-        <h1 class="header-title">Alias Detection</h1>
-        <p class="header-subtitle">Investigate player relationships and identify potential alternate accounts</p>
-      </div>
-    </div>
+  <div class="portal-page">
+    <div class="portal-grid" aria-hidden="true" />
+    <div class="portal-inner">
+      <div class="data-explorer">
+        <div class="explorer-inner">
 
-    <div class="detection-grid">
-      <!-- Search & Input Section -->
-      <div class="search-section">
-        <AliasDetectionForm
-          ref="formRef"
-          @search="onSearch"
-          :loading="isLoading"
-          :initial-player1="player1"
-          :initial-player2="player2"
-        />
-      </div>
+          <!-- Header -->
+          <div class="mb-6">
+            <h1 class="text-2xl sm:text-3xl font-bold text-[var(--portal-text-bright,#e5e7eb)] font-mono mb-2">
+              ALIAS DETECTION
+            </h1>
+            <p class="text-sm text-neutral-500">
+              Investigate player relationships and identify potential alternate accounts
+            </p>
+          </div>
 
-      <!-- Results Section -->
-      <div v-if="report" class="results-section">
-        <AliasDetectionReport :report="report" />
-        <AliasDetectionFullComparison
-          :player1-name="report.player1"
-          :player2-name="report.player2"
-        />
-      </div>
+          <!-- Search & Input Section -->
+          <div class="explorer-card mb-6">
+            <div class="explorer-card-body">
+              <AliasDetectionForm
+                ref="formRef"
+                @search="onSearch"
+                :loading="isLoading"
+                :initial-player1="player1"
+                :initial-player2="player2"
+              />
+            </div>
+          </div>
 
-      <!-- Empty State -->
-      <div v-if="!report && !isLoading" class="empty-state">
-        <div class="empty-icon">⚔</div>
-        <h2>No Investigation Yet</h2>
-        <p>Enter two player names above to begin analyzing their relationship patterns.</p>
-      </div>
+          <!-- Loading State -->
+          <div v-if="isLoading" class="explorer-card">
+            <div class="explorer-card-body text-center py-12">
+              <div class="flex items-center justify-center mb-4">
+                <div class="w-12 h-12 border-4 border-neutral-700 rounded-full animate-spin" />
+                <div class="absolute w-12 h-12 border-4 border-cyan-500 rounded-full border-t-transparent animate-spin" />
+              </div>
+              <p class="text-neutral-400">Analyzing players...</p>
+            </div>
+          </div>
 
-      <!-- Error State -->
-      <div v-if="error" class="error-state">
-        <div class="error-icon">!</div>
-        <h2>Investigation Error</h2>
-        <p>{{ error }}</p>
-        <button @click="error = null" class="btn-clear-error">Dismiss</button>
+          <!-- Error State -->
+          <div v-else-if="error" class="explorer-card">
+            <div class="explorer-card-body text-center py-8">
+              <div class="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center border border-red-500/50 mx-auto mb-4">
+                <span class="text-2xl">⚠</span>
+              </div>
+              <h3 class="text-lg font-bold text-red-400 mb-2">Investigation Error</h3>
+              <p class="text-neutral-400 mb-6">{{ error }}</p>
+              <button
+                @click="error = null"
+                class="px-4 py-2 bg-red-500/20 border border-red-500/50 rounded text-red-400 text-sm hover:bg-red-500/30 transition-colors"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+
+          <!-- Results Section -->
+          <div v-else-if="report" class="space-y-6">
+            <div class="explorer-card">
+              <div class="explorer-card-body">
+                <AliasDetectionReport :report="report" />
+              </div>
+            </div>
+
+            <div class="explorer-card">
+              <div class="explorer-card-body">
+                <AliasDetectionFullComparison
+                  :player1-name="report.player1"
+                  :player2-name="report.player2"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div v-else class="explorer-card">
+            <div class="explorer-card-body text-center py-12">
+              <div class="flex flex-col items-center justify-center mb-4">
+                <div class="text-5xl mb-4">⚔️</div>
+                <h3 class="text-lg font-bold text-neutral-300 mb-2">No Investigation Yet</h3>
+                <p class="text-neutral-500 w-full sm:max-w-md px-4 sm:px-0">
+                  Enter two player names above to begin analyzing their relationship patterns.
+                </p>
+              </div>
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
   </div>
@@ -136,120 +183,30 @@ watch(
 </script>
 
 <style scoped>
-.alias-detection-container {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  background: #0f0f15;
+.explorer-stat-card {
   padding: 1rem;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-}
-
-.detection-header {
-  margin-bottom: 1.5rem;
-  text-align: left;
-}
-
-.header-content {
-  width: 100%;
-}
-
-.header-title {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: #e5e7eb;
-  margin: 0 0 0.5rem 0;
-  letter-spacing: 0;
-}
-
-.header-subtitle {
-  font-size: 0.95rem;
-  color: #6b7280;
-  margin: 0;
-  font-weight: 400;
-}
-
-.detection-grid {
-  width: 100%;
-  display: grid;
-  gap: 1.5rem;
-  flex: 1;
-}
-
-.search-section {
-  grid-column: 1 / -1;
-}
-
-.results-section {
-  grid-column: 1 / -1;
+  background: var(--portal-surface, #0f0f15);
+  border: 1px solid var(--portal-border, #1a1a24);
+  border-radius: 6px;
   display: flex;
   flex-direction: column;
-  gap: 2rem;
-  flex: 1;
+  gap: 0.5rem;
 }
 
-.empty-state,
-.error-state {
-  grid-column: 1 / -1;
-  padding: 2rem;
-  text-align: center;
-  border: 1px solid #1a1a24;
-  border-radius: 6px;
-  background: transparent;
-}
-
-.empty-icon,
-.error-icon {
-  font-size: 2.5rem;
-  margin-bottom: 0.75rem;
-}
-
-.empty-state h2,
-.error-state h2 {
-  color: #e5e7eb;
-  margin: 0 0 0.5rem 0;
-  font-size: 1.25rem;
-}
-
-.empty-state p,
-.error-state p {
-  color: #9ca3af;
-  margin: 0;
-  font-size: 0.9rem;
-}
-
-.error-state {
-  border-color: #dc2626;
-}
-
-.error-state h2 {
-  color: #dc2626;
-}
-
-.btn-clear-error {
-  margin-top: 1.5rem;
-  padding: 0.5rem 1.5rem;
-  background: #ef4444;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.btn-clear-error:hover {
-  background: #dc2626;
-}
-
-@media (max-width: 768px) {
-  .detection-header {
-    margin-bottom: 1rem;
+@media (max-width: 640px) {
+  .explorer-stat-card {
+    padding: 0.75rem;
   }
 
-  .detection-grid {
-    gap: 1rem;
+  .explorer-stat-card > div:first-child {
+    font-size: 1.5rem;
+  }
+
+  .explorer-stat-card > div:last-child {
+    font-size: 0.6rem;
   }
 }
 </style>
+
+<style src="./portal-layout.css"></style>
+<style src="./DataExplorer.vue.css"></style>

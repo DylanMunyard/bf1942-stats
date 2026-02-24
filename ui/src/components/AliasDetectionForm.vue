@@ -1,53 +1,51 @@
 <template>
   <div class="form-container">
-    <div class="form-card">
-      <div class="form-header">
-        <h2>Compare Players</h2>
-        <p>Enter two player names to analyze their activity patterns and relationships</p>
-      </div>
+    <div class="form-header-section">
+      <h2>Compare Players</h2>
+      <p>Enter two player names to analyze their activity patterns and relationships</p>
+    </div>
 
-      <form @submit.prevent="handleSubmit" class="form-content">
-        <div class="input-group">
-          <div class="input-field">
-            <label>Player 1</label>
-            <PlayerSearchInput
-              ref="player1SearchRef"
-              v-model="player1"
-              :player-number="1"
-              :allow-auto-search="false"
-              @select="selectPlayer1"
-              @enter="handleSubmit"
-            />
-          </div>
-
-          <div class="vs-separator">
-            <div class="separator-line"></div>
-            <span class="separator-text">vs</span>
-            <div class="separator-line"></div>
-          </div>
-
-          <div class="input-field">
-            <label>Player 2</label>
-            <PlayerSearchInput
-              ref="player2SearchRef"
-              v-model="player2"
-              :player-number="2"
-              :allow-auto-search="false"
-              @select="selectPlayer2"
-              @enter="handleSubmit"
-            />
-          </div>
+    <form @submit.prevent="handleSubmit" class="form-content">
+      <div class="input-group">
+        <div class="input-field">
+          <label>Player 1</label>
+          <PlayerSearchInput
+            ref="player1SearchRef"
+            v-model="player1"
+            :player-number="1"
+            :allow-auto-search="false"
+            @select="selectPlayer1"
+            @enter="handleSubmit"
+          />
         </div>
 
-        <button type="submit" class="btn-submit" :disabled="loading || !player1 || !player2">
-          <span v-if="!loading" class="btn-text">Analyze</span>
-          <span v-else class="btn-text loading">
-            <span class="spinner"></span>
-            Analyzing...
-          </span>
-        </button>
-      </form>
-    </div>
+        <div class="vs-separator">
+          <div class="separator-line"></div>
+          <span class="separator-text">vs</span>
+          <div class="separator-line"></div>
+        </div>
+
+        <div class="input-field">
+          <label>Player 2</label>
+          <PlayerSearchInput
+            ref="player2SearchRef"
+            v-model="player2"
+            :player-number="2"
+            :allow-auto-search="false"
+            @select="selectPlayer2"
+            @enter="handleSubmit"
+          />
+        </div>
+      </div>
+
+      <button type="submit" class="btn-submit" :disabled="loading || !player1 || !player2">
+        <span v-if="!loading" class="btn-text">Analyze</span>
+        <span v-else class="btn-text loading">
+          <span class="spinner"></span>
+          Analyzing...
+        </span>
+      </button>
+    </form>
   </div>
 </template>
 
@@ -118,37 +116,29 @@ defineExpose({
 <style scoped>
 .form-container {
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
-.form-card {
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid #334155;
-  border-radius: 12px;
-  backdrop-filter: blur(10px);
-  overflow: hidden;
+.form-header-section {
+  margin-bottom: 0.5rem;
 }
 
-.form-header {
-  padding: 2rem;
-  border-bottom: 1px solid #334155;
-  background: rgba(15, 23, 42, 0.5);
-}
-
-.form-header h2 {
+.form-header-section h2 {
   margin: 0 0 0.5rem 0;
-  color: #e2e8f0;
-  font-size: 1.5rem;
+  color: #cbd5e1;
+  font-size: 1.25rem;
   font-weight: 600;
 }
 
-.form-header p {
+.form-header-section p {
   margin: 0;
   color: #94a3b8;
   font-size: 0.9rem;
 }
 
 .form-content {
-  padding: 2rem;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -159,12 +149,15 @@ defineExpose({
   grid-template-columns: 1fr auto 1fr;
   gap: 1.5rem;
   align-items: flex-start;
+  min-height: 100px;
+  overflow: visible;
 }
 
 .input-field {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  min-width: 0;
 }
 
 .input-field label {
@@ -175,69 +168,6 @@ defineExpose({
   letter-spacing: 0.5px;
 }
 
-.input-wrapper {
-  position: relative;
-}
-
-.input {
-  width: 100%;
-  padding: 0.875rem 1rem;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1.5px solid #475569;
-  border-radius: 8px;
-  color: #e2e8f0;
-  font-size: 1rem;
-  transition: all 0.2s;
-  font-family: inherit;
-}
-
-.input:focus {
-  outline: none;
-  border-color: #3b82f6;
-  background: rgba(15, 23, 42, 0.8);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.input:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.input::placeholder {
-  color: #64748b;
-}
-
-.suggestions {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  background: rgba(30, 41, 59, 0.95);
-  border: 1px solid #334155;
-  border-top: none;
-  border-radius: 0 0 8px 8px;
-  max-height: 200px;
-  overflow-y: auto;
-  z-index: 10;
-}
-
-.suggestion-item {
-  padding: 0.75rem 1rem;
-  color: #e2e8f0;
-  cursor: pointer;
-  transition: background-color 0.15s;
-  border-bottom: 1px solid #334155;
-}
-
-.suggestion-item:last-child {
-  border-bottom: none;
-}
-
-.suggestion-item:hover {
-  background: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
-}
-
 .vs-separator {
   display: flex;
   flex-direction: column;
@@ -245,14 +175,13 @@ defineExpose({
   align-items: center;
   gap: 0.5rem;
   padding-top: 1.5rem;
+  flex-shrink: 0;
 }
 
 .separator-line {
-  flex: 1;
   height: 1px;
   background: linear-gradient(90deg, transparent, #475569, transparent);
-  width: 100%;
-  max-width: 30px;
+  width: 30px;
 }
 
 .separator-text {
@@ -278,7 +207,7 @@ defineExpose({
   justify-content: center;
   gap: 0.75rem;
   min-height: 48px;
-  margin-top: 0.5rem;
+  align-self: flex-start;
 }
 
 .btn-submit:hover:not(:disabled) {
@@ -320,23 +249,6 @@ defineExpose({
 }
 
 @media (max-width: 768px) {
-  .form-card {
-    border-radius: 8px;
-  }
-
-  .form-header {
-    padding: 1.5rem;
-  }
-
-  .form-header h2 {
-    font-size: 1.25rem;
-  }
-
-  .form-content {
-    padding: 1.5rem;
-    gap: 1rem;
-  }
-
   .input-group {
     grid-template-columns: 1fr;
     gap: 1rem;
@@ -350,6 +262,7 @@ defineExpose({
     padding: 0.875rem 1.5rem;
     font-size: 0.95rem;
     min-height: 44px;
+    align-self: stretch;
   }
 }
 </style>
