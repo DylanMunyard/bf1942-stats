@@ -29,9 +29,13 @@ interface Props {
   modelValue: string;
   placeholder: string;
   playerNumber: 1 | 2;
+  allowAutoSearch?: boolean;
+  inputRef?: HTMLInputElement | null;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  allowAutoSearch: true
+});
 const emit = defineEmits<{
   'update:modelValue': [value: string];
   'select': [player: PlayerSearchResult];
@@ -91,10 +95,9 @@ const onInput = (query: string) => {
   }, 300) as unknown as number;
 };
 
-const onFocus = () => {
-  if (props.modelValue.length >= 2) {
-    searchPlayers(props.modelValue);
-  }
+const onBlur = () => {
+  // Close dropdown when field loses focus
+  hideDropdown();
 };
 
 const selectPlayer = (player: PlayerSearchResult) => {
@@ -106,10 +109,15 @@ const selectPlayer = (player: PlayerSearchResult) => {
 
 const hideDropdown = () => {
   showDropdown.value = false;
+  searchResults.value = [];
 };
 
+defineExpose({
+  hideDropdown
+});
+
 watch(() => props.modelValue, (newValue) => {
-  if (newValue.length >= 2) {
+  if (props.allowAutoSearch && newValue.length >= 2) {
     onInput(newValue);
   } else {
     searchResults.value = [];
@@ -139,16 +147,16 @@ watch(() => props.modelValue, (newValue) => {
       <!-- Search Input -->
       <input
         :value="modelValue"
-        type="text" 
-        :placeholder="placeholder" 
+        type="text"
+        :placeholder="placeholder"
         autocomplete="off"
         class="w-full pl-14 pr-14 py-4 bg-gradient-to-r from-slate-800/80 to-slate-900/80 backdrop-blur-lg border border-slate-700/50 rounded-xl text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 transition-all duration-300 font-medium shadow-lg focus:shadow-cyan-500/30"
-        :class="playerNumber === 1 
-          ? 'focus:ring-cyan-500/50 focus:border-cyan-500/50 hover:shadow-cyan-500/20' 
+        :class="playerNumber === 1
+          ? 'focus:ring-cyan-500/50 focus:border-cyan-500/50 hover:shadow-cyan-500/20'
           : 'focus:ring-orange-500/50 focus:border-orange-500/50 hover:shadow-orange-500/20'"
         @keyup.enter="$emit('enter')"
         @input="(e) => onInput((e.target as HTMLInputElement).value)"
-        @focus="onFocus"
+        @blur="onBlur"
       >
       
       <!-- Loading Spinner -->

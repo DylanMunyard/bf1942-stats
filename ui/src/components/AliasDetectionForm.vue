@@ -11,8 +11,10 @@
           <div class="input-field">
             <label>Player 1</label>
             <PlayerSearchInput
+              ref="player1SearchRef"
               v-model="player1"
               :player-number="1"
+              :allow-auto-search="false"
               @select="selectPlayer1"
               @enter="handleSubmit"
             />
@@ -27,8 +29,10 @@
           <div class="input-field">
             <label>Player 2</label>
             <PlayerSearchInput
+              ref="player2SearchRef"
               v-model="player2"
               :player-number="2"
+              :allow-auto-search="false"
               @select="selectPlayer2"
               @enter="handleSubmit"
             />
@@ -76,6 +80,8 @@ const props = withDefaults(defineProps<Props>(), {
 
 const player1 = ref('')
 const player2 = ref('')
+const player1SearchRef = ref<any>(null)
+const player2SearchRef = ref<any>(null)
 
 // Set initial values from props
 watch(
@@ -98,6 +104,15 @@ const selectPlayer1 = (player: PlayerSearchResult) => {
 const selectPlayer2 = (player: PlayerSearchResult) => {
   player2.value = player.playerName
 }
+
+const closeDropdowns = () => {
+  player1SearchRef.value?.hideDropdown()
+  player2SearchRef.value?.hideDropdown()
+}
+
+defineExpose({
+  closeDropdowns
+})
 </script>
 
 <style scoped>

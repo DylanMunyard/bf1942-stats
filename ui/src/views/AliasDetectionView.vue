@@ -11,6 +11,7 @@
       <!-- Search & Input Section -->
       <div class="search-section">
         <AliasDetectionForm
+          ref="formRef"
           @search="onSearch"
           :loading="isLoading"
           :initial-player1="player1"
@@ -62,6 +63,7 @@ const isLoading = ref(false)
 const error = ref<string | null>(null)
 const player1 = ref<string>('')
 const player2 = ref<string>('')
+const formRef = ref<any>(null)
 
 const onSearch = async (p1: string, p2: string) => {
   if (!p1 || !p2) {
@@ -97,6 +99,8 @@ const loadComparison = async (p1: string, p2: string) => {
     report.value = result
     player1.value = p1
     player2.value = p2
+    // Close the dropdowns after comparison
+    formRef.value?.closeDropdowns()
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to analyze players'
   } finally {

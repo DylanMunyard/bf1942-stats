@@ -133,6 +133,8 @@ const router = useRouter();
 const player1Input = ref('');
 const player2Input = ref('');
 const player2InputRef = ref<HTMLInputElement | null>(null);
+const player1SearchRef = ref<any>(null);
+const player2SearchRef = ref<any>(null);
 const comparisonData = ref<ComparisonData | null>(null);
 const isLoading = ref(false);
 const error = ref<string | null>(null);
@@ -225,16 +227,19 @@ const handleCompare = async () => {
   console.log('handleCompare called');
   console.log('player1Input.value:', player1Input.value);
   console.log('player2Input.value:', player2Input.value);
-  
+
   const p1 = player1Input.value.trim();
   const p2 = player2Input.value.trim();
-  
+
   console.log('p1 after trim:', p1);
   console.log('p2 after trim:', p2);
-  
+
   if (p1 && p2) {
     console.log('Calling fetchComparisonData');
     await fetchComparisonData(p1, p2);
+    // Close the dropdowns after comparison
+    player1SearchRef.value?.hideDropdown();
+    player2SearchRef.value?.hideDropdown();
   } else {
     console.log('Not calling fetchComparisonData - one or both inputs are empty');
   }
@@ -413,6 +418,7 @@ const closeMilestoneAchievementsModal = () => {
         >
           <!-- Player 1 Input with Search -->
           <PlayerSearchInput
+            ref="player1SearchRef"
             v-model="player1Input"
             placeholder="Player 1 Name"
             :player-number="1"
@@ -427,6 +433,7 @@ const closeMilestoneAchievementsModal = () => {
 
           <!-- Player 2 Input with Search -->
           <PlayerSearchInput
+            ref="player2SearchRef"
             v-model="player2Input"
             placeholder="Player 2 Name"
             :player-number="2"
