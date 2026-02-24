@@ -5,29 +5,22 @@ import CommunityCard from '@/components/CommunityCard.vue'
 import { useAuth } from '@/composables/useAuth'
 
 const communities = ref<PlayerCommunity[]>([])
+const allCommunitiesCache = ref<PlayerCommunity[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
 const triggering = ref(false)
+const searchMode = ref<'all' | 'player'>('all')
 
 const minSize = ref(3)
 const activeOnly = ref(true)
 const sortBy = ref<'cohesion' | 'members' | 'recent'>('cohesion')
 const searchQuery = ref('')
+const noResults = ref(false)
 
 const { isSupport } = useAuth()
 
 const sortedAndFilteredCommunities = computed(() => {
   let result = [...communities.value]
-
-  // Search filter
-  if (searchQuery.value.trim()) {
-    const query = searchQuery.value.toLowerCase()
-    result = result.filter(c =>
-      c.name.toLowerCase().includes(query) ||
-      c.id.toLowerCase().includes(query) ||
-      c.members.some(m => m.toLowerCase().includes(query))
-    )
-  }
 
   // Sort
   switch (sortBy.value) {
@@ -58,7 +51,9 @@ const loadCommunities = async () => {
   loading.value = true
   error.value = null
   try {
-    communities.value = await fetchAllCommunities(minSize.value, activeOnly.value)
+    const loaded = await fetchAllCommunities(minSize.value, activeOnly.value)
+    communities.value = loaded
+    allCommunitiesCache.value = loaded
   } catch (err) {
     error.value = 'Failed to load communities'
     console.error(err)
@@ -83,6 +78,54 @@ const triggerDetection = async () => {
   }
 }
 
+let searchTimeout: NodeJS.Timeout | null = null
+const searchInputRef = ref<HTMLInputElement | null>(null)
+
+const handlePlayerSearch = (playerName: string) => {
+  // Clear previous timeout
+  if (searchTimeout) clearTimeout(searchTimeout)
+
+  if (!playerName.trim()) {
+    searchMode.value = 'all'
+    noResults.value = false
+    communities.value = allCommunitiesCache.value
+    return
+  }
+
+  // Search immediately with case-insensitive partial matching for better UX
+  searchMode.value = 'player'
+  error.value = null
+  noResults.value = false
+
+  searchTimeout = setTimeout(() => {
+    const query = playerName.toLowerCase()
+
+    // Filter communities that have a member matching the partial name
+    const filtered = allCommunitiesCache.value.filter(community =>
+      community.members.some(member => member.toLowerCase().includes(query))
+    )
+
+    communities.value = filtered
+
+    if (filtered.length === 0) {
+      noResults.value = true
+    }
+
+    // Keep focus on input
+    if (searchInputRef.value) {
+      searchInputRef.value.focus()
+    }
+  }, 200)
+}
+
+const clearSearch = () => {
+  searchQuery.value = ''
+  searchMode.value = 'all'
+  noResults.value = false
+  error.value = null
+  communities.value = allCommunitiesCache.value
+}
+
 onMounted(() => {
   loadCommunities()
 })
@@ -101,7 +144,7 @@ onMounted(() => {
               PLAYER COMMUNITIES
             </h1>
             <p class="text-sm text-neutral-500">
-              Explore detected player communities and their connections
+              Search for a player to see their communities, or explore all detected communities
             </p>
           </div>
 
@@ -129,14 +172,16 @@ onMounted(() => {
           <div class="explorer-card mb-6">
             <div class="explorer-card-body">
               <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <!-- Search -->
+                <!-- Search by Player -->
                 <div>
-                  <label class="block text-xs text-neutral-500 uppercase tracking-wider mb-2">Search</label>
+                  <label class="block text-xs text-neutral-500 uppercase tracking-wider mb-2">Find Player's Communities</label>
                   <input
+                    ref="searchInputRef"
                     v-model="searchQuery"
+                    @input="handlePlayerSearch(searchQuery)"
                     type="text"
-                    placeholder="Search communities..."
-                    class="w-full px-3 py-2 bg-neutral-800/50 border border-neutral-700 rounded text-sm text-neutral-200 placeholder-neutral-600"
+                    placeholder="Type player name (partial match)"
+                    class="w-full px-3 py-2 bg-neutral-800/50 border border-neutral-700 rounded text-sm text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-cyan-500 transition-colors"
                   />
                 </div>
 
@@ -154,7 +199,7 @@ onMounted(() => {
                 </div>
 
                 <!-- Min Size -->
-                <div>
+                <div v-if="searchMode === 'all'">
                   <label class="block text-xs text-neutral-500 uppercase tracking-wider mb-2">Min Members</label>
                   <select
                     v-model.number="minSize"
@@ -168,7 +213,7 @@ onMounted(() => {
                 </div>
 
                 <!-- Active Only -->
-                <div>
+                <div v-if="searchMode === 'all'">
                   <label class="block text-xs text-neutral-500 uppercase tracking-wider mb-2">Status</label>
                   <select
                     v-model="activeOnly"
@@ -179,17 +224,28 @@ onMounted(() => {
                     <option :value="false">All Communities</option>
                   </select>
                 </div>
+
+                <!-- Clear Search Button (when searching by player) -->
+                <div v-if="searchMode === 'player'">
+                  <label class="block text-xs text-neutral-500 uppercase tracking-wider mb-2">&nbsp;</label>
+                  <button
+                    @click="clearSearch"
+                    class="w-full px-3 py-2 bg-neutral-800/50 border border-neutral-700 rounded text-sm text-neutral-300 hover:bg-neutral-700/50 transition-colors"
+                  >
+                    Clear Search
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- Loading State -->
-          <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <!-- Loading State (initial load) -->
+          <div v-if="loading && allCommunitiesCache.length === 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div v-for="i in 6" :key="i" class="animate-pulse bg-neutral-800 h-96 rounded" />
           </div>
 
-          <!-- Error State -->
-          <div v-else-if="error" class="explorer-card">
+          <!-- Error State (only for loading errors, not search errors) -->
+          <div v-else-if="error && !searchQuery.trim()" class="explorer-card">
             <div class="explorer-card-body text-center">
               <p class="text-red-400 mb-4">{{ error }}</p>
               <button
@@ -204,7 +260,22 @@ onMounted(() => {
           <!-- Empty State -->
           <div v-else-if="sortedAndFilteredCommunities.length === 0" class="explorer-card">
             <div class="explorer-card-body text-center py-12">
-              <div v-if="communities.length === 0">
+              <div v-if="noResults && searchQuery.trim()">
+                <div class="mb-4">
+                  <div class="text-5xl mb-4">🔍</div>
+                  <h3 class="text-lg font-bold text-neutral-300 mb-2">No Communities Found</h3>
+                  <p class="text-neutral-500 mb-6 max-w-md mx-auto">
+                    Player <strong>"{{ searchQuery }}"</strong> is not a member of any communities, or the player name was not found.
+                  </p>
+                </div>
+                <button
+                  @click="clearSearch"
+                  class="px-4 py-2 bg-neutral-800 border border-neutral-700 rounded text-neutral-300 text-sm hover:bg-neutral-700 transition-colors"
+                >
+                  View All Communities
+                </button>
+              </div>
+              <div v-else-if="communities.length === 0">
                 <div class="mb-4">
                   <div class="text-5xl mb-4">🔍</div>
                   <h3 class="text-lg font-bold text-neutral-300 mb-2">No Communities Detected Yet</h3>
@@ -232,7 +303,7 @@ onMounted(() => {
               <div v-else>
                 <p class="text-neutral-500 mb-4">No communities found matching your criteria</p>
                 <button
-                  @click="() => { searchQuery = ''; minSize = 3; activeOnly = true; loadCommunities() }"
+                  @click="() => { minSize = 3; activeOnly = true; loadCommunities() }"
                   class="px-4 py-2 bg-neutral-800 border border-neutral-700 rounded text-neutral-300 text-sm hover:bg-neutral-700 transition-colors"
                 >
                   Reset Filters
@@ -240,6 +311,7 @@ onMounted(() => {
               </div>
             </div>
           </div>
+
 
           <!-- Communities Grid -->
           <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -252,7 +324,12 @@ onMounted(() => {
 
           <!-- Results Summary -->
           <div v-if="!loading && sortedAndFilteredCommunities.length > 0" class="mt-6 text-center text-sm text-neutral-500">
-            Showing {{ sortedAndFilteredCommunities.length }} of {{ communities.length }} communities
+            <span v-if="searchQuery.trim() && searchMode === 'player'">
+              <strong>"{{ searchQuery }}"</strong> is a member of {{ sortedAndFilteredCommunities.length }} communit{{ sortedAndFilteredCommunities.length === 1 ? 'y' : 'ies' }}
+            </span>
+            <span v-else>
+              Showing {{ sortedAndFilteredCommunities.length }} of {{ communities.length }} communities
+            </span>
           </div>
 
         </div>

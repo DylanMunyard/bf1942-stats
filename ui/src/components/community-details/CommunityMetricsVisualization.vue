@@ -151,47 +151,6 @@ const getCoreRatio = () => {
       </div>
     </div>
 
-    <!-- Server Distribution -->
-    <div class="explorer-card">
-      <div class="explorer-card-header">
-        <h2 class="font-mono font-bold text-cyan-300">SERVER DISTRIBUTION</h2>
-      </div>
-      <div class="explorer-card-body space-y-3">
-        <div>
-          <div class="flex justify-between items-center mb-2">
-            <span class="text-sm text-neutral-400">Primary Servers</span>
-            <span class="text-xs font-mono text-neutral-500">5 most active</span>
-          </div>
-          <div class="flex gap-1">
-            <div
-              v-for="(_, idx) in community.primaryServers.slice(0, 5)"
-              :key="idx"
-              class="flex-1 h-8 rounded bg-gradient-to-b from-purple-600 to-purple-700 opacity-80 hover:opacity-100 transition-opacity cursor-pointer"
-              :title="`${community.primaryServers[idx]}`"
-            />
-          </div>
-          <p class="text-xs text-neutral-500 mt-2">
-            {{ community.primaryServers.length }} total servers
-          </p>
-        </div>
-
-        <!-- Server List -->
-        <div class="mt-4 space-y-2">
-          <div
-            v-for="(server, idx) in community.primaryServers.slice(0, 5)"
-            :key="idx"
-            class="flex items-center justify-between p-2 bg-neutral-800/30 rounded text-sm"
-          >
-            <div class="flex items-center gap-2 flex-1 min-w-0">
-              <div class="w-2 h-2 rounded-full bg-purple-500 flex-shrink-0" />
-              <span class="text-neutral-300 truncate">{{ server }}</span>
-            </div>
-            <div class="text-xs text-neutral-500 font-mono flex-shrink-0">{{ idx + 1 }}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- Health Summary -->
     <div class="explorer-card">
       <div class="explorer-card-header">
@@ -219,7 +178,7 @@ const getCoreRatio = () => {
         <div class="p-3 bg-neutral-800/30 rounded border border-neutral-700/50 text-sm text-neutral-300">
           <p>
             This {{ community.cohesionScore >= 0.7 ? 'tight-knit' : 'developing' }} community of {{ community.memberCount }} players
-            plays primarily on {{ community.primaryServers.length }} server{{ community.primaryServers.length !== 1 ? 's' : '' }}.
+            with {{ getDensityLevel(community.avgSessionsPerPair).toLowerCase() }} density interaction.
             {{ community.isActive ? 'The community is currently active.' : 'The community is currently dormant.' }}
           </p>
         </div>

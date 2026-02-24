@@ -688,7 +688,8 @@ public class PlayerRelationshipService(
             await tx.RunAsync("MATCH (c:Community) DELETE c");
 
             // Minimum session threshold for considering players connected
-            const int minSessions = 3;
+            // Higher threshold = tighter, more meaningful communities
+            const int minSessions = 5;
 
             // Step 1: Find player groups using simple connection-based clustering
             // Group players by finding the smallest player name they're connected to (creates stable groups)
@@ -714,7 +715,7 @@ public class PlayerRelationshipService(
                 MATCH (p:Player)
                 WHERE p.communityId IS NOT NULL
                 WITH p.communityId AS communityId, COLLECT(p.name) AS members
-                WHERE SIZE(members) >= 3
+                WHERE SIZE(members) >= 3 AND SIZE(members) <= 20
 
                 // Calculate cohesion and other stats
                 UNWIND members AS m1
@@ -731,6 +732,9 @@ public class PlayerRelationshipService(
                           THEN 0.0
                           ELSE toFloat(edgeCount * 2) / (SIZE(members) * (SIZE(members) - 1))
                      END AS cohesion
+
+                // Filter: Only keep communities with meaningful cohesion and sufficient connections
+                WHERE cohesion >= 0.3 AND avgSessions >= 2
 
                 // Find core members (those with most connections in the community)
                 UNWIND members AS member
@@ -778,8 +782,71 @@ public class PlayerRelationshipService(
                 var createResult = await createCursor.SingleAsync();
                 var createdCount = createResult["createdCommunities"].As<int>();
 
-                logger.LogInformation("Community detection completed: created {CreatedCount} communities", createdCount);
-                return $"Successfully detected and created {createdCount} communities using pure Cypher clustering";
+                // Step 3: Create synthetic communities for highly connected players without a natural community
+                var syntheticCommunitiesQuery = @"
+                    // Find players who are not in any community but have strong connections
+                    MATCH (p:Player)
+                    WHERE p.communityId IS NULL
+                    MATCH (p)-[r:PLAYED_WITH]-(teammate)
+                    WITH p, teammate, r.sessionCount AS sessions
+                    ORDER BY p.name, sessions DESC
+                    WITH p, COLLECT({name: teammate.name, sessions: sessions})[0..7] AS topTeammates
+                    WHERE SIZE(topTeammates) >= 3
+                    WITH p, topTeammates, [t IN topTeammates | t.name] AS topNames
+
+                    // Create a synthetic community with the player and their top teammates
+                    // Calculate average sessions manually
+                    WITH p, topNames, topNames + [p.name] AS allNames,
+                         reduce(sum = 0, t IN topTeammates | sum + t.sessions) / toFloat(SIZE(topTeammates)) AS avgSessions,
+                         MAX(datetime()) AS lastActive
+
+                    // Calculate cohesion for the synthetic community
+                    UNWIND allNames AS m1
+                    UNWIND allNames AS m2
+                    WITH p, topNames, allNames, avgSessions, lastActive, m1, m2
+                    WHERE m1 < m2
+                    OPTIONAL MATCH (p1:Player {name: m1})-[r:PLAYED_WITH]-(p2:Player {name: m2})
+                    WITH p, topNames, allNames, avgSessions, lastActive, COUNT(r) AS edgeCount
+
+                    // Calculate cohesion
+                    WITH p, topNames, allNames, avgSessions, lastActive, edgeCount,
+                         CASE WHEN SIZE(allNames) <= 1
+                              THEN 0.0
+                              ELSE toFloat(edgeCount * 2) / (SIZE(allNames) * (SIZE(allNames) - 1))
+                         END AS cohesion
+
+                    // Find primary servers for this group
+                    UNWIND allNames AS member
+                    MATCH (pl:Player {name: member})-[ps:PLAYS_ON]->(s:Server)
+                    WITH p, topNames, allNames, avgSessions, lastActive, cohesion,
+                         s.guid AS serverGuid, s.name AS serverName, COUNT(*) AS playCount
+                    ORDER BY playCount DESC
+                    WITH p, topNames, allNames, avgSessions, lastActive, cohesion,
+                         COLLECT(serverGuid)[0..5] AS serverGuids,
+                         COLLECT(serverName)[0..5] AS serverNames
+
+                    // Create synthetic community node
+                    CREATE (c:Community {
+                        id: 'synth_' + SUBSTRING(p.name, 0, 15) + '_' + SUBSTRING(randomUUID(), 0, 8),
+                        name: 'Squad: ' + p.name + ' & Co',
+                        members: allNames,
+                        coreMembers: [p.name] + topNames[0..4],
+                        primaryServers: serverNames,
+                        formationDate: datetime(),
+                        lastActiveDate: lastActive,
+                        avgSessionsPerPair: avgSessions,
+                        cohesionScore: cohesion
+                    })
+                    RETURN COUNT(c) AS createdSyntheticCommunities";
+
+                logger.LogDebug("Creating synthetic communities for unassigned highly-connected players");
+                var syntheticCursor = await tx.RunAsync(syntheticCommunitiesQuery);
+                var syntheticResult = await syntheticCursor.SingleAsync();
+                var syntheticCount = syntheticResult["createdSyntheticCommunities"].As<int>();
+
+                var totalCount = createdCount + syntheticCount;
+                logger.LogInformation("Community detection completed: created {CreatedCount} natural + {SyntheticCount} synthetic communities", createdCount, syntheticCount);
+                return $"Successfully detected and created {totalCount} communities ({createdCount} natural + {syntheticCount} synthetic)";
             }
             catch (Exception ex)
             {

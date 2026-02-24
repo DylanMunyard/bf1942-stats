@@ -3,9 +3,6 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { fetchCommunity, type PlayerCommunity } from '@/services/playerRelationshipsApi'
 import CommunityMembersSection from '@/components/community-details/CommunityMembersSection.vue'
-import CommunityServersSection from '@/components/community-details/CommunityServersSection.vue'
-import CommunityNetworkGraph from '@/components/community-details/CommunityNetworkGraph.vue'
-import CommunityActivityTimeline from '@/components/community-details/CommunityActivityTimeline.vue'
 import CommunityMetricsVisualization from '@/components/community-details/CommunityMetricsVisualization.vue'
 import CommunityActivityChart from '@/components/community-details/CommunityActivityChart.vue'
 import CommunityServerMap from '@/components/community-details/CommunityServerMap.vue'
@@ -16,7 +13,7 @@ const router = useRouter()
 const community = ref<PlayerCommunity | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
-const activeTab = ref<'metrics' | 'activity' | 'server-map' | 'members' | 'servers' | 'network' | 'timeline'>('metrics')
+const activeTab = ref<'metrics' | 'activity' | 'server-map' | 'members'>('metrics')
 
 const cohesionPercentage = computed(() =>
   community.value ? Math.round(community.value.cohesionScore * 100) : 0
@@ -35,8 +32,6 @@ const statusLabel = computed(() => {
   if (community.value.cohesionScore >= 0.5) return 'ACTIVE'
   return 'EMERGING'
 })
-
-const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString()
 
 const loadCommunity = async () => {
   loading.value = true
@@ -136,28 +131,12 @@ onMounted(() => {
               </div>
             </div>
 
-            <!-- Key Dates -->
-            <div class="explorer-card mb-6">
-              <div class="explorer-card-body">
-                <div class="grid grid-cols-2 gap-4">
-                  <div>
-                    <div class="text-xs text-neutral-500 uppercase tracking-wider mb-2">Formation Date</div>
-                    <div class="text-sm text-neutral-200">{{ formatDate(community.formationDate) }}</div>
-                  </div>
-                  <div>
-                    <div class="text-xs text-neutral-500 uppercase tracking-wider mb-2">Last Active</div>
-                    <div class="text-sm text-neutral-200">{{ formatDate(community.lastActiveDate) }}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             <!-- Tab Navigation -->
             <div class="explorer-card mb-6 overflow-x-auto">
               <div class="explorer-card-body">
                 <div class="flex gap-2 whitespace-nowrap">
                   <button
-                    v-for="tab in ['metrics', 'activity', 'server-map', 'members', 'servers', 'network', 'timeline']"
+                    v-for="tab in ['metrics', 'activity', 'server-map', 'members']"
                     :key="tab"
                     @click="activeTab = tab as any"
                     class="px-4 py-2 rounded text-sm font-medium transition-colors"
@@ -184,15 +163,6 @@ onMounted(() => {
 
               <!-- Members Tab -->
               <CommunityMembersSection v-else-if="activeTab === 'members'" :community="community" />
-
-              <!-- Servers Tab -->
-              <CommunityServersSection v-else-if="activeTab === 'servers'" :community="community" />
-
-              <!-- Network Tab -->
-              <CommunityNetworkGraph v-else-if="activeTab === 'network'" :community="community" />
-
-              <!-- Timeline Tab -->
-              <CommunityActivityTimeline v-else-if="activeTab === 'timeline'" :community="community" />
             </div>
 
           </div>
