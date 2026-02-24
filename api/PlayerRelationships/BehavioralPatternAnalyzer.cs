@@ -78,7 +78,7 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
         {
             var result = await dbContext.Database
                 .SqlQueryRaw<DateTime>("""
-                    SELECT MAX(LastSeenTime)
+                    SELECT MAX(LastSeenTime) as LastSeenTime
                     FROM PlayerSessions
                     WHERE PlayerName = @playerName
                     """,
