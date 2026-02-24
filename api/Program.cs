@@ -28,6 +28,7 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Metrics;
 using api.Telemetry;
 using OpenTelemetry.Exporter;
+using System.Diagnostics;
 using Microsoft.AspNetCore.ResponseCompression;
 using System.IO.Compression;
 using api.Data.Migrations;
@@ -729,6 +730,16 @@ try
 
     // Enable response compression (must be early in pipeline)
     host.UseResponseCompression();
+
+    // Strip W3C trace context headers from incoming requests
+    // This ensures each API request starts its own independent trace
+    // Rather than inheriting trace IDs from browser requests
+    host.Use(async (httpContext, next) =>
+    {
+        httpContext.Request.Headers.Remove("traceparent");
+        httpContext.Request.Headers.Remove("tracestate");
+        await next();
+    });
 
     // Enable routing and controllers
     host.UseRouting();

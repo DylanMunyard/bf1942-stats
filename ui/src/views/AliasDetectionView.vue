@@ -123,7 +123,7 @@ const onSearch = async (p1: string, p2: string) => {
     return
   }
 
-  // Update URL with query params
+  // Update URL with query params (watch will trigger loadComparison)
   await router.push({
     path: '/alias-detection',
     query: {
@@ -131,9 +131,6 @@ const onSearch = async (p1: string, p2: string) => {
       player2: p2
     }
   })
-
-  // Load the comparison
-  await loadComparison(p1, p2)
 }
 
 const loadComparison = async (p1: string, p2: string) => {
