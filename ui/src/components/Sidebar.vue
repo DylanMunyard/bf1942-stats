@@ -160,6 +160,40 @@
           </div>
         </router-link>
 
+        <!-- Alias Detection Link -->
+        <router-link
+          to="/alias-detection"
+          class="group relative flex flex-col items-center justify-center w-14 h-14 mx-auto rounded-xl bg-gradient-to-br from-neutral-700/50 to-neutral-800/50 backdrop-blur-sm border border-neutral-600/50 hover:border-cyan-500/50 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/25"
+          active-class="!border-cyan-500 !bg-gradient-to-br !from-cyan-500/20 !to-blue-500/20 !shadow-lg !shadow-cyan-500/30"
+        >
+          <div
+            class="w-8 h-8 rounded-full bg-cover bg-center bg-no-repeat opacity-80 group-hover:opacity-100 transition-opacity duration-300"
+            :style="{ backgroundImage: `url(${aliasDetectionIcon})` }"
+          />
+
+          <!-- Enhanced Tooltip -->
+          <div class="absolute right-full mr-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none">
+            <div class="bg-gradient-to-r from-neutral-900/95 to-neutral-950 backdrop-blur-lg rounded-xl border border-neutral-700/50 p-4 shadow-2xl min-w-80">
+              <div class="flex items-center gap-4 mb-3">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 flex items-center justify-center">
+                  <div
+                    class="w-8 h-8 rounded-full bg-cover bg-center bg-no-repeat"
+                    :style="{ backgroundImage: `url(${aliasDetectionIcon})` }"
+                  />
+                </div>
+                <div class="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-400">
+                  Alias Detection
+                </div>
+              </div>
+              <p class="text-neutral-300 text-sm leading-relaxed">
+                Investigate player relationships and identify potential alternate accounts.
+              </p>
+            </div>
+            <!-- Arrow -->
+            <div class="absolute left-full top-1/2 -translate-y-1/2 border-l-8 border-l-neutral-900 border-y-8 border-y-transparent" />
+          </div>
+        </router-link>
+
         <!-- Data Explorer Link - Featured -->
         <router-link
           to="/explore"
@@ -317,6 +351,18 @@
           />
         </router-link>
 
+        <!-- Alias Detection Link -->
+        <router-link
+          to="/alias-detection"
+          class="group flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-neutral-700/50 to-neutral-800/50 backdrop-blur-sm border border-neutral-600/50 hover:border-cyan-500/50 transition-all duration-300 hover:scale-105"
+          active-class="!border-cyan-500 !bg-gradient-to-br !from-cyan-500/20 !to-blue-500/20 !shadow-lg !shadow-cyan-500/30"
+        >
+          <div
+            class="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-cover bg-center bg-no-repeat opacity-80 group-hover:opacity-100 transition-opacity duration-300"
+            :style="{ backgroundImage: `url(${aliasDetectionIcon})` }"
+          />
+        </router-link>
+
         <!-- Data Explorer Link - Featured -->
         <router-link
           to="/explore"
@@ -376,6 +422,7 @@ import dashboardIcon from '@/assets/achievements/dashboard-sidemenu.webp';
 import serversIcon from '@/assets/servers.webp';
 import playersIcon from '@/assets/players.webp';
 import communitiesIcon from '@/assets/communities.webp';
+import aliasDetectionIcon from '@/assets/alias_detection.webp';
 import explorerIcon from '@/assets/menu-item-data-explorer.webp';
 import clippyIcon from '@/assets/clippy_my_boi.webp';
 
