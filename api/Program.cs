@@ -221,10 +221,17 @@ try
                         return true;
                     };
                 });
-                // EF Core and SqlClient instrumentation removed to reduce telemetry overhead.
-                // Every DB query generates a span with the full SQL statement, which is
-                // very noisy in Seq. ASP.NET Core instrumentation + custom activity sources
-                // provide sufficient request-level and business-logic tracing.
+
+                // Enable EF Core and SqlClient instrumentation for SQL query visibility
+                tracing.AddEntityFrameworkCoreInstrumentation(options =>
+                {
+                    options.SetDbStatementForText = true;
+                });
+
+                tracing.AddSqlClientInstrumentation(options =>
+                {
+                    options.SetDbStatementForText = true;
+                });
 
                 tracing.AddOtlpExporter(opt =>
                 {
