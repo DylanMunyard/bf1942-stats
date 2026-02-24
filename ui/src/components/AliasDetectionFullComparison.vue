@@ -25,14 +25,13 @@
         />
       </div>
 
-      <!-- Playtime Overlap -->
+      <!-- Activity Timeline -->
       <div v-if="comparisonData.hourlyOverlap && comparisonData.hourlyOverlap.length > 0" class="section">
-        <HourlyOverlapChart
+        <h3 class="section-title">Activity Timeline</h3>
+        <ActivityTimelineBar
           :hourly-overlap="comparisonData.hourlyOverlap"
           :player1-name="player1Name"
           :player2-name="player2Name"
-          :is-dark-mode="true"
-          :chart-key="chartKey"
         />
       </div>
 
@@ -72,7 +71,7 @@
 import { ref, computed, onMounted } from 'vue'
 import ComparisonCoreStats from './ComparisonCoreStats.vue'
 import PerformanceOverTime from './PerformanceOverTime.vue'
-import HourlyOverlapChart from './HourlyOverlapChart.vue'
+import ActivityTimelineBar from './ActivityTimelineBar.vue'
 import MapPerformanceTable from './MapPerformanceTable.vue'
 import HeadToHeadTable from './HeadToHeadTable.vue'
 
@@ -220,5 +219,14 @@ onMounted(() => {
 
 .section {
   width: 100%;
+}
+
+.section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 </style>

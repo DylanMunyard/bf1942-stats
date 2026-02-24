@@ -33,6 +33,18 @@
       </div>
     </div>
 
+    <!-- Similarity Radar Chart -->
+    <div class="radar-section">
+      <h3>Similarity Analysis</h3>
+      <SimilarityRadarChart
+        :stat-analysis="report.statAnalysis"
+        :behavioral-analysis="report.behavioralAnalysis"
+        :network-analysis="report.networkAnalysis"
+        :temporal-analysis="report.temporalAnalysis"
+        :is-dark-mode="true"
+      />
+    </div>
+
     <!-- Analysis Grid -->
     <div class="analysis-grid">
       <!-- Stat Analysis -->
@@ -243,6 +255,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import SimilarityRadarChart from './SimilarityRadarChart.vue'
 import type { PlayerAliasSuspicionReport } from '../types/alias-detection'
 
 interface Props {
@@ -290,6 +303,23 @@ const formatDate = (date: string) => {
 .overall-score-section {
   grid-column: 1 / -1;
   display: flex;
+}
+
+/* Radar Section */
+.radar-section {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.radar-section > h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .score-card {
