@@ -291,9 +291,9 @@ public class Neo4jNetworkAnalyzer(IDriver neoDriver)
 
     private async Task<int> GetCoSessionCountAsync(IAsyncSession session, string player1, string player2, int lookBackDays)
     {
+        // Check if players ever played together (no time filter - looking at full history)
         var query = """
             MATCH (p1:Player {name: $player1})-[r1:PLAYED_WITH]-(mutual:Player)-[r2:PLAYED_WITH]-(p2:Player {name: $player2})
-            WHERE r1.lastPlayedTogether > datetime({timezone: "UTC"}).minus(duration({days: $lookBackDays}))
             RETURN COUNT(DISTINCT mutual) as count
             """;
 
@@ -301,7 +301,7 @@ public class Neo4jNetworkAnalyzer(IDriver neoDriver)
         {
             var result = await session.ExecuteReadAsync(async tx =>
             {
-                var res = await tx.RunAsync(query, new { player1, player2, lookBackDays });
+                var res = await tx.RunAsync(query, new { player1, player2 });
                 return await res.SingleAsync();
             });
 
@@ -309,7 +309,7 @@ public class Neo4jNetworkAnalyzer(IDriver neoDriver)
         }
         catch
         {
-            // Query might fail if relationship data doesn't have timestamp
+            // Query might fail if relationship data doesn't exist
             return 0;
         }
     }

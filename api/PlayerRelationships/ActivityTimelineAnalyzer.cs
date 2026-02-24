@@ -19,11 +19,9 @@ public class ActivityTimelineAnalyzer(PlayerTrackerDbContext dbContext)
         string player2,
         int lookBackDays = 180)
     {
-        var cutoff = DateTime.UtcNow.AddDays(-lookBackDays);
-
-        // Get activity period for each player (single row aggregation)
-        var period1 = await CalculateActivityPeriodAsync(player1, cutoff);
-        var period2 = await CalculateActivityPeriodAsync(player2, cutoff);
+        // Get complete activity periods first (all historical data)
+        var period1 = await CalculateActivityPeriodAsync(player1, DateTime.MinValue);
+        var period2 = await CalculateActivityPeriodAsync(player2, DateTime.MinValue);
 
         if (period1.TotalSessions == 0 || period2.TotalSessions == 0)
         {
@@ -40,10 +38,11 @@ public class ActivityTimelineAnalyzer(PlayerTrackerDbContext dbContext)
             };
         }
 
-        // Analyze the gap
+        // Analyze the gap (uses complete activity data)
         var gapAnalysis = AnalyzeGap(period1, period2);
 
-        // Build daily timelines using raw SQL (returns only aggregated daily data)
+        // Build daily timelines limited to lookBackDays for visualization
+        var cutoff = DateTime.UtcNow.AddDays(-lookBackDays);
         var timeline1 = await BuildDailyTimelineAsync(player1, cutoff);
         var timeline2 = await BuildDailyTimelineAsync(player2, cutoff);
 

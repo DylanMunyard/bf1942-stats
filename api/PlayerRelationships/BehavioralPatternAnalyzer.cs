@@ -20,25 +20,12 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
         string player2,
         int lookBackDays = 90)
     {
-        var cutoffDate = DateTime.UtcNow.AddDays(-lookBackDays);
+        // Get each player's most recent activity point
+        var lastActive1 = await GetPlayerLastActivityAsync(player1);
+        var lastActive2 = await GetPlayerLastActivityAsync(player2);
 
-        // Check if we have any session data for both players using raw SQL
-        // Query ALL historical data, not limited by lookBackDays
-        var sessionCounts = await dbContext.Database
-            .SqlQueryRaw<SessionCountResult>("""
-                SELECT PlayerName, COUNT(*) as Count
-                FROM PlayerSessions
-                WHERE PlayerName = @player1 OR PlayerName = @player2
-                GROUP BY PlayerName
-                """,
-                new Microsoft.Data.Sqlite.SqliteParameter("@player1", player1),
-                new Microsoft.Data.Sqlite.SqliteParameter("@player2", player2))
-            .ToListAsync();
-
-        var count1 = sessionCounts.FirstOrDefault(x => x.PlayerName == player1)?.Count ?? 0;
-        var count2 = sessionCounts.FirstOrDefault(x => x.PlayerName == player2)?.Count ?? 0;
-
-        if (count1 == 0 || count2 == 0)
+        // If either player has no data, return insufficient
+        if (lastActive1 == DateTime.MinValue || lastActive2 == DateTime.MinValue)
         {
             return new BehavioralAnalysis(
                 Score: 0.0,
@@ -50,11 +37,16 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
             );
         }
 
+        // Use the most recent activity point between both players
+        var analysisStartDate = DateTime.UtcNow;  // Reference point
+        var cutoffDate1 = lastActive1.AddDays(-lookBackDays);  // Go back from player1's last activity
+        var cutoffDate2 = lastActive2.AddDays(-lookBackDays);  // Go back from player2's last activity
+
         // Calculate individual behavioral metrics using raw SQL (no in-memory loading)
-        var playTimeOverlap = await CalculatePlayTimeOverlapAsync(player1, player2, cutoffDate);
-        var serverAffinity = await CalculateServerAffinityAsync(player1, player2, cutoffDate);
+        var playTimeOverlap = await CalculatePlayTimeOverlapAsync(player1, player2, cutoffDate1, cutoffDate2);
+        var serverAffinity = await CalculateServerAffinityAsync(player1, player2, cutoffDate1, cutoffDate2);
         var pingConsistency = await CalculatePingConsistencyAsync(player1, player2);
-        var sessionPattern = await CalculateSessionPatternSimilarityAsync(player1, player2, cutoffDate);
+        var sessionPattern = await CalculateSessionPatternSimilarityAsync(player1, player2, cutoffDate1, cutoffDate2);
 
         // Overall score: weighted average
         var overallScore = (playTimeOverlap * 0.30) +
@@ -65,7 +57,7 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
         var analysis = BuildAnalysis(
             player1, player2,
             playTimeOverlap, serverAffinity, pingConsistency, sessionPattern,
-            count1, count2
+            lookBackDays
         );
 
         return new BehavioralAnalysis(
@@ -79,31 +71,56 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
     }
 
     /// <summary>
+    /// Get the most recent activity timestamp for a player.
+    /// </summary>
+    private async Task<DateTime> GetPlayerLastActivityAsync(string playerName)
+    {
+        try
+        {
+            var result = await dbContext.Database
+                .SqlQueryRaw<DateTime>("""
+                    SELECT MAX(LastSeenTime)
+                    FROM PlayerSessions
+                    WHERE PlayerName = @playerName
+                    """,
+                    new Microsoft.Data.Sqlite.SqliteParameter("@playerName", playerName))
+                .SingleAsync();
+            
+            return result != default ? result : DateTime.MinValue;
+        }
+        catch
+        {
+            return DateTime.MinValue;
+        }
+    }
+
+    /// <summary>
     /// Calculate similarity of play time patterns (hour-of-day) using raw SQL.
     /// Returns 1.0 if they play at similar times, 0.0 if completely different times.
     /// </summary>
-    private async Task<double> CalculatePlayTimeOverlapAsync(string player1, string player2, DateTime cutoff)
+    private async Task<double> CalculatePlayTimeOverlapAsync(string player1, string player2, DateTime cutoff1, DateTime cutoff2)
     {
-        // Get hour-of-day distribution from database (returns only 24 rows per player)
-        // Uses ALL historical data to identify play time patterns, regardless of when they played
+        // Get hour-of-day distribution from database - for each player from their own cutoff
         var hourStats1 = await dbContext.Database
             .SqlQueryRaw<HourDistributionResult>("""
                 SELECT CAST(strftime('%H', StartTime) AS INTEGER) as Hour, COUNT(*) as Count
                 FROM PlayerSessions
-                WHERE PlayerName = @playerName
+                WHERE PlayerName = @playerName AND StartTime >= @cutoff
                 GROUP BY Hour
                 """,
-                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player1))
+                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player1),
+                new Microsoft.Data.Sqlite.SqliteParameter("@cutoff", cutoff1))
             .ToListAsync();
 
         var hourStats2 = await dbContext.Database
             .SqlQueryRaw<HourDistributionResult>("""
                 SELECT CAST(strftime('%H', StartTime) AS INTEGER) as Hour, COUNT(*) as Count
                 FROM PlayerSessions
-                WHERE PlayerName = @playerName
+                WHERE PlayerName = @playerName AND StartTime >= @cutoff
                 GROUP BY Hour
                 """,
-                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player2))
+                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player2),
+                new Microsoft.Data.Sqlite.SqliteParameter("@cutoff", cutoff2))
             .ToListAsync();
 
         // Build normalized probability vectors from aggregated data
@@ -138,23 +155,24 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
     /// Calculate server affinity similarity using raw SQL.
     /// Returns % of servers in common between their play lists.
     /// </summary>
-    private async Task<double> CalculateServerAffinityAsync(string player1, string player2, DateTime cutoff)
+    private async Task<double> CalculateServerAffinityAsync(string player1, string player2, DateTime cutoff1, DateTime cutoff2)
     {
-        // Get distinct servers for both players (only server guids, not full data)
-        // Uses ALL historical data to identify server preferences
+        // Get distinct servers for both players from their respective cutoff points
         var commonServerCount = await dbContext.Database
             .SqlQueryRaw<int>("""
                 SELECT COUNT(DISTINCT ServerGuid)
                 FROM (
                     SELECT DISTINCT ServerGuid FROM PlayerSessions
-                    WHERE PlayerName = @player1
+                    WHERE PlayerName = @player1 AND StartTime >= @cutoff1
                     INTERSECT
                     SELECT DISTINCT ServerGuid FROM PlayerSessions
-                    WHERE PlayerName = @player2
+                    WHERE PlayerName = @player2 AND StartTime >= @cutoff2
                 )
                 """,
                 new Microsoft.Data.Sqlite.SqliteParameter("@player1", player1),
-                new Microsoft.Data.Sqlite.SqliteParameter("@player2", player2))
+                new Microsoft.Data.Sqlite.SqliteParameter("@cutoff1", cutoff1),
+                new Microsoft.Data.Sqlite.SqliteParameter("@player2", player2),
+                new Microsoft.Data.Sqlite.SqliteParameter("@cutoff2", cutoff2))
             .SingleAsync();
 
         // Get union count
@@ -163,14 +181,16 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
                 SELECT COUNT(DISTINCT ServerGuid)
                 FROM (
                     SELECT DISTINCT ServerGuid FROM PlayerSessions
-                    WHERE PlayerName = @player1
+                    WHERE PlayerName = @player1 AND StartTime >= @cutoff1
                     UNION
                     SELECT DISTINCT ServerGuid FROM PlayerSessions
-                    WHERE PlayerName = @player2
+                    WHERE PlayerName = @player2 AND StartTime >= @cutoff2
                 )
                 """,
                 new Microsoft.Data.Sqlite.SqliteParameter("@player1", player1),
-                new Microsoft.Data.Sqlite.SqliteParameter("@player2", player2))
+                new Microsoft.Data.Sqlite.SqliteParameter("@cutoff1", cutoff1),
+                new Microsoft.Data.Sqlite.SqliteParameter("@player2", player2),
+                new Microsoft.Data.Sqlite.SqliteParameter("@cutoff2", cutoff2))
             .SingleAsync();
 
         if (totalUniqueServers == 0)
@@ -265,10 +285,9 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
     /// <summary>
     /// Calculate similarity of session patterns (frequency, duration) using raw SQL.
     /// </summary>
-    private async Task<double> CalculateSessionPatternSimilarityAsync(string player1, string player2, DateTime cutoff)
+    private async Task<double> CalculateSessionPatternSimilarityAsync(string player1, string player2, DateTime cutoff1, DateTime cutoff2)
     {
-        // Get session statistics from database (single row per player)
-        // Uses ALL historical data to identify session patterns
+        // Get session statistics from each player's recent activity window
         var stats1 = await dbContext.Database
             .SqlQueryRaw<SessionStatResult>("""
                 SELECT
@@ -276,9 +295,10 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
                     SUM(CAST((julianday(LastSeenTime) - julianday(StartTime)) * 1440 AS INTEGER)) as TotalMinutes,
                     AVG(CAST((julianday(LastSeenTime) - julianday(StartTime)) * 1440 AS REAL)) as AvgSessionMinutes
                 FROM PlayerSessions
-                WHERE PlayerName = @playerName
+                WHERE PlayerName = @playerName AND StartTime >= @cutoff
                 """,
-                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player1))
+                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player1),
+                new Microsoft.Data.Sqlite.SqliteParameter("@cutoff", cutoff1))
             .SingleAsync();
 
         var stats2 = await dbContext.Database
@@ -288,12 +308,13 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
                     SUM(CAST((julianday(LastSeenTime) - julianday(StartTime)) * 1440 AS INTEGER)) as TotalMinutes,
                     AVG(CAST((julianday(LastSeenTime) - julianday(StartTime)) * 1440 AS REAL)) as AvgSessionMinutes
                 FROM PlayerSessions
-                WHERE PlayerName = @playerName
+                WHERE PlayerName = @playerName AND StartTime >= @cutoff
                 """,
-                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player2))
+                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player2),
+                new Microsoft.Data.Sqlite.SqliteParameter("@cutoff", cutoff2))
             .SingleAsync();
 
-        // If no sessions for either player, return neutral score
+        // If no sessions for either player in their window, return neutral score
         if (stats1.SessionCount == 0 || stats2.SessionCount == 0)
             return 0.5;
 
@@ -306,10 +327,13 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
             ? 1.0 - Math.Min(1.0, Math.Abs(avgDuration1 - avgDuration2) / maxDuration)
             : 0.5;
 
-        // Session frequency (sessions per day)
-        var now = DateTime.UtcNow;
-        var daySpan1 = (int)(now - new DateTime(1900, 1, 1)).TotalDays; // Since records began
-        var daySpan2 = (int)(now - new DateTime(1900, 1, 1)).TotalDays;
+        // Session frequency within their respective windows
+        var daySpan1 = (int)(stats1.TotalMinutes / 1440.0 ?? 1);  // Convert minutes to days
+        var daySpan2 = (int)(stats2.TotalMinutes / 1440.0 ?? 1);
+        
+        daySpan1 = Math.Max(1, daySpan1);  // At least 1 day
+        daySpan2 = Math.Max(1, daySpan2);
+        
         var freq1 = daySpan1 > 0 ? stats1.SessionCount / (double)daySpan1 : 0;
         var freq2 = daySpan2 > 0 ? stats2.SessionCount / (double)daySpan2 : 0;
 
@@ -363,12 +387,11 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
         double serverAffinity,
         double pingConsistency,
         double sessionPattern,
-        int count1,
-        int count2)
+        int lookBackDays)
     {
         var parts = new List<string>();
 
-        parts.Add($"{player1}: {count1} sessions, {player2}: {count2} sessions");
+        parts.Add($"Analysis window: last {lookBackDays} days from each player's activity");
 
         if (playTimeOverlap > 0.75)
             parts.Add("Play at very similar times of day");
