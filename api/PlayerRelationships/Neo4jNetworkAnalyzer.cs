@@ -14,14 +14,14 @@ public class Neo4jNetworkAnalyzer(IDriver neoDriver)
     public async Task<(NetworkAnalysis NetworkAnalysis, TemporalAnalysis TemporalAnalysis)> AnalyzeNetworkAndTemporalAsync(
         string player1,
         string player2,
-        int lookBackDays = 90)
+        int lookBackDays = 3650)
     {
         try
         {
             using var session = neoDriver.AsyncSession();
 
             var networkAnalysis = await AnalyzeNetworkSimilarityAsync(session, player1, player2);
-            var temporalAnalysis = await AnalyzeTemporalConsistencyAsync(session, player1, player2, lookBackDays);
+            var temporalAnalysis = await AnalyzeTemporalConsistencyAsync(session, player1, player2);
 
             return (networkAnalysis, temporalAnalysis);
         }
@@ -246,14 +246,13 @@ public class Neo4jNetworkAnalyzer(IDriver neoDriver)
     private async Task<TemporalAnalysis> AnalyzeTemporalConsistencyAsync(
         IAsyncSession session,
         string player1,
-        string player2,
-        int lookBackDays)
+        string player2)
     {
         // Check if they ever appear in same session (would indicate NOT aliases)
-        var coSessionCount = await GetCoSessionCountAsync(session, player1, player2, lookBackDays);
+        var coSessionCount = await GetCoSessionCountAsync(session, player1, player2);
 
         // Get activity periods
-        var activities = await GetActivityPeriodsAsync(session, player1, player2, lookBackDays);
+        var activities = await GetActivityPeriodsAsync(session, player1, player2);
 
         var score = 1.0;
         var redFlags = new List<string>();
@@ -289,9 +288,9 @@ public class Neo4jNetworkAnalyzer(IDriver neoDriver)
         );
     }
 
-    private async Task<int> GetCoSessionCountAsync(IAsyncSession session, string player1, string player2, int lookBackDays)
+    private async Task<int> GetCoSessionCountAsync(IAsyncSession session, string player1, string player2)
     {
-        // Check if players ever played together (no time filter - looking at full history)
+        // Check if players ever played together (queries full history for relationship existence)
         var query = """
             MATCH (p1:Player {name: $player1})-[r1:PLAYED_WITH]-(mutual:Player)-[r2:PLAYED_WITH]-(p2:Player {name: $player2})
             RETURN COUNT(DISTINCT mutual) as count
@@ -317,8 +316,7 @@ public class Neo4jNetworkAnalyzer(IDriver neoDriver)
     private async Task<(DateTime LastSessionPlayer1, DateTime LastSessionPlayer2)> GetActivityPeriodsAsync(
         IAsyncSession session,
         string player1,
-        string player2,
-        int lookBackDays)
+        string player2)
     {
         var query = """
             MATCH (p1:Player {name: $player1})-[r1:PLAYED_WITH]-(t1:Player)

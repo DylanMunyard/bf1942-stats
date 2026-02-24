@@ -37,8 +37,7 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
             );
         }
 
-        // Use the most recent activity point between both players
-        var analysisStartDate = DateTime.UtcNow;  // Reference point
+        // Calculate activity-based cutoff for each player
         var cutoffDate1 = lastActive1.AddDays(-lookBackDays);  // Go back from player1's last activity
         var cutoffDate2 = lastActive2.AddDays(-lookBackDays);  // Go back from player2's last activity
 
