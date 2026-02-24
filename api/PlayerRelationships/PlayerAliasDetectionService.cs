@@ -22,7 +22,7 @@ public class PlayerAliasDetectionService(
     public async Task<PlayerAliasSuspicionReport> ComparePlayers(
         string player1,
         string player2,
-        int lookBackDays = 90,
+        int lookBackDays = 3650,
         AliasDetectionWeights? customWeights = null)
     {
         var startTime = DateTime.UtcNow;

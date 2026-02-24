@@ -60,13 +60,13 @@ public class AliasDetectionController(
     /// </summary>
     /// <param name="targetPlayer">The player to find potential aliases for</param>
     /// <param name="limit">Maximum number of top suspects to return. Default 10, max 50.</param>
-    /// <param name="lookBackDays">Number of days to analyze. Default 90.</param>
+    /// <param name="lookBackDays">Number of days to analyze from each player's last activity. Default 3650 (10 years).</param>
     /// <returns>Batch comparison report with top suspects</returns>
     [HttpGet("{targetPlayer}/potential-aliases")]
     public async Task<ActionResult<PlayerAliasBatchReport>> FindPotentialAliasesAsync(
         string targetPlayer,
         [FromQuery] int limit = 10,
-        [FromQuery] int lookBackDays = 90)
+        [FromQuery] int lookBackDays = 3650)
     {
         if (string.IsNullOrWhiteSpace(targetPlayer))
             return BadRequest("targetPlayer parameter is required");
@@ -132,7 +132,7 @@ public class AliasDetectionController(
     public async Task<ActionResult<ActivityTimeline>> GetActivityTimeline(
         [FromQuery] string player1,
         [FromQuery] string player2,
-        [FromQuery] int lookBackDays = 180)
+        [FromQuery] int lookBackDays = 3650)
     {
         if (string.IsNullOrWhiteSpace(player1) || string.IsNullOrWhiteSpace(player2))
             return BadRequest("Both player1 and player2 parameters are required");
