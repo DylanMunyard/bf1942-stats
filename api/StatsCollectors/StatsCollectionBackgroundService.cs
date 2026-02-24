@@ -226,7 +226,14 @@ public class StatsCollectionBackgroundService(
         var hourTimestamp = Instant.FromDateTimeUtc(
             new DateTime(timestamp.Year, timestamp.Month, timestamp.Day, timestamp.Hour, 0, 0, DateTimeKind.Utc));
 
-        foreach (var server in servers)
+        // Deduplicate servers by GUID within this batch to avoid EF Core tracking conflicts
+        // (e.g., when a server restarts and appears twice in the same collection cycle)
+        var uniqueServers = servers
+            .GroupBy(s => s.Guid)
+            .Select(g => g.First())
+            .ToList();
+
+        foreach (var server in uniqueServers)
         {
             var playersOnline = server.Players.Count();
 
