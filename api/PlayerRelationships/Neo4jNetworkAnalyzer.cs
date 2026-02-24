@@ -45,7 +45,7 @@ public class Neo4jNetworkAnalyzer(IDriver neoDriver)
                    size(teammates1) as count1,
                    size(teammates2) as count2,
                    size([x IN teammates1 WHERE x IN teammates2]) +
-                   size([x IN teammates2 WHERE x NOT IN teammates1]) as union
+                   size([x IN teammates2 WHERE NOT (x IN teammates1)]) as union
             """;
 
         var result = await session.ExecuteReadAsync(async tx =>
