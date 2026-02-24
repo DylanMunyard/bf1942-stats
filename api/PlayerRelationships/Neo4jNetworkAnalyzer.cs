@@ -29,18 +29,19 @@ public class Neo4jNetworkAnalyzer(IDriver neoDriver)
         string player1,
         string player2)
     {
-        // Get teammates for each player
+        // Get teammates for each player - use OPTIONAL MATCH to handle players with no teammates
         var query = """
-            MATCH (p1:Player {name: $player1})-[r1:PLAYED_WITH]-(t:Player)
-            WITH collect(DISTINCT t.name) as teammates1, p1.name as p1name
-
-            MATCH (p2:Player {name: $player2})-[r2:PLAYED_WITH]-(t2:Player)
-            WITH teammates1, collect(DISTINCT t2.name) as teammates2, p1name, p2.name as p2name
-
-            UNWIND teammates1 as t1
-            WITH teammates1, teammates2, p1name, p2name,
+            MATCH (p1:Player {name: $player1})
+            OPTIONAL MATCH (p1)-[r1:PLAYED_WITH]-(t1:Player)
+            WITH p1, collect(DISTINCT t1.name) as teammates1
+            
+            MATCH (p2:Player {name: $player2})
+            OPTIONAL MATCH (p2)-[r2:PLAYED_WITH]-(t2:Player)
+            WITH p1, teammates1, p2, collect(DISTINCT t2.name) as teammates2
+            
+            WITH teammates1, teammates2,
                  size([x IN teammates1 WHERE x IN teammates2]) as intersection
-
+            
             RETURN intersection,
                    size(teammates1) as count1,
                    size(teammates2) as count2,
@@ -51,8 +52,28 @@ public class Neo4jNetworkAnalyzer(IDriver neoDriver)
         var result = await session.ExecuteReadAsync(async tx =>
         {
             var res = await tx.RunAsync(query, new { player1, player2 });
-            return await res.SingleAsync();
+            var records = await res.ToListAsync();
+            if (records.Count == 0)
+            {
+                // Players don't exist in Neo4j - return neutral analysis
+                return null;
+            }
+            return records.First();
         });
+
+        // If players don't exist in Neo4j, return neutral analysis
+        if (result == null)
+        {
+            return new NetworkAnalysis(
+                Score: 0.5,
+                SharedTeammateCount: 0,
+                TeammateOverlapPercentage: 0.0,
+                MutualConnectionScore: 0.0,
+                HasDirectConnection: false,
+                NetworkShapeSimilarity: 0.5,
+                Analysis: "Insufficient Neo4j data"
+            );
+        }
 
         var sharedTeammates = result["intersection"].As<int>();
         var count1 = result["count1"].As<int>();
@@ -101,13 +122,23 @@ public class Neo4jNetworkAnalyzer(IDriver neoDriver)
             RETURN COUNT(r) as count
             """;
 
-        var result = await session.ExecuteReadAsync(async tx =>
+        try
         {
-            var res = await tx.RunAsync(query, new { player1, player2 });
-            return await res.SingleAsync();
-        });
+            var result = await session.ExecuteReadAsync(async tx =>
+            {
+                var res = await tx.RunAsync(query, new { player1, player2 });
+                var records = await res.ToListAsync();
+                if (records.Count == 0)
+                    return 0L;
+                return records.First()["count"].As<long>();
+            });
 
-        return result["count"].As<long>() > 0;
+            return result > 0;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private async Task<int> GetMutualConnectionsAsync(IAsyncSession session, string player1, string player2)
@@ -118,47 +149,72 @@ public class Neo4jNetworkAnalyzer(IDriver neoDriver)
             RETURN COUNT(DISTINCT mutual) as count
             """;
 
-        var result = await session.ExecuteReadAsync(async tx =>
+        try
         {
-            var res = await tx.RunAsync(query, new { player1, player2 });
-            return await res.SingleAsync();
-        });
+            var result = await session.ExecuteReadAsync(async tx =>
+            {
+                var res = await tx.RunAsync(query, new { player1, player2 });
+                var records = await res.ToListAsync();
+                if (records.Count == 0)
+                    return 0L;
+                return records.First()["count"].As<long>();
+            });
 
-        return (int)result["count"].As<long>();
+            return (int)result;
+        }
+        catch
+        {
+            return 0;
+        }
     }
 
     private async Task<double> CalculateNetworkShapeSimilarityAsync(IAsyncSession session, string player1, string player2)
     {
         // Get network metrics (degree centrality, clustering coefficient)
         var query = """
-            MATCH (p1:Player {name: $player1})-[r1:PLAYED_WITH]-(t1:Player)
-            WITH p1.name as p1name, count(r1) as degree1
-
-            MATCH (p2:Player {name: $player2})-[r2:PLAYED_WITH]-(t2:Player)
+            MATCH (p1:Player {name: $player1})
+            OPTIONAL MATCH (p1)-[r1:PLAYED_WITH]-(t1:Player)
+            WITH count(r1) as degree1
+            
+            MATCH (p2:Player {name: $player2})
+            OPTIONAL MATCH (p2)-[r2:PLAYED_WITH]-(t2:Player)
             WITH degree1, count(r2) as degree2
-
+            
             RETURN degree1, degree2
             """;
 
-        var result = await session.ExecuteReadAsync(async tx =>
+        try
         {
-            var res = await tx.RunAsync(query, new { player1, player2 });
-            return await res.SingleAsync();
-        });
+            var result = await session.ExecuteReadAsync(async tx =>
+            {
+                var res = await tx.RunAsync(query, new { player1, player2 });
+                var records = await res.ToListAsync();
+                if (records.Count == 0)
+                    return null;
+                return records.First();
+            });
 
-        var degree1 = result["degree1"].As<long>();
-        var degree2 = result["degree2"].As<long>();
+            if (result == null)
+                return 0.5;
 
-        if (degree1 == 0 || degree2 == 0)
+            var degree1 = result["degree1"].As<long>();
+            var degree2 = result["degree2"].As<long>();
+
+            if (degree1 == 0 || degree2 == 0)
+                return 0.5;
+
+            // Compare network sizes
+            var ratio = (double)degree1 / degree2;
+            if (ratio < 1)
+                ratio = 1 / ratio;
+
+            // Normalize: similar sizes = high score
+            return Math.Max(0.0, 1.0 - Math.Min(1.0, (ratio - 1) / 2));
+        }
+        catch
+        {
             return 0.5;
-
-        // Compare network sizes
-        var ratio = (double)degree1 / degree2;
-        if (ratio < 1)
-            ratio = 1 / ratio;
-
-        // Normalize: similar sizes = high score
-        return Math.Max(0.0, 1.0 - Math.Min(1.0, (ratio - 1) / 2));
+        }
     }
 
     private async Task<TemporalAnalysis> AnalyzeTemporalConsistencyAsync(
