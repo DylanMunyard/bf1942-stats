@@ -86,26 +86,25 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
     private async Task<double> CalculatePlayTimeOverlapAsync(string player1, string player2, DateTime cutoff)
     {
         // Get hour-of-day distribution from database (returns only 24 rows per player)
+        // Uses ALL historical data to identify play time patterns, regardless of when they played
         var hourStats1 = await dbContext.Database
             .SqlQueryRaw<HourDistributionResult>("""
                 SELECT CAST(strftime('%H', StartTime) AS INTEGER) as Hour, COUNT(*) as Count
                 FROM PlayerSessions
-                WHERE PlayerName = @playerName AND StartTime >= @cutoff
+                WHERE PlayerName = @playerName
                 GROUP BY Hour
                 """,
-                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player1),
-                new Microsoft.Data.Sqlite.SqliteParameter("@cutoff", cutoff))
+                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player1))
             .ToListAsync();
 
         var hourStats2 = await dbContext.Database
             .SqlQueryRaw<HourDistributionResult>("""
                 SELECT CAST(strftime('%H', StartTime) AS INTEGER) as Hour, COUNT(*) as Count
                 FROM PlayerSessions
-                WHERE PlayerName = @playerName AND StartTime >= @cutoff
+                WHERE PlayerName = @playerName
                 GROUP BY Hour
                 """,
-                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player2),
-                new Microsoft.Data.Sqlite.SqliteParameter("@cutoff", cutoff))
+                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player2))
             .ToListAsync();
 
         // Build normalized probability vectors from aggregated data
@@ -143,20 +142,20 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
     private async Task<double> CalculateServerAffinityAsync(string player1, string player2, DateTime cutoff)
     {
         // Get distinct servers for both players (only server guids, not full data)
+        // Uses ALL historical data to identify server preferences
         var commonServerCount = await dbContext.Database
             .SqlQueryRaw<int>("""
                 SELECT COUNT(DISTINCT ServerGuid)
                 FROM (
                     SELECT DISTINCT ServerGuid FROM PlayerSessions
-                    WHERE PlayerName = @player1 AND StartTime >= @cutoff
+                    WHERE PlayerName = @player1
                     INTERSECT
                     SELECT DISTINCT ServerGuid FROM PlayerSessions
-                    WHERE PlayerName = @player2 AND StartTime >= @cutoff
+                    WHERE PlayerName = @player2
                 )
                 """,
                 new Microsoft.Data.Sqlite.SqliteParameter("@player1", player1),
-                new Microsoft.Data.Sqlite.SqliteParameter("@player2", player2),
-                new Microsoft.Data.Sqlite.SqliteParameter("@cutoff", cutoff))
+                new Microsoft.Data.Sqlite.SqliteParameter("@player2", player2))
             .SingleAsync();
 
         // Get union count
@@ -165,15 +164,14 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
                 SELECT COUNT(DISTINCT ServerGuid)
                 FROM (
                     SELECT DISTINCT ServerGuid FROM PlayerSessions
-                    WHERE PlayerName = @player1 AND StartTime >= @cutoff
+                    WHERE PlayerName = @player1
                     UNION
                     SELECT DISTINCT ServerGuid FROM PlayerSessions
-                    WHERE PlayerName = @player2 AND StartTime >= @cutoff
+                    WHERE PlayerName = @player2
                 )
                 """,
                 new Microsoft.Data.Sqlite.SqliteParameter("@player1", player1),
-                new Microsoft.Data.Sqlite.SqliteParameter("@player2", player2),
-                new Microsoft.Data.Sqlite.SqliteParameter("@cutoff", cutoff))
+                new Microsoft.Data.Sqlite.SqliteParameter("@player2", player2))
             .SingleAsync();
 
         if (totalUniqueServers == 0)
@@ -271,6 +269,7 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
     private async Task<double> CalculateSessionPatternSimilarityAsync(string player1, string player2, DateTime cutoff)
     {
         // Get session statistics from database (single row per player)
+        // Uses ALL historical data to identify session patterns
         var stats1 = await dbContext.Database
             .SqlQueryRaw<SessionStatResult>("""
                 SELECT
@@ -278,10 +277,9 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
                     SUM(CAST((julianday(LastSeenTime) - julianday(StartTime)) * 1440 AS INTEGER)) as TotalMinutes,
                     AVG(CAST((julianday(LastSeenTime) - julianday(StartTime)) * 1440 AS REAL)) as AvgSessionMinutes
                 FROM PlayerSessions
-                WHERE PlayerName = @playerName AND StartTime >= @cutoff
+                WHERE PlayerName = @playerName
                 """,
-                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player1),
-                new Microsoft.Data.Sqlite.SqliteParameter("@cutoff", cutoff))
+                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player1))
             .SingleAsync();
 
         var stats2 = await dbContext.Database
@@ -291,10 +289,9 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
                     SUM(CAST((julianday(LastSeenTime) - julianday(StartTime)) * 1440 AS INTEGER)) as TotalMinutes,
                     AVG(CAST((julianday(LastSeenTime) - julianday(StartTime)) * 1440 AS REAL)) as AvgSessionMinutes
                 FROM PlayerSessions
-                WHERE PlayerName = @playerName AND StartTime >= @cutoff
+                WHERE PlayerName = @playerName
                 """,
-                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player2),
-                new Microsoft.Data.Sqlite.SqliteParameter("@cutoff", cutoff))
+                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player2))
             .SingleAsync();
 
         // If no sessions for either player, return neutral score
@@ -311,8 +308,9 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
             : 0.5;
 
         // Session frequency (sessions per day)
-        var daySpan1 = (int)((DateTime.UtcNow - cutoff).TotalDays);
-        var daySpan2 = (int)((DateTime.UtcNow - cutoff).TotalDays);
+        var now = DateTime.UtcNow;
+        var daySpan1 = (int)(now - new DateTime(1900, 1, 1)).TotalDays; // Since records began
+        var daySpan2 = (int)(now - new DateTime(1900, 1, 1)).TotalDays;
         var freq1 = daySpan1 > 0 ? stats1.SessionCount / (double)daySpan1 : 0;
         var freq2 = daySpan2 > 0 ? stats2.SessionCount / (double)daySpan2 : 0;
 

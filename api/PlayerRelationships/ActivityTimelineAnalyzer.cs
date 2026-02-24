@@ -83,10 +83,9 @@ public class ActivityTimelineAnalyzer(PlayerTrackerDbContext dbContext)
                     COUNT(*) as SessionCount,
                     COUNT(DISTINCT DATE(StartTime)) as ActiveDays
                 FROM PlayerSessions
-                WHERE PlayerName = @playerName AND StartTime >= @cutoff AND IsDeleted = 0
+                WHERE PlayerName = @playerName AND IsDeleted = 0
                 """,
-                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", playerName),
-                new Microsoft.Data.Sqlite.SqliteParameter("@cutoff", cutoff))
+                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", playerName))
             .SingleAsync();
 
         if (stats.SessionCount == 0 || stats.FirstSeen == null || stats.LastSeen == null)
@@ -125,12 +124,11 @@ public class ActivityTimelineAnalyzer(PlayerTrackerDbContext dbContext)
                          ELSE SUM(TotalKills)
                     END as AvgKd
                 FROM PlayerSessions
-                WHERE PlayerName = @playerName AND StartTime >= @cutoff AND IsDeleted = 0
+                WHERE PlayerName = @playerName AND IsDeleted = 0
                 GROUP BY DATE(StartTime)
                 ORDER BY Date DESC
                 """,
-                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", playerName),
-                new Microsoft.Data.Sqlite.SqliteParameter("@cutoff", cutoff))
+                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", playerName))
             .ToListAsync();
 
         return dailyStats

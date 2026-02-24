@@ -14,11 +14,12 @@ public class StatSimilarityCalculator(ISqlitePlayerStatsService statsService)
     /// <summary>
     /// Calculate overall stat similarity between two players.
     /// Returns score 0-1 where 1.0 = identical, 0.0 = completely different.
+    /// Uses all available historical stats to identify behavioral patterns.
     /// </summary>
     public async Task<StatSimilarityAnalysis> CalculateSimilarityAsync(
         string player1,
         string player2,
-        int lookBackDays = 90)
+        int lookBackDays = 3650)  // 10 years of history for dormant accounts
     {
         var stats1 = await statsService.GetPlayerStatsAsync(player1, lookBackDays);
         var stats2 = await statsService.GetPlayerStatsAsync(player2, lookBackDays);
