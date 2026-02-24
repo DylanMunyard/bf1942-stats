@@ -190,19 +190,17 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
     /// </summary>
     private async Task<double> CalculatePingConsistencyAsync(string player1, string player2)
     {
-        var cutoff = DateTime.UtcNow.AddDays(-7); // Recent data only
-
-        // Get average ping per server for both players (aggregated in database)
+        // Get average ping per server for both players - all historical data
+        // (not limited to recent timeframe since players might be offline for months)
         var pings1 = await dbContext.Database
             .SqlQueryRaw<PingStatResult>("""
                 SELECT ps.ServerGuid, AVG(CAST(o.Ping AS REAL)) as AvgPing
                 FROM PlayerObservations o
                 JOIN PlayerSessions ps ON o.SessionId = ps.SessionId
-                WHERE ps.PlayerName = @playerName AND ps.StartTime >= @cutoff AND o.Ping > 0
+                WHERE ps.PlayerName = @playerName AND o.Ping > 0
                 GROUP BY ps.ServerGuid
                 """,
-                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player1),
-                new Microsoft.Data.Sqlite.SqliteParameter("@cutoff", cutoff))
+                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player1))
             .ToListAsync();
 
         var pings2 = await dbContext.Database
@@ -210,11 +208,10 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
                 SELECT ps.ServerGuid, AVG(CAST(o.Ping AS REAL)) as AvgPing
                 FROM PlayerObservations o
                 JOIN PlayerSessions ps ON o.SessionId = ps.SessionId
-                WHERE ps.PlayerName = @playerName AND ps.StartTime >= @cutoff AND o.Ping > 0
+                WHERE ps.PlayerName = @playerName AND o.Ping > 0
                 GROUP BY ps.ServerGuid
                 """,
-                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player2),
-                new Microsoft.Data.Sqlite.SqliteParameter("@cutoff", cutoff))
+                new Microsoft.Data.Sqlite.SqliteParameter("@playerName", player2))
             .ToListAsync();
 
         // Filter out null pings
