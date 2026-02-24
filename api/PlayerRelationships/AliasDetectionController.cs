@@ -19,17 +19,18 @@ public class AliasDetectionController(
     /// <summary>
     /// Compare two players for alias/similarity patterns.
     /// Returns comprehensive analysis including stat similarity, behavior patterns, network analysis, and red flags.
+    /// Analyzes all historical data to catch dormant accounts and identify patterns regardless of how long they've been offline.
     /// </summary>
     /// <param name="player1">First player name</param>
     /// <param name="player2">Second player name to compare</param>
-    /// <param name="lookBackDays">Number of days to analyze. Default 90. Use 0 for all-time.</param>
+    /// <param name="lookBackDays">Number of days to analyze. Default 3650 (10 years) for comprehensive historical analysis.</param>
     /// <param name="request">Optional: Custom weights for similarity dimensions</param>
     /// <returns>Detailed suspicion report</returns>
     [HttpGet("compare")]
     public async Task<ActionResult<PlayerAliasSuspicionReport>> ComparePlayersAsync(
         [FromQuery] string player1,
         [FromQuery] string player2,
-        [FromQuery] int lookBackDays = 90,
+        [FromQuery] int lookBackDays = 3650,
         [FromBody] AliasDetectionWeights? customWeights = null)
     {
         if (string.IsNullOrWhiteSpace(player1) || string.IsNullOrWhiteSpace(player2))

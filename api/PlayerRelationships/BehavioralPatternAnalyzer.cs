@@ -23,17 +23,16 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
         var cutoffDate = DateTime.UtcNow.AddDays(-lookBackDays);
 
         // Check if we have any session data for both players using raw SQL
+        // Query ALL historical data, not limited by lookBackDays
         var sessionCounts = await dbContext.Database
             .SqlQueryRaw<SessionCountResult>("""
                 SELECT PlayerName, COUNT(*) as Count
                 FROM PlayerSessions
-                WHERE (PlayerName = @player1 OR PlayerName = @player2)
-                  AND StartTime >= @cutoff
+                WHERE PlayerName = @player1 OR PlayerName = @player2
                 GROUP BY PlayerName
                 """,
                 new Microsoft.Data.Sqlite.SqliteParameter("@player1", player1),
-                new Microsoft.Data.Sqlite.SqliteParameter("@player2", player2),
-                new Microsoft.Data.Sqlite.SqliteParameter("@cutoff", cutoffDate))
+                new Microsoft.Data.Sqlite.SqliteParameter("@player2", player2))
             .ToListAsync();
 
         var count1 = sessionCounts.FirstOrDefault(x => x.PlayerName == player1)?.Count ?? 0;
