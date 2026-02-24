@@ -38,12 +38,11 @@ public class PlayerAliasDetectionService(
         var (networkAnalysis, temporalAnalysis) = await networkAnalyzer.AnalyzeNetworkAndTemporalAsync(player1, player2, lookBackDays);
         var activityTimeline = await timelineAnalyzer.AnalyzeTimelineAsync(player1, player2, lookBackDays);
 
-        // Calculate overall similarity score using configurable weights
-        var overallScore = (statAnalysis.Score * weights.StatWeight) +
-                          (behavioralAnalysis.Score * weights.BehavioralWeight) +
-                          (networkAnalysis.Score * weights.NetworkWeight) +
-                          (temporalAnalysis.Score * weights.TemporalWeight) +
-                          (activityTimeline.SwitchoverSuspicionScore * weights.SwitchoverWeight);
+        // Calculate overall similarity score using only dimensions with sufficient data
+        // Dynamically re-weight remaining dimensions
+        var overallScore = CalculateWeightedScore(
+            statAnalysis, behavioralAnalysis, networkAnalysis, temporalAnalysis,
+            activityTimeline, weights);
 
         // Determine suspicion level
         var suspicionLevel = overallScore switch
@@ -227,6 +226,60 @@ public class PlayerAliasDetectionService(
     }
 
     /// <summary>
+    /// Calculate weighted overall score, excluding dimensions with insufficient data.
+    /// Re-weights remaining dimensions proportionally to their original weights.
+    /// </summary>
+    private static double CalculateWeightedScore(
+        StatSimilarityAnalysis statAnalysis,
+        BehavioralAnalysis behavioralAnalysis,
+        NetworkAnalysis networkAnalysis,
+        TemporalAnalysis temporalAnalysis,
+        ActivityTimeline activityTimeline,
+        AliasDetectionWeights weights)
+    {
+        var totalWeight = 0.0;
+        var weightedSum = 0.0;
+
+        // Include stat analysis if sufficient data
+        if (statAnalysis.HasSufficientData)
+        {
+            weightedSum += statAnalysis.Score * weights.StatWeight;
+            totalWeight += weights.StatWeight;
+        }
+
+        // Include behavioral analysis if sufficient data
+        if (behavioralAnalysis.HasSufficientData)
+        {
+            weightedSum += behavioralAnalysis.Score * weights.BehavioralWeight;
+            totalWeight += weights.BehavioralWeight;
+        }
+
+        // Include network analysis if sufficient data
+        if (networkAnalysis.HasSufficientData)
+        {
+            weightedSum += networkAnalysis.Score * weights.NetworkWeight;
+            totalWeight += weights.NetworkWeight;
+        }
+
+        // Include temporal analysis if sufficient data
+        if (temporalAnalysis.HasSufficientData)
+        {
+            weightedSum += temporalAnalysis.Score * weights.TemporalWeight;
+            totalWeight += weights.TemporalWeight;
+        }
+
+        // Include switchover weight only if gap is <= 30 days (active switching, not dormancy)
+        if (activityTimeline.HasSufficientData)
+        {
+            weightedSum += activityTimeline.SwitchoverSuspicionScore * weights.SwitchoverWeight;
+            totalWeight += weights.SwitchoverWeight;
+        }
+
+        // Return normalized score based on available data
+        return totalWeight > 0 ? weightedSum / totalWeight : 0.0;
+    }
+
+    /// <summary>
     /// Calculate confidence in the analysis based on data volume.
     /// </summary>
     private static double CalculateConfidence(
@@ -237,13 +290,13 @@ public class PlayerAliasDetectionService(
         var confidence = 0.5; // Base confidence
 
         // More data = higher confidence
-        if (!statAnalysis.Analysis.Contains("Insufficient"))
+        if (statAnalysis.HasSufficientData)
             confidence += 0.25;
 
-        if (!behavioralAnalysis.Analysis.Contains("Insufficient"))
+        if (behavioralAnalysis.HasSufficientData)
             confidence += 0.15;
 
-        if (networkAnalysis.SharedTeammateCount > 5)
+        if (networkAnalysis.HasSufficientData && networkAnalysis.SharedTeammateCount > 5)
             confidence += 0.10;
 
         return Math.Min(1.0, confidence);

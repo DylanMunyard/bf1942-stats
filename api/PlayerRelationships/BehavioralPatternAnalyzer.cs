@@ -31,9 +31,10 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
                 Score: 0.0,
                 PlayTimeOverlapScore: 0.0,
                 ServerAffinityScore: 0.0,
-                PingConsistencyScore: 0.5,
+                PingConsistencyScore: 0.0,
                 SessionPatternScore: 0.0,
-                Analysis: "Insufficient session data"
+                Analysis: "Insufficient session data",
+                HasSufficientData: false
             );
         }
 
@@ -78,7 +79,7 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
         {
             var result = await dbContext.Database
                 .SqlQueryRaw<DateTime>("""
-                    SELECT MAX(LastSeenTime) as LastSeenTime
+                    SELECT MAX(LastSeenTime) as Value
                     FROM PlayerSessions
                     WHERE PlayerName = @playerName
                     """,

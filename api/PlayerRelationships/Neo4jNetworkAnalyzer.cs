@@ -27,24 +27,26 @@ public class Neo4jNetworkAnalyzer(IDriver neoDriver)
         }
         catch (Exception)
         {
-            // Neo4j unavailable or data missing - return neutral analyses
+            // Neo4j unavailable or data missing - return analyses marked as insufficient
             return (
                 new NetworkAnalysis(
-                    Score: 0.5,
+                    Score: 0.0,
                     SharedTeammateCount: 0,
                     TeammateOverlapPercentage: 0.0,
                     MutualConnectionScore: 0.0,
                     HasDirectConnection: false,
-                    NetworkShapeSimilarity: 0.5,
-                    Analysis: "Neo4j data unavailable"
+                    NetworkShapeSimilarity: 0.0,
+                    Analysis: "Insufficient Neo4j data - only 30 days of backfill",
+                    HasSufficientData: false
                 ),
                 new TemporalAnalysis(
-                    Score: 0.5,
+                    Score: 0.0,
                     TemporalOverlapMinutes: 0,
                     SignificantTemporalOverlap: false,
-                    InvertedActivityScore: 0.5,
-                    ActivityGapConsistency: 0.5,
-                    Analysis: "Neo4j data unavailable"
+                    InvertedActivityScore: 0.0,
+                    ActivityGapConsistency: 0.0,
+                    Analysis: "Insufficient Neo4j data - only 30 days of backfill",
+                    HasSufficientData: false
                 )
             );
         }
@@ -87,17 +89,18 @@ public class Neo4jNetworkAnalyzer(IDriver neoDriver)
             return records.First();
         });
 
-        // If players don't exist in Neo4j, return neutral analysis
+        // If players don't exist in Neo4j, return analysis marked as insufficient
         if (result == null)
         {
             return new NetworkAnalysis(
-                Score: 0.5,
+                Score: 0.0,
                 SharedTeammateCount: 0,
                 TeammateOverlapPercentage: 0.0,
                 MutualConnectionScore: 0.0,
                 HasDirectConnection: false,
-                NetworkShapeSimilarity: 0.5,
-                Analysis: "Insufficient Neo4j data"
+                NetworkShapeSimilarity: 0.0,
+                Analysis: "Insufficient Neo4j data - players not found",
+                HasSufficientData: false
             );
         }
 
@@ -248,11 +251,28 @@ public class Neo4jNetworkAnalyzer(IDriver neoDriver)
         string player1,
         string player2)
     {
-        // Check if they ever appear in same session (would indicate NOT aliases)
-        var coSessionCount = await GetCoSessionCountAsync(session, player1, player2);
-
         // Get activity periods
         var activities = await GetActivityPeriodsAsync(session, player1, player2);
+
+        // Check if we have insufficient data (no activity found in Neo4j)
+        var hasData = activities.LastSessionPlayer1 != DateTime.MinValue && activities.LastSessionPlayer2 != DateTime.MinValue;
+
+        if (!hasData)
+        {
+            // Cannot analyze temporal patterns without activity data
+            return new TemporalAnalysis(
+                Score: 0.0,
+                TemporalOverlapMinutes: 0,
+                SignificantTemporalOverlap: false,
+                InvertedActivityScore: 0.0,
+                ActivityGapConsistency: 0.0,
+                Analysis: "Insufficient Neo4j data - cannot determine activity periods",
+                HasSufficientData: false
+            );
+        }
+
+        // Check if they ever appear in same session (would indicate NOT aliases)
+        var coSessionCount = await GetCoSessionCountAsync(session, player1, player2);
 
         var score = 1.0;
         var redFlags = new List<string>();
@@ -284,7 +304,8 @@ public class Neo4jNetworkAnalyzer(IDriver neoDriver)
             SignificantTemporalOverlap: coSessionCount > 10,
             InvertedActivityScore: invertedActivityScore,
             ActivityGapConsistency: 0.5, // TODO: Compute gap consistency
-            Analysis: analysis
+            Analysis: analysis,
+            HasSufficientData: true
         );
     }
 

@@ -39,7 +39,7 @@ public class ActivityTimelineAnalyzer(PlayerTrackerDbContext dbContext)
         }
 
         // Analyze the gap (uses complete activity data)
-        var gapAnalysis = AnalyzeGap(period1, period2);
+        var gapAnalysis = AnalyzeGap(period1, period2, player1, player2);
 
         // Build daily timelines limited to lookBackDays for visualization
         var cutoff = DateTime.UtcNow.AddDays(-lookBackDays);
@@ -55,6 +55,10 @@ public class ActivityTimelineAnalyzer(PlayerTrackerDbContext dbContext)
         // Calculate switchover suspicion score
         var switchoverScore = CalculateSwitchoverSuspicionScore(period1, period2, gapAnalysis);
 
+        // Determine if switchover analysis is meaningful
+        // Large gaps (>30 days) indicate dormancy, not active switching - insufficient for alias detection
+        var hasSwitchoverData = gapAnalysis.SwitchoverWindowDays <= 30;
+
         return new ActivityTimeline
         {
             Player1Activity = period1,
@@ -64,7 +68,8 @@ public class ActivityTimelineAnalyzer(PlayerTrackerDbContext dbContext)
             Player2Timeline = timeline2,
             AsciiTimeline = asciiTimeline,
             Analysis = analysis,
-            SwitchoverSuspicionScore = switchoverScore
+            SwitchoverSuspicionScore = switchoverScore,
+            HasSufficientData = hasSwitchoverData
         };
     }
 
@@ -144,14 +149,14 @@ public class ActivityTimelineAnalyzer(PlayerTrackerDbContext dbContext)
     /// <summary>
     /// Analyze the gap between two activity periods.
     /// </summary>
-    private static GapAnalysis AnalyzeGap(ActivityPeriod period1, ActivityPeriod period2)
+    private static GapAnalysis AnalyzeGap(ActivityPeriod period1, ActivityPeriod period2, string player1Name, string player2Name)
     {
         // Determine which account stopped first
         var stoppedFirst = period1.LastSeen <= period2.LastSeen ? "Player1" : "Player2";
         var startedSecond = stoppedFirst == "Player1" ? "Player2" : "Player1";
 
-        var accountStoppedFirst = stoppedFirst == "Player1" ? "Player 1" : "Player 2";
-        var accountStartedSecond = startedSecond == "Player1" ? "Player 1" : "Player 2";
+        var accountStoppedFirst = stoppedFirst == "Player1" ? player1Name : player2Name;
+        var accountStartedSecond = startedSecond == "Player1" ? player1Name : player2Name;
 
         var switchoverStart = stoppedFirst == "Player1" ? period1.LastSeen : period2.LastSeen;
         var switchoverEnd = startedSecond == "Player1" ? period1.FirstSeen : period2.FirstSeen;
@@ -172,7 +177,7 @@ public class ActivityTimelineAnalyzer(PlayerTrackerDbContext dbContext)
         var overlapRatio = totalSpan > 0 ? overlapDays / totalSpan : 0;
 
         // Describe the pattern
-        var patternDescription = GeneratePatternDescription(daysBetween, switchoverWindow, overlapRatio);
+        var patternDescription = GeneratePatternDescription(daysBetween, switchoverWindow, overlapRatio, accountStoppedFirst, accountStartedSecond);
 
         return new GapAnalysis
         {
@@ -190,22 +195,22 @@ public class ActivityTimelineAnalyzer(PlayerTrackerDbContext dbContext)
     /// <summary>
     /// Generate human-readable pattern description.
     /// </summary>
-    private static string GeneratePatternDescription(int daysBetween, int windowDays, double overlapRatio)
+    private static string GeneratePatternDescription(int daysBetween, int windowDays, double overlapRatio, string stoppedFirst, string startedSecond)
     {
         if (overlapRatio > 0.3)
             return $"Significant overlap ({overlapRatio:P0}) - accounts played simultaneously";
 
         if (daysBetween < 0)
-            return $"Accounts overlapped - Player 2 started {Math.Abs(daysBetween)} days before Player 1 ended";
+            return $"Accounts overlapped - {startedSecond} started {Math.Abs(daysBetween)} days before {stoppedFirst} ended";
 
         if (daysBetween == 0)
-            return "Perfect handoff - Player 2 started exactly when Player 1 stopped (suspicious timing)";
+            return $"Perfect handoff - {startedSecond} started exactly when {stoppedFirst} stopped (suspicious timing)";
 
         if (daysBetween <= 3)
-            return $"Very tight switchover - gap of only {daysBetween} days (highly suspicious)";
+            return $"Very tight switchover - {stoppedFirst} to {startedSecond} in {daysBetween} days (highly suspicious)";
 
         if (daysBetween <= 7)
-            return $"Tight switchover - gap of {daysBetween} days (suspicious pattern)";
+            return $"Tight switchover - {stoppedFirst} to {startedSecond} in {daysBetween} days (suspicious pattern)";
 
         if (daysBetween <= 30)
             return $"Moderate gap - {daysBetween} days between accounts (possible alt)";

@@ -36,9 +36,11 @@ public interface ISqlitePlayerStatsService
     Task<PlayerBestScores> GetPlayerBestScoresAsync(string playerName, int lookBackDays = 30);
 
     /// <summary>
-    /// Gets average ping for players over the last 7 days.
+    /// Gets average ping for players from their most recent sessions.
     /// </summary>
-    Task<Dictionary<string, double>> GetAveragePingAsync(string[] playerNames);
+    /// <param name="playerNames">Array of player names to get ping data for.</param>
+    /// <param name="sampleSize">Number of most recent sessions per player to sample. Default 50.</param>
+    Task<Dictionary<string, double>> GetAveragePingAsync(string[] playerNames, int sampleSize = 50);
 }
 
 /// <summary>

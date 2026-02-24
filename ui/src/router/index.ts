@@ -26,6 +26,7 @@ const DataExplorer = () => import('../views/DataExplorer.vue')
 const AdminDataManagement = () => import('../views/AdminDataManagement.vue')
 const CommunitiesView = () => import('../views/CommunitiesView.vue')
 const CommunityDetailsView = () => import('../views/CommunityDetailsView.vue')
+const AliasDetectionView = () => import('../views/AliasDetectionView.vue')
 
 const routes: RouteRecordRaw[] = [
     {
@@ -468,6 +469,15 @@ const routes: RouteRecordRaw[] = [
       meta: {
         title: (route: RouteLocationNormalized) => `Community ${route.params.id} - BF Stats`,
         description: (route: RouteLocationNormalized) => `Detailed view of player community ${route.params.id}. See all members, servers, network connections, and activity trends.`
+      }
+    },
+    {
+      path: '/alias-detection',
+      name: 'alias-detection',
+      component: AliasDetectionView,
+      meta: {
+        title: 'Alias Detection - Player Relationship Analysis | BF Stats',
+        description: 'Investigate potential player aliases and alternate accounts. Analyze behavioral patterns, statistics, and activity timelines to identify suspicious accounts.'
       }
     }
 ]

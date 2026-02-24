@@ -95,7 +95,8 @@ public record StatSimilarityAnalysis(
     double ScorePerRoundDifference,
     double MapPerformanceSimilarity,
     double ServerPerformanceSimilarity,
-    string Analysis
+    string Analysis,
+    bool HasSufficientData = true
 );
 
 /// <summary>
@@ -108,7 +109,8 @@ public record BehavioralAnalysis(
     double ServerAffinityScore,        // 0-1, % of same servers
     double PingConsistencyScore,       // 0-1, ping variance on same servers
     double SessionPatternScore,        // 0-1, session frequency/duration similarity
-    string Analysis
+    string Analysis,
+    bool HasSufficientData = true
 );
 
 /// <summary>
@@ -122,7 +124,8 @@ public record NetworkAnalysis(
     double MutualConnectionScore,
     bool HasDirectConnection,          // Should be false if aliases
     double NetworkShapeSimilarity,
-    string Analysis
+    string Analysis,
+    bool HasSufficientData = true
 );
 
 /// <summary>
@@ -135,7 +138,8 @@ public record TemporalAnalysis(
     bool SignificantTemporalOverlap,   // Red flag if true
     double InvertedActivityScore,      // Do they play at opposite times?
     double ActivityGapConsistency,     // Similar gaps between sessions
-    string Analysis
+    string Analysis,
+    bool HasSufficientData = true
 );
 
 /// <summary>

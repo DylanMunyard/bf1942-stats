@@ -322,36 +322,42 @@ public class SqlitePlayerStatsService(PlayerTrackerDbContext dbContext) : ISqlit
     }
 
     /// <inheritdoc/>
-    public async Task<Dictionary<string, double>> GetAveragePingAsync(string[] playerNames)
+    public async Task<Dictionary<string, double>> GetAveragePingAsync(string[] playerNames, int sampleSize = 50)
     {
         using var activity = ActivitySources.SqliteAnalytics.StartActivity("GetAveragePingAsync");
         activity?.SetTag("query.name", "GetAveragePing");
-        activity?.SetTag("query.filters", $"players:{playerNames.Length}");
+        activity?.SetTag("query.filters", $"players:{playerNames.Length},sampleSize:{sampleSize}");
 
         var stopwatch = Stopwatch.StartNew();
 
-        // Query last 7 days of PlayerSessions
-        var sevenDaysAgo = DateTime.UtcNow.AddDays(-7);
+        // Get the last N sessions per player and calculate average ping from those
+        // This ensures we get a consistent sample size regardless of how long ago they played
+        var pingData = new List<dynamic>();
 
-        var pingData = await dbContext.PlayerSessions
-            .Where(ps => playerNames.Contains(ps.Player.Name) &&
-                        ps.AveragePing > 0 &&
-                        ps.AveragePing < 1000 &&
-                        ps.StartTime >= sevenDaysAgo)
-            .GroupBy(ps => ps.Player.Name)
-            .Select(g => new
+        foreach (var playerName in playerNames)
+        {
+            var avgPing = await dbContext.PlayerSessions
+                .Where(ps => ps.Player.Name == playerName &&
+                            ps.AveragePing > 0 &&
+                            ps.AveragePing < 1000)
+                .OrderByDescending(ps => ps.StartTime)
+                .Take(sampleSize)
+                .Select(ps => ps.AveragePing)
+                .AverageAsync();
+
+            pingData.Add(new
             {
-                PlayerName = g.Key,
-                AvgPing = g.Average(ps => ps.AveragePing)
-            })
-            .ToListAsync();
+                PlayerName = playerName,
+                AvgPing = avgPing
+            });
+        }
 
         stopwatch.Stop();
         activity?.SetTag("result.row_count", pingData.Count);
         activity?.SetTag("result.duration_ms", stopwatch.ElapsedMilliseconds);
         activity?.SetTag("result.table", "PlayerSessions");
 
-        return pingData.ToDictionary(p => p.PlayerName, p => p.AvgPing ?? 0);
+        return pingData.ToDictionary(p => (string)p.PlayerName, p => (double?)p.AvgPing ?? 0);
     }
 
     private static (int Year, int Week) GetIsoWeek(DateTime date)

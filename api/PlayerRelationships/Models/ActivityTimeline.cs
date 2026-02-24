@@ -41,6 +41,12 @@ public class ActivityTimeline
     /// How suspicious is this switchover pattern? 0-1.
     /// </summary>
     public double SwitchoverSuspicionScore { get; set; }
+
+    /// <summary>
+    /// Whether switchover analysis has sufficient data to be meaningful.
+    /// Large gaps (>30 days) are treated as dormancy, not active switching.
+    /// </summary>
+    public bool HasSufficientData { get; set; } = true;
 }
 
 /// <summary>

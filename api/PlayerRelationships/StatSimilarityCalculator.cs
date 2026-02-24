@@ -34,7 +34,8 @@ public class StatSimilarityCalculator(ISqlitePlayerStatsService statsService)
                 ScorePerRoundDifference: 0.0,
                 MapPerformanceSimilarity: 0.0,
                 ServerPerformanceSimilarity: 0.0,
-                Analysis: "Insufficient player data for comparison"
+                Analysis: "Insufficient player data for comparison",
+                HasSufficientData: false
             );
         }
 
