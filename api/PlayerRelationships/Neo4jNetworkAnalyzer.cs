@@ -16,12 +16,38 @@ public class Neo4jNetworkAnalyzer(IDriver neoDriver)
         string player2,
         int lookBackDays = 90)
     {
-        using var session = neoDriver.AsyncSession();
+        try
+        {
+            using var session = neoDriver.AsyncSession();
 
-        var networkAnalysis = await AnalyzeNetworkSimilarityAsync(session, player1, player2);
-        var temporalAnalysis = await AnalyzeTemporalConsistencyAsync(session, player1, player2, lookBackDays);
+            var networkAnalysis = await AnalyzeNetworkSimilarityAsync(session, player1, player2);
+            var temporalAnalysis = await AnalyzeTemporalConsistencyAsync(session, player1, player2, lookBackDays);
 
-        return (networkAnalysis, temporalAnalysis);
+            return (networkAnalysis, temporalAnalysis);
+        }
+        catch (Exception)
+        {
+            // Neo4j unavailable or data missing - return neutral analyses
+            return (
+                new NetworkAnalysis(
+                    Score: 0.5,
+                    SharedTeammateCount: 0,
+                    TeammateOverlapPercentage: 0.0,
+                    MutualConnectionScore: 0.0,
+                    HasDirectConnection: false,
+                    NetworkShapeSimilarity: 0.5,
+                    Analysis: "Neo4j data unavailable"
+                ),
+                new TemporalAnalysis(
+                    Score: 0.5,
+                    TemporalOverlapMinutes: 0,
+                    SignificantTemporalOverlap: false,
+                    InvertedActivityScore: 0.5,
+                    ActivityGapConsistency: 0.5,
+                    Analysis: "Neo4j data unavailable"
+                )
+            );
+        }
     }
 
     private async Task<NetworkAnalysis> AnalyzeNetworkSimilarityAsync(
