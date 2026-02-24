@@ -13,6 +13,12 @@ public class Neo4jService : IAsyncDisposable
     private readonly string _database;
     private readonly ILogger<Neo4jService> _logger;
 
+    /// <summary>
+    /// Get the underlying Neo4j driver instance.
+    /// Useful for services that need direct driver access.
+    /// </summary>
+    public IDriver Driver => _driver;
+
     public Neo4jService(Neo4jConfiguration config, ILogger<Neo4jService> logger)
     {
         _logger = logger;

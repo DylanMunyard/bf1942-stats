@@ -635,21 +635,36 @@ try
     {
         builder.Services.AddSingleton(neo4jConfig);
         builder.Services.AddSingleton<api.PlayerRelationships.Neo4jService>();
+
+        // Register IDriver as a singleton (provided by Neo4jService with proper configuration)
+        builder.Services.AddSingleton<Neo4j.Driver.IDriver>(sp =>
+        {
+            var neo4jService = sp.GetRequiredService<api.PlayerRelationships.Neo4jService>();
+            return neo4jService.Driver;
+        });
+
         builder.Services.AddSingleton<api.PlayerRelationships.Neo4jMigrationService>();
         builder.Services.AddScoped<api.PlayerRelationships.PlayerRelationshipEtlService>();
         builder.Services.AddScoped<api.PlayerRelationships.PlayerRelationshipService>();
-        
+
         // Add caching support
         builder.Services.AddScoped<api.PlayerRelationships.IRelationshipCacheService, api.PlayerRelationships.RelationshipCacheService>();
         builder.Services.AddScoped<api.PlayerRelationships.CachedPlayerRelationshipService>();
-        
+
         // Register the cached version as the default IPlayerRelationshipService
-        builder.Services.AddScoped<api.PlayerRelationships.IPlayerRelationshipService>(sp => 
+        builder.Services.AddScoped<api.PlayerRelationships.IPlayerRelationshipService>(sp =>
             sp.GetRequiredService<api.PlayerRelationships.CachedPlayerRelationshipService>());
-        
+
         // Register community detection background service
         builder.Services.AddHostedService<api.PlayerRelationships.CommunityDetectionService>();
-        
+
+        // Register player alias detection services
+        builder.Services.AddScoped<api.PlayerRelationships.StatSimilarityCalculator>();
+        builder.Services.AddScoped<api.PlayerRelationships.BehavioralPatternAnalyzer>();
+        builder.Services.AddScoped<api.PlayerRelationships.Neo4jNetworkAnalyzer>();
+        builder.Services.AddScoped<api.PlayerRelationships.ActivityTimelineAnalyzer>();
+        builder.Services.AddScoped<api.PlayerRelationships.PlayerAliasDetectionService>();
+
         builder.Logging.AddConsole().SetMinimumLevel(LogLevel.Information);
     }
 

@@ -32,7 +32,9 @@
       "mcp__serena__edit_memory",
       "Bash(sqlite3:*)",
       "mcp__serena__find_file",
-      "mcp__serena__search_for_pattern"
+      "mcp__serena__search_for_pattern",
+      "Bash(ls:*)",
+      "Bash(find:*)"
     ]
   }
 }
