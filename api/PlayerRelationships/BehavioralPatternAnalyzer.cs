@@ -217,6 +217,10 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
                 new Microsoft.Data.Sqlite.SqliteParameter("@cutoff", cutoff))
             .ToListAsync();
 
+        // Filter out null pings
+        pings1 = pings1.Where(p => p.AvgPing.HasValue).ToList();
+        pings2 = pings2.Where(p => p.AvgPing.HasValue).ToList();
+
         if (pings1.Count == 0 || pings2.Count == 0)
             return 0.5; // Neutral if no ping data
 
@@ -232,8 +236,8 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
 
         foreach (var server in commonServers)
         {
-            var ping1 = pings1.First(p => p.ServerGuid == server).AvgPing;
-            var ping2 = pings2.First(p => p.ServerGuid == server).AvgPing;
+            var ping1 = pings1.First(p => p.ServerGuid == server).AvgPing ?? 0;
+            var ping2 = pings2.First(p => p.ServerGuid == server).AvgPing ?? 0;
 
             // Large ping differences on same server = likely different geographic locations
             var maxPing = Math.Max(ping1, ping2);
@@ -296,9 +300,13 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
                 new Microsoft.Data.Sqlite.SqliteParameter("@cutoff", cutoff))
             .SingleAsync();
 
-        // Compare average session duration
-        var avgDuration1 = stats1.AvgSessionMinutes;
-        var avgDuration2 = stats2.AvgSessionMinutes;
+        // If no sessions for either player, return neutral score
+        if (stats1.SessionCount == 0 || stats2.SessionCount == 0)
+            return 0.5;
+
+        // Compare average session duration (handle nulls)
+        var avgDuration1 = stats1.AvgSessionMinutes ?? 0;
+        var avgDuration2 = stats2.AvgSessionMinutes ?? 0;
 
         var maxDuration = Math.Max(avgDuration1, avgDuration2);
         var durationSimilarity = maxDuration > 0

@@ -45,7 +45,7 @@ public class TotalServersResult
 public class PingStatResult
 {
     public string ServerGuid { get; set; } = "";
-    public double AvgPing { get; set; }
+    public double? AvgPing { get; set; }
 }
 
 /// <summary>
@@ -54,8 +54,8 @@ public class PingStatResult
 public class SessionStatResult
 {
     public int SessionCount { get; set; }
-    public long TotalMinutes { get; set; }
-    public double AvgSessionMinutes { get; set; }
+    public long? TotalMinutes { get; set; }
+    public double? AvgSessionMinutes { get; set; }
 }
 
 /// <summary>
@@ -63,8 +63,8 @@ public class SessionStatResult
 /// </summary>
 public class ActivityPeriodResult
 {
-    public DateTime FirstSeen { get; set; }
-    public DateTime LastSeen { get; set; }
+    public DateTime? FirstSeen { get; set; }
+    public DateTime? LastSeen { get; set; }
     public int SessionCount { get; set; }
     public int ActiveDays { get; set; }
 }
@@ -74,8 +74,8 @@ public class ActivityPeriodResult
 /// </summary>
 public class DailyActivityResult
 {
-    public DateTime Date { get; set; }
+    public DateTime? Date { get; set; }
     public int SessionCount { get; set; }
-    public long TotalMinutes { get; set; }
-    public double AvgKd { get; set; }
+    public long? TotalMinutes { get; set; }
+    public double? AvgKd { get; set; }
 }

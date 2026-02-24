@@ -89,18 +89,18 @@ public class ActivityTimelineAnalyzer(PlayerTrackerDbContext dbContext)
                 new Microsoft.Data.Sqlite.SqliteParameter("@cutoff", cutoff))
             .SingleAsync();
 
-        if (stats.SessionCount == 0)
+        if (stats.SessionCount == 0 || stats.FirstSeen == null || stats.LastSeen == null)
             return new ActivityPeriod { DaysSinceLast = int.MaxValue };
 
         var now = DateTime.UtcNow;
-        var daysSinceLast = (int)(now - stats.LastSeen).TotalDays;
-        var daysSpan = (stats.LastSeen - stats.FirstSeen).TotalDays;
+        var daysSinceLast = (int)(now - stats.LastSeen.Value).TotalDays;
+        var daysSpan = (stats.LastSeen.Value - stats.FirstSeen.Value).TotalDays;
         var avgPerDay = daysSpan > 0 ? stats.SessionCount / daysSpan : 0;
 
         return new ActivityPeriod
         {
-            FirstSeen = stats.FirstSeen,
-            LastSeen = stats.LastSeen,
+            FirstSeen = stats.FirstSeen.Value,
+            LastSeen = stats.LastSeen.Value,
             TotalActiveDays = stats.ActiveDays,
             DaysSinceLast = daysSinceLast,
             TotalSessions = stats.SessionCount,
@@ -133,13 +133,15 @@ public class ActivityTimelineAnalyzer(PlayerTrackerDbContext dbContext)
                 new Microsoft.Data.Sqlite.SqliteParameter("@cutoff", cutoff))
             .ToListAsync();
 
-        return dailyStats.Select(d => new DailyActivity
-        {
-            Date = d.Date,
-            SessionCount = d.SessionCount,
-            TotalMinutes = (int)d.TotalMinutes,
-            AvgKd = d.AvgKd
-        }).ToList();
+        return dailyStats
+            .Where(d => d.Date.HasValue)  // Filter out any null dates
+            .Select(d => new DailyActivity
+            {
+                Date = d.Date.Value,
+                SessionCount = d.SessionCount,
+                TotalMinutes = (int)(d.TotalMinutes ?? 0),
+                AvgKd = d.AvgKd ?? 0
+            }).ToList();
     }
 
     /// <summary>
