@@ -132,16 +132,20 @@
           class="group relative flex flex-col items-center justify-center w-14 h-14 mx-auto rounded-xl bg-gradient-to-br from-neutral-700/50 to-neutral-800/50 backdrop-blur-sm border border-neutral-600/50 hover:border-cyan-500/50 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/25"
           active-class="!border-cyan-500 !bg-gradient-to-br !from-cyan-500/20 !to-blue-500/20 !shadow-lg !shadow-cyan-500/30"
         >
-          <div class="w-8 h-8 flex items-center justify-center opacity-80 group-hover:opacity-100 transition-opacity duration-300">
-            <i class="pi pi-users text-2xl text-teal-400/90" />
-          </div>
+          <div
+            class="w-8 h-8 rounded-full bg-cover bg-center bg-no-repeat opacity-80 group-hover:opacity-100 transition-opacity duration-300"
+            :style="{ backgroundImage: `url(${communitiesIcon})` }"
+          />
 
           <!-- Enhanced Tooltip -->
           <div class="absolute right-full mr-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none">
             <div class="bg-gradient-to-r from-neutral-900/95 to-neutral-950 backdrop-blur-lg rounded-xl border border-neutral-700/50 p-4 shadow-2xl min-w-80">
               <div class="flex items-center gap-4 mb-3">
                 <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-500/20 to-cyan-500/20 border border-teal-500/30 flex items-center justify-center">
-                  <i class="pi pi-users text-xl text-teal-400/90" />
+                  <div
+                    class="w-8 h-8 rounded-full bg-cover bg-center bg-no-repeat"
+                    :style="{ backgroundImage: `url(${communitiesIcon})` }"
+                  />
                 </div>
                 <div class="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-cyan-400">
                   Communities
@@ -307,7 +311,10 @@
           class="group flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-neutral-700/50 to-neutral-800/50 backdrop-blur-sm border border-neutral-600/50 hover:border-cyan-500/50 transition-all duration-300 hover:scale-105"
           active-class="!border-cyan-500 !bg-gradient-to-br !from-cyan-500/20 !to-blue-500/20 !shadow-lg !shadow-cyan-500/30"
         >
-          <i class="pi pi-users text-lg text-teal-400/90" />
+          <div
+            class="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-cover bg-center bg-no-repeat opacity-80 group-hover:opacity-100 transition-opacity duration-300"
+            :style="{ backgroundImage: `url(${communitiesIcon})` }"
+          />
         </router-link>
 
         <!-- Data Explorer Link - Featured -->
@@ -368,6 +375,7 @@ import { fetchDashboardData } from '@/services/dashboardService';
 import dashboardIcon from '@/assets/achievements/dashboard-sidemenu.webp';
 import serversIcon from '@/assets/servers.webp';
 import playersIcon from '@/assets/players.webp';
+import communitiesIcon from '@/assets/communities.webp';
 import explorerIcon from '@/assets/menu-item-data-explorer.webp';
 import clippyIcon from '@/assets/clippy_my_boi.webp';
 
