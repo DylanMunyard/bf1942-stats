@@ -159,7 +159,7 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
         // Get distinct servers for both players from their respective cutoff points
         var commonServerCount = await dbContext.Database
             .SqlQueryRaw<int>("""
-                SELECT COUNT(DISTINCT ServerGuid)
+                SELECT COUNT(DISTINCT ServerGuid) as Value
                 FROM (
                     SELECT DISTINCT ServerGuid FROM PlayerSessions
                     WHERE PlayerName = @player1 AND StartTime >= @cutoff1
@@ -177,7 +177,7 @@ public class BehavioralPatternAnalyzer(PlayerTrackerDbContext dbContext)
         // Get union count
         var totalUniqueServers = await dbContext.Database
             .SqlQueryRaw<int>("""
-                SELECT COUNT(DISTINCT ServerGuid)
+                SELECT COUNT(DISTINCT ServerGuid) as Value
                 FROM (
                     SELECT DISTINCT ServerGuid FROM PlayerSessions
                     WHERE PlayerName = @player1 AND StartTime >= @cutoff1
