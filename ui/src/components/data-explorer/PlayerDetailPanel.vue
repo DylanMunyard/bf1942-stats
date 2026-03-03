@@ -23,49 +23,66 @@
     <div v-else-if="slicedData">
 
       <!-- Header / Controls -->
-      <div class="mb-4 sm:mb-6">
-        <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div>
-            <h2 class="explorer-section-title" style="font-size: 1.25rem; margin: 0">{{ getCurrentSliceName() }}</h2>
-            <p class="text-xs mt-1" style="color: var(--text-secondary)">{{ getCurrentSliceDescription() }}</p>
+      <div class="mb-6 sm:mb-8">
+        <!-- Metric Selector Tabs -->
+        <div class="metric-selector mb-4 sm:mb-5">
+          <div class="metric-tabs">
+            <button
+              v-for="tab in metricTabs"
+              :key="tab.type"
+              @click="selectMetric(tab.type)"
+              class="metric-tab"
+              :class="{ 'metric-tab--active': getMetricTypeForSlice(selectedSliceType) === tab.type }"
+              :data-metric="tab.type"
+            >
+              <span class="metric-tab-label">{{ tab.label }}</span>
+            </button>
           </div>
 
-          <div class="flex flex-col sm:flex-row gap-4 items-end sm:items-center">
-            <!-- Slice Dimension Selector -->
-            <div class="slice-select-wrap relative min-w-[240px]">
-              <label class="slice-select-label">SLICE BY</label>
-              <select
-                v-model="selectedSliceType"
-                @change="changeSliceType"
-                class="explorer-select appearance-none cursor-pointer w-full"
-                style="padding: 0.6rem 2.5rem 0.6rem 1rem"
-              >
-                <option
-                  v-for="dimension in availableDimensions"
-                  :key="dimension.type"
-                  :value="dimension.type"
-                >
-                  {{ dimension.name }}
-                </option>
-              </select>
-              <div class="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-neon-cyan">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
-            </div>
-
-            <!-- Time Range Pills -->
-            <div class="explorer-time-pills">
+          <!-- Scope Toggle -->
+          <div class="metric-scope-toggle">
+            <span class="scope-label">Breakdown:</span>
+            <div class="scope-buttons">
               <button
-                v-for="option in timeRangeOptions"
-                :key="option.value"
-                class="explorer-time-pill"
-                :class="{ 'explorer-time-pill--active': selectedTimeRange === option.value }"
-                @click="changeTimeRange(option.value)"
-                :disabled="isLoading"
+                @click="toggleScope('map')"
+                class="scope-btn"
+                :class="{ 'scope-btn--active': !includeServerInSlice() }"
               >
-                {{ option.label }}
+                Map Only
+              </button>
+              <button
+                @click="toggleScope('map-server')"
+                class="scope-btn"
+                :class="{ 'scope-btn--active': includeServerInSlice() }"
+              >
+                Map + Server
               </button>
             </div>
+          </div>
+        </div>
+
+        <!-- Title and Description -->
+        <div class="mb-4">
+          <h2 class="metric-title" :data-metric="getMetricTypeForSlice(selectedSliceType)">
+            {{ getCurrentSliceName() }}
+          </h2>
+          <p class="metric-description">{{ getCurrentSliceDescription() }}</p>
+        </div>
+
+        <!-- Time Range Controls (Secondary) -->
+        <div class="time-range-controls">
+          <span class="time-range-label">Time Range</span>
+          <div class="explorer-time-pills">
+            <button
+              v-for="option in timeRangeOptions"
+              :key="option.value"
+              class="explorer-time-pill"
+              :class="{ 'explorer-time-pill--active': selectedTimeRange === option.value }"
+              @click="changeTimeRange(option.value)"
+              :disabled="isLoading"
+            >
+              {{ option.label }}
+            </button>
           </div>
         </div>
       </div>
@@ -74,7 +91,7 @@
       <div v-if="slicedData.results.length > 0" class="explorer-stats-grid mb-4 sm:mb-8">
         <!-- Card 1: Count -->
         <div class="explorer-stat">
-          <div class="explorer-stat-value">{{ slicedData.results.length }}</div>
+          <div class="explorer-stat-value">{{ slicedData.pagination.totalItems }}</div>
           <div class="explorer-stat-label">{{ getResultTypeLabel() }}</div>
         </div>
 
@@ -291,6 +308,66 @@ const allResults = ref<PlayerSliceResultDto[]>([]);
 
 const timeRangeOptions = PLAYER_STATS_TIME_RANGE_OPTIONS;
 
+// Metric tabs configuration
+interface MetricTab {
+  type: 'score' | 'kills' | 'wins';
+  label: string;
+}
+
+const metricTabs: MetricTab[] = [
+  { type: 'score', label: 'SCORE' },
+  { type: 'kills', label: 'KILLS' },
+  { type: 'wins', label: 'WINS' }
+];
+
+// Extract metric type from slice type
+const getMetricTypeForSlice = (sliceType: string): 'score' | 'kills' | 'wins' => {
+  if (sliceType.includes('Kills')) return 'kills';
+  if (sliceType.includes('TeamWins')) return 'wins';
+  return 'score';
+};
+
+// Check if current slice includes server breakdown
+const includeServerInSlice = (): boolean => {
+  return selectedSliceType.value.includes('Server');
+};
+
+// Toggle between map-only and map+server scope
+const toggleScope = (scope: 'map' | 'map-server') => {
+  let newSliceType = '';
+  const currentMetric = getMetricTypeForSlice(selectedSliceType.value);
+  const includeServer = scope === 'map-server';
+
+  if (currentMetric === 'kills') {
+    newSliceType = includeServer ? 'KillsByMapAndServer' : 'KillsByMap';
+  } else if (currentMetric === 'wins') {
+    newSliceType = includeServer ? 'TeamWinsByMapAndServer' : 'TeamWinsByMap';
+  } else {
+    newSliceType = includeServer ? 'ScoreByMapAndServer' : 'ScoreByMap';
+  }
+
+  selectedSliceType.value = newSliceType;
+  currentPage.value = 1;
+  loadData(selectedTimeRange.value);
+};
+
+// Select a metric and update slice type accordingly
+const selectMetric = (metricType: 'score' | 'kills' | 'wins') => {
+  let newSliceType = '';
+  const currentHasServer = includeServerInSlice();
+
+  if (metricType === 'kills') {
+    newSliceType = currentHasServer ? 'KillsByMapAndServer' : 'KillsByMap';
+  } else if (metricType === 'wins') {
+    newSliceType = currentHasServer ? 'TeamWinsByMapAndServer' : 'TeamWinsByMap';
+  } else {
+    newSliceType = currentHasServer ? 'ScoreByMapAndServer' : 'ScoreByMap';
+  }
+  selectedSliceType.value = newSliceType;
+  currentPage.value = 1;
+  loadData(selectedTimeRange.value);
+};
+
 const gameLabel = computed(() => {
   switch (slicedData.value?.game?.toLowerCase()) {
     case 'bf1942': return 'BF1942';
@@ -417,11 +494,6 @@ const changeTimeRange = (days: number) => {
   selectedTimeRange.value = days;
   currentPage.value = 1;
   loadData(days);
-};
-
-const changeSliceType = () => {
-  currentPage.value = 1;
-  loadData(selectedTimeRange.value);
 };
 
 const changePage = (page: number) => {
@@ -574,14 +646,17 @@ watch(() => props.serverGuid, () => {
 
 /* --- Section Title --- */
 .explorer-section-title {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.11em;
   color: var(--neon-cyan);
-  margin: 0 0 0.75rem;
+  margin: 0 0 1rem;
+  padding-bottom: 0.5rem;
   font-family: 'JetBrains Mono', monospace;
   text-transform: uppercase;
-  text-shadow: 0 0 10px rgba(0, 255, 242, 0.3);
+  text-shadow: 0 0 12px rgba(0, 255, 242, 0.35);
+  border-bottom: 1px solid rgba(0, 255, 242, 0.15);
+  transition: all 0.3s ease;
 }
 
 /* --- Stats Grid --- */
@@ -602,8 +677,8 @@ watch(() => props.serverGuid, () => {
   padding: 0.75rem 0.5rem;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
-  transition: all 0.3s ease;
+  border-radius: 6px;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @media (min-width: 640px) {
@@ -613,8 +688,9 @@ watch(() => props.serverGuid, () => {
 }
 
 .explorer-stat:hover {
-  border-color: rgba(0, 255, 242, 0.3);
-  box-shadow: 0 0 20px rgba(0, 255, 242, 0.1);
+  border-color: rgba(0, 255, 242, 0.5);
+  box-shadow: 0 0 25px rgba(0, 255, 242, 0.15);
+  background: rgba(0, 255, 242, 0.05);
 }
 
 .explorer-stat-value {
@@ -626,22 +702,26 @@ watch(() => props.serverGuid, () => {
 
 .explorer-stat-value--accent {
   color: var(--neon-cyan);
-  text-shadow: 0 0 10px rgba(0, 255, 242, 0.5);
+  text-shadow: 0 0 12px rgba(0, 255, 242, 0.6);
+  transition: all 0.4s ease;
 }
 
 .explorer-stat-value--green {
   color: var(--neon-green);
-  text-shadow: 0 0 10px rgba(57, 255, 20, 0.5);
+  text-shadow: 0 0 12px rgba(57, 255, 20, 0.6);
+  transition: all 0.4s ease;
 }
 
 .explorer-stat-value--pink {
-  color: var(--neon-pink);
-  text-shadow: 0 0 10px rgba(255, 0, 255, 0.5);
+  color: var(--neon-red);
+  text-shadow: 0 0 12px rgba(255, 0, 0, 0.6);
+  transition: all 0.4s ease;
 }
 
 .explorer-stat-value--gold {
   color: var(--neon-gold);
-  text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+  text-shadow: 0 0 12px rgba(255, 215, 0, 0.6);
+  transition: all 0.4s ease;
 }
 
 .explorer-stat-label {
@@ -658,12 +738,13 @@ watch(() => props.serverGuid, () => {
   border: 1px solid var(--border-color);
   border-radius: 8px;
   overflow: hidden;
-  transition: all 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .explorer-card:hover {
-  border-color: rgba(0, 255, 242, 0.3);
-  box-shadow: 0 0 30px rgba(0, 255, 242, 0.1);
+  border-color: rgba(0, 255, 242, 0.4);
+  box-shadow: 0 8px 24px rgba(0, 255, 242, 0.15);
 }
 
 /* --- Table --- */
@@ -675,21 +756,22 @@ watch(() => props.serverGuid, () => {
 
 .explorer-table th {
   text-align: left;
-  padding: 0.5rem 0.5rem;
+  padding: 0.65rem 0.5rem;
   background: var(--bg-card);
   color: var(--neon-cyan);
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.06em;
   font-family: 'JetBrains Mono', monospace;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 2px solid rgba(0, 255, 242, 0.2);
   font-size: 0.7rem;
   text-transform: uppercase;
   white-space: nowrap;
+  transition: all 0.3s ease;
 }
 
 @media (min-width: 640px) {
   .explorer-table th {
-    padding: 0.5rem 0.75rem;
+    padding: 0.75rem 0.75rem;
   }
 }
 
@@ -698,14 +780,14 @@ watch(() => props.serverGuid, () => {
 }
 
 .explorer-table td {
-  padding: 0.5rem 0.5rem;
-  border-bottom: 1px solid var(--border-color);
+  padding: 0.6rem 0.5rem;
+  border-bottom: 1px solid rgba(0, 255, 242, 0.05);
   color: var(--text-primary);
 }
 
 @media (min-width: 640px) {
   .explorer-table td {
-    padding: 0.5rem 0.75rem;
+    padding: 0.6rem 0.75rem;
   }
 }
 
@@ -714,11 +796,13 @@ watch(() => props.serverGuid, () => {
 }
 
 .explorer-table tbody tr {
-  transition: all 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
 }
 
 .explorer-table tbody tr:hover td {
-  background: rgba(0, 255, 242, 0.08);
+  background: rgba(0, 255, 242, 0.12);
+  color: var(--text-primary);
 }
 
 .explorer-table-muted {
@@ -962,18 +1046,175 @@ watch(() => props.serverGuid, () => {
 .text-neon-gold { color: var(--neon-gold); }
 .text-neon-red { color: var(--neon-red); }
 
-/* --- Floating label for slice selector --- */
-.slice-select-wrap .slice-select-label {
-  position: absolute;
-  top: -0.625rem;
-  left: 0.75rem;
-  padding: 0 0.25rem;
-  background: var(--bg-card);
-  font-size: 0.625rem;
+/* --- Metric Selector Tabs --- */
+.metric-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.metric-tabs {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.metric-tab {
+  padding: 0.65rem 1.25rem;
+  font-size: 0.8rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
-  color: var(--neon-cyan);
   font-family: 'JetBrains Mono', monospace;
-  z-index: 10;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 2px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+}
+
+.metric-tab:hover {
+  border-color: rgba(0, 255, 242, 0.4);
+  color: var(--text-primary);
+}
+
+.metric-tab--active {
+  border-color: currentColor;
+  color: var(--bg-dark);
+  font-weight: 800;
+}
+
+/* Color-coded active states */
+.metric-tab--active[data-metric="score"] {
+  background: var(--neon-cyan);
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 20px rgba(0, 255, 242, 0.5), inset 0 0 20px rgba(0, 255, 242, 0.1);
+}
+
+.metric-tab--active[data-metric="kills"] {
+  background: var(--neon-red);
+  border-color: var(--neon-red);
+  box-shadow: 0 0 20px rgba(255, 0, 0, 0.5), inset 0 0 20px rgba(255, 0, 0, 0.1);
+}
+
+.metric-tab--active[data-metric="wins"] {
+  background: var(--neon-green);
+  border-color: var(--neon-green);
+  box-shadow: 0 0 20px rgba(57, 255, 20, 0.5), inset 0 0 20px rgba(57, 255, 20, 0.1);
+}
+
+/* --- Scope Toggle --- */
+.metric-scope-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.scope-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.scope-buttons {
+  display: flex;
+  gap: 0.25rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.25rem;
+}
+
+.scope-btn {
+  padding: 0.45rem 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.scope-btn:hover {
+  color: var(--text-primary);
+  border-color: rgba(0, 255, 242, 0.2);
+}
+
+.scope-btn--active {
+  background: var(--bg-panel);
+  border-color: var(--neon-cyan);
+  color: var(--neon-cyan);
+  box-shadow: 0 0 10px rgba(0, 255, 242, 0.3);
+}
+
+/* Metric Title with Color Theming */
+.metric-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: 0.02em;
+  font-family: 'JetBrains Mono', monospace;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.metric-title[data-metric="score"] {
+  color: var(--neon-cyan);
+  text-shadow: 0 0 15px rgba(0, 255, 242, 0.4);
+}
+
+.metric-title[data-metric="kills"] {
+  color: var(--neon-red);
+  text-shadow: 0 0 15px rgba(255, 0, 0, 0.4);
+}
+
+.metric-title[data-metric="wins"] {
+  color: var(--neon-green);
+  text-shadow: 0 0 15px rgba(57, 255, 20, 0.4);
+}
+
+/* Metric Description */
+.metric-description {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-top: 0.35rem;
+  letter-spacing: 0.03em;
+  transition: color 0.3s ease;
+}
+
+/* Time Range Controls (Secondary) */
+.time-range-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(0, 255, 242, 0.1);
+}
+
+@media (min-width: 640px) {
+  .time-range-controls {
+    flex-direction: row;
+    align-items: center;
+    gap: 1rem;
+  }
+}
+
+.time-range-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-family: 'JetBrains Mono', monospace;
 }
 </style>

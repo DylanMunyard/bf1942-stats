@@ -716,8 +716,7 @@ onUnmounted(() => {
               <div class="xl:col-span-7 space-y-6">
                 <div class="explorer-card">
                   <div class="explorer-card-header">
-                    <h3 class="explorer-card-title">DATA EXPLORER BREAKDOWN</h3>
-                    <p class="text-[10px] text-neutral-500 font-mono mt-1">EXPANDED MAP AND SERVER SLICING</p>
+                    <h3 class="explorer-card-title">BREAKDOWN</h3>
                   </div>
                   <div class="explorer-card-body">
                     <PlayerDetailPanel

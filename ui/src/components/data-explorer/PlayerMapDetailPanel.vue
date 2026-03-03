@@ -101,91 +101,48 @@
             </div>
 
             <!-- Rankings Table -->
-            <div class="rankings-table-container">
-              <div v-if="showContextPlayers && contextPlayers.length > 0" class="context-players-section">
-                <div class="context-header">
-                  <span class="text-xs font-mono text-neutral-500">PLAYERS AROUND YOU</span>
-                </div>
-                <table class="detail-table context-table">
-                  <tbody>
-                    <tr
-                      v-for="player in contextPlayers"
-                      :key="`context-${player.playerName}`"
-                      :class="{
-                        'player-row-highlight': player.playerName === playerName
-                      }"
-                    >
-                      <td class="text-center w-12">
-                        <span class="rank-badge" :class="getRankBadgeClass(player.rank)">
-                          {{ player.rank }}
-                        </span>
-                      </td>
-                      <td>
-                        <router-link
-                          :to="`/players/${encodeURIComponent(player.playerName)}`"
-                          class="detail-link font-mono"
-                        >
-                          {{ player.playerName }}
-                          <span v-if="player.playerName === playerName" class="text-neon-cyan ml-2">(YOU)</span>
-                        </router-link>
-                      </td>
-                      <td class="text-right font-mono">
-                        {{ formatMetricValue(player) }}
-                      </td>
-                      <td class="text-right font-mono text-neutral-400">
-                        {{ player.totalRounds }}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div class="context-separator">
-                  <span class="text-xs text-neutral-500">FULL RANKINGS</span>
-                </div>
-              </div>
-              
-              <div class="overflow-x-auto">
-                <table class="detail-table">
-                  <thead>
-                    <tr>
-                      <th class="text-center w-12">#</th>
-                      <th>Player</th>
-                      <th class="text-right">{{ getMetricLabel() }}</th>
-                      <th class="text-right">Rounds</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="(player, index) in rankings"
-                      :key="player.playerName"
-                      :data-player="player.playerName"
-                      :class="{
-                        'player-row-highlight': player.playerName === playerName
-                      }"
-                    >
-                      <td class="text-center">
-                        <span class="rank-badge" :class="getRankBadgeClass(player.rank)">
-                          {{ player.rank }}
-                        </span>
-                      </td>
-                      <td>
-                        <router-link
-                          :to="`/players/${encodeURIComponent(player.playerName)}`"
-                          class="detail-link font-mono"
-                        >
-                          {{ player.playerName }}
-                          <span v-if="player.playerName === playerName" class="text-neon-cyan ml-2">(YOU)</span>
-                        </router-link>
-                      </td>
-                      <td class="text-right font-mono">
-                        {{ formatMetricValue(player) }}
-                      </td>
-                      <td class="text-right font-mono text-neutral-400">
-                        {{ player.totalRounds }}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+            <div class="overflow-x-auto">
+              <table class="detail-table">
+                <thead>
+                  <tr>
+                    <th class="text-center w-12">#</th>
+                    <th>Player</th>
+                    <th class="text-right">{{ getMetricLabel() }}</th>
+                    <th class="text-right">Rounds</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="(player, index) in rankings"
+                    :key="player.playerName"
+                    :data-player="player.playerName"
+                    :class="{
+                      'player-row-highlight': player.playerName === playerName
+                    }"
+                  >
+                    <td class="text-center">
+                      <span class="rank-badge" :class="getRankBadgeClass(player.rank)">
+                        {{ player.rank }}
+                      </span>
+                    </td>
+                    <td>
+                      <router-link
+                        :to="`/players/${encodeURIComponent(player.playerName)}`"
+                        class="detail-link font-mono"
+                      >
+                        {{ player.playerName }}
+                        <span v-if="player.playerName === playerName" class="text-neon-cyan ml-2">(YOU)</span>
+                      </router-link>
+                    </td>
+                    <td class="text-right font-mono">
+                      {{ formatMetricValue(player) }}
+                    </td>
+                    <td class="text-right font-mono text-neutral-400">
+                      {{ player.totalRounds }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
 
             <!-- Pagination -->
@@ -291,9 +248,6 @@ const rankings = ref<MapPlayerRanking[]>([]);
 const playerRanking = ref<MapPlayerRanking | null>(null);
 const totalRankedPlayers = ref(0);
 const isRankingsLoading = ref(false);
-const isPlayerVisible = ref(false);
-const contextPlayers = ref<MapPlayerRanking[]>([]);
-const showContextPlayers = ref(false);
 
 // Ranking tabs
 const rankingTabs = [
@@ -404,57 +358,12 @@ const loadRankings = async () => {
 
     rankings.value = response.rankings;
     totalPages.value = Math.ceil(response.totalCount / pageSize);
-    
-    // Check if player is visible on current page
-    isPlayerVisible.value = rankings.value.some(r => r.playerName === props.playerName);
-    
-    // Load context players if player is not on current page
-    if (!isPlayerVisible.value && playerRanking.value) {
-      await loadContextPlayers();
-      showContextPlayers.value = true;
-    } else {
-      showContextPlayers.value = false;
-      contextPlayers.value = [];
-    }
   } catch (err) {
     console.error('Error loading rankings:', err);
   } finally {
     isRankingsLoading.value = false;
   }
 };
-
-const loadContextPlayers = async () => {
-  if (!playerRanking.value) return;
-  
-  try {
-    // Calculate the range of players to fetch (2 above and 2 below)
-    const contextRange = 2;
-    const startRank = Math.max(1, playerRanking.value.rank - contextRange);
-    const endRank = Math.min(totalRankedPlayers.value, playerRanking.value.rank + contextRange);
-    
-    // Fetch the page that contains these ranks
-    const contextPage = Math.ceil(startRank / pageSize);
-    const contextResponse = await fetchMapPlayerRankings(
-      props.mapName,
-      props.game as any || 'bf1942',
-      contextPage,
-      pageSize,
-      undefined,
-      selectedServerGuid.value || undefined,
-      60,
-      activeRankingTab.value
-    );
-    
-    // Filter to only show players around the current player
-    contextPlayers.value = contextResponse.rankings.filter(
-      r => r.rank >= startRank && r.rank <= endRank
-    );
-  } catch (err) {
-    console.error('Error loading context players:', err);
-  }
-};
-
-
 
 const formatMetricValue = (player: MapPlayerRanking): string => {
   switch (activeRankingTab.value) {
@@ -725,57 +634,6 @@ watch([activeRankingTab, selectedServerGuid], () => {
 .detail-pagination-info {
   font-size: 0.75rem;
   color: var(--text-secondary);
-}
-
-.rankings-table-container {
-  position: relative;
-}
-
-.context-players-section {
-  margin-bottom: 1rem;
-  background: linear-gradient(135deg, rgba(0, 255, 242, 0.05) 0%, transparent 100%);
-  border: 1px solid rgba(0, 255, 242, 0.2);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.context-header {
-  padding: 0.5rem 1rem;
-  background: rgba(0, 255, 242, 0.08);
-  border-bottom: 1px solid rgba(0, 255, 242, 0.15);
-}
-
-.context-table {
-  border: none;
-  margin: 0;
-}
-
-.context-table td {
-  border-bottom-color: rgba(0, 255, 242, 0.1);
-}
-
-.context-separator {
-  text-align: center;
-  padding: 1rem;
-  position: relative;
-}
-
-.context-separator::before,
-.context-separator::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  width: calc(50% - 4rem);
-  height: 1px;
-  background: var(--border-color);
-}
-
-.context-separator::before {
-  left: 0;
-}
-
-.context-separator::after {
-  right: 0;
 }
 
 .rank-badge {
