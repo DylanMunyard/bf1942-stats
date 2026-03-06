@@ -171,13 +171,13 @@
 
 /* Server rankings ping: high-contrast on dark background (WCAG-friendly) */
 .ping-good {
-  color: #6ee7b7 !important;  /* green-400: clear “good” on dark, ~5.5:1 on #0d1117 */
+  color: #6ee7b7 !important;  /* green-400: clear "good" on dark, ~5.5:1 on #0d1117 */
 }
 .ping-warning {
   color: #fef08a !important;  /* yellow-200: light yellow, high contrast on black */
 }
 .ping-bad {
-  color: #fca5a5 !important;  /* red-500: strong contrast for “bad” ping */
+  color: #fca5a5 !important;  /* red-500: strong contrast for "bad" ping */
 }
 
 /* Rankings panel hero: high-contrast accent on dark (replaces cyan-400) */
@@ -188,7 +188,7 @@ a.rankings-hero-accent:hover {
   color: #cffafe !important;  /* cyan-100 on hover */
 }
 
-/* Rankings list: “Rankings” button – high-contrast on dark */
+/* Rankings list: "Rankings" button – high-contrast on dark */
 .rankings-list-btn {
   color: #a5f3fc !important;
   border-color: rgba(165, 243, 252, 0.5) !important;
@@ -196,4 +196,22 @@ a.rankings-hero-accent:hover {
 .rankings-list-btn:hover {
   color: #cffafe !important;
   background-color: rgba(165, 243, 252, 0.1) !important;
+}
+
+/* Three-tier panel hierarchy */
+.explorer-card--trophy {
+  background: #111827;
+  border-color: rgba(245, 158, 11, 0.25);
+  border-left: 3px solid rgba(245, 158, 11, 0.5);
+}
+.explorer-card--trophy .explorer-card-title { 
+  color: var(--neon-gold); 
+}
+
+.explorer-card--achievement {
+  background: linear-gradient(135deg, var(--bg-panel) 0%, rgba(168,85,247,0.06) 100%);
+  border-color: rgba(168, 85, 247, 0.2);
+}
+.explorer-card--achievement .explorer-card-title { 
+  color: #a855f7; 
 }

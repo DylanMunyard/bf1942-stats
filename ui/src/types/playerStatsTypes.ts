@@ -398,3 +398,50 @@ export interface PlayerOnlineHistoryResponse {
   game: string;
   lastUpdated: string; // ISO date string
 }
+
+// New interfaces for player details redesign
+export interface HeatmapCell { 
+  dayOfWeek: number; 
+  hour: number; 
+  minutesActive: number; 
+  mostPlayedMap?: string; 
+}
+
+export interface ActivityHeatmapResponse { 
+  playerName: string; 
+  cells: HeatmapCell[]; 
+  totalDays: number; 
+}
+
+export interface MapTimelineEntry { 
+  mapName: string; 
+  kills: number; 
+  deaths: number; 
+  kdRatio: number; 
+  score: number; 
+  sessions: number; 
+  playTimeMinutes: number; 
+}
+
+export interface MapTimelineMonth { 
+  year: number; 
+  month: number; 
+  monthLabel: string; 
+  maps: MapTimelineEntry[]; 
+}
+
+export interface MapPerformanceTimelineResponse { 
+  playerName: string; 
+  game: string; 
+  months: MapTimelineMonth[]; 
+}
+
+export interface PlayerMapStatEntry { 
+  mapName: string; 
+  totalScore: number; 
+  totalKills: number; 
+  totalDeaths: number; 
+  sessionsPlayed: number; 
+  totalPlayTimeMinutes: number; 
+  kdRatio: number; 
+}

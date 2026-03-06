@@ -7,37 +7,38 @@
       <div class="explorer-skeleton" style="height: 15rem"></div>
     </div>
 
-    <!-- Error State -->
-    <div v-else-if="error" class="explorer-empty">
-      <div class="explorer-empty-icon text-neon-red">!</div>
-      <p class="explorer-empty-title text-neon-red">{{ error }}</p>
-      <button @click="loadData()" class="explorer-btn explorer-btn--ghost explorer-btn--sm mt-4">
-        Try again
-      </button>
-    </div>
-
     <!-- Content -->
     <div v-else-if="rankingsData">
-      <!-- Summary Hero Stats -->
-      <div class="rankings-hero mb-6">
-        <div class="rankings-hero-badge" :class="getBadgeClass(rankingsData.summary.percentileCategory)">
-          <span class="rankings-hero-icon">{{ getBadgeIcon(rankingsData.summary.percentileCategory) }}</span>
-          <span class="rankings-hero-label">{{ getBadgeLabel(rankingsData.summary.percentileCategory) }}</span>
+      <!-- Time Period Selection -->
+      <div class="time-period-selector mb-6">
+        <div class="time-period-buttons">
+          <button
+            :class="['time-period-btn', { active: timePeriod === 'last-month' }]"
+            @click="selectTimePeriod('last-month')"
+          >
+            Last Month
+          </button>
+          <button
+            :class="['time-period-btn', { active: timePeriod === 'all-time' }]"
+            @click="selectTimePeriod('all-time')"
+          >
+            All Time
+          </button>
         </div>
-        
-        <div class="rankings-hero-stats">
-          <div class="rankings-hero-stat">
-            <div class="rankings-hero-value text-neon-gold">{{ rankingsData.summary.top1Rankings }}</div>
-            <div class="rankings-hero-label">🥇 #1 RANKS</div>
-          </div>
-          <div class="rankings-hero-stat">
-            <div class="rankings-hero-value text-neon-cyan">{{ rankingsData.summary.top10Rankings }}</div>
-            <div class="rankings-hero-label">TOP 10</div>
-          </div>
-          <div class="rankings-hero-stat">
-            <div class="rankings-hero-value">{{ rankingsData.summary.averagePercentile.toFixed(1) }}%</div>
-            <div class="rankings-hero-label">AVG PERCENTILE</div>
-          </div>
+        <div class="time-period-picker">
+          <select v-model.number="selectedYear" @change="onDateChange" class="explorer-select">
+            <option v-for="year in availableYears" :key="year" :value="year">
+              {{ year }}
+            </option>
+          </select>
+          <select v-model.number="selectedMonth" @change="onDateChange" class="explorer-select">
+            <option v-for="(monthName, idx) in monthNames" :key="idx" :value="idx + 1">
+              {{ monthName }}
+            </option>
+          </select>
+          <button @click="loadRankingsForPeriod" class="explorer-btn explorer-btn--ghost explorer-btn--sm">
+            View
+          </button>
         </div>
       </div>
 
@@ -54,8 +55,47 @@
         </button>
       </div>
 
-      <!-- Current Rankings Tab -->
-      <div v-if="activeTab === 'current'" class="space-y-2">
+      <!-- Error State (shown inline with controls) -->
+      <div v-if="error" class="mb-4 p-4 bg-red-500/20 border border-red-500/50 rounded-lg">
+        <div class="flex items-center gap-3">
+          <div class="text-red-400 text-lg">!</div>
+          <div>
+            <p class="text-red-400 font-medium">{{ error }}</p>
+            <button @click="loadData()" class="text-red-400 text-sm underline mt-1 hover:text-red-300">
+              Try again
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Performance Tab -->
+      <div v-if="!error && activeTab === 'current'" class="space-y-2">
+        <!-- View mode toggle -->
+        <div class="view-toggle">
+          <button 
+            :class="['toggle-btn', { active: viewMode === 'chart' }]"
+            @click="viewMode = 'chart'"
+          >
+            CHART
+          </button>
+          <button 
+            :class="['toggle-btn', { active: viewMode === 'list' }]"
+            @click="viewMode = 'list'"
+          >
+            LIST
+          </button>
+        </div>
+
+        <!-- Chart view -->
+        <div v-if="viewMode === 'chart'">
+          <PlayerCompetitiveRankingsChart 
+            :rankings="rankingsData.mapRankings"
+            :sortBy="'kdRatio'"
+          />
+        </div>
+
+        <!-- List view -->
+        <div v-else>
         <div 
           v-for="ranking in paginatedRankings"
           :key="ranking.mapName"
@@ -111,8 +151,10 @@
           <p class="text-neutral-500">No competitive rankings available for this time period.</p>
         </div>
 
-        <!-- Pagination Controls -->
-        <div v-if="totalPages > 1" class="pagination-controls">
+        </div>
+
+        <!-- Pagination Controls (only for list view) -->
+        <div v-if="viewMode === 'list' && totalPages > 1" class="pagination-controls">
           <button
             class="pagination-btn"
             :disabled="currentPage === 1"
@@ -142,7 +184,7 @@
       </div>
 
       <!-- Timeline Tab -->
-      <div v-else-if="activeTab === 'timeline'" class="timeline-content">
+      <div v-else-if="!error && activeTab === 'timeline'" class="timeline-content">
         <!-- Map Selector -->
         <div class="mb-4">
           <select 
@@ -190,6 +232,7 @@ import { ref, computed, watch, onMounted, nextTick, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import Chart from 'chart.js/auto';
 import type { ChartConfiguration } from 'chart.js';
+import PlayerCompetitiveRankingsChart from './PlayerCompetitiveRankingsChart.vue';
 
 const props = defineProps<{
   playerName: string;
@@ -263,11 +306,14 @@ interface RankingTimelineResponse {
 
 // State
 const tabs = [
-  { id: 'current', label: 'CURRENT RANKINGS' },
+  { id: 'current', label: 'PERFORMANCE' },
   { id: 'timeline', label: 'RANK TIMELINE' }
 ];
 
-const activeTab = ref<'current' | 'timeline'>('current');
+const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+const activeTab = ref<'current' | 'timeline'>('current' as 'current' | 'timeline');
+const viewMode = ref<'chart' | 'list'>('chart' as 'chart' | 'list'); // Default to chart view
 const rankingsData = ref<CompetitiveRankingsResponse | null>(null);
 const timelineData = ref<RankingTimelineResponse | null>(null);
 const isLoading = ref(false);
@@ -276,6 +322,11 @@ const error = ref<string | null>(null);
 const selectedTimelineMap = ref('');
 const timelineCanvas = ref<HTMLCanvasElement | null>(null);
 let timelineChart: Chart | null = null;
+
+// Time period state
+const timePeriod = ref<'last-month' | 'all-time' | 'custom'>('last-month');
+const selectedYear = ref(new Date().getFullYear());
+const selectedMonth = ref(new Date().getMonth() + 1);
 
 // Pagination state
 const currentPage = ref(1);
@@ -290,6 +341,16 @@ const sortedRankings = computed(() => {
 const availableMaps = computed(() => {
   if (!rankingsData.value) return [];
   return rankingsData.value.mapRankings.map(r => r.mapName).sort();
+});
+
+const availableYears = computed(() => {
+  const currentYear = new Date().getFullYear();
+  const years = [];
+  // Show years from 5 years ago to current year
+  for (let i = currentYear - 5; i <= currentYear; i++) {
+    years.push(i);
+  }
+  return years;
 });
 
 // Pagination computed properties
@@ -315,15 +376,32 @@ const paginationRange = computed(() => {
 });
 
 // Methods
-const loadData = async () => {
+const selectTimePeriod = (period: 'last-month' | 'all-time') => {
+  timePeriod.value = period;
+  loadRankingsForPeriod();
+};
+
+const onDateChange = () => {
+  timePeriod.value = 'custom';
+};
+
+const loadRankingsForPeriod = async () => {
   isLoading.value = true;
   error.value = null;
 
   try {
-    const response = await fetch(
-      `/stats/data-explorer/players/${encodeURIComponent(props.playerName)}/competitive-rankings?` +
-      `game=${props.game || 'bf1942'}&days=60`
-    );
+    let url = `/stats/data-explorer/players/${encodeURIComponent(props.playerName)}/competitive-rankings?game=${props.game || 'bf1942'}`;
+
+    if (timePeriod.value === 'last-month') {
+      url += '&days=30';
+    } else if (timePeriod.value === 'all-time') {
+      url += '&days=999999'; // Effectively all-time
+    } else if (timePeriod.value === 'custom') {
+      // For custom, send year/month parameters
+      url += `&year=${selectedYear.value}&month=${selectedMonth.value}`;
+    }
+
+    const response = await fetch(url);
 
     if (!response.ok) {
       if (response.status === 404) {
@@ -340,6 +418,10 @@ const loadData = async () => {
   } finally {
     isLoading.value = false;
   }
+};
+
+const loadData = async () => {
+  await loadRankingsForPeriod();
 };
 
 const goToPage = (page: number) => {
@@ -402,13 +484,13 @@ const drawTimelineChart = () => {
         {
           label: 'Rank',
           data: validData.map(t => t.rank).reverse(),
-          borderColor: '#00fff2',
-          backgroundColor: 'rgba(0, 255, 242, 0.1)',
+          borderColor: '#2196F3',
+          backgroundColor: 'rgba(33, 150, 243, 0.1)',
           borderWidth: 2,
           fill: true,
           tension: 0.3,
           pointRadius: 4,
-          pointBackgroundColor: '#00fff2',
+          pointBackgroundColor: '#2196F3',
           pointBorderColor: '#ffffff',
           pointBorderWidth: 2,
           pointHoverRadius: 6,
@@ -417,13 +499,13 @@ const drawTimelineChart = () => {
         {
           label: 'Percentile',
           data: validData.map(t => t.percentile).reverse(),
-          borderColor: '#ff00ff',
-          backgroundColor: 'rgba(255, 0, 255, 0.1)',
+          borderColor: '#E91E63',
+          backgroundColor: 'rgba(233, 30, 99, 0.1)',
           borderWidth: 2,
           fill: false,
           tension: 0.3,
           pointRadius: 3,
-          pointBackgroundColor: '#ff00ff',
+          pointBackgroundColor: '#E91E63',
           yAxisID: 'y-percentile'
         }
       ]
@@ -447,7 +529,7 @@ const drawTimelineChart = () => {
           backgroundColor: isDarkMode ? 'rgba(35, 21, 53, 0.95)' : 'rgba(0, 0, 0, 0.9)',
           titleColor: '#ffffff',
           bodyColor: '#ffffff',
-          borderColor: '#00fff2',
+          borderColor: '#2196F3',
           borderWidth: 1,
           cornerRadius: 6,
           displayColors: true,
@@ -556,24 +638,6 @@ const getTrendClass = (trend: string): string => {
   }
 };
 
-const getBadgeClass = (category: string): string => {
-  return `badge-${category}`;
-};
-
-const getBadgeIcon = (category: string): string => {
-  switch (category) {
-    case 'elite': return '👑';
-    case 'master': return '⭐';
-    case 'expert': return '💎';
-    case 'veteran': return '🎖️';
-    default: return '🎯';
-  }
-};
-
-const getBadgeLabel = (category: string): string => {
-  return category.toUpperCase();
-};
-
 // Lifecycle
 onMounted(() => {
   loadData();
@@ -604,6 +668,96 @@ watch(() => props.playerName, () => {
 /* Base styles following explorer theme */
 .competitive-rankings {
   font-family: 'JetBrains Mono', monospace;
+}
+
+/* Time Period Selector */
+.time-period-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.time-period-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.time-period-btn {
+  flex: 1;
+  padding: 0.65rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.time-period-btn:hover {
+  border-color: var(--neon-cyan);
+  color: var(--text-primary);
+}
+
+.time-period-btn.active {
+  background: var(--neon-cyan);
+  border-color: var(--neon-cyan);
+  color: var(--bg-dark);
+  box-shadow: 0 0 20px rgba(0, 255, 242, 0.5);
+}
+
+.time-period-picker {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.time-period-picker select {
+  flex: 1;
+  min-width: 120px;
+  padding: 0.5rem;
+  font-size: 0.8rem;
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.time-period-picker select:hover {
+  border-color: var(--neon-cyan);
+}
+
+.time-period-picker select:focus {
+  outline: none;
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 10px rgba(0, 255, 242, 0.3);
+}
+
+@media (max-width: 640px) {
+  .time-period-selector {
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .time-period-picker {
+    flex-direction: column;
+  }
+
+  .time-period-picker select,
+  .time-period-picker button {
+    width: 100%;
+  }
 }
 
 /* Hero section */
@@ -1013,6 +1167,35 @@ watch(() => props.playerName, () => {
 .text-neutral-500 { color: var(--text-secondary); }
 .text-xs { font-size: 0.625rem; }
 .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+/* View toggle */
+.view-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  justify-content: center;
+}
+
+.toggle-btn {
+  padding: 4px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-btn.active {
+  background: var(--neon-cyan);
+  color: var(--bg-dark);
+  border-color: var(--neon-cyan);
+}
+
+.toggle-btn:hover:not(.active) {
+  border-color: var(--neon-cyan);
+  color: var(--neon-cyan);
+}
 
 /* Pagination */
 .pagination-controls {

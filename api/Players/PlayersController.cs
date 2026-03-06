@@ -1,3 +1,4 @@
+using api.Analytics.Models;
 using api.Constants;
 using api.Players.Models;
 using api.PlayerStats;
@@ -207,6 +208,18 @@ public class PlayersController(
             // Return a generic 500 error
             return StatusCode(500, "An internal server error occurred while comparing players.");
         }
+    }
+
+    [HttpGet("{playerName}/map-stats")]
+    public async Task<ActionResult<List<ServerStatistics>>> GetPlayerMapStats(
+        string playerName,
+        [FromQuery] string game = "bf1942",
+        [FromQuery] int days = 30)
+    {
+        playerName = Uri.UnescapeDataString(playerName);
+        var period = days <= 30 ? TimePeriod.Last30Days : TimePeriod.ThisYear;
+        var result = await sqlitePlayerStatsService.GetPlayerMapStatsAsync(playerName, period);
+        return Ok(result);
     }
 
 }

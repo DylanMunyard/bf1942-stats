@@ -7,15 +7,17 @@ import { Line } from 'vue-chartjs';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import PlayerAchievementSummary from '../components/PlayerAchievementSummary.vue';
 import PlayerRecentRoundsCompact from '../components/PlayerRecentRoundsCompact.vue';
-import HeroBackButton from '../components/HeroBackButton.vue';
 import PlayerAchievementHeroBadges from '../components/PlayerAchievementHeroBadges.vue';
 import PlayerServerMapStats from '../components/PlayerServerMapStats.vue';
 import MapRankingsPanel from '../components/MapRankingsPanel.vue';
 import PlayerDetailPanel from '../components/data-explorer/PlayerDetailPanel.vue';
-import MapDetailPanel from '../components/data-explorer/MapDetailPanel.vue';
 import PlayerMapDetailPanel from '../components/data-explorer/PlayerMapDetailPanel.vue';
 import ServerMapDetailPanel from '../components/data-explorer/ServerMapDetailPanel.vue';
 import PlayerCompetitiveRankings from '../components/data-explorer/PlayerCompetitiveRankings.vue';
+import MapPerformanceRace from '../components/data-explorer/MapPerformanceRace.vue';
+import PlayerActivityHeatmap from '../components/PlayerActivityHeatmap.vue';
+import PlayerMapPreference from '../components/PlayerMapPreference.vue';
+import PlayerServerMap from '../components/data-explorer/PlayerServerMap.vue';
 import { formatRelativeTime } from '@/utils/timeUtils';
 import { calculateKDR } from '@/utils/statsUtils';
 import { useAIContext } from '@/composables/useAIContext';
@@ -39,9 +41,6 @@ const playerName = ref(route.params.playerName as string);
 const playerStats = ref<PlayerTimeStatistics | null>(null);
 const isLoading = ref(true);
 const error = ref<string | null>(null);
-const showTrendCharts = ref(false);
-const trendChartHideTimeout = ref<NodeJS.Timeout | null>(null);
-const trendChartHoverCount = ref(0);
 const showLastOnline = ref(false);
 const achievementGroups = ref<PlayerAchievementGroup[]>([]);
 const achievementGroupsLoading = ref(false);
@@ -140,6 +139,84 @@ const kdRatioTrendChartData = computed(() => {
       pointBorderColor: '#ffffff',
       pointBorderWidth: 1,
     }]
+  };
+});
+
+const trendChartOptions = computed(() => {
+  const computedStyles = window.getComputedStyle(document.documentElement);
+  const isDarkMode = computedStyles.getPropertyValue('--color-background').trim().includes('26, 16, 37') ||
+                    document.documentElement.classList.contains('dark-mode') ||
+                    (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      intersect: false,
+      mode: 'index' as const
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        grid: {
+          color: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+          borderColor: isDarkMode ? '#30363d' : '#e0e0e0'
+        },
+        ticks: {
+          color: isDarkMode ? '#8b949e' : '#666666',
+          font: {
+            size: 10
+          }
+        }
+      },
+      x: {
+        grid: {
+          display: false
+        },
+        ticks: {
+          color: isDarkMode ? '#8b949e' : '#666666',
+          font: {
+            size: 10
+          },
+          maxRotation: 0,
+          autoSkip: true,
+          maxTicksLimit: 10
+        }
+      }
+    },
+    plugins: {
+      legend: {
+        display: false
+      },
+      tooltip: {
+        enabled: true,
+        backgroundColor: isDarkMode ? 'rgba(35, 21, 53, 0.95)' : 'rgba(0, 0, 0, 0.8)',
+        titleColor: '#ffffff',
+        bodyColor: '#ffffff',
+        borderColor: isDarkMode ? '#9c27b0' : '#666666',
+        borderWidth: 1,
+        cornerRadius: 6,
+        displayColors: false,
+        padding: 10,
+        titleFont: { size: 12, weight: 'bold' as const },
+        bodyFont: { size: 11 },
+        callbacks: {
+          title: function(context: any[]) {
+            return context[0].label;
+          },
+          label: function(context: any) {
+            const label = context.dataset.label;
+            const value = context.parsed.y;
+            if (label === 'Kill Rate') {
+              return `${label}: ${value.toFixed(2)} kills/min`;
+            } else if (label === 'K/D Ratio') {
+              return `${label}: ${value.toFixed(2)}`;
+            }
+            return `${label}: ${value}`;
+          }
+        }
+      }
+    }
   };
 });
 
@@ -337,30 +414,6 @@ const navigateToRoundReport = (roundId: string) => {
     }
   });
 };
-
-
-// Functions to handle sticky trend chart hover behavior using hover counter
-const enterTrendChartArea = () => {
-  trendChartHoverCount.value++;
-  showTrendCharts.value = true;
-  // Clear any pending hide timeout
-  if (trendChartHideTimeout.value) {
-    clearTimeout(trendChartHideTimeout.value);
-    trendChartHideTimeout.value = null;
-  }
-};
-
-const leaveTrendChartArea = () => {
-  trendChartHoverCount.value = Math.max(0, trendChartHoverCount.value - 1);
-  // Only hide if no areas are being hovered
-  if (trendChartHoverCount.value === 0) {
-    trendChartHideTimeout.value = setTimeout(() => {
-      showTrendCharts.value = false;
-      trendChartHideTimeout.value = null;
-    }, 800); // Longer delay for moving between charts
-  }
-};
-
 
 
 
@@ -640,34 +693,9 @@ onUnmounted(() => {
 
                   <div class="flex flex-wrap gap-2 items-center ml-auto">
                     <!-- K/D Badge -->
-                    <div class="relative" @mouseenter="enterTrendChartArea" @mouseleave="leaveTrendChartArea">
-                      <div class="explorer-tag explorer-tag--accent flex items-center gap-2 cursor-pointer">
-                        <span class="font-bold">{{ calculateKDR(playerStats?.totalKills || 0, playerStats?.totalDeaths || 0) }}</span>
-                        <span class="text-neutral-500">K/D</span>
-                      </div>
-
-                      <!-- Trend Charts -->
-                      <div
-                        v-if="showTrendCharts"
-                        class="absolute right-0 top-full mt-2 bg-[var(--bg-card)] border border-[var(--border-color)] rounded p-3 w-80 z-50 shadow-2xl"
-                        @mouseenter="enterTrendChartArea"
-                        @mouseleave="leaveTrendChartArea"
-                      >
-                        <div class="space-y-4">
-                          <div class="space-y-1">
-                            <div class="text-xs font-mono text-neon-cyan">KILL RATE TREND</div>
-                            <div class="h-16 -mx-1">
-                              <Line :data="killRateTrendChartData" :options="microChartOptions" />
-                            </div>
-                          </div>
-                          <div class="space-y-1">
-                            <div class="text-xs font-mono text-neon-pink">K/D TREND</div>
-                            <div class="h-16 -mx-1">
-                              <Line :data="kdRatioTrendChartData" :options="microChartOptions" />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                    <div class="explorer-tag explorer-tag--accent flex items-center gap-2">
+                      <span class="font-bold">{{ calculateKDR(playerStats?.totalKills || 0, playerStats?.totalDeaths || 0) }}</span>
+                      <span class="text-neutral-500">K/D</span>
                     </div>
 
                     <!-- Playtime -->
@@ -709,6 +737,30 @@ onUnmounted(() => {
               </div>
             </div>
 
+            <!-- Performance Trends (Always Visible) -->
+            <div v-if="playerStats?.recentStats && (playerStats.recentStats.kdRatioTrend.length > 0 || playerStats.recentStats.killRateTrend.length > 0)" class="explorer-card">
+              <div class="explorer-card-header">
+                <h3 class="explorer-card-title">PERFORMANCE TRENDS</h3>
+                <p class="text-[10px] text-neutral-500 font-mono mt-1">90-DAY ANALYSIS</p>
+              </div>
+              <div class="explorer-card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div class="space-y-2">
+                    <div class="text-sm font-mono text-neon-pink">K/D RATIO TREND</div>
+                    <div class="h-48">
+                      <Line :data="kdRatioTrendChartData" :options="trendChartOptions" />
+                    </div>
+                  </div>
+                  <div class="space-y-2">
+                    <div class="text-sm font-mono text-neon-cyan">KILL RATE TREND</div>
+                    <div class="h-48">
+                      <Line :data="killRateTrendChartData" :options="trendChartOptions" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Main Grid Layout -->
             <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
               
@@ -730,7 +782,7 @@ onUnmounted(() => {
                 <!-- Competitive Rankings -->
                 <div class="explorer-card">
                   <div class="explorer-card-header">
-                    <h3 class="explorer-card-title">COMPETITIVE RANKINGS</h3>
+                    <h3 class="explorer-card-title">MAPS</h3>
                     <p class="text-[10px] text-neutral-500 font-mono mt-1">YOUR POSITION AMONG ALL PLAYERS</p>
                   </div>
                   <div class="explorer-card-body">
@@ -741,13 +793,27 @@ onUnmounted(() => {
                     />
                   </div>
                 </div>
+
+                <!-- Map Performance Race -->
+                <div class="explorer-card">
+                  <div class="explorer-card-header">
+                    <h3 class="explorer-card-title">MAP PERFORMANCE OVER TIME</h3>
+                    <p class="text-[10px] text-neutral-500 font-mono mt-1">TRACK YOUR EVOLVING MAP PREFERENCES</p>
+                  </div>
+                  <div class="explorer-card-body">
+                    <MapPerformanceRace
+                      :player-name="playerName"
+                      :game="playerPanelGame"
+                    />
+                  </div>
+                </div>
               </div>
 
               <!-- Right Column: Achievements, Best Scores, Servers -->
               <div class="xl:col-span-5 space-y-6">
                 
                 <!-- Achievements -->
-                <div class="explorer-card">
+                <div class="explorer-card explorer-card--achievement">
                   <div class="explorer-card-header flex items-center justify-between">
                     <h3 class="explorer-card-title">ACHIEVEMENTS</h3>
                     <router-link
@@ -768,7 +834,7 @@ onUnmounted(() => {
                 </div>
 
                 <!-- Best Scores -->
-                <div class="explorer-card">
+                <div class="explorer-card explorer-card--trophy">
                   <div class="explorer-card-header flex items-center justify-between">
                     <h3 class="explorer-card-title">BEST SCORES</h3>
                     <div class="explorer-toggle-group">
@@ -814,8 +880,22 @@ onUnmounted(() => {
                   </div>
                 </div>
 
+                <!-- Map Preference -->
+                <div class="explorer-card explorer-card--trophy">
+                  <div class="explorer-card-header">
+                    <h3 class="explorer-card-title">MAP PREFERENCE</h3>
+                    <p class="text-[10px] text-neutral-500 font-mono mt-1">LAST 30 DAYS</p>
+                  </div>
+                  <div class="explorer-card-body">
+                    <PlayerMapPreference
+                      :player-name="playerName"
+                      :game="playerPanelGame"
+                    />
+                  </div>
+                </div>
+
                 <!-- Servers List -->
-                <div class="explorer-card">
+                <div class="explorer-card explorer-card--trophy">
                   <div class="explorer-card-header flex items-center justify-between">
                     <h3 class="explorer-card-title">SERVERS</h3>
                     <button
@@ -867,6 +947,33 @@ onUnmounted(() => {
                   </div>
                 </div>
 
+                <!-- Activity Heatmap -->
+                <div class="explorer-card">
+                  <div class="explorer-card-header">
+                    <h3 class="explorer-card-title">ACTIVITY HEATMAP</h3>
+                    <p class="text-[10px] text-neutral-500 font-mono mt-1">WHEN YOU TYPICALLY PLAY</p>
+                  </div>
+                  <div class="explorer-card-body">
+                    <PlayerActivityHeatmap
+                      :player-name="playerName"
+                      :game="playerPanelGame"
+                    />
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Server Map (Player Network) -->
+            <div class="explorer-card">
+              <div class="explorer-card-header">
+                <h3 class="explorer-card-title">SERVER-PLAYER NETWORK</h3>
+                <p class="text-[10px] text-neutral-500 font-mono mt-1">YOUR CONNECTIONS ACROSS SERVERS</p>
+              </div>
+              <div class="explorer-card-body p-0">
+                <PlayerServerMap
+                  :player-name="playerName"
+                />
               </div>
             </div>
 

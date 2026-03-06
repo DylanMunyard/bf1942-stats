@@ -675,6 +675,106 @@ public class PlayerRelationshipService(
     }
 
     /// <summary>
+    /// Get the server-player network for a specific player.
+    /// Returns the player, their teammates, and the servers they play on together.
+    /// </summary>
+    public async Task<CommunityServerMap> GetPlayerServerMapAsync(
+        string playerName,
+        CancellationToken cancellationToken = default)
+    {
+        logger.LogDebug("Getting server map for player {PlayerName}", playerName);
+
+        return await neo4jService.ExecuteReadAsync(async tx =>
+        {
+            // Get the focal player and their teammates (connected players)
+            var playerQuery = @"
+                MATCH (p:Player {name: $playerName})
+                OPTIONAL MATCH (p)-[r:CO_PLAYED_WITH]-(teammate:Player)
+                RETURN DISTINCT p.name AS playerName
+                UNION ALL
+                MATCH (p:Player {name: $playerName})-[r:CO_PLAYED_WITH]-(teammate:Player)
+                RETURN DISTINCT teammate.name AS playerName";
+
+            var cursor = await tx.RunAsync(playerQuery, new { playerName });
+            var playerNames = new List<string> { playerName };
+
+            await foreach (var record in cursor)
+            {
+                var name = record["playerName"].As<string>();
+                if (!playerNames.Contains(name))
+                    playerNames.Add(name);
+            }
+
+            // Get all player-server relationships for the focal player and their teammates
+            var mapQuery = @"
+                UNWIND $playerNames AS name
+                MATCH (p:Player {name: name})-[ps:PLAYS_ON]->(s:Server)
+                RETURN DISTINCT
+                       p.name AS playerName,
+                       s.guid AS serverGuid,
+                       s.name AS serverName,
+                       ps.sessionCount AS sessionCount,
+                       ps.lastPlayed AS lastPlayed
+                ORDER BY p.name, ps.sessionCount DESC";
+
+            var mapCursor = await tx.RunAsync(mapQuery, new { playerNames });
+
+            var playerNodes = new Dictionary<string, ServerMapNode>();
+            var serverNodes = new Dictionary<string, ServerMapNode>();
+            var edges = new List<ServerMapEdge>();
+
+            await foreach (var record in mapCursor)
+            {
+                var pName = record["playerName"].As<string>();
+                var serverGuid = record["serverGuid"].As<string>();
+                var serverName = record["serverName"].As<string>();
+                var sessionCount = record["sessionCount"].As<int>();
+                var lastPlayed = ToNullableDateTime(record["lastPlayed"]) ?? DateTime.UtcNow;
+
+                // Add player node if not exists (mark focal player as core)
+                if (!playerNodes.ContainsKey(pName))
+                {
+                    playerNodes[pName] = new ServerMapNode
+                    {
+                        Id = pName,
+                        Label = pName,
+                        Type = "player",
+                        IsCore = pName == playerName  // Focal player is marked as core
+                    };
+                }
+
+                // Add server node if not exists
+                if (!serverNodes.ContainsKey(serverGuid))
+                {
+                    serverNodes[serverGuid] = new ServerMapNode
+                    {
+                        Id = serverGuid,
+                        Label = serverName,
+                        Type = "server",
+                        IsCore = false
+                    };
+                }
+
+                // Add edge
+                edges.Add(new ServerMapEdge
+                {
+                    Source = pName,
+                    Target = serverGuid,
+                    Weight = sessionCount,
+                    LastPlayed = lastPlayed
+                });
+            }
+
+            return new CommunityServerMap
+            {
+                Players = playerNodes.Values.ToList(),
+                Servers = serverNodes.Values.ToList(),
+                Edges = edges
+            };
+        });
+    }
+
+    /// <summary>
     /// Run community detection algorithm and store results.
     /// Uses pure Cypher-based clustering (no GDS required for Kubernetes deployment).
     /// </summary>

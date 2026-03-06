@@ -490,4 +490,66 @@ public class DataExplorerController(
 
         return Ok(result);
     }
+
+    /// <summary>
+    /// Get player's activity heatmap showing when they typically play.
+    /// Returns activity data grouped by day of week and hour.
+    /// </summary>
+    /// <param name="playerName">The player name</param>
+    /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
+    /// <param name="days">Number of days to look back (default 90)</param>
+    [HttpGet("players/{playerName}/activity-heatmap")]
+    [ProducesResponseType(typeof(PlayerActivityHeatmapResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PlayerActivityHeatmapResponse>> GetPlayerActivityHeatmap(
+        string playerName, 
+        [FromQuery] string game = "bf1942", 
+        [FromQuery] int days = 90)
+    {
+        // URL decode parameter
+        playerName = Uri.UnescapeDataString(playerName);
+
+        logger.LogDebug("Getting activity heatmap for player {PlayerName} for last {Days} days", playerName, days);
+
+        var result = await dataExplorerService.GetPlayerActivityHeatmapAsync(playerName, days);
+
+        if (result == null)
+        {
+            logger.LogWarning("No activity data found for player: {PlayerName}", playerName);
+            return NotFound($"No activity data found for player '{playerName}'");
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Get player's map performance timeline showing trends over time.
+    /// Returns monthly snapshots of map performance metrics.
+    /// </summary>
+    /// <param name="playerName">The player name</param>
+    /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
+    /// <param name="months">Number of months to look back (default 12)</param>
+    [HttpGet("players/{playerName}/map-performance-timeline")]
+    [ProducesResponseType(typeof(MapPerformanceTimelineResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<MapPerformanceTimelineResponse>> GetMapPerformanceTimeline(
+        string playerName, 
+        [FromQuery] string game = "bf1942", 
+        [FromQuery] int months = 12)
+    {
+        // URL decode parameter
+        playerName = Uri.UnescapeDataString(playerName);
+
+        logger.LogDebug("Getting map performance timeline for player {PlayerName} for last {Months} months", playerName, months);
+
+        var result = await dataExplorerService.GetMapPerformanceTimelineAsync(playerName, game, months);
+
+        if (result == null)
+        {
+            logger.LogWarning("No map performance data found for player: {PlayerName}", playerName);
+            return NotFound($"No map performance data found for player '{playerName}'");
+        }
+
+        return Ok(result);
+    }
 }

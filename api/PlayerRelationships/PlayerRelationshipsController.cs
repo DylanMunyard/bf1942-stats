@@ -191,4 +191,23 @@ public class PlayerRelationshipsController(
             return StatusCode(500, "An error occurred while fetching server social statistics");
         }
     }
+
+    /// <summary>
+    /// Get the server-player network for a specific player.
+    /// Shows the player, their teammates, and shared servers for visualization.
+    /// </summary>
+    [HttpGet("players/{playerName}/server-map")]
+    public async Task<ActionResult<CommunityServerMap>> GetPlayerServerMap(string playerName)
+    {
+        try
+        {
+            var serverMap = await relationshipService.GetPlayerServerMapAsync(playerName);
+            return Ok(serverMap);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error getting server map for player {PlayerName}", playerName);
+            return StatusCode(500, "An error occurred while fetching server map");
+        }
+    }
 }

@@ -286,4 +286,23 @@ public class CachedPlayerRelationshipService(
 
         return result;
     }
+
+    public async Task<CommunityServerMap> GetPlayerServerMapAsync(
+        string playerName,
+        CancellationToken cancellationToken = default)
+    {
+        var cacheKey = $"player:{playerName}:server-map";
+        var cached = await cacheService.GetAsync<CommunityServerMap>(cacheKey, cancellationToken);
+
+        if (cached != null)
+        {
+            logger.LogDebug("Cache hit for server map of player {PlayerName}", playerName);
+            return cached;
+        }
+
+        var result = await innerService.GetPlayerServerMapAsync(playerName, cancellationToken);
+        await cacheService.SetAsync(cacheKey, result, TimeSpan.FromHours(1), cancellationToken);
+
+        return result;
+    }
 }

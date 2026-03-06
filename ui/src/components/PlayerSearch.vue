@@ -130,7 +130,7 @@ watch(() => props.modelValue, (newValue) => {
   >
     <!-- Search Icon with Glow -->
     <div class="absolute left-4 top-1/2 transform -translate-y-1/2 z-10">
-      <div class="w-5 h-5 rounded-full bg-gradient-to-r from-cyan-400 to-purple-500 flex items-center justify-center">
+      <div class="w-5 h-5 rounded-full bg-gradient-to-r from-amber-400 to-purple-500 flex items-center justify-center">
         <span class="text-neutral-900 text-xs font-bold">🔍</span>
       </div>
     </div>
@@ -140,7 +140,7 @@ watch(() => props.modelValue, (newValue) => {
       :model-value="modelValue"
       type="text"
       :placeholder="placeholder"
-      class="w-full pl-14 pr-14 py-3 bg-gradient-to-r from-neutral-800/80 to-neutral-900/80 backdrop-blur-lg border border-neutral-700/50 rounded-xl text-neutral-200 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500/50 transition-all duration-300 font-medium shadow-lg hover:shadow-cyan-500/20 focus:shadow-cyan-500/30"
+      class="w-full pl-14 pr-14 py-3 bg-gradient-to-r from-[var(--bg-surface)] to-[var(--bg-base)] backdrop-blur-lg border border-[var(--border-ember-subtle)] rounded-xl text-[var(--text-ember-primary)] placeholder-[var(--text-ember-muted)] focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500/30 transition-all duration-300 font-medium shadow-lg hover:shadow-amber-500/10 focus:shadow-amber-500/20"
       @input="(e) => onInput((e.target as HTMLInputElement).value)"
       @keyup.enter="$emit('enter')"
       @focus="onFocus"
@@ -152,29 +152,29 @@ watch(() => props.modelValue, (newValue) => {
       v-if="isLoading"
       class="absolute right-4 top-1/2 transform -translate-y-1/2"
     >
-      <div class="w-5 h-5 border-2 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin" />
+      <div class="w-5 h-5 border-2 border-amber-500/30 border-t-amber-400 rounded-full animate-spin" />
     </div>
     
     <!-- Search Glow Effect -->
-    <div class="absolute inset-0 rounded-xl bg-gradient-to-r from-cyan-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+    <div class="absolute inset-0 rounded-xl bg-gradient-to-r from-amber-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
     
     <!-- Enhanced Player Dropdown -->
     <div
       v-if="showDropdown"
-      class="absolute top-full mt-3 left-0 right-0 bg-gradient-to-br from-neutral-800/95 to-neutral-900/95 backdrop-blur-lg rounded-xl border border-neutral-700/50 max-h-80 overflow-y-auto shadow-2xl z-50"
+      class="absolute top-full mt-3 left-0 right-0 bg-gradient-to-br from-[var(--bg-surface)] to-[var(--bg-base)] backdrop-blur-lg rounded-xl border border-[var(--border-ember-subtle)] max-h-80 overflow-y-auto shadow-2xl z-50"
     >
       <div
         v-for="player in searchResults"
         :key="player.playerName"
-        class="group p-4 border-b border-neutral-700/30 hover:bg-gradient-to-r hover:from-neutral-700/50 hover:to-neutral-800/50 cursor-pointer transition-all duration-300 last:border-b-0 hover:shadow-lg"
+        class="group p-4 border-b border-[var(--border-ember-subtle)] hover:bg-gradient-to-r hover:from-[var(--bg-muted)] hover:to-[var(--bg-surface)] cursor-pointer transition-all duration-300 last:border-b-0 hover:shadow-lg"
         @mousedown.prevent="selectPlayer(player)"
       >
         <div class="space-y-2">
-          <div class="font-bold text-neutral-200 text-sm group-hover:text-cyan-400 transition-colors">
+          <div class="font-bold text-[var(--text-ember-primary)] text-sm group-hover:text-amber-400 transition-colors">
             {{ player.playerName }}
           </div>
           <div class="flex items-center gap-3 flex-wrap text-xs">
-            <span class="text-neutral-400 font-medium">{{ formatPlayTime(player.totalPlayTimeMinutes) }}</span>
+            <span class="text-[var(--text-ember-muted)] font-medium">{{ formatPlayTime(player.totalPlayTimeMinutes) }}</span>
             <span
               v-if="player.isActive"
               class="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold text-green-400 bg-green-500/20 border border-green-500/30 rounded-full"

@@ -6,7 +6,10 @@ import {
   SessionDetails,
   SessionListItem,
   InitialData,
-  PlayerHistoryResponse
+  PlayerHistoryResponse,
+  ActivityHeatmapResponse,
+  MapPerformanceTimelineResponse,
+  PlayerMapStatEntry
 } from '../types/playerStatsTypes';
 
 /**
@@ -279,5 +282,77 @@ export async function fetchPlayerOnlineHistory(
   } catch (err) {
     console.error('Error fetching player online history:', err);
     throw new Error('Failed to get player online history');
+  }
+}
+
+/**
+ * Fetches player activity heatmap data
+ * @param playerName The name of the player
+ * @param game The game type (default: 'bf1942')
+ * @param days Number of days to look back (default: 90)
+ * @returns Activity heatmap data
+ */
+export async function fetchPlayerActivityHeatmap(
+  playerName: string, 
+  game: string = 'bf1942', 
+  days: number = 90
+): Promise<ActivityHeatmapResponse> {
+  try {
+    const response = await axios.get<ActivityHeatmapResponse>(
+      `/stats/data-explorer/players/${encodeURIComponent(playerName)}/activity-heatmap`,
+      { params: { game, days } }
+    );
+    return response.data;
+  } catch (err) {
+    console.error('Error fetching activity heatmap:', err);
+    throw new Error('Failed to get activity heatmap');
+  }
+}
+
+/**
+ * Fetches player map performance timeline data
+ * @param playerName The name of the player
+ * @param game The game type (default: 'bf1942')
+ * @param months Number of months to look back (default: 12)
+ * @returns Map performance timeline data
+ */
+export async function fetchMapPerformanceTimeline(
+  playerName: string, 
+  game: string = 'bf1942', 
+  months: number = 12
+): Promise<MapPerformanceTimelineResponse> {
+  try {
+    const response = await axios.get<MapPerformanceTimelineResponse>(
+      `/stats/data-explorer/players/${encodeURIComponent(playerName)}/map-performance-timeline`,
+      { params: { game, months } }
+    );
+    return response.data;
+  } catch (err) {
+    console.error('Error fetching map performance timeline:', err);
+    throw new Error('Failed to get map performance timeline');
+  }
+}
+
+/**
+ * Fetches player map statistics
+ * @param playerName The name of the player
+ * @param game The game type (default: 'bf1942')
+ * @param days Number of days to look back (default: 30)
+ * @returns Player map statistics
+ */
+export async function fetchPlayerMapStats(
+  playerName: string, 
+  game: string = 'bf1942', 
+  days: number = 30
+): Promise<PlayerMapStatEntry[]> {
+  try {
+    const response = await axios.get<PlayerMapStatEntry[]>(
+      `/stats/players/${encodeURIComponent(playerName)}/map-stats`,
+      { params: { game, days } }
+    );
+    return response.data;
+  } catch (err) {
+    console.error('Error fetching player map stats:', err);
+    throw new Error('Failed to get player map stats');
   }
 }

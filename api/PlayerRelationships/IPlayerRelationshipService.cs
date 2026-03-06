@@ -88,4 +88,8 @@ public interface IPlayerRelationshipService
     Task<CommunityServerMap> GetCommunityServerMapAsync(
         string communityId,
         CancellationToken cancellationToken = default);
+
+    Task<CommunityServerMap> GetPlayerServerMapAsync(
+        string playerName,
+        CancellationToken cancellationToken = default);
 }

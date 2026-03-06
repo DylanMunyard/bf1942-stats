@@ -1,13 +1,13 @@
 /* ===== HACKER THEME - Global Base Styles ===== */
 
-/* Neon color palette */
+/* Material Design Color Palette */
 :root {
-  /* Neon accents */
-  --neon-cyan: #00fff2;
-  --neon-green: #39ff14;
-  --neon-pink: #ff00ff;
-  --neon-gold: #ffd700;
-  --neon-red: #ff3131;
+  /* Material Design accents - readable and professional */
+  --neon-cyan: #2196F3;      /* Material Blue */
+  --neon-green: #4CAF50;     /* Material Green */
+  --neon-pink: #E91E63;      /* Material Pink */
+  --neon-gold: #FFC107;      /* Material Amber */
+  --neon-red: #F44336;       /* Material Red */
 
   /* Backgrounds */
   --bg-dark: #0a0a0f;
@@ -30,15 +30,59 @@
   --color-text-2: var(--text-secondary);
   --color-text-muted: rgba(139, 148, 158, 0.7);
   --color-primary: var(--neon-cyan);
-  --color-primary-hover: #00ffff;
+  --color-primary-hover: #42A5F5;
   --color-accent: var(--neon-green);
-  --color-accent-hover: #4dff33;
+  --color-accent-hover: #66BB6A;
   --color-card-bg: var(--bg-panel);
   --color-card-bg-hover: var(--bg-card);
   --color-text-secondary: var(--text-secondary);
 
   /* Mobile navigation height */
   --mobile-nav-height: 64px;
+
+  /* ===== EMBER DARK THEME - Gaming Material Design ===== */
+  /* Backgrounds (warm dark grays) */
+  --bg-base: #13100f;
+  --bg-surface: #1c1815;
+  --bg-elevated: #252019;
+  --bg-muted: #2e2820;
+
+  /* Primary Accent — Amber/Gold (warmth) */
+  --accent-amber: #f59e0b;
+  --accent-amber-muted: rgba(245, 158, 11, 0.12);
+  --accent-amber-glow: rgba(245, 158, 11, 0.20);
+
+  /* Secondary Accent — Deep Purple (gaming/futuristic) */
+  --accent-purple: #a855f7;
+  --accent-purple-muted: rgba(168, 85, 247, 0.12);
+  --accent-purple-glow: rgba(168, 85, 247, 0.20);
+
+  /* Status Colors */
+  --color-success: #10b981;
+  --color-warning: #f97316;
+  --color-danger: #ef4444;
+  --color-info: #60a5fa;
+
+  /* Text */
+  --text-ember-primary: #f5f0eb;
+  --text-ember-secondary: #a8998c;
+  --text-ember-muted: #6b5f56;
+  --border-ember-default: #2e2820;
+  --border-ember-subtle: #3d342b;
+}
+
+/* Light mode overrides for Ember Dark theme */
+html.light-mode :root {
+  --bg-base: #faf7f5;
+  --bg-surface: #f0ece8;
+  --bg-elevated: #e8e2dc;
+  --bg-muted: #dfd8d0;
+  --text-ember-primary: #1c1815;
+  --text-ember-secondary: #6b5f56;
+  --text-ember-muted: #a8998c;
+  --border-ember-default: #d4cdc5;
+  --border-ember-subtle: #e3dcd4;
+  /* Accents stay the same in light mode */
 }
 
 *,

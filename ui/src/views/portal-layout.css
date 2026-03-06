@@ -3,19 +3,28 @@
  * and wrap content in <div class="portal-inner">. */
 
 .portal-page {
-  --portal-bg: #06060a;
-  --portal-surface: rgba(12, 12, 18, 0.85);
-  --portal-surface-elevated: #111118;
-  --portal-border: #1a1a24;
-  --portal-border-focus: #2a2a38;
-  --portal-accent: #00e5a0;
-  --portal-accent-dim: rgba(0, 229, 160, 0.12);
-  --portal-accent-glow: rgba(0, 229, 160, 0.25);
-  --portal-warn: #f59e0b;
-  --portal-danger: #ef4444;
+  /* Ember Dark theme: warm dark backgrounds */
+  --portal-bg: var(--bg-base, #13100f);
+  --portal-surface: rgba(28, 24, 21, 0.9);
+  --portal-surface-elevated: var(--bg-elevated, #252019);
+  --portal-border: var(--border-ember-subtle, #3d342b);
+  --portal-border-focus: #4d3f34;
+  /* Primary accent: amber gold for warmth */
+  --portal-accent: var(--accent-amber, #f59e0b);
+  --portal-accent-dim: var(--accent-amber-muted, rgba(245, 158, 11, 0.12));
+  --portal-accent-glow: var(--accent-amber-glow, rgba(245, 158, 11, 0.20));
+  /* Secondary accent: deep purple for gaming */
+  --portal-accent-secondary: var(--accent-purple, #a855f7);
+  --portal-accent-secondary-dim: var(--accent-purple-muted, rgba(168, 85, 247, 0.12));
+  /* Status colors */
+  --portal-warn: var(--color-warning, #f97316);
+  --portal-danger: var(--color-danger, #ef4444);
   --portal-danger-glow: rgba(239, 68, 68, 0.2);
-  --portal-text: #9ca3af;
-  --portal-text-bright: #e5e7eb;
+  --portal-success: var(--color-success, #10b981);
+  --portal-info: var(--color-info, #60a5fa);
+  /* Text */
+  --portal-text: var(--text-ember-secondary, #a8998c);
+  --portal-text-bright: var(--text-ember-primary, #f5f0eb);
   min-height: 100vh;
   background: var(--portal-bg);
   color: var(--portal-text);
@@ -27,8 +36,8 @@
   position: fixed;
   inset: 0;
   background-image:
-    linear-gradient(rgba(0, 229, 160, 0.015) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 229, 160, 0.015) 1px, transparent 1px);
+    linear-gradient(rgba(245, 158, 11, 0.008) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245, 158, 11, 0.008) 1px, transparent 1px);
   background-size: 48px 48px;
   pointer-events: none;
   z-index: 0;
@@ -72,14 +81,14 @@
 
 /* Accessibility: visible focus rings for keyboard navigation */
 .portal-page :focus-visible {
-  outline: 2px solid var(--portal-accent);
+  outline: 2px solid var(--portal-accent, var(--accent-amber));
   outline-offset: 2px;
 }
 
 .portal-page button:focus-visible,
 .portal-page a:focus-visible,
 .portal-page [tabindex]:focus-visible {
-  outline: 2px solid var(--portal-accent);
+  outline: 2px solid var(--portal-accent, var(--accent-amber));
   outline-offset: 2px;
   border-radius: 4px;
 }

@@ -29,8 +29,8 @@ const setActiveFilter = (filterId: string) => {
       :class="[
         'group relative flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-200',
         activeFilter === game.id
-          ? 'bg-neutral-700 border-neutral-600 text-white shadow-md'
-          : 'bg-neutral-800/60 border-neutral-700/50 hover:border-neutral-600 text-neutral-300 hover:bg-neutral-800'
+          ? 'bg-[var(--bg-muted)] border-[var(--border-ember-subtle)] text-[var(--text-ember-primary)] shadow-md'
+          : 'bg-[var(--bg-surface)] border-[var(--border-ember-subtle)] hover:border-[var(--border-ember-default)] text-[var(--text-ember-secondary)] hover:bg-[var(--bg-muted)]'
       ]"
       @click="setActiveFilter(game.id)"
     >

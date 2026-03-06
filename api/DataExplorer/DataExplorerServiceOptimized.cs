@@ -2181,7 +2181,10 @@ public class DataExplorerService(
         // Note: Currently we don't filter by game in the rankings query since PlayerMapStats
         // doesn't have game info and joining with Servers table would be complex.
         // This returns rankings across all games.
-        var cutoffDate = DateTime.UtcNow.AddDays(-days);
+
+        // Cap days to prevent DateTime overflow (max ~36500 days = ~100 years)
+        var cappedDays = Math.Min(Math.Max(days, 1), 36500);
+        var cutoffDate = DateTime.UtcNow.AddDays(-cappedDays);
         var startYear = cutoffDate.Year;
         var startMonth = cutoffDate.Month;
 
@@ -2557,6 +2560,122 @@ public class DataExplorerService(
             ServerBreakdown: serverBreakdownList,
             DateRange: new DateRangeDto(days, cutoffDate, DateTime.UtcNow)
         );
+    }
+
+    public async Task<PlayerActivityHeatmapResponse?> GetPlayerActivityHeatmapAsync(string playerName, int days = 90)
+    {
+        if (string.IsNullOrWhiteSpace(playerName))
+            return null;
+
+        var cutoff = DateTime.UtcNow.AddDays(-days);
+
+        // Fetch sessions from the database
+        var sessions = await dbContext.PlayerSessions
+            .Where(ps => ps.PlayerName == playerName 
+                && ps.StartTime >= cutoff 
+                && !ps.IsDeleted)
+            .Select(ps => new 
+            { 
+                ps.StartTime, 
+                ps.LastSeenTime, 
+                ps.MapName 
+            })
+            .ToListAsync();
+
+        if (sessions.Count == 0)
+            return new PlayerActivityHeatmapResponse(playerName, [], days);
+
+        // Group sessions by day of week and hour
+        var activityData = sessions
+            .SelectMany(s => 
+            {
+                // Generate activity for each hour the session spans
+                var activities = new List<(int DayOfWeek, int Hour, int Minutes, string MapName)>();
+                var start = s.StartTime;
+                var end = s.LastSeenTime;
+
+                while (start < end)
+                {
+                    var hourEnd = new DateTime(start.Year, start.Month, start.Day, start.Hour, 0, 0).AddHours(1);
+                    var segmentEnd = hourEnd < end ? hourEnd : end;
+                    var minutes = (int)(segmentEnd - start).TotalMinutes;
+
+                    activities.Add(((int)start.DayOfWeek, start.Hour, minutes, s.MapName));
+
+                    start = hourEnd;
+                }
+
+                return activities;
+            })
+            .GroupBy(a => new { a.DayOfWeek, a.Hour })
+            .Select(g => new HeatmapCellDto(
+                DayOfWeek: g.Key.DayOfWeek,
+                Hour: g.Key.Hour,
+                MinutesActive: g.Sum(a => a.Minutes),
+                MostPlayedMap: g.GroupBy(a => a.MapName)
+                    .OrderByDescending(mg => mg.Sum(m => m.Minutes))
+                    .First()
+                    .Key
+            ))
+            .ToList();
+
+        return new PlayerActivityHeatmapResponse(playerName, activityData, days);
+    }
+
+    public async Task<MapPerformanceTimelineResponse?> GetMapPerformanceTimelineAsync(string playerName, string game = "bf1942", int months = 12)
+    {
+        if (string.IsNullOrWhiteSpace(playerName))
+            return null;
+
+        var normalizedGame = NormalizeGame(game);
+        var cutoff = DateTime.UtcNow.AddMonths(-months);
+        var cutoffYear = cutoff.Year;
+        var cutoffMonth = cutoff.Month;
+
+        // Get all map stats for the player, grouped by year/month
+        var stats = await dbContext.PlayerMapStats
+            .Where(m => m.PlayerName == playerName 
+                && m.ServerGuid == "" // Global stats only
+                && ((m.Year > cutoffYear) || (m.Year == cutoffYear && m.Month >= cutoffMonth)))
+            .ToListAsync();
+
+        if (stats.Count == 0)
+            return new MapPerformanceTimelineResponse(playerName, normalizedGame, []);
+
+        // Filter by game if we can determine it from map names
+        // For now, we'll include all maps since we don't have game info in PlayerMapStats
+        
+        // Group by year/month
+        var monthlyData = stats
+            .GroupBy(s => new { s.Year, s.Month })
+            .Select(g => 
+            {
+                var monthLabel = new DateTime(g.Key.Year, g.Key.Month, 1).ToString("MMM yyyy");
+                var mapStats = g
+                    .Select(s => new MapTimelineEntryDto(
+                        MapName: s.MapName,
+                        Kills: s.TotalKills,
+                        Deaths: s.TotalDeaths,
+                        KdRatio: s.TotalDeaths > 0 ? Math.Round((double)s.TotalKills / s.TotalDeaths, 2) : s.TotalKills,
+                        Score: s.TotalScore,
+                        Sessions: s.TotalRounds,
+                        PlayTimeMinutes: Math.Round(s.TotalPlayTimeMinutes, 1)
+                    ))
+                    .OrderByDescending(m => m.Score)
+                    .ToList();
+
+                return new MapTimelineMonthDto(
+                    Year: g.Key.Year,
+                    Month: g.Key.Month,
+                    MonthLabel: monthLabel,
+                    Maps: mapStats
+                );
+            })
+            .OrderBy(m => m.Year)
+            .ThenBy(m => m.Month)
+            .ToList();
+
+        return new MapPerformanceTimelineResponse(playerName, normalizedGame, monthlyData);
     }
 
     #endregion

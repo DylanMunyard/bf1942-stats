@@ -167,4 +167,21 @@ public interface IDataExplorerService
         string mapName,
         string game = "bf1942",
         int days = 60);
+
+    /// <summary>
+    /// Get player's activity heatmap showing when they typically play.
+    /// Returns activity data grouped by day of week and hour.
+    /// </summary>
+    /// <param name="playerName">The player name</param>
+    /// <param name="days">Number of days to look back (default 90)</param>
+    Task<PlayerActivityHeatmapResponse?> GetPlayerActivityHeatmapAsync(string playerName, int days = 90);
+
+    /// <summary>
+    /// Get player's map performance timeline showing trends over time.
+    /// Returns monthly snapshots of map performance metrics.
+    /// </summary>
+    /// <param name="playerName">The player name</param>
+    /// <param name="game">Game filter: bf1942 (default), fh2, or bfvietnam</param>
+    /// <param name="months">Number of months to look back (default 12)</param>
+    Task<MapPerformanceTimelineResponse?> GetMapPerformanceTimelineAsync(string playerName, string game = "bf1942", int months = 12);
 }

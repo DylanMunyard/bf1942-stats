@@ -107,7 +107,13 @@
           <div class="explorer-stat-label">{{ getSecondaryMetricLabel() }}</div>
         </div>
 
-        <!-- Card 4: Percentage -->
+        <!-- Card 4: Average Primary Per Round -->
+        <div class="explorer-stat">
+          <div class="explorer-stat-value" :class="themeStatClass">{{ getAveragePrimaryPerRound() }}</div>
+          <div class="explorer-stat-label">{{ getAveragePrimaryLabel() }}</div>
+        </div>
+
+        <!-- Card 5: Average K/D or Win Rate -->
         <div class="explorer-stat">
           <div class="explorer-stat-value" :class="percentageStatClass">{{ getAveragePercentage() }}<span class="text-sm ml-1 opacity-50">{{ getPercentageUnit() || '' }}</span></div>
           <div class="explorer-stat-label">{{ getPercentageLabel() }}</div>
@@ -323,7 +329,7 @@ const metricTabs: MetricTab[] = [
 // Extract metric type from slice type
 const getMetricTypeForSlice = (sliceType: string): 'score' | 'kills' | 'wins' => {
   if (sliceType.includes('Kills')) return 'kills';
-  if (sliceType.includes('TeamWins')) return 'wins';
+  if (sliceType.includes('Wins')) return 'wins';
   return 'score';
 };
 
@@ -341,7 +347,7 @@ const toggleScope = (scope: 'map' | 'map-server') => {
   if (currentMetric === 'kills') {
     newSliceType = includeServer ? 'KillsByMapAndServer' : 'KillsByMap';
   } else if (currentMetric === 'wins') {
-    newSliceType = includeServer ? 'TeamWinsByMapAndServer' : 'TeamWinsByMap';
+    newSliceType = includeServer ? 'WinsByMapAndServer' : 'WinsByMap';
   } else {
     newSliceType = includeServer ? 'ScoreByMapAndServer' : 'ScoreByMap';
   }
@@ -359,7 +365,7 @@ const selectMetric = (metricType: 'score' | 'kills' | 'wins') => {
   if (metricType === 'kills') {
     newSliceType = currentHasServer ? 'KillsByMapAndServer' : 'KillsByMap';
   } else if (metricType === 'wins') {
-    newSliceType = currentHasServer ? 'TeamWinsByMapAndServer' : 'TeamWinsByMap';
+    newSliceType = currentHasServer ? 'WinsByMapAndServer' : 'WinsByMap';
   } else {
     newSliceType = currentHasServer ? 'ScoreByMapAndServer' : 'ScoreByMap';
   }
@@ -427,8 +433,8 @@ const loadSliceDimensions = async () => {
       { type: 'ScoreByMapAndServer', name: 'Score by Map + Server', description: 'Player score per map per server' },
       { type: 'KillsByMap', name: 'Kills by Map', description: 'Total kills per map' },
       { type: 'KillsByMapAndServer', name: 'Kills by Map + Server', description: 'Kills per map per server' },
-      { type: 'TeamWinsByMap', name: 'Team Wins by Map', description: 'Team win statistics per map' },
-      { type: 'TeamWinsByMapAndServer', name: 'Team Wins by Map + Server', description: 'Team wins per map per server' }
+      { type: 'WinsByMap', name: 'Wins by Map', description: 'Win statistics per map' },
+      { type: 'WinsByMapAndServer', name: 'Wins by Map + Server', description: 'Wins per map per server' }
     ];
   }
 };
@@ -439,7 +445,6 @@ const loadData = async (days?: number) => {
   const timeRange = days || selectedTimeRange.value;
 
   isLoading.value = true;
-  error.value = null;
 
   try {
     const params = new URLSearchParams({
@@ -461,6 +466,7 @@ const loadData = async (days?: number) => {
     }
 
     const responseData = await response.json();
+    error.value = null; // Clear error on success
 
     allResults.value = responseData.results || [];
 
@@ -479,6 +485,7 @@ const loadData = async (days?: number) => {
   } catch (err: any) {
     console.error(`Error loading sliced player data:`, err);
     error.value = err.message || 'Failed to load player details';
+    // Don't clear slicedData so user can navigate away from the failed metric
   }
 
   isLoading.value = false;
@@ -578,6 +585,27 @@ const getAveragePercentage = () => {
   return (total / slicedData.value.results.length).toFixed(1);
 };
 
+const getAveragePrimaryPerRound = () => {
+  if (!slicedData.value || slicedData.value.results.length === 0) return '0';
+  const totalPrimary = slicedData.value.results.reduce((sum, result) => sum + result.primaryValue, 0);
+  const totalSecondary = slicedData.value.results.reduce((sum, result) => sum + result.secondaryValue, 0);
+
+  if (totalSecondary === 0) return '0';
+
+  const average = totalPrimary / totalSecondary;
+  if (selectedSliceType.value.includes('Kills')) {
+    return average.toFixed(2);
+  }
+  return average.toLocaleString('en-US', { maximumFractionDigits: 0 });
+};
+
+const getAveragePrimaryLabel = () => {
+  if (selectedSliceType.value.includes('Score')) return 'Avg Score/Round';
+  if (selectedSliceType.value.includes('Kills')) return 'Avg Kills/Round';
+  if (selectedSliceType.value.includes('Wins')) return 'Avg Wins/Round';
+  return 'Avg Per Round';
+};
+
 const formatAdditionalKey = (key: string) => {
   return key
     .replace(/([a-z])([A-Z])/g, '$1 $2')
@@ -668,7 +696,13 @@ watch(() => props.serverGuid, () => {
 
 @media (min-width: 640px) {
   .explorer-stats-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 768px) {
+  .explorer-stats-grid {
+    grid-template-columns: repeat(5, 1fr);
   }
 }
 

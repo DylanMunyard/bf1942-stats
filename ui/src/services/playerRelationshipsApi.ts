@@ -183,3 +183,10 @@ export async function fetchCommunityServerMap(communityId: string): Promise<Comm
   );
   return response.data;
 }
+
+export async function fetchPlayerServerMap(playerName: string): Promise<CommunityServerMap> {
+  const response = await axios.get<CommunityServerMap>(
+    `${BASE}/players/${encodeURIComponent(playerName)}/server-map`
+  );
+  return response.data;
+}
