@@ -13,7 +13,7 @@
     <!-- Map preference data -->
     <div v-else-if="topMap" class="preference-content">
       <!-- Hero card for top map -->
-      <div class="hero-map">
+      <div class="hero-map hero-map--clickable" @click="emit('navigateToMap', topMap.mapName)">
         <h4 class="hero-map-name">{{ topMap.mapName }}</h4>
         <div class="hero-stats">
           <div class="stat-item">
@@ -33,7 +33,7 @@
 
       <!-- Top 5 maps bars -->
       <div v-if="topMaps.length > 1" class="map-bars">
-        <div v-for="(map, index) in topMaps.slice(0, 5)" :key="map.mapName" class="map-bar-row">
+        <div v-for="(map, index) in topMaps.slice(0, 5)" :key="map.mapName" class="map-bar-row map-bar-row--clickable" @click="emit('navigateToMap', map.mapName)">
           <div class="map-bar-label">
             <span class="map-position">{{ index + 1 }}</span>
             <span class="map-name">{{ map.mapName }}</span>
@@ -69,6 +69,10 @@ import type { PlayerMapStatEntry } from '../types/playerStatsTypes';
 const props = defineProps<{
   playerName: string;
   game?: string;
+}>();
+
+const emit = defineEmits<{
+  navigateToMap: [mapName: string];
 }>();
 
 const loading = ref(true);
@@ -162,6 +166,16 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
+.hero-map--clickable {
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.hero-map--clickable:hover {
+  border-color: rgba(245, 158, 11, 0.5);
+  background: rgba(245, 158, 11, 0.1);
+}
+
 .hero-map-name {
   font-size: 18px;
   font-weight: 600;
@@ -201,6 +215,23 @@ onMounted(() => {
 
 .map-bar-row {
   margin-bottom: 12px;
+}
+
+.map-bar-row--clickable {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 4px;
+  margin-left: -4px;
+  margin-right: -4px;
+  transition: background 0.2s ease;
+}
+
+.map-bar-row--clickable:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.map-bar-row--clickable:hover .map-name {
+  color: var(--neon-cyan);
 }
 
 .map-bar-label {

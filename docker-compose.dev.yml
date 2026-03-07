@@ -168,12 +168,6 @@ services:
       - NEO4J_server_bolt_thread__pool__min__size=5
       - NEO4J_server_bolt_thread__pool__max__size=400
       
-      # APOC plugins for advanced graph algorithms
-      - NEO4J_PLUGINS=["apoc"]
-      
-      # Logging
-      - NEO4J_db_logs_query_enabled=INFO  # Query logging level
-      
     volumes:
       - neo4j-data:/data
       - neo4j-logs:/logs

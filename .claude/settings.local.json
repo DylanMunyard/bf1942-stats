@@ -35,7 +35,11 @@
       "mcp__serena__search_for_pattern",
       "Bash(ls:*)",
       "Bash(find:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "mcp__serena__list_memories",
+      "Bash(npm run:*)",
+      "Bash(docker-compose:*)",
+      "Bash(git status:*)"
     ]
   }
 }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
+import { useLazyLoad } from '@/composables/useLazyLoad';
 import { useRouter, useRoute } from 'vue-router';
 import { PlayerTimeStatistics, fetchPlayerStats } from '../services/playerStatsService';
 import { TrendDataPoint, PlayerAchievementGroup } from '../types/playerStatsTypes';
@@ -60,6 +61,16 @@ const selectedMapDetailName = ref<string | null>(null);
 
 // State for server map detail panel (drill-down from map detail)
 const selectedServerMapDetail = ref<{ serverGuid: string; mapName: string } | null>(null);
+
+// Lazy loading for below-the-fold sections
+const mapPerformanceRef = ref<HTMLElement | null>(null);
+const activityHeatmapRef = ref<HTMLElement | null>(null);
+const serverNetworkRef = ref<HTMLElement | null>(null);
+const mapPreferenceRef = ref<HTMLElement | null>(null);
+const mapPerformanceVisible = useLazyLoad(mapPerformanceRef);
+const activityHeatmapVisible = useLazyLoad(activityHeatmapRef);
+const serverNetworkVisible = useLazyLoad(serverNetworkRef);
+const mapPreferenceVisible = useLazyLoad(mapPreferenceRef);
 
 // Wide viewport: show slide-out panel side-by-side (lg: 1024px+)
 const isWideScreen = ref(false);
@@ -607,6 +618,12 @@ watch(
   (newName, oldName) => {
     if (newName !== oldName) {
       playerName.value = newName as string;
+      // Close all open panels/modals
+      selectedServerGuid.value = null;
+      rankingsMapName.value = null;
+      rankingsServerGuid.value = null;
+      selectedMapDetailName.value = null;
+      selectedServerMapDetail.value = null;
       fetchData();
     }
   }
@@ -625,11 +642,6 @@ onUnmounted(() => {
   document.body.style.overflow = 'unset';
   document.removeEventListener('click', closeTooltipOnClickOutside);
   window.removeEventListener('resize', updateWideScreen);
-
-  // Clear any pending trend chart hide timeout
-  if (trendChartHideTimeout.value) {
-    clearTimeout(trendChartHideTimeout.value);
-  }
 });
 
 </script>
@@ -795,16 +807,21 @@ onUnmounted(() => {
                 </div>
 
                 <!-- Map Performance Race -->
-                <div class="explorer-card">
+                <div ref="mapPerformanceRef" class="explorer-card">
                   <div class="explorer-card-header">
                     <h3 class="explorer-card-title">MAP PERFORMANCE OVER TIME</h3>
                     <p class="text-[10px] text-neutral-500 font-mono mt-1">TRACK YOUR EVOLVING MAP PREFERENCES</p>
                   </div>
                   <div class="explorer-card-body">
                     <MapPerformanceRace
+                      v-if="mapPerformanceVisible"
                       :player-name="playerName"
                       :game="playerPanelGame"
+                      @navigate-to-map="openMapDetail"
                     />
+                    <div v-else class="h-48 flex items-center justify-center text-neutral-500">
+                      <div class="explorer-spinner" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -881,16 +898,21 @@ onUnmounted(() => {
                 </div>
 
                 <!-- Map Preference -->
-                <div class="explorer-card explorer-card--trophy">
+                <div ref="mapPreferenceRef" class="explorer-card explorer-card--trophy">
                   <div class="explorer-card-header">
                     <h3 class="explorer-card-title">MAP PREFERENCE</h3>
                     <p class="text-[10px] text-neutral-500 font-mono mt-1">LAST 30 DAYS</p>
                   </div>
                   <div class="explorer-card-body">
                     <PlayerMapPreference
+                      v-if="mapPreferenceVisible"
                       :player-name="playerName"
                       :game="playerPanelGame"
+                      @navigate-to-map="openMapDetail"
                     />
+                    <div v-else class="h-32 flex items-center justify-center text-neutral-500">
+                      <div class="explorer-spinner" />
+                    </div>
                   </div>
                 </div>
 
@@ -950,16 +972,20 @@ onUnmounted(() => {
                 </div>
 
                 <!-- Activity Heatmap -->
-                <div class="explorer-card">
+                <div ref="activityHeatmapRef" class="explorer-card">
                   <div class="explorer-card-header">
                     <h3 class="explorer-card-title">ACTIVITY HEATMAP</h3>
                     <p class="text-[10px] text-neutral-500 font-mono mt-1">WHEN YOU TYPICALLY PLAY</p>
                   </div>
                   <div class="explorer-card-body">
                     <PlayerActivityHeatmap
+                      v-if="activityHeatmapVisible"
                       :player-name="playerName"
                       :game="playerPanelGame"
                     />
+                    <div v-else class="h-48 flex items-center justify-center text-neutral-500">
+                      <div class="explorer-spinner" />
+                    </div>
                   </div>
                 </div>
 
@@ -967,15 +993,19 @@ onUnmounted(() => {
             </div>
 
             <!-- Server Map (Player Network) -->
-            <div class="explorer-card">
+            <div ref="serverNetworkRef" class="explorer-card">
               <div class="explorer-card-header">
                 <h3 class="explorer-card-title">SERVER-PLAYER NETWORK</h3>
                 <p class="text-[10px] text-neutral-500 font-mono mt-1">YOUR CONNECTIONS ACROSS SERVERS</p>
               </div>
               <div class="explorer-card-body p-0">
                 <PlayerServerMap
+                  v-if="serverNetworkVisible"
                   :player-name="playerName"
                 />
+                <div v-else class="h-64 flex items-center justify-center text-neutral-500">
+                  <div class="explorer-spinner" />
+                </div>
               </div>
             </div>
 

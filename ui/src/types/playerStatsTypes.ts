@@ -67,6 +67,11 @@ export interface Session {
   serverGuid: string;
   sessionId: number;
   roundId: string; // Added for round report navigation
+  // Round context — computed server-side
+  placement: number | null;
+  totalParticipants: number | null;
+  teamResult: 'win' | 'loss' | 'tie' | 'unknown';
+  playerTeamLabel: string | null;
 }
 
 export interface ActivityByHour {

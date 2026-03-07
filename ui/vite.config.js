@@ -12,7 +12,7 @@ export default defineConfig({
     vueDevTools(),
     visualizer({
       filename: './dist/stats.html',
-      open: true,
+      open: false,
       gzipSize: true,
       brotliSize: true,
     }),

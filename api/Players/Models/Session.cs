@@ -15,4 +15,10 @@ public class Session
     public int TotalKills { get; set; }
     public int TotalDeaths { get; set; }
     public string GameId { get; set; } = string.Empty;
+
+    // Round context — computed server-side to avoid per-round API calls
+    public int? Placement { get; set; }
+    public int? TotalParticipants { get; set; }
+    public string TeamResult { get; set; } = "unknown"; // win, loss, tie, unknown
+    public string? PlayerTeamLabel { get; set; }
 }

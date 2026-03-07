@@ -91,18 +91,37 @@
           <div v-else-if="rankings && rankings.length > 0">
 
 
-            <!-- Server Filter (if player plays on multiple servers) -->
-            <div v-if="serverOptions.length > 1" class="mb-4">
-              <select
-                v-model="selectedServerGuid"
-                @change="loadRankings"
-                class="detail-select w-full"
-              >
-                <option value="">All Servers</option>
-                <option v-for="server in serverOptions" :key="server.guid" :value="server.guid">
-                  {{ server.name }}
-                </option>
-              </select>
+            <!-- Filters row -->
+            <div class="flex flex-col sm:flex-row gap-3 mb-4">
+              <!-- Server Filter (if player plays on multiple servers) -->
+              <div v-if="serverOptions.length > 1" class="flex-1">
+                <select
+                  v-model="selectedServerGuid"
+                  @change="loadRankings"
+                  class="detail-select w-full"
+                >
+                  <option value="">All Servers</option>
+                  <option v-for="server in serverOptions" :key="server.guid" :value="server.guid">
+                    {{ server.name }}
+                  </option>
+                </select>
+              </div>
+
+              <!-- Min Rounds Filter -->
+              <div class="flex items-center gap-0 bg-[var(--bg-panel)] rounded border border-[var(--border-color)] p-0.5 self-start">
+                <span class="px-1.5 text-[10px] font-mono text-neutral-500 uppercase tracking-wider">Rnds</span>
+                <button
+                  v-for="rounds in minRoundsOptions"
+                  :key="rounds"
+                  class="px-2 py-1 text-[10px] font-mono rounded transition-all font-semibold"
+                  :class="selectedMinRounds === rounds
+                    ? 'bg-[var(--neon-cyan)] text-[var(--bg-dark)]'
+                    : 'text-neutral-500 hover:text-neutral-300 hover:bg-white/5'"
+                  @click="selectedMinRounds = rounds; currentPage = 1; loadRankings()"
+                >
+                  {{ rounds }}+
+                </button>
+              </div>
             </div>
 
             <!-- Rankings Table -->
@@ -267,6 +286,8 @@ const selectedServerGuid = ref<string>('');
 const currentPage = ref(1);
 const pageSize = 20;
 const totalPages = ref(1);
+const selectedMinRounds = ref(3);
+const minRoundsOptions = [3, 5, 10, 20, 50];
 
 // Computed
 const kdRatio = computed(() => {
@@ -341,7 +362,8 @@ const loadRankings = async () => {
       props.playerName,
       selectedServerGuid.value || undefined,
       60,
-      activeRankingTab.value
+      activeRankingTab.value,
+      selectedMinRounds.value
     );
 
     if (playerSearchResponse.rankings.length > 0) {
@@ -362,7 +384,8 @@ const loadRankings = async () => {
       undefined,
       selectedServerGuid.value || undefined,
       60,
-      activeRankingTab.value
+      activeRankingTab.value,
+      selectedMinRounds.value
     );
 
     rankings.value = response.rankings;

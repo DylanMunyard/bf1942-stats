@@ -79,7 +79,8 @@ public interface IDataExplorerService
         string? searchQuery = null,
         string? serverGuid = null,
         int days = 60,
-        string sortBy = "score");
+        string sortBy = "score",
+        int minRounds = 3);
 
     /// <summary>
     /// Get activity patterns for a specific map showing when it's typically played.

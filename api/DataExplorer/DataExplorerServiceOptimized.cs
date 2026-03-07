@@ -1038,7 +1038,8 @@ public class DataExplorerService(
         string? searchQuery = null,
         string? serverGuid = null,
         int days = 60,
-        string sortBy = "score")
+        string sortBy = "score",
+        int minRounds = 3)
     {
         var normalizedGame = NormalizeGame(game);
 
@@ -1090,6 +1091,11 @@ public class DataExplorerService(
             paramOffset++;
         }
 
+        // Add minRounds parameter
+        var minRoundsParamIndex = paramOffset;
+        sqlParams.Add(Math.Max(1, minRounds));
+        paramOffset++;
+
         // Count total matching players (for pagination)
         // Must use same HAVING filter as data query to get accurate count
         var countSql = $@"
@@ -1102,7 +1108,7 @@ public class DataExplorerService(
                   AND ServerGuid IN ({guidParams})
                   {playerFilter}
                 GROUP BY PlayerName
-                HAVING SUM(TotalRounds) >= 3
+                HAVING SUM(TotalRounds) >= @p{minRoundsParamIndex}
             )";
 
         var totalCount = await dbContext.Database
@@ -1170,7 +1176,7 @@ public class DataExplorerService(
                   AND ServerGuid IN ({guidParams})
                   {playerFilter}
                 GROUP BY PlayerName
-                HAVING SUM(TotalRounds) >= 3
+                HAVING SUM(TotalRounds) >= @p{minRoundsParamIndex}
             ) t
             LEFT JOIN PlayerWins pw ON t.PlayerName = pw.PlayerName
             ORDER BY {orderByClause}

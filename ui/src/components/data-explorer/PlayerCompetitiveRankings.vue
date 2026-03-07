@@ -32,8 +32,8 @@
             </option>
           </select>
           <select v-model.number="selectedMonth" @change="onDateChange" class="explorer-select">
-            <option v-for="(monthName, idx) in monthNames" :key="idx" :value="idx + 1">
-              {{ monthName }}
+            <option v-for="month in availableMonths" :key="month.value" :value="month.value" :disabled="month.disabled">
+              {{ month.label }}
             </option>
           </select>
           <button @click="loadRankingsForPeriod" class="explorer-btn explorer-btn--ghost explorer-btn--sm">
@@ -88,9 +88,10 @@
 
         <!-- Chart view -->
         <div v-if="viewMode === 'chart'">
-          <PlayerCompetitiveRankingsChart 
+          <PlayerCompetitiveRankingsChart
             :rankings="rankingsData.mapRankings"
             :sortBy="'kdRatio'"
+            @navigate-to-map="navigateToMapRankings"
           />
         </div>
 
@@ -343,14 +344,24 @@ const availableMaps = computed(() => {
   return rankingsData.value.mapRankings.map(r => r.mapName).sort();
 });
 
+const DATA_START_YEAR = 2025;
+const DATA_START_MONTH = 6; // June 2025
+
 const availableYears = computed(() => {
   const currentYear = new Date().getFullYear();
   const years = [];
-  // Show years from 5 years ago to current year
-  for (let i = currentYear - 5; i <= currentYear; i++) {
+  for (let i = DATA_START_YEAR; i <= currentYear; i++) {
     years.push(i);
   }
   return years;
+});
+
+const availableMonths = computed(() => {
+  return monthNames.map((name, idx) => ({
+    value: idx + 1,
+    label: name,
+    disabled: selectedYear.value === DATA_START_YEAR && idx + 1 < DATA_START_MONTH
+  }));
 });
 
 // Pagination computed properties
@@ -383,6 +394,10 @@ const selectTimePeriod = (period: 'last-month' | 'all-time') => {
 
 const onDateChange = () => {
   timePeriod.value = 'custom';
+  // Clamp month if before data start
+  if (selectedYear.value === DATA_START_YEAR && selectedMonth.value < DATA_START_MONTH) {
+    selectedMonth.value = DATA_START_MONTH;
+  }
 };
 
 const loadRankingsForPeriod = async () => {

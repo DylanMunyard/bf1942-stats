@@ -62,7 +62,7 @@
             :key="map.mapName"
             class="bar-row"
           >
-            <div class="bar-label" :title="map.mapName">{{ map.mapName }}</div>
+            <div class="bar-label bar-label--clickable" :title="map.mapName" @click.stop="emit('navigateToMap', map.mapName)">{{ map.mapName }}</div>
             <div class="bar-track">
               <div
                 class="bar-fill"
@@ -91,6 +91,10 @@ import type { MapPerformanceTimelineResponse } from '@/types/playerStatsTypes';
 const props = defineProps<{
   playerName: string;
   game?: string;
+}>();
+
+const emit = defineEmits<{
+  navigateToMap: [mapName: string];
 }>();
 
 const loading = ref(true);
@@ -387,6 +391,15 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.bar-label--clickable {
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.bar-label--clickable:hover {
+  color: var(--neon-cyan);
 }
 
 @media (max-width: 640px) {

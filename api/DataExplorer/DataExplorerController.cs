@@ -254,14 +254,16 @@ public class DataExplorerController(
         [FromQuery] string? search = null,
         [FromQuery] string? serverGuid = null,
         [FromQuery] int days = 60,
-        [FromQuery] string sortBy = "score")
+        [FromQuery] string sortBy = "score",
+        [FromQuery] int minRounds = 3)
     {
         // URL decode the map name
         mapName = Uri.UnescapeDataString(mapName);
 
-        // Clamp page size
+        // Clamp page size and minRounds
         pageSize = Math.Clamp(pageSize, 1, 50);
         page = Math.Max(1, page);
+        minRounds = Math.Clamp(minRounds, 1, 100);
 
         // Validate sortBy (case-insensitive comparison)
         var validSortFields = new[] { "score", "kills", "kdratio", "killrate", "wins" };
@@ -269,11 +271,11 @@ public class DataExplorerController(
             sortBy = "score";
 
         logger.LogDebug(
-            "Getting map player rankings for {MapName} with game: {Game}, page: {Page}, pageSize: {PageSize}, search: {Search}, serverGuid: {ServerGuid}, sortBy: {SortBy}",
-            mapName, game, page, pageSize, search, serverGuid, sortBy);
+            "Getting map player rankings for {MapName} with game: {Game}, page: {Page}, pageSize: {PageSize}, search: {Search}, serverGuid: {ServerGuid}, sortBy: {SortBy}, minRounds: {MinRounds}",
+            mapName, game, page, pageSize, search, serverGuid, sortBy, minRounds);
 
         var result = await dataExplorerService.GetMapPlayerRankingsAsync(
-            mapName, game, page, pageSize, search, serverGuid, days, sortBy);
+            mapName, game, page, pageSize, search, serverGuid, days, sortBy, minRounds);
 
         if (result == null)
         {

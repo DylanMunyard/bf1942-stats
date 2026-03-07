@@ -40,6 +40,16 @@ const totalCount = ref(0);
 
 
 const selectedDays = ref(props.days || 60);
+const selectedMinRounds = ref(3);
+
+const minRoundsOptions = [3, 5, 10, 20, 50];
+
+const handleMinRoundsChange = (rounds: number) => {
+  if (rounds === selectedMinRounds.value || isRefreshing.value) return;
+  selectedMinRounds.value = rounds;
+  currentPage.value = 1;
+  loadRankings();
+};
 
 const loadRankings = async () => {
   if (!props.mapName) return;
@@ -60,7 +70,8 @@ const loadRankings = async () => {
       debouncedSearch.value || undefined,
       props.serverGuid,
       selectedDays.value,
-      activeTab.value
+      activeTab.value,
+      selectedMinRounds.value
     );
 
     rankings.value = response.rankings;
@@ -186,19 +197,37 @@ watch(() => props.days, (newDays) => {
           <div v-if="isRefreshing" class="w-3.5 h-3.5 border-2 border-[var(--border-color)] border-t-[var(--neon-cyan)] rounded-full animate-spin" />
         </div>
         
-        <!-- Period Selector -->
-        <div class="flex items-center gap-0 bg-[var(--bg-panel)] rounded border border-[var(--border-color)] p-0.5 self-start sm:self-auto">
-          <button
-            v-for="days in [30, 60, 90, 365]"
-            :key="days"
-            class="px-2.5 py-1 text-[10px] font-mono rounded transition-all font-semibold uppercase tracking-wider"
-            :class="selectedDays === days 
-              ? 'bg-[var(--neon-cyan)] text-[var(--bg-dark)] shadow-[0_0_10px_rgba(0,255,242,0.4)]' 
-              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5'"
-            @click="handleDaysChange(days)"
-          >
-            {{ days === 365 ? '1Y' : `${days}D` }}
-          </button>
+        <div class="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          <!-- Period Selector -->
+          <div class="flex items-center gap-0 bg-[var(--bg-panel)] rounded border border-[var(--border-color)] p-0.5">
+            <button
+              v-for="days in [30, 60, 90, 365]"
+              :key="days"
+              class="px-2.5 py-1 text-[10px] font-mono rounded transition-all font-semibold uppercase tracking-wider"
+              :class="selectedDays === days
+                ? 'bg-[var(--neon-cyan)] text-[var(--bg-dark)] shadow-[0_0_10px_rgba(0,255,242,0.4)]'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5'"
+              @click="handleDaysChange(days)"
+            >
+              {{ days === 365 ? '1Y' : `${days}D` }}
+            </button>
+          </div>
+
+          <!-- Min Rounds Filter -->
+          <div class="flex items-center gap-0 bg-[var(--bg-panel)] rounded border border-[var(--border-color)] p-0.5">
+            <span class="px-1.5 text-[10px] font-mono text-[var(--text-secondary)] uppercase tracking-wider">Rnds</span>
+            <button
+              v-for="rounds in minRoundsOptions"
+              :key="rounds"
+              class="px-2 py-1 text-[10px] font-mono rounded transition-all font-semibold"
+              :class="selectedMinRounds === rounds
+                ? 'bg-[var(--neon-cyan)] text-[var(--bg-dark)] shadow-[0_0_10px_rgba(0,255,242,0.4)]'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5'"
+              @click="handleMinRoundsChange(rounds)"
+            >
+              {{ rounds }}+
+            </button>
+          </div>
         </div>
       </div>
 

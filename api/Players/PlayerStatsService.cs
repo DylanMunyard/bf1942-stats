@@ -282,9 +282,67 @@ public class PlayerStatsService(PlayerTrackerDbContext dbContext,
                 TotalDeaths = s.TotalDeaths,
                 TotalScore = s.TotalScore,
                 IsActive = s.IsActive,
-                GameId = s.Server.GameId
+                GameId = s.Server.GameId,
+                PlayerTeamLabel = s.CurrentTeamLabel
             })
             .ToListAsync();
+
+        // Enrich recent sessions with round context (placement + win/loss)
+        var roundIds = recentSessions
+            .Where(s => s.RoundId != null)
+            .Select(s => s.RoundId!)
+            .Distinct()
+            .ToList();
+
+        if (roundIds.Count > 0)
+        {
+            var rounds = await dbContext.Rounds
+                .Where(r => roundIds.Contains(r.RoundId))
+                .Select(r => new { r.RoundId, r.Tickets1, r.Tickets2, r.Team1Label, r.Team2Label, r.ParticipantCount })
+                .ToDictionaryAsync(r => r.RoundId);
+
+            var scoresByRound = await dbContext.PlayerSessions
+                .Where(ps => ps.RoundId != null && roundIds.Contains(ps.RoundId) && !ps.IsDeleted)
+                .Select(ps => new { ps.RoundId, ps.TotalScore })
+                .ToListAsync();
+
+            var groupedScores = scoresByRound
+                .GroupBy(x => x.RoundId!)
+                .ToDictionary(g => g.Key, g => g.Select(x => x.TotalScore).OrderDescending().ToList());
+
+            foreach (var session in recentSessions.Where(s => s.RoundId != null))
+            {
+                if (rounds.TryGetValue(session.RoundId!, out var round))
+                {
+                    session.TotalParticipants = round.ParticipantCount
+                        ?? (groupedScores.TryGetValue(session.RoundId!, out var scores) ? scores.Count : null);
+
+                    // Compute placement from sorted scores
+                    if (groupedScores.TryGetValue(session.RoundId!, out var roundScores))
+                    {
+                        session.Placement = roundScores.IndexOf(session.TotalScore) + 1;
+                    }
+
+                    // Compute team result from ticket counts
+                    var teamLabel = session.PlayerTeamLabel?.Trim();
+                    if (round.Tickets1.HasValue && round.Tickets2.HasValue
+                        && !string.IsNullOrEmpty(round.Team1Label) && !string.IsNullOrEmpty(round.Team2Label)
+                        && !string.IsNullOrEmpty(teamLabel))
+                    {
+                        if (round.Tickets1 == round.Tickets2)
+                        {
+                            session.TeamResult = "tie";
+                        }
+                        else
+                        {
+                            var winningTeam = round.Tickets1 > round.Tickets2 ? round.Team1Label : round.Team2Label;
+                            session.TeamResult = string.Equals(winningTeam?.Trim(), teamLabel, StringComparison.OrdinalIgnoreCase)
+                                ? "win" : "loss";
+                        }
+                    }
+                }
+            }
+        }
 
         // 2. Get player stats (SQLite)
         PlayerLifetimeStats? lifetimeStats = null;

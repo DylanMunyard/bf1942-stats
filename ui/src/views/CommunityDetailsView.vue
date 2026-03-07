@@ -4,7 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { fetchCommunity, type PlayerCommunity } from '@/services/playerRelationshipsApi'
 import CommunityMembersSection from '@/components/community-details/CommunityMembersSection.vue'
 import CommunityActivityChart from '@/components/community-details/CommunityActivityChart.vue'
-import CommunityServerMap from '@/components/community-details/CommunityServerMap.vue'
+import PlayerServerMap from '@/components/data-explorer/PlayerServerMap.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -152,7 +152,7 @@ onMounted(() => {
             <!-- Tab Content -->
             <div class="space-y-6">
               <!-- Server Map Tab (Full screen bipartite graph) -->
-              <CommunityServerMap v-if="activeTab === 'server-map'" :community="community" />
+              <PlayerServerMap v-if="activeTab === 'server-map'" :community-id="community.id" />
 
               <!-- Activity Chart Tab (Full screen chart) -->
               <CommunityActivityChart v-else-if="activeTab === 'activity'" :community="community" />

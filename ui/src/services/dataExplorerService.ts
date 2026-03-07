@@ -561,7 +561,8 @@ export async function fetchMapPlayerRankings(
   search?: string,
   serverGuid?: string,
   days: number = 60,
-  sortBy: MapRankingSortBy = 'score'
+  sortBy: MapRankingSortBy = 'score',
+  minRounds?: number
 ): Promise<MapPlayerRankingsResponse> {
   try {
     const response = await axios.get<MapPlayerRankingsResponse>(
@@ -574,7 +575,8 @@ export async function fetchMapPlayerRankings(
           search: search || undefined,
           serverGuid: serverGuid || undefined,
           days,
-          sortBy
+          sortBy,
+          minRounds: minRounds || undefined
         }
       }
     );
