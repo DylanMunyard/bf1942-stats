@@ -2,8 +2,8 @@
   <div class="competitive-rankings-chart">
     <!-- Metric toggle -->
     <div class="metric-toggle">
-      <button 
-        v-for="metric in metrics" 
+      <button
+        v-for="metric in metrics"
         :key="metric.value"
         :class="['metric-btn', { active: sortBy === metric.value }]"
         @click="sortBy = metric.value"
@@ -12,17 +12,32 @@
       </button>
     </div>
 
-    <!-- Chart container -->
-    <div class="chart-container">
-      <canvas ref="chartCanvas"></canvas>
+    <!-- Custom bar chart with animated reordering -->
+    <div class="bar-chart">
+      <TransitionGroup name="bar-reorder" tag="div" class="bar-list">
+        <div
+          v-for="(map, index) in topMaps"
+          :key="map.mapName"
+          class="bar-row"
+        >
+          <div class="bar-label" :title="map.mapName">{{ map.mapName }}</div>
+          <div class="bar-track">
+            <div
+              class="bar-fill"
+              :style="{ width: getBarWidth(map) + '%' }"
+              :class="getBarClass(map, index)"
+            />
+          </div>
+          <div class="bar-value">{{ formatValue(map) }}</div>
+        </div>
+      </TransitionGroup>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import { Chart, ChartConfiguration, registerables } from 'chart.js';
-// Define MapRanking interface locally since it's not exported
+import { ref, computed } from 'vue';
+
 interface MapRanking {
   mapName: string;
   rank: number;
@@ -35,191 +50,68 @@ interface MapRanking {
   playTimeMinutes: number;
 }
 
-Chart.register(...registerables);
-
 const props = defineProps<{
   rankings: MapRanking[];
   sortBy?: 'kdRatio' | 'kills' | 'timePlayed' | 'score';
 }>();
 
-const chartCanvas = ref<HTMLCanvasElement>();
-let chart: Chart<'bar'> | null = null;
-
 const sortBy = ref<'kdRatio' | 'kills' | 'timePlayed' | 'score'>(props.sortBy || 'kdRatio');
 
-const metrics = [
+const metrics: { value: 'kdRatio' | 'kills' | 'timePlayed' | 'score'; label: string }[] = [
   { value: 'kdRatio', label: 'K/D' },
   { value: 'kills', label: 'KILLS' },
   { value: 'timePlayed', label: 'TIME' },
   { value: 'score', label: 'SCORE' }
 ];
 
-// Get top 15 maps sorted by selected metric
+const getValue = (m: MapRanking): number => {
+  switch (sortBy.value) {
+    case 'kdRatio': return m.kdRatio;
+    case 'kills': return m.totalKills;
+    case 'timePlayed': return m.playTimeMinutes;
+    case 'score': return m.totalScore;
+    default: return m.totalScore;
+  }
+};
+
 const topMaps = computed(() => {
-  const sorted = [...props.rankings].sort((a, b) => {
-    switch (sortBy.value) {
-      case 'kdRatio':
-        return b.kdRatio - a.kdRatio;
-      case 'kills':
-        return b.kills - a.kills;
-      case 'timePlayed':
-        return b.timePlayed - a.timePlayed;
-      case 'score':
-      default:
-        return b.score - a.score;
-    }
-  });
-  
+  const sorted = [...props.rankings].sort((a, b) => getValue(b) - getValue(a));
   return sorted.slice(0, 15);
 });
 
-// Generate chart data
-const chartData = computed(() => {
-  const labels = topMaps.value.map(m => m.mapName);
-  const data = topMaps.value.map(m => {
-    switch (sortBy.value) {
-      case 'kdRatio':
-        return m.kdRatio;
-      case 'kills':
-        return m.totalKills;
-      case 'timePlayed':
-        return m.playTimeMinutes;
-      case 'score':
-      default:
-        return m.totalScore;
+const maxValue = computed(() => {
+  if (topMaps.value.length === 0) return 1;
+  return Math.max(...topMaps.value.map(getValue));
+});
+
+const getBarWidth = (map: MapRanking): number => {
+  const val = getValue(map);
+  return maxValue.value > 0 ? (val / maxValue.value) * 100 : 0;
+};
+
+const getBarClass = (map: MapRanking, index: number): string => {
+  if (map.rank === 1) return 'bar-fill--gold';
+  if (index === 0) return 'bar-fill--top';
+  return '';
+};
+
+const formatValue = (map: MapRanking): string => {
+  switch (sortBy.value) {
+    case 'kdRatio': return map.kdRatio.toFixed(2);
+    case 'kills': return map.totalKills.toLocaleString();
+    case 'timePlayed': {
+      const hours = Math.floor(map.playTimeMinutes / 60);
+      const mins = Math.floor(map.playTimeMinutes % 60);
+      return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
     }
-  });
-
-  // Generate colors - gold for #1 rank, gradient sky-blue for others
-  const colors = topMaps.value.map((map, index) => {
-    if (map.rank === 1) {
-      return 'rgba(251, 191, 36, 0.8)'; // Material Design amber-400
-    }
-    // Gradient from bright to dim sky-blue based on position
-    const opacity = 0.8 - (index * 0.04);
-    return `rgba(245, 158, 11, ${Math.max(opacity, 0.3)})`;
-  });
-
-  return {
-    labels,
-    datasets: [{
-      data,
-      backgroundColor: colors,
-      borderColor: colors.map(c => c.replace('0.8', '1').replace('0.3', '0.5')),
-      borderWidth: 1
-    }]
-  };
-});
-
-// Chart configuration
-const chartConfig = computed<ChartConfiguration<'bar'>>(() => ({
-  type: 'bar',
-  data: chartData.value,
-  options: {
-    indexAxis: 'y',
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false
-      },
-      tooltip: {
-        backgroundColor: 'rgba(0, 0, 0, 0.9)',
-        titleColor: '#F59E0B',
-        bodyColor: '#ffffff',
-        borderColor: '#30363d',
-        borderWidth: 1,
-        padding: 12,
-        displayColors: false,
-        callbacks: {
-          title: (tooltipItems) => {
-            const map = topMaps.value[tooltipItems[0].dataIndex];
-            return map.mapName;
-          },
-          label: (tooltipItem) => {
-            const map = topMaps.value[tooltipItem.dataIndex];
-            const lines = [
-              `Rank: #${map.rank} (${map.percentile}th percentile)`,
-              `Score: ${map.totalScore.toLocaleString()}`,
-              `Kills: ${map.totalKills.toLocaleString()}`,
-              `Deaths: ${map.totalDeaths.toLocaleString()}`,
-              `K/D: ${map.kdRatio.toFixed(2)}`,
-              `Time: ${Math.round(map.playTimeMinutes / 60)}h`
-            ];
-            return lines;
-          }
-        }
-      }
-    },
-    scales: {
-      x: {
-        grid: {
-          color: 'rgba(48, 54, 61, 0.5)',
-          borderColor: '#30363d'
-        },
-        ticks: {
-          color: '#8b949e',
-          callback: function(value) {
-            switch (sortBy.value) {
-              case 'kdRatio':
-                return Number(value).toFixed(2);
-              case 'timePlayed':
-                return `${Math.round(Number(value) / 60)}h`;
-              case 'kills':
-              case 'score':
-              default:
-                return Number(value).toLocaleString();
-            }
-          }
-        }
-      },
-      y: {
-        grid: {
-          display: false
-        },
-        ticks: {
-          color: '#8b949e',
-          font: {
-            size: 11
-          }
-        }
-      }
-    }
+    case 'score': return map.totalScore.toLocaleString();
+    default: return '';
   }
-}));
-
-// Create or update chart
-function createChart() {
-  if (!chartCanvas.value) return;
-
-  if (chart) {
-    chart.data = chartData.value;
-    chart.options = chartConfig.value.options;
-    chart.update('active');
-  } else {
-    chart = new Chart(chartCanvas.value, chartConfig.value);
-  }
-}
-
-// Watch for changes
-watch([sortBy, () => props.rankings], () => {
-  createChart();
-});
-
-onMounted(() => {
-  createChart();
-});
-
-onUnmounted(() => {
-  if (chart) {
-    chart.destroy();
-  }
-});
+};
 </script>
 
 <style scoped>
 .competitive-rankings-chart {
-  height: 100%;
   display: flex;
   flex-direction: column;
 }
@@ -237,6 +129,7 @@ onUnmounted(() => {
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
   font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -252,14 +145,108 @@ onUnmounted(() => {
   color: var(--neon-cyan);
 }
 
-.chart-container {
-  flex: 1;
-  min-height: 400px;
+/* Bar chart */
+.bar-chart {
   position: relative;
 }
 
-canvas {
-  width: 100% !important;
-  height: 100% !important;
+.bar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+}
+
+.bar-label {
+  width: 120px;
+  min-width: 120px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-secondary);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 640px) {
+  .bar-label {
+    width: 80px;
+    min-width: 80px;
+    font-size: 10px;
+  }
+}
+
+.bar-track {
+  flex: 1;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  background: rgba(245, 158, 11, 0.6);
+  border-radius: 3px;
+  transition: width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.bar-fill--gold {
+  background: rgba(251, 191, 36, 0.85);
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.3);
+}
+
+.bar-fill--top {
+  background: rgba(245, 158, 11, 0.8);
+}
+
+.bar-value {
+  width: 70px;
+  min-width: 70px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-primary);
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .bar-value {
+    width: 55px;
+    min-width: 55px;
+    font-size: 10px;
+  }
+}
+
+/* FLIP animation for reordering */
+.bar-reorder-move {
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.bar-reorder-enter-active {
+  transition: all 0.4s ease;
+}
+
+.bar-reorder-leave-active {
+  transition: all 0.3s ease;
+  position: absolute;
+  width: 100%;
+}
+
+.bar-reorder-enter-from {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+.bar-reorder-leave-to {
+  opacity: 0;
+  transform: translateX(20px);
 }
 </style>

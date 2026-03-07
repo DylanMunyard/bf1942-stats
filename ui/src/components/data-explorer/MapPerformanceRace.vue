@@ -19,16 +19,16 @@
 
       <!-- Controls -->
       <div class="race-controls">
-        <button 
+        <button
           @click="togglePlayback"
           :class="['control-btn', isPlaying ? 'pause' : 'play']"
         >
-          {{ isPlaying ? '❚❚ PAUSE' : '▶ PLAY' }}
+          {{ isPlaying ? '&#10074;&#10074; PAUSE' : '&#9654; PLAY' }}
         </button>
-        
+
         <div class="metric-toggle">
-          <button 
-            v-for="metric in metrics" 
+          <button
+            v-for="metric in metrics"
             :key="metric.value"
             :class="['metric-btn', { active: selectedMetric === metric.value }]"
             @click="selectedMetric = metric.value"
@@ -40,8 +40,8 @@
 
       <!-- Month scrubber -->
       <div class="month-scrubber">
-        <input 
-          type="range" 
+        <input
+          type="range"
           v-model.number="currentMonthIndex"
           :min="0"
           :max="timelineData.months.length - 1"
@@ -54,9 +54,25 @@
         </div>
       </div>
 
-      <!-- Chart container -->
-      <div class="chart-container">
-        <canvas ref="chartCanvas"></canvas>
+      <!-- Bar chart with animated reordering -->
+      <div class="bar-chart">
+        <TransitionGroup name="bar-reorder" tag="div" class="bar-list">
+          <div
+            v-for="(map, index) in topMaps"
+            :key="map.mapName"
+            class="bar-row"
+          >
+            <div class="bar-label" :title="map.mapName">{{ map.mapName }}</div>
+            <div class="bar-track">
+              <div
+                class="bar-fill"
+                :style="{ width: getBarWidth(map) + '%' }"
+                :class="getBarClass(index)"
+              />
+            </div>
+            <div class="bar-value">{{ formatValue(map) }}</div>
+          </div>
+        </TransitionGroup>
       </div>
     </div>
 
@@ -68,12 +84,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { fetchMapPerformanceTimeline } from '@/services/playerStatsApi';
-import { Chart, ChartConfiguration, registerables } from 'chart.js';
 import type { MapPerformanceTimelineResponse } from '@/types/playerStatsTypes';
-
-Chart.register(...registerables);
 
 const props = defineProps<{
   playerName: string;
@@ -86,171 +99,59 @@ const timelineData = ref<MapPerformanceTimelineResponse | null>(null);
 const currentMonthIndex = ref(0);
 const isPlaying = ref(false);
 const selectedMetric = ref<'kdRatio' | 'score' | 'kills'>('kdRatio' as 'kdRatio' | 'score' | 'kills');
-const playbackSpeed = ref(1500); // ms between frames (slower for fewer periods)
+const playbackSpeed = ref(1500);
 
-const chartCanvas = ref<HTMLCanvasElement>();
-let chart: Chart<'bar'> | null = null;
 let playbackInterval: number | null = null;
 
-const metrics = [
+const metrics: { value: 'kdRatio' | 'score' | 'kills'; label: string }[] = [
   { value: 'kdRatio', label: 'K/D' },
   { value: 'score', label: 'SCORE' },
   { value: 'kills', label: 'KILLS' }
 ];
 
-// Get current month data
 const currentMonth = computed(() => {
   if (!timelineData.value) return null;
   return timelineData.value.months[currentMonthIndex.value];
 });
 
-// Get top 10 maps for current month sorted by selected metric
+const getValue = (m: { kdRatio: number; score: number; kills: number }): number => {
+  switch (selectedMetric.value) {
+    case 'kdRatio': return m.kdRatio;
+    case 'kills': return m.kills;
+    case 'score': return m.score;
+    default: return m.score;
+  }
+};
+
 const topMaps = computed(() => {
   if (!currentMonth.value) return [];
-  
-  const sorted = [...currentMonth.value.maps].sort((a, b) => {
-    switch (selectedMetric.value) {
-      case 'kdRatio':
-        return b.kdRatio - a.kdRatio;
-      case 'kills':
-        return b.kills - a.kills;
-      case 'score':
-      default:
-        return b.score - a.score;
-    }
-  });
-  
+  const sorted = [...currentMonth.value.maps].sort((a, b) => getValue(b) - getValue(a));
   return sorted.slice(0, 10);
 });
 
-// Generate stable color for each map based on string hash
-function getMapColor(mapName: string): string {
-  let hash = 0;
-  for (let i = 0; i < mapName.length; i++) {
-    hash = mapName.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  
-  const hue = Math.abs(hash % 360);
-  return `hsla(${hue}, 70%, 50%, 0.8)`;
-}
-
-// Generate chart data
-const chartData = computed(() => {
-  const labels = topMaps.value.map(m => m.mapName);
-  const data = topMaps.value.map(m => {
-    switch (selectedMetric.value) {
-      case 'kdRatio':
-        return m.kdRatio;
-      case 'kills':
-        return m.kills;
-      case 'score':
-      default:
-        return m.score;
-    }
-  });
-
-  const colors = topMaps.value.map(m => getMapColor(m.mapName));
-
-  return {
-    labels,
-    datasets: [{
-      data,
-      backgroundColor: colors,
-      borderColor: colors.map(c => c.replace('0.8', '1')),
-      borderWidth: 1
-    }]
-  };
+const maxValue = computed(() => {
+  if (topMaps.value.length === 0) return 1;
+  return Math.max(...topMaps.value.map(getValue));
 });
 
-// Chart configuration
-const chartConfig = computed<ChartConfiguration<'bar'>>(() => ({
-  type: 'bar',
-  data: chartData.value,
-  options: {
-    indexAxis: 'y',
-    responsive: true,
-    maintainAspectRatio: false,
-    animation: {
-      duration: 400,
-      easing: 'easeOutQuart'
-    },
-    plugins: {
-      legend: {
-        display: false
-      },
-      tooltip: {
-        backgroundColor: 'rgba(0, 0, 0, 0.9)',
-        titleColor: '#F59E0B',
-        bodyColor: '#ffffff',
-        borderColor: '#30363d',
-        borderWidth: 1,
-        padding: 12,
-        displayColors: false,
-        callbacks: {
-          title: (tooltipItems) => {
-            const map = topMaps.value[tooltipItems[0].dataIndex];
-            return map.mapName;
-          },
-          label: (tooltipItem) => {
-            const map = topMaps.value[tooltipItem.dataIndex];
-            const lines = [
-              `K/D: ${map.kdRatio.toFixed(2)}`,
-              `Score: ${map.score.toLocaleString()}`,
-              `Kills: ${map.kills.toLocaleString()}`,
-              `Deaths: ${map.deaths.toLocaleString()}`,
-              `Sessions: ${map.sessions}`,
-              `Time: ${Math.round(map.playTimeMinutes)}m`
-            ];
-            return lines;
-          }
-        }
-      }
-    },
-    scales: {
-      x: {
-        grid: {
-          color: 'rgba(48, 54, 61, 0.5)',
-          borderColor: '#30363d'
-        },
-        ticks: {
-          color: '#8b949e',
-          callback: function(value) {
-            switch (selectedMetric.value) {
-              case 'kdRatio':
-                return Number(value).toFixed(2);
-              default:
-                return value.toLocaleString();
-            }
-          }
-        }
-      },
-      y: {
-        grid: {
-          display: false
-        },
-        ticks: {
-          color: '#8b949e',
-          font: {
-            size: 11
-          }
-        }
-      }
-    }
-  }
-}));
+const getBarWidth = (map: { kdRatio: number; score: number; kills: number }): number => {
+  const val = getValue(map);
+  return maxValue.value > 0 ? (val / maxValue.value) * 100 : 0;
+};
 
-// Create or update chart
-function updateChart() {
-  if (!chartCanvas.value) return;
+const getBarClass = (index: number): string => {
+  if (index === 0) return 'bar-fill--top';
+  return '';
+};
 
-  if (chart) {
-    chart.data = chartData.value;
-    // Use 'none' to skip animations and avoid jarring re-animation from 0
-    chart.update('none');
-  } else {
-    chart = new Chart(chartCanvas.value, chartConfig.value);
+const formatValue = (map: { kdRatio: number; score: number; kills: number; playTimeMinutes: number }): string => {
+  switch (selectedMetric.value) {
+    case 'kdRatio': return map.kdRatio.toFixed(2);
+    case 'kills': return map.kills.toLocaleString();
+    case 'score': return map.score.toLocaleString();
+    default: return '';
   }
-}
+};
 
 // Playback control
 function togglePlayback() {
@@ -264,7 +165,6 @@ function togglePlayback() {
 function startPlayback() {
   if (!timelineData.value) return;
 
-  // Auto-restart if at the end
   if (currentMonthIndex.value >= timelineData.value.months.length - 1) {
     currentMonthIndex.value = 0;
   }
@@ -288,7 +188,6 @@ function stopPlayback() {
   }
 }
 
-// Load timeline data
 async function loadData() {
   loading.value = true;
   error.value = null;
@@ -297,31 +196,16 @@ async function loadData() {
     timelineData.value = await fetchMapPerformanceTimeline(
       props.playerName,
       props.game || 'bf1942',
-      12 // 12 months
+      12
     );
-
-    // Start from the beginning
     currentMonthIndex.value = 0;
-
-    // Set loading to false first to render the DOM
-    loading.value = false;
-
-    // Wait for DOM to update with canvas
-    await nextTick();
-
-    // Initialize chart after DOM is ready
-    updateChart();
   } catch (err) {
     error.value = 'Failed to load map performance timeline';
     console.error(err);
+  } finally {
     loading.value = false;
   }
 }
-
-// Watch for changes that require chart update
-watch([currentMonthIndex, selectedMetric], () => {
-  updateChart();
-});
 
 onMounted(() => {
   loadData();
@@ -329,9 +213,6 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopPlayback();
-  if (chart) {
-    chart.destroy();
-  }
 });
 </script>
 
@@ -340,6 +221,7 @@ onUnmounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
+  font-family: 'JetBrains Mono', monospace;
 }
 
 .loading-state,
@@ -351,7 +233,7 @@ onUnmounted(() => {
 }
 
 .error-state {
-  color: var(--error-color);
+  color: var(--neon-red);
 }
 
 .race-content {
@@ -365,6 +247,7 @@ onUnmounted(() => {
   font-weight: 600;
   text-align: center;
   color: var(--neon-cyan);
+  text-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
   margin-bottom: 16px;
 }
 
@@ -381,6 +264,7 @@ onUnmounted(() => {
   border: 1px solid var(--border-color);
   color: var(--text-primary);
   font-size: 13px;
+  font-family: 'JetBrains Mono', monospace;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -391,7 +275,7 @@ onUnmounted(() => {
 }
 
 .control-btn.play {
-  background: rgba(0, 217, 255, 0.1);
+  background: rgba(245, 158, 11, 0.1);
   border-color: var(--neon-cyan);
   color: var(--neon-cyan);
 }
@@ -413,6 +297,7 @@ onUnmounted(() => {
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
   font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -421,6 +306,11 @@ onUnmounted(() => {
   background: var(--neon-cyan);
   color: var(--bg-dark);
   border-color: var(--neon-cyan);
+}
+
+.metric-btn:hover:not(.active) {
+  border-color: var(--neon-cyan);
+  color: var(--neon-cyan);
 }
 
 .month-scrubber {
@@ -469,14 +359,102 @@ onUnmounted(() => {
   color: var(--text-secondary);
 }
 
-.chart-container {
-  flex: 1;
-  min-height: 350px;
+/* Bar chart */
+.bar-chart {
   position: relative;
 }
 
-canvas {
-  width: 100% !important;
-  height: 100% !important;
+.bar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+}
+
+.bar-label {
+  width: 120px;
+  min-width: 120px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 640px) {
+  .bar-label {
+    width: 80px;
+    min-width: 80px;
+    font-size: 10px;
+  }
+}
+
+.bar-track {
+  flex: 1;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  background: rgba(245, 158, 11, 0.6);
+  border-radius: 3px;
+  transition: width 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.bar-fill--top {
+  background: rgba(251, 191, 36, 0.85);
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.3);
+}
+
+.bar-value {
+  width: 70px;
+  min-width: 70px;
+  font-size: 11px;
+  color: var(--text-primary);
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .bar-value {
+    width: 55px;
+    min-width: 55px;
+    font-size: 10px;
+  }
+}
+
+/* FLIP animation for reordering */
+.bar-reorder-move {
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.bar-reorder-enter-active {
+  transition: all 0.4s ease;
+}
+
+.bar-reorder-leave-active {
+  transition: all 0.3s ease;
+  position: absolute;
+  width: 100%;
+}
+
+.bar-reorder-enter-from {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+.bar-reorder-leave-to {
+  opacity: 0;
+  transform: translateX(20px);
 }
 </style>
