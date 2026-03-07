@@ -8,7 +8,7 @@ const props = defineProps<{
 }>()
 
 const width = ref(800)
-const height = ref(700)
+const height = ref(600)
 const depth = ref(1)
 const maxNodes = ref(50)
 const minOverlap = ref(3)
@@ -346,18 +346,18 @@ const handleResize = () => {
   checkMobile()
   const container = svgElement.value?.parentElement
   if (container) {
-    // Fullscreen mode on desktop (account for container padding)
+    // Fullscreen mode on desktop
     if (isFullscreen.value && !isMobile.value) {
-      width.value = window.innerWidth - 40
-      height.value = window.innerHeight - 40
+      width.value = window.innerWidth - 80 // Account for sidebar (w-20)
+      height.value = window.innerHeight
     }
     // On mobile, use full viewport dimensions
     else if (isMobile.value) {
       width.value = window.innerWidth
-      height.value = window.innerHeight - 48 // Account for controls bar
+      height.value = window.innerHeight - 112 // 64px nav + 48px controls bar
     } else {
       width.value = container.offsetWidth
-      height.value = 700
+      height.value = Math.min(container.offsetWidth * 0.75, 600)
     }
 
     if (svg) {
@@ -388,7 +388,7 @@ watch(() => props.playerName, () => {
 </script>
 
 <template>
-  <div class="player-network-graph relative" :class="{ 'mobile-optimized': isMobile, 'desktop-fullscreen': isFullscreen && !isMobile }">
+  <div class="player-network-graph relative" :class="{ 'mobile-optimized': isMobile && isFullscreen, 'desktop-fullscreen': isFullscreen && !isMobile }">
     <!-- Loading overlay -->
     <div v-if="loading" class="absolute inset-0 flex items-center justify-center z-10 bg-[var(--portal-bg,#06060a)]/80">
       <div class="explorer-spinner" />
@@ -408,8 +408,8 @@ watch(() => props.playerName, () => {
       <span class="fullscreen-exit-text">ESC to exit</span>
     </div>
 
-    <!-- Mobile Controls Bar -->
-    <div v-if="isMobile" class="mobile-controls-bar">
+    <!-- Mobile Controls Bar (only in fullscreen) -->
+    <div v-if="isMobile && isFullscreen" class="mobile-controls-bar">
       <button class="mobile-control-btn" @click="showControls = !showControls">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
@@ -425,10 +425,15 @@ watch(() => props.playerName, () => {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
         </svg>
       </button>
+      <button class="mobile-control-btn" @click="toggleFullscreen">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
     </div>
 
     <!-- Mobile Controls Overlay -->
-    <div v-if="isMobile && showControls" class="mobile-controls-overlay" @click.self="showControls = false">
+    <div v-if="isMobile && isFullscreen && showControls" class="mobile-controls-overlay" @click.self="showControls = false">
       <div class="mobile-controls-panel">
         <div class="flex justify-between items-center mb-3">
           <h3 class="text-sm font-semibold text-neutral-200">Graph Controls</h3>
@@ -493,8 +498,8 @@ watch(() => props.playerName, () => {
       </div>
     </div>
 
-    <!-- Desktop Controls -->
-    <div v-if="!isMobile" class="absolute top-3 right-3 bg-[var(--portal-surface-elevated,#111118)] border border-[var(--portal-border,#1a1a24)] rounded-lg p-3 text-sm z-10" :class="{ 'z-61': isFullscreen }">
+    <!-- Controls (shown inline on all screens, replaced by mobile bar when fullscreen on mobile) -->
+    <div v-if="!isMobile || !isFullscreen" class="absolute top-3 right-3 bg-[var(--portal-surface-elevated,#111118)] border border-[var(--portal-border,#1a1a24)] rounded-lg p-3 text-sm z-10" :class="{ 'z-61': isFullscreen }">
       <div class="flex items-center justify-between mb-2">
         <h3 class="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Controls</h3>
         <button 
@@ -551,8 +556,8 @@ watch(() => props.playerName, () => {
       </div>
     </div>
 
-    <!-- Desktop Legend -->
-    <div v-if="!isMobile" class="absolute bottom-3 left-3 bg-[var(--portal-surface-elevated,#111118)] border border-[var(--portal-border,#1a1a24)] rounded-lg p-3 z-10" :class="{ 'z-61': isFullscreen }">
+    <!-- Legend -->
+    <div v-if="!isMobile || !isFullscreen" class="absolute bottom-3 left-3 bg-[var(--portal-surface-elevated,#111118)] border border-[var(--portal-border,#1a1a24)] rounded-lg p-3 z-10" :class="{ 'z-61': isFullscreen }">
       <h3 class="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-2">Legend</h3>
       <div class="space-y-1.5 text-xs">
         <div class="flex items-center gap-2">
@@ -578,7 +583,7 @@ watch(() => props.playerName, () => {
     </div>
 
     <!-- SVG Container -->
-    <svg ref="svgElement" :width="width" :height="height" class="w-full" :class="{ 'rounded-lg': !isMobile }" style="background: var(--portal-bg, #06060a)">
+    <svg ref="svgElement" :width="width" :height="height" class="w-full network-main-svg" :class="{ 'rounded-lg': !isMobile }" style="background: var(--portal-bg, #06060a)">
     </svg>
 
     <!-- Tooltip -->
@@ -598,7 +603,10 @@ watch(() => props.playerName, () => {
 /* Mobile optimization styles */
 .mobile-optimized {
   position: fixed;
-  inset: 0;
+  top: 64px; /* Below mobile nav bar (h-16) */
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 40;
   display: flex;
   flex-direction: column;
@@ -607,7 +615,7 @@ watch(() => props.playerName, () => {
 
 .mobile-controls-bar {
   position: fixed;
-  top: 0;
+  top: 64px; /* Below mobile nav bar (h-16) */
   left: 0;
   right: 0;
   height: 48px;
@@ -705,14 +713,14 @@ watch(() => props.playerName, () => {
     border-radius: 0 !important;
   }
   
-  .player-network-graph.mobile-optimized svg {
+  .player-network-graph.mobile-optimized .network-main-svg {
     position: fixed;
-    top: 48px; /* Height of mobile controls bar */
+    top: 112px; /* 64px nav + 48px controls bar */
     left: 0;
     right: 0;
     bottom: 0;
     width: 100vw !important;
-    height: calc(100vh - 48px) !important;
+    height: calc(100vh - 112px) !important;
   }
   
   /* Hide desktop tooltip on mobile, show mobile-optimized version */
@@ -743,8 +751,11 @@ watch(() => props.playerName, () => {
 /* Desktop fullscreen mode */
 .desktop-fullscreen {
   position: fixed;
-  inset: 0;
-  z-index: 60; /* Higher than sidebar z-50 */
+  top: 0;
+  left: 0;
+  right: 80px; /* Account for desktop sidebar (w-20) */
+  bottom: 0;
+  z-index: 40;
   background: var(--portal-bg, #06060a);
   padding: 20px;
   display: flex;
@@ -755,6 +766,14 @@ watch(() => props.playerName, () => {
 
 .player-network-graph {
   transition: all 0.3s ease-out;
+}
+
+/* Ensure SVG fills available space in fullscreen */
+.desktop-fullscreen svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: calc(100vw - 80px - 40px); /* Subtract sidebar + padding */
+  max-height: calc(100vh - 40px);
 }
 
 .desktop-fullscreen-btn {
@@ -790,9 +809,9 @@ watch(() => props.playerName, () => {
 .fullscreen-exit-hint {
   position: fixed;
   top: 20px;
-  left: 50%;
+  left: calc((100vw - 80px) / 2); /* Center within the area left of sidebar */
   transform: translateX(-50%);
-  z-index: 61; /* Above fullscreen container */
+  z-index: 41;
   display: flex;
   align-items: center;
   background: rgba(17, 17, 24, 0.95);
@@ -856,13 +875,6 @@ watch(() => props.playerName, () => {
   left: 20px;
 }
 
-/* Ensure SVG fills available space in fullscreen */
-.desktop-fullscreen svg {
-  width: 100% !important;
-  height: 100% !important;
-  max-width: calc(100vw - 40px);
-  max-height: calc(100vh - 40px);
-}
 
 /* Utility for tooltip z-index in fullscreen */
 .z-52 {
@@ -870,6 +882,6 @@ watch(() => props.playerName, () => {
 }
 
 .z-61 {
-  z-index: 61;
+  z-index: 41;
 }
 </style>

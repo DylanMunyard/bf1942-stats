@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, onUnmounted, computed } from 'vue'
 import * as d3 from 'd3'
-import { fetchPlayerServerMap, type CommunityServerMap } from '@/services/playerRelationshipsApi'
+import { fetchPlayerServerMap, fetchCommunityServerMap, type CommunityServerMap } from '@/services/playerRelationshipsApi'
 
 const props = defineProps<{
-  playerName: string
+  playerName?: string
+  communityId?: string
 }>()
 
 const loading = ref(true)
 const error = ref<string | null>(null)
 const serverMapData = ref<CommunityServerMap | null>(null)
 const svgElement = ref<SVGSVGElement | null>(null)
+const svgContainer = ref<HTMLDivElement | null>(null)
 const isMaximized = ref(false)
 
 let simulation: d3.Simulation<any, undefined> | null = null
@@ -19,8 +21,8 @@ let currentGroup: any = null
 let zoomBehavior: any = null
 let keyboardHandler: ((e: KeyboardEvent) => void) | null = null
 
-const width = 600
-const height = 350
+const width = ref(600)
+const height = ref(500)
 
 const stats = computed(() => {
   if (!serverMapData.value) return null
@@ -32,13 +34,54 @@ const stats = computed(() => {
   }
 })
 
+const legendLabels = computed(() => {
+  if (props.communityId) {
+    return {
+      servers: 'Community plays on these servers',
+      core: 'Most connected members',
+      regular: 'Other community members',
+      coreLabel: 'Core Players',
+      regularLabel: 'Regular Players'
+    }
+  }
+  return {
+    servers: 'Servers you play on',
+    core: 'Player you\'re viewing',
+    regular: 'Players you\'ve played with',
+    coreLabel: 'You',
+    regularLabel: 'Teammates'
+  }
+})
+
+const measureSize = () => {
+  const container = svgContainer.value
+  if (!container) return
+  width.value = container.clientWidth
+  if (isMaximized.value) {
+    const isMobile = window.innerWidth < 768
+    height.value = window.innerHeight - 60 - (isMobile ? 64 : 0)
+  } else {
+    height.value = Math.max(500, Math.round(window.innerHeight * 0.6))
+  }
+}
+
+const handleResize = () => {
+  measureSize()
+  if (svg && simulation) {
+    svg.attr('viewBox', `0 0 ${width.value} ${height.value}`)
+    simulation.force('center', d3.forceCenter(width.value / 2, height.value / 2))
+    simulation.alpha(0.3).restart()
+    setTimeout(() => resetView(), 300)
+  }
+}
+
 const resetView = () => {
   if (!currentGroup || !svg || !zoomBehavior) return
 
   try {
     const bounds = currentGroup.node().getBBox()
-    const fullWidth = width
-    const fullHeight = height
+    const fullWidth = width.value
+    const fullHeight = height.value
     const midX = bounds.x + bounds.width / 2
     const midY = bounds.y + bounds.height / 2
 
@@ -64,7 +107,15 @@ const loadServerMap = async () => {
   error.value = null
 
   try {
-    serverMapData.value = await fetchPlayerServerMap(props.playerName)
+    if (props.communityId) {
+      serverMapData.value = await fetchCommunityServerMap(props.communityId)
+    } else if (props.playerName) {
+      serverMapData.value = await fetchPlayerServerMap(props.playerName)
+    } else {
+      error.value = 'No player or community specified'
+      loading.value = false
+      return
+    }
 
     loading.value = false
 
@@ -79,27 +130,18 @@ const loadServerMap = async () => {
 
 const renderVisualization = () => {
   try {
-    if (!serverMapData.value) {
-      console.error('Missing server map data')
-      return
-    }
-
-    if (!svgElement.value) {
-      console.error('Missing SVG element ref')
-      return
-    }
+    if (!serverMapData.value) return
+    if (!svgElement.value) return
 
     simulation?.stop()
 
     svg = d3.select(svgElement.value)
 
-    if (!svg.node()) {
-      console.error('SVG selection is empty')
-      return
-    }
+    if (!svg.node()) return
 
     svg.selectAll('*').remove()
-    svg.attr('viewBox', `0 0 ${width} ${height}`)
+    measureSize()
+    svg.attr('viewBox', `0 0 ${width.value} ${height.value}`)
   } catch (e) {
     console.error('Error in SVG setup:', e)
     throw e
@@ -124,7 +166,7 @@ const renderVisualization = () => {
         .strength(0.8)
       )
       .force('charge', d3.forceManyBody().strength(-800))
-      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('center', d3.forceCenter(width.value / 2, height.value / 2))
       .force('collision', d3.forceCollide().radius(35))
       .alphaDecay(0.02)
 
@@ -179,13 +221,13 @@ const renderVisualization = () => {
       .attr('stroke', 'rgba(255,255,255,0.2)')
       .attr('stroke-width', 1.5)
       .style('cursor', 'pointer')
-      .on('mouseover', function (event: MouseEvent, d: any) {
+      .on('mouseover', function (_event: MouseEvent, d: any) {
         d3.select(this)
           .attr('r', d.type === 'server' ? 24 : d.isCore ? 16 : 12)
           .attr('stroke', '#fff')
           .attr('stroke-width', 2)
       })
-      .on('mouseout', function (event: MouseEvent, d: any) {
+      .on('mouseout', function (_event: MouseEvent, d: any) {
         d3.select(this)
           .attr('r', d.type === 'server' ? 18 : d.isCore ? 12 : 8)
           .attr('stroke', 'rgba(255,255,255,0.2)')
@@ -264,8 +306,8 @@ const renderVisualization = () => {
     function zoomToFit(group: any) {
       try {
         const bounds = group.node().getBBox()
-        const fullWidth = width
-        const fullHeight = height
+        const fullWidth = width.value
+        const fullHeight = height.value
         const midX = bounds.x + bounds.width / 2
         const midY = bounds.y + bounds.height / 2
 
@@ -277,7 +319,7 @@ const renderVisualization = () => {
             .duration(750)
             .attr('transform', `translate(${translate[0]},${translate[1]})scale(${scale})`)
         }
-      } catch (e) {
+      } catch {
         // Silent fail if bounds can't be calculated
       }
     }
@@ -304,10 +346,12 @@ onMounted(() => {
   }
 
   window.addEventListener('keydown', keyboardHandler)
+  window.addEventListener('resize', handleResize)
 })
 
 onUnmounted(() => {
   simulation?.stop()
+  window.removeEventListener('resize', handleResize)
 
   if (keyboardHandler) {
     window.removeEventListener('keydown', keyboardHandler)
@@ -316,6 +360,14 @@ onUnmounted(() => {
 
 watch(() => props.playerName, () => {
   loadServerMap()
+})
+
+watch(() => props.communityId, () => {
+  loadServerMap()
+})
+
+watch(isMaximized, () => {
+  setTimeout(() => handleResize(), 50)
 })
 </script>
 
@@ -371,7 +423,7 @@ watch(() => props.playerName, () => {
     </div>
 
     <!-- Visualization -->
-    <div v-else :class="['explorer-card', isMaximized && 'fixed top-0 bottom-0 left-0 right-0 md:right-20 z-50 rounded-none m-0 max-w-none max-h-none']">
+    <div v-else :class="['explorer-card', isMaximized && 'fixed top-16 md:top-0 bottom-0 left-0 right-0 md:right-20 z-50 rounded-none m-0 max-w-none max-h-none']">
       <div class="explorer-card-header flex items-center justify-between">
         <h2 class="font-mono font-bold text-cyan-300">SERVER-PLAYER NETWORK</h2>
         <div class="flex gap-2">
@@ -380,26 +432,23 @@ watch(() => props.playerName, () => {
             class="px-3 py-1 text-sm bg-cyan-500/20 border border-cyan-500/50 rounded text-cyan-300 hover:bg-cyan-500/30 transition-colors"
             title="Reset view (Ctrl+R)"
           >
-            ⟲ Reset
+            &#x27F2; Reset
           </button>
           <button
             @click="isMaximized = !isMaximized"
             class="px-3 py-1 text-sm bg-cyan-500/20 border border-cyan-500/50 rounded text-cyan-300 hover:bg-cyan-500/30 transition-colors"
             :title="isMaximized ? 'Collapse (Esc)' : 'Expand to fullscreen'"
           >
-            {{ isMaximized ? '✕ Close' : '⛶ Expand' }}
+            {{ isMaximized ? '&#x2715; Close' : '&#x26F6; Expand' }}
           </button>
         </div>
       </div>
-      <div :class="['explorer-card-body p-0 overflow-hidden', isMaximized ? 'flex-1' : 'rounded-b']">
-        <div class="flex justify-center">
-          <svg
-            ref="svgElement"
-            :width="width"
-            :height="height"
-            style="background: var(--portal-surface, #0f0f15); display: block; max-width: 100%; height: auto"
-          />
-        </div>
+      <div ref="svgContainer" :class="['explorer-card-body p-0 overflow-hidden', isMaximized ? 'flex-1' : 'rounded-b']">
+        <svg
+          ref="svgElement"
+          class="server-map-svg"
+          :style="{ height: height + 'px' }"
+        />
       </div>
     </div>
 
@@ -411,7 +460,7 @@ watch(() => props.playerName, () => {
             <div class="w-4 h-4 rounded-full bg-purple-500" />
             <span class="text-sm text-neutral-400">Servers</span>
           </div>
-          <p class="text-xs text-neutral-500">Servers you play on</p>
+          <p class="text-xs text-neutral-500">{{ legendLabels.servers }}</p>
         </div>
       </div>
 
@@ -419,9 +468,9 @@ watch(() => props.playerName, () => {
         <div class="explorer-card-body">
           <div class="flex items-center gap-2 mb-2">
             <div class="w-3 h-3 rounded-full bg-green-500" />
-            <span class="text-sm text-neutral-400">You</span>
+            <span class="text-sm text-neutral-400">{{ legendLabels.coreLabel }}</span>
           </div>
-          <p class="text-xs text-neutral-500">Player you're viewing</p>
+          <p class="text-xs text-neutral-500">{{ legendLabels.core }}</p>
         </div>
       </div>
 
@@ -429,9 +478,9 @@ watch(() => props.playerName, () => {
         <div class="explorer-card-body">
           <div class="flex items-center gap-2 mb-2">
             <div class="w-2 h-2 rounded-full bg-gray-500" />
-            <span class="text-sm text-neutral-400">Teammates</span>
+            <span class="text-sm text-neutral-400">{{ legendLabels.regularLabel }}</span>
           </div>
-          <p class="text-xs text-neutral-500">Players you've played with</p>
+          <p class="text-xs text-neutral-500">{{ legendLabels.regular }}</p>
         </div>
       </div>
 
@@ -499,8 +548,9 @@ watch(() => props.playerName, () => {
   justify-content: center;
 }
 
-svg {
-  max-width: 100%;
-  max-height: 100%;
+.server-map-svg {
+  display: block;
+  width: 100%;
+  background: var(--portal-surface, #0f0f15);
 }
 </style>
