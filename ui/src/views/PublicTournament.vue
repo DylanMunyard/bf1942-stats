@@ -432,7 +432,7 @@ const getAccentTextColor = (): string => {
 const getAccentColorWithOpacity = (opacity: number): string => {
   const accent = getAccentColor();
   const rgb = hexToRgb(accent);
-  if (!rgb) return `rgba(255, 215, 0, ${opacity})`;
+  if (!rgb) return `rgba(251, 191, 36, ${opacity})`;
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`;
 };
 

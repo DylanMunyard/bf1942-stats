@@ -339,11 +339,11 @@ watch(() => props.days, (newDays) => {
 <style scoped>
 /* Match DataExplorer.vue.css theme */
 .map-rankings-panel {
-  --neon-cyan: #00fff2;
-  --neon-green: #39ff14;
-  --neon-pink: #ff00ff;
-  --neon-gold: #ffd700;
-  --neon-red: #ff3131;
+  --neon-cyan: #F59E0B;
+  --neon-green: #34D399;
+  --neon-pink: #FB7185;
+  --neon-gold: #FBBF24;
+  --neon-red: #F87171;
   --bg-dark: #0a0a0f;
   --bg-panel: #0d1117;
   --bg-card: #161b22;
@@ -368,7 +368,7 @@ watch(() => props.days, (newDays) => {
 .map-rankings-panel input:focus {
   outline: none;
   border-color: var(--neon-cyan);
-  box-shadow: 0 0 15px rgba(0, 255, 242, 0.2);
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
 }
 
 .map-rankings-panel table {
@@ -382,7 +382,7 @@ watch(() => props.days, (newDays) => {
   letter-spacing: 0.08em;
   font-weight: 700;
   font-size: 0.7rem;
-  text-shadow: 0 0 10px rgba(0, 255, 242, 0.3);
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
 }
 
 .map-rankings-panel tbody tr {
@@ -390,7 +390,7 @@ watch(() => props.days, (newDays) => {
 }
 
 .map-rankings-panel tbody tr:hover {
-  background: rgba(0, 255, 242, 0.08);
+  background: rgba(245, 158, 11, 0.08);
 }
 
 /* Rank badge styling */

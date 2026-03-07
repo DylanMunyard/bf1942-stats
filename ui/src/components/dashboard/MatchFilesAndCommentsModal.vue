@@ -413,7 +413,7 @@ onMounted(() => {
       <!-- Loading State -->
       <div v-if="isLoading" class="flex items-center justify-center py-12">
         <div class="flex flex-col items-center gap-3">
-          <div class="w-8 h-8 border-2 border-current border-t-transparent rounded-full animate-spin" style="border-color: #6e7681; border-top-color: #00fff2;" />
+          <div class="w-8 h-8 border-2 border-current border-t-transparent rounded-full animate-spin" style="border-color: #6e7681; border-top-color: #F59E0B;" />
           <p class="text-sm" style="color: #6e7681;">Loading files and comments...</p>
         </div>
       </div>
@@ -503,7 +503,7 @@ onMounted(() => {
                       target="_blank"
                       rel="noopener noreferrer"
                       class="text-sm font-medium break-all hover:underline"
-                      style="color: #00fff2;"
+                      style="color: #F59E0B;"
                     >
                       {{ file.name }} ↗️
                     </a>

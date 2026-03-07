@@ -192,7 +192,7 @@ onUnmounted(() => {
   width: 100%;
   overflow: hidden;
   box-shadow:
-    0 0 40px rgba(0, 255, 242, 0.1),
+    0 0 40px rgba(245, 158, 11, 0.1),
     0 25px 50px -12px rgba(0, 0, 0, 0.5);
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   animation: modal-in 0.2s ease-out;
@@ -262,8 +262,8 @@ onUnmounted(() => {
 }
 
 .btn-close:hover {
-  color: #ff3131;
-  background: rgba(255, 49, 49, 0.1);
+  color: #F87171;
+  background: rgba(248, 113, 113, 0.1);
 }
 
 /* Header */
@@ -341,8 +341,8 @@ onUnmounted(() => {
 }
 
 :deep(.from-cyan-400) {
-  --tw-gradient-from: #00fff2;
-  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(0, 255, 242, 0));
+  --tw-gradient-from: #F59E0B;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(245, 158, 11, 0));
 }
 
 :deep(.to-blue-400) {
@@ -355,7 +355,7 @@ onUnmounted(() => {
 }
 
 :deep(.to-cyan-400) {
-  --tw-gradient-to: #00fff2;
+  --tw-gradient-to: #F59E0B;
 }
 
 :deep(.from-purple-400) {

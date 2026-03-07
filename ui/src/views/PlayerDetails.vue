@@ -935,6 +935,8 @@ onUnmounted(() => {
                             <span v-if="server.hasStats">|</span>
                             <span v-if="server.hasStats">K/D {{ Number(server.kdRatio).toFixed(2) }}</span>
                             <span v-else-if="server.ranking">{{ server.ranking.scoreDisplay || server.ranking.totalScore.toLocaleString() }} score</span>
+                            <span v-if="server.ranking?.averagePing">|</span>
+                            <span v-if="server.ranking?.averagePing" class="text-neon-cyan">PING {{ Math.round(server.ranking.averagePing) }}ms</span>
                           </div>
                         </div>
 

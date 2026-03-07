@@ -109,7 +109,7 @@ const getStatusClass = () => {
 
 <style scoped>
 .hacker-card {
-  --card-accent: #39ff14;
+  --card-accent: #34D399;
   position: relative;
   background: #0d1117;
   border: 1px solid #30363d;
@@ -122,15 +122,15 @@ const getStatusClass = () => {
 
 .hacker-card:hover {
   border-color: var(--card-accent);
-  box-shadow: 0 0 20px rgba(57, 255, 20, 0.15);
+  box-shadow: 0 0 20px rgba(52, 211, 153, 0.15);
 }
 
 .hacker-card:not(.is-online) {
-  --card-accent: #ff3131;
+  --card-accent: #F87171;
 }
 
 .hacker-card:not(.is-online):hover {
-  box-shadow: 0 0 20px rgba(255, 49, 49, 0.1);
+  box-shadow: 0 0 20px rgba(248, 113, 113, 0.1);
 }
 
 .card-content {
@@ -158,24 +158,24 @@ const getStatusClass = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, rgba(57, 255, 20, 0.15) 0%, rgba(57, 255, 20, 0.05) 100%);
-  border: 1px solid rgba(57, 255, 20, 0.3);
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.15) 0%, rgba(52, 211, 153, 0.05) 100%);
+  border: 1px solid rgba(52, 211, 153, 0.3);
   border-radius: 4px;
 }
 
 .hacker-card:not(.is-online) .server-icon {
-  background: linear-gradient(135deg, rgba(255, 49, 49, 0.15) 0%, rgba(255, 49, 49, 0.05) 100%);
-  border-color: rgba(255, 49, 49, 0.3);
+  background: linear-gradient(135deg, rgba(248, 113, 113, 0.15) 0%, rgba(248, 113, 113, 0.05) 100%);
+  border-color: rgba(248, 113, 113, 0.3);
 }
 
 .icon-text {
   font-size: 0.8rem;
   font-weight: 700;
-  color: #39ff14;
+  color: #34D399;
 }
 
 .hacker-card:not(.is-online) .icon-text {
-  color: #ff3131;
+  color: #F87171;
 }
 
 .status-led {
@@ -189,13 +189,13 @@ const getStatusClass = () => {
 }
 
 .status-led.online {
-  background: #39ff14;
-  box-shadow: 0 0 8px #39ff14;
+  background: #34D399;
+  box-shadow: 0 0 8px #34D399;
   animation: blink 2s infinite;
 }
 
 .status-led.offline {
-  background: #ff3131;
+  background: #F87171;
 }
 
 @keyframes blink {
@@ -222,8 +222,8 @@ const getStatusClass = () => {
 }
 
 .server-name:hover {
-  color: #39ff14;
-  text-shadow: 0 0 10px rgba(57, 255, 20, 0.5);
+  color: #34D399;
+  text-shadow: 0 0 10px rgba(52, 211, 153, 0.5);
 }
 
 .server-status {
@@ -238,7 +238,7 @@ const getStatusClass = () => {
 }
 
 .map-label {
-  color: #39ff14;
+  color: #34D399;
   font-weight: bold;
 }
 
@@ -249,7 +249,7 @@ const getStatusClass = () => {
 }
 
 .status-row.offline .status-label {
-  color: #ff3131;
+  color: #F87171;
   font-style: italic;
 }
 
@@ -274,39 +274,39 @@ const getStatusClass = () => {
 }
 
 .player-count.status-offline {
-  background: rgba(255, 49, 49, 0.15);
-  border: 1px solid rgba(255, 49, 49, 0.3);
-  color: #ff3131;
+  background: rgba(248, 113, 113, 0.15);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  color: #F87171;
 }
 
 .player-count.status-empty {
-  background: rgba(57, 255, 20, 0.1);
-  border: 1px solid rgba(57, 255, 20, 0.2);
-  color: #39ff14;
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+  color: #34D399;
 }
 
 .player-count.status-low {
-  background: rgba(57, 255, 20, 0.15);
-  border: 1px solid rgba(57, 255, 20, 0.3);
-  color: #39ff14;
+  background: rgba(52, 211, 153, 0.15);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  color: #34D399;
 }
 
 .player-count.status-medium {
-  background: rgba(57, 255, 20, 0.2);
-  border: 1px solid rgba(57, 255, 20, 0.4);
-  color: #39ff14;
+  background: rgba(52, 211, 153, 0.2);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  color: #34D399;
 }
 
 .player-count.status-high {
-  background: rgba(0, 255, 242, 0.2);
-  border: 1px solid rgba(0, 255, 242, 0.4);
-  color: #00fff2;
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #F59E0B;
 }
 
 .player-count.status-full {
-  background: rgba(255, 215, 0, 0.2);
-  border: 1px solid rgba(255, 215, 0, 0.4);
-  color: #ffd700;
+  background: rgba(251, 191, 36, 0.2);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: #FBBF24;
 }
 
 .count-current {
@@ -350,14 +350,14 @@ const getStatusClass = () => {
 }
 
 .btn-join {
-  color: #39ff14;
-  border-color: rgba(57, 255, 20, 0.3);
+  color: #34D399;
+  border-color: rgba(52, 211, 153, 0.3);
 }
 
 .btn-join:hover {
-  background: rgba(57, 255, 20, 0.15);
-  border-color: #39ff14;
-  box-shadow: 0 0 10px rgba(57, 255, 20, 0.3);
+  background: rgba(52, 211, 153, 0.15);
+  border-color: #34D399;
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.3);
 }
 
 .btn-remove {
@@ -365,9 +365,9 @@ const getStatusClass = () => {
 }
 
 .btn-remove:hover {
-  border-color: #ff3131;
-  color: #ff3131;
-  background: rgba(255, 49, 49, 0.1);
+  border-color: #F87171;
+  color: #F87171;
+  background: rgba(248, 113, 113, 0.1);
 }
 
 /* Mobile */

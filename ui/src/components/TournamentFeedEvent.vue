@@ -77,7 +77,7 @@ const props = defineProps<{
 
 const getIconBackground = (): string => {
   const rgb = hexToRgb(props.accentColor);
-  if (!rgb) return 'rgba(255, 215, 0, 0.15)';
+  if (!rgb) return 'rgba(251, 191, 36, 0.15)';
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15)`;
 };
 

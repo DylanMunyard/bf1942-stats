@@ -21,12 +21,12 @@
 
 /* Timeline bar hover glow */
 .timeline-bar:hover {
-  box-shadow: 0 0 8px rgba(0, 255, 242, 0.5);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
 }
 
 /* Server row selection state */
 tbody tr.selected {
-  background: rgba(0, 255, 242, 0.1) !important;
+  background: rgba(245, 158, 11, 0.1) !important;
   border-left: 3px solid var(--neon-cyan);
 }
 

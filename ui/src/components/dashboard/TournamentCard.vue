@@ -200,7 +200,7 @@ watch(() => props.tournament.hasHeroImage, (newValue) => {
 
 <style scoped>
 .hacker-card {
-  --card-accent: #ffd700;
+  --card-accent: #FBBF24;
   position: relative;
   background: #0d1117;
   border: 1px solid #30363d;
@@ -212,7 +212,7 @@ watch(() => props.tournament.hasHeroImage, (newValue) => {
 
 .hacker-card:hover {
   border-color: var(--card-accent);
-  box-shadow: 0 0 20px rgba(255, 215, 0, 0.15);
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.15);
 }
 
 /* Hero Section */
@@ -234,8 +234,8 @@ watch(() => props.tournament.hasHeroImage, (newValue) => {
 .loading-spinner {
   width: 24px;
   height: 24px;
-  border: 2px solid rgba(255, 215, 0, 0.2);
-  border-top-color: #ffd700;
+  border: 2px solid rgba(251, 191, 36, 0.2);
+  border-top-color: #FBBF24;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -313,7 +313,7 @@ watch(() => props.tournament.hasHeroImage, (newValue) => {
 }
 
 .hacker-card:hover .tournament-name {
-  color: #ffd700;
+  color: #FBBF24;
 }
 
 /* Meta Info */
@@ -370,8 +370,8 @@ watch(() => props.tournament.hasHeroImage, (newValue) => {
 .stat-value {
   font-size: 1.125rem;
   font-weight: 700;
-  color: #ffd700;
-  text-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+  color: #FBBF24;
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
 }
 
 .stat-label {
@@ -399,9 +399,9 @@ watch(() => props.tournament.hasHeroImage, (newValue) => {
 }
 
 .status-active {
-  background: rgba(0, 255, 242, 0.15);
-  border: 1px solid rgba(0, 255, 242, 0.3);
-  color: #00fff2;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #F59E0B;
 }
 
 .status-pending {
@@ -414,8 +414,8 @@ watch(() => props.tournament.hasHeroImage, (newValue) => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #00fff2;
-  box-shadow: 0 0 8px #00fff2;
+  background: #F59E0B;
+  box-shadow: 0 0 8px #F59E0B;
   animation: pulse 2s infinite;
 }
 
@@ -450,14 +450,14 @@ watch(() => props.tournament.hasHeroImage, (newValue) => {
 }
 
 .btn-primary {
-  color: #ffd700;
-  border-color: rgba(255, 215, 0, 0.3);
+  color: #FBBF24;
+  border-color: rgba(251, 191, 36, 0.3);
 }
 
 .btn-primary:hover {
-  background: rgba(255, 215, 0, 0.15);
-  border-color: #ffd700;
-  box-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
+  background: rgba(251, 191, 36, 0.15);
+  border-color: #FBBF24;
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.2);
 }
 
 .btn-secondary {
@@ -470,13 +470,13 @@ watch(() => props.tournament.hasHeroImage, (newValue) => {
 }
 
 .btn-danger {
-  color: #ff3131;
-  border-color: rgba(255, 49, 49, 0.3);
+  color: #F87171;
+  border-color: rgba(248, 113, 113, 0.3);
 }
 
 .btn-danger:hover {
-  background: rgba(255, 49, 49, 0.15);
-  border-color: #ff3131;
+  background: rgba(248, 113, 113, 0.15);
+  border-color: #F87171;
 }
 
 /* Mobile */

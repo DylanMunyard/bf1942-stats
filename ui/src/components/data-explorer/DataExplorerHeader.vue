@@ -133,7 +133,7 @@ const searchPlaceholder = computed(() => {
   overflow: hidden;
   background: var(--bg-panel, #0d1117);
   box-shadow:
-    0 0 20px rgba(0, 255, 242, 0.1),
+    0 0 20px rgba(245, 158, 11, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
@@ -177,7 +177,7 @@ const searchPlaceholder = computed(() => {
 }
 
 .terminal-path {
-  color: var(--neon-cyan, #00fff2);
+  color: var(--neon-cyan, #F59E0B);
 }
 
 .terminal-cmd {
@@ -186,7 +186,7 @@ const searchPlaceholder = computed(() => {
 }
 
 .cursor {
-  color: var(--neon-green, #39ff14);
+  color: var(--neon-green, #34D399);
   animation: blink 1s step-end infinite;
 }
 
@@ -231,32 +231,32 @@ const searchPlaceholder = computed(() => {
   font-size: clamp(1.25rem, 4vw, 1.75rem);
   font-weight: 700;
   font-family: 'JetBrains Mono', monospace;
-  color: var(--neon-cyan, #00fff2);
+  color: var(--neon-cyan, #F59E0B);
   text-transform: uppercase;
   letter-spacing: 2px;
   margin: 0 0 0.5rem 0;
   text-shadow:
-    0 0 10px var(--neon-cyan, #00fff2),
-    0 0 20px var(--neon-cyan, #00fff2);
+    0 0 10px var(--neon-cyan, #F59E0B),
+    0 0 20px var(--neon-cyan, #F59E0B);
   animation: glitch 3s infinite;
 }
 
 @keyframes glitch {
   0%, 90%, 100% {
     text-shadow:
-      0 0 10px var(--neon-cyan, #00fff2),
-      0 0 20px var(--neon-cyan, #00fff2);
+      0 0 10px var(--neon-cyan, #F59E0B),
+      0 0 20px var(--neon-cyan, #F59E0B);
   }
   92% {
     text-shadow:
-      -2px 0 var(--neon-pink, #ff00ff),
-      2px 0 var(--neon-green, #39ff14);
+      -2px 0 var(--neon-pink, #FB7185),
+      2px 0 var(--neon-green, #34D399);
     transform: translate(2px, 0);
   }
   94% {
     text-shadow:
-      2px 0 var(--neon-pink, #ff00ff),
-      -2px 0 var(--neon-green, #39ff14);
+      2px 0 var(--neon-pink, #FB7185),
+      -2px 0 var(--neon-green, #34D399);
     transform: translate(-2px, 0);
   }
 }
@@ -270,18 +270,18 @@ const searchPlaceholder = computed(() => {
 }
 
 .prompt {
-  color: var(--neon-green, #39ff14);
+  color: var(--neon-green, #34D399);
   margin-right: 0.5rem;
 }
 
 .typing-text {
-  border-right: 2px solid var(--neon-green, #39ff14);
+  border-right: 2px solid var(--neon-green, #34D399);
   padding-right: 4px;
   animation: typing-cursor 0.8s step-end infinite;
 }
 
 @keyframes typing-cursor {
-  0%, 100% { border-color: var(--neon-green, #39ff14); }
+  0%, 100% { border-color: var(--neon-green, #34D399); }
   50% { border-color: transparent; }
 }
 
@@ -343,13 +343,13 @@ const searchPlaceholder = computed(() => {
 
 .explorer-mode-btn:hover {
   color: var(--text-primary, #e6edf3);
-  background: rgba(0, 255, 242, 0.1);
+  background: rgba(245, 158, 11, 0.1);
 }
 
 .explorer-mode-btn--active {
-  background: var(--neon-cyan, #00fff2);
+  background: var(--neon-cyan, #F59E0B);
   color: var(--bg-dark, #0a0a0f);
-  box-shadow: 0 0 15px rgba(0, 255, 242, 0.4);
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
 }
 
 .mode-icon {
@@ -389,7 +389,7 @@ const searchPlaceholder = computed(() => {
   left: 0.75rem;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--neon-green, #39ff14);
+  color: var(--neon-green, #34D399);
   opacity: 0.8;
   font-size: 0.875rem;
   font-family: 'JetBrains Mono', monospace;
@@ -422,7 +422,7 @@ const searchPlaceholder = computed(() => {
 
 .explorer-search-input:focus {
   outline: none;
-  border-color: var(--neon-cyan, #00fff2);
-  box-shadow: 0 0 15px rgba(0, 255, 242, 0.2);
+  border-color: var(--neon-cyan, #F59E0B);
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
 }
 </style>

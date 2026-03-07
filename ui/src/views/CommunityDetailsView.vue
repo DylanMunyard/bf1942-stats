@@ -3,7 +3,6 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { fetchCommunity, type PlayerCommunity } from '@/services/playerRelationshipsApi'
 import CommunityMembersSection from '@/components/community-details/CommunityMembersSection.vue'
-import CommunityMetricsVisualization from '@/components/community-details/CommunityMetricsVisualization.vue'
 import CommunityActivityChart from '@/components/community-details/CommunityActivityChart.vue'
 import CommunityServerMap from '@/components/community-details/CommunityServerMap.vue'
 
@@ -13,7 +12,7 @@ const router = useRouter()
 const community = ref<PlayerCommunity | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
-const activeTab = ref<'metrics' | 'activity' | 'server-map' | 'members'>('metrics')
+const activeTab = ref<'activity' | 'server-map' | 'members'>('server-map')
 
 const cohesionPercentage = computed(() =>
   community.value ? Math.round(community.value.cohesionScore * 100) : 0
@@ -136,7 +135,7 @@ onMounted(() => {
               <div class="explorer-card-body">
                 <div class="flex gap-2 whitespace-nowrap">
                   <button
-                    v-for="tab in ['metrics', 'activity', 'server-map', 'members']"
+                    v-for="tab in ['server-map', 'activity', 'members']"
                     :key="tab"
                     @click="activeTab = tab as any"
                     class="px-4 py-2 rounded text-sm font-medium transition-colors"
@@ -152,14 +151,11 @@ onMounted(() => {
 
             <!-- Tab Content -->
             <div class="space-y-6">
-              <!-- Metrics Tab (Full screen visualization) -->
-              <CommunityMetricsVisualization v-if="activeTab === 'metrics'" :community="community" />
+              <!-- Server Map Tab (Full screen bipartite graph) -->
+              <CommunityServerMap v-if="activeTab === 'server-map'" :community="community" />
 
               <!-- Activity Chart Tab (Full screen chart) -->
               <CommunityActivityChart v-else-if="activeTab === 'activity'" :community="community" />
-
-              <!-- Server Map Tab (Full screen bipartite graph) -->
-              <CommunityServerMap v-else-if="activeTab === 'server-map'" :community="community" />
 
               <!-- Members Tab -->
               <CommunityMembersSection v-else-if="activeTab === 'members'" :community="community" />

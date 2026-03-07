@@ -180,7 +180,7 @@ const chartConfig = computed<ChartConfiguration<'bar'>>(() => ({
       },
       tooltip: {
         backgroundColor: 'rgba(0, 0, 0, 0.9)',
-        titleColor: '#00d9ff',
+        titleColor: '#F59E0B',
         bodyColor: '#ffffff',
         borderColor: '#30363d',
         borderWidth: 1,

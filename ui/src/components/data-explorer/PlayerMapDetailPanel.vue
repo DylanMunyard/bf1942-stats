@@ -282,24 +282,33 @@ const loadData = async () => {
   error.value = null;
 
   try {
-    // Load player's stats for this map
+    // Load all map stats for this player
     const response = await fetch(
-      `/stats/data-explorer/players/${encodeURIComponent(props.playerName)}/map-stats/${encodeURIComponent(props.mapName)}?game=${props.game || 'bf1942'}`
+      `/api/players/${encodeURIComponent(props.playerName)}/map-stats?game=${props.game || 'bf1942'}`
     );
 
     if (!response.ok) {
       throw new Error('Failed to load player map statistics');
     }
 
-    const data = await response.json();
-    console.log('Player map stats data:', data);
-    playerStats.value = data.aggregatedStats;
-    serverStats.value = data.serverBreakdown || [];
+    const mapsList = await response.json();
+    console.log('All player maps data:', mapsList);
 
-    // If player only plays on specific servers, default to the first one
-    if (serverStats.value.length > 0 && !selectedServerGuid.value) {
-      // Don't auto-select a server, let them see global rankings
-      console.log('Player plays on servers:', serverStats.value.map(s => s.serverName));
+    // Find the specific map in the list
+    const mapData = mapsList.find((m: any) => m.mapName.toLowerCase() === props.mapName.toLowerCase());
+
+    if (mapData) {
+      // Convert the flat map data to the aggregatedStats format
+      playerStats.value = {
+        totalScore: mapData.totalScore,
+        totalKills: mapData.totalKills,
+        totalDeaths: mapData.totalDeaths,
+        totalRounds: mapData.sessionsPlayed,
+        playTimeMinutes: mapData.totalPlayTimeMinutes
+      };
+      console.log('Map stats found:', playerStats.value);
+    } else {
+      throw new Error(`Map "${props.mapName}" not found in player stats`);
     }
 
     // Load initial rankings
@@ -447,7 +456,7 @@ watch([activeRankingTab, selectedServerGuid], () => {
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--neon-cyan);
-  text-shadow: 0 0 10px rgba(0, 255, 242, 0.3);
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
   letter-spacing: 0.05em;
 }
 
@@ -469,7 +478,7 @@ watch([activeRankingTab, selectedServerGuid], () => {
   color: var(--neon-cyan);
   margin-bottom: 0.75rem;
   text-transform: uppercase;
-  text-shadow: 0 0 10px rgba(0, 255, 242, 0.3);
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
 }
 
 .detail-stat-card {
@@ -482,8 +491,8 @@ watch([activeRankingTab, selectedServerGuid], () => {
 }
 
 .detail-stat-card:hover {
-  border-color: rgba(0, 255, 242, 0.3);
-  box-shadow: 0 0 20px rgba(0, 255, 242, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.1);
 }
 
 .detail-stat-value {
@@ -526,7 +535,7 @@ watch([activeRankingTab, selectedServerGuid], () => {
 .detail-tab--active {
   color: var(--neon-cyan);
   border-bottom-color: var(--neon-cyan);
-  text-shadow: 0 0 10px rgba(0, 255, 242, 0.5);
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
 }
 
 .detail-card {
@@ -538,8 +547,8 @@ watch([activeRankingTab, selectedServerGuid], () => {
 }
 
 .detail-card:hover {
-  border-color: rgba(0, 255, 242, 0.2);
-  box-shadow: 0 0 30px rgba(0, 255, 242, 0.05);
+  border-color: rgba(245, 158, 11, 0.2);
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.05);
 }
 
 .detail-table {
@@ -566,7 +575,7 @@ watch([activeRankingTab, selectedServerGuid], () => {
 }
 
 .detail-table tr:hover td {
-  background: rgba(0, 255, 242, 0.05);
+  background: rgba(245, 158, 11, 0.05);
 }
 
 .detail-link {
@@ -577,7 +586,7 @@ watch([activeRankingTab, selectedServerGuid], () => {
 
 .detail-link:hover {
   color: var(--neon-cyan);
-  text-shadow: 0 0 5px rgba(0, 255, 242, 0.5);
+  text-shadow: 0 0 5px rgba(245, 158, 11, 0.5);
 }
 
 .detail-select {
@@ -595,7 +604,7 @@ watch([activeRankingTab, selectedServerGuid], () => {
 .detail-select:focus {
   outline: none;
   border-color: var(--neon-cyan);
-  box-shadow: 0 0 15px rgba(0, 255, 242, 0.2);
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
 }
 
 .detail-pagination {
@@ -623,7 +632,7 @@ watch([activeRankingTab, selectedServerGuid], () => {
 .detail-pagination-btn:hover:not(:disabled) {
   color: var(--neon-cyan);
   border-color: var(--neon-cyan);
-  background: rgba(0, 255, 242, 0.1);
+  background: rgba(245, 158, 11, 0.1);
 }
 
 .detail-pagination-btn:disabled {
@@ -649,7 +658,7 @@ watch([activeRankingTab, selectedServerGuid], () => {
 .rank-gold {
   background: var(--neon-gold);
   color: var(--bg-dark);
-  box-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.4);
 }
 
 .rank-silver {
@@ -670,7 +679,7 @@ watch([activeRankingTab, selectedServerGuid], () => {
 
 
 .player-row-highlight td {
-  background: rgba(0, 255, 242, 0.08) !important;
+  background: rgba(245, 158, 11, 0.08) !important;
   position: relative;
 }
 
@@ -682,7 +691,7 @@ watch([activeRankingTab, selectedServerGuid], () => {
   bottom: 0;
   width: 3px;
   background: var(--neon-cyan);
-  box-shadow: 0 0 10px rgba(0, 255, 242, 0.5);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
 }
 
 .highlight-animation {
@@ -691,14 +700,14 @@ watch([activeRankingTab, selectedServerGuid], () => {
 
 @keyframes highlight-pulse {
   0% { 
-    background-color: rgba(0, 255, 242, 0.08);
+    background-color: rgba(245, 158, 11, 0.08);
   }
   50% { 
-    background-color: rgba(0, 255, 242, 0.2);
-    box-shadow: 0 0 30px rgba(0, 255, 242, 0.3);
+    background-color: rgba(245, 158, 11, 0.2);
+    box-shadow: 0 0 30px rgba(245, 158, 11, 0.3);
   }
   100% { 
-    background-color: rgba(0, 255, 242, 0.08);
+    background-color: rgba(245, 158, 11, 0.08);
   }
 }
 
@@ -770,12 +779,12 @@ watch([activeRankingTab, selectedServerGuid], () => {
 .detail-retry:hover {
   color: var(--text-primary);
   border-color: var(--neon-cyan);
-  background: rgba(0, 255, 242, 0.1);
+  background: rgba(245, 158, 11, 0.1);
 }
 
 /* Neon color utilities */
-.text-neon-cyan { color: var(--neon-cyan); text-shadow: 0 0 10px rgba(0, 255, 242, 0.5); }
-.text-neon-green { color: var(--neon-green); text-shadow: 0 0 10px rgba(57, 255, 20, 0.5); }
+.text-neon-cyan { color: var(--neon-cyan); text-shadow: 0 0 10px rgba(245, 158, 11, 0.5); }
+.text-neon-green { color: var(--neon-green); text-shadow: 0 0 10px rgba(52, 211, 153, 0.5); }
 .text-neon-red { color: var(--neon-red); text-shadow: 0 0 10px rgba(255, 0, 0, 0.5); }
-.text-neon-gold { color: var(--neon-gold); text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
+.text-neon-gold { color: var(--neon-gold); text-shadow: 0 0 10px rgba(251, 191, 36, 0.5); }
 </style>

@@ -324,8 +324,8 @@ watch(() => props.searchQuery, () => {
 }
 
 .master-list:hover {
-  border-color: rgba(0, 255, 242, 0.2);
-  box-shadow: 0 0 20px rgba(0, 255, 242, 0.05);
+  border-color: rgba(245, 158, 11, 0.2);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.05);
 }
 
 .master-list-header {
@@ -348,7 +348,7 @@ watch(() => props.searchQuery, () => {
   font-size: 0.75rem;
   font-weight: 700;
   font-family: 'JetBrains Mono', monospace;
-  color: var(--neon-cyan, #00fff2);
+  color: var(--neon-cyan, #F59E0B);
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
@@ -391,9 +391,9 @@ watch(() => props.searchQuery, () => {
 }
 
 .master-list-game-btn--active {
-  background: rgba(0, 255, 242, 0.15);
-  color: var(--neon-cyan, #00fff2);
-  box-shadow: 0 0 10px rgba(0, 255, 242, 0.2);
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--neon-cyan, #F59E0B);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.2);
 }
 
 .master-list-body {
@@ -429,11 +429,11 @@ watch(() => props.searchQuery, () => {
 
 .master-list-empty-icon {
   font-size: 1.5rem;
-  color: var(--neon-cyan, #00fff2);
+  color: var(--neon-cyan, #F59E0B);
   opacity: 0.5;
   margin-bottom: 0.5rem;
   font-family: 'JetBrains Mono', monospace;
-  text-shadow: 0 0 10px rgba(0, 255, 242, 0.3);
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
 }
 
 .master-list-empty-text {
@@ -446,14 +446,14 @@ watch(() => props.searchQuery, () => {
 .master-list-error {
   font-size: 0.8rem;
   font-family: 'JetBrains Mono', monospace;
-  color: var(--neon-red, #ff3131);
+  color: var(--neon-red, #F87171);
   margin-bottom: 0.75rem;
 }
 
 .master-list-retry {
   font-size: 0.8rem;
   font-family: 'JetBrains Mono', monospace;
-  color: var(--neon-cyan, #00fff2);
+  color: var(--neon-cyan, #F59E0B);
   background: none;
   border: 1px solid var(--border-color, #30363d);
   border-radius: 4px;
@@ -463,9 +463,9 @@ watch(() => props.searchQuery, () => {
 }
 
 .master-list-retry:hover {
-  background: rgba(0, 255, 242, 0.1);
-  border-color: var(--neon-cyan, #00fff2);
-  box-shadow: 0 0 15px rgba(0, 255, 242, 0.2);
+  background: rgba(245, 158, 11, 0.1);
+  border-color: var(--neon-cyan, #F59E0B);
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
 }
 
 .master-list-scroll {
@@ -492,10 +492,10 @@ watch(() => props.searchQuery, () => {
 }
 
 .master-list-load-more-btn:hover:not(:disabled) {
-  background: rgba(0, 255, 242, 0.1);
-  color: var(--neon-cyan, #00fff2);
-  border-color: rgba(0, 255, 242, 0.3);
-  box-shadow: 0 0 10px rgba(0, 255, 242, 0.2);
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--neon-cyan, #F59E0B);
+  border-color: rgba(245, 158, 11, 0.3);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.2);
 }
 
 .master-list-load-more-btn:disabled {

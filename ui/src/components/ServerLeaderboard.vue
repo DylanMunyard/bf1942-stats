@@ -252,8 +252,8 @@ const getRoundReportLink = (player: PlayerWithRank): string | null => {
 
 /* Rank-based styling with cyberpunk colors */
 .player-row.rank-first {
-  background: linear-gradient(90deg, rgba(255, 215, 0, 0.1) 0%, rgba(255, 215, 0, 0.05) 100%);
-  border-left-color: rgba(255, 215, 0, 0.6);
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.1) 0%, rgba(251, 191, 36, 0.05) 100%);
+  border-left-color: rgba(251, 191, 36, 0.6);
 }
 
 .player-row.rank-second {

@@ -30,31 +30,31 @@
 /* Cyan accent colors */
 .text-cyan-400, .text-cyan-300, .text-cyan-500 { color: var(--neon-cyan) !important; }
 .bg-cyan-500, .bg-cyan-600 { background-color: var(--neon-cyan) !important; color: var(--bg-dark) !important; }
-.bg-cyan-500\/20 { background-color: rgba(0, 255, 242, 0.15) !important; }
+.bg-cyan-500\/20 { background-color: rgba(245, 158, 11, 0.15) !important; }
 .border-cyan-500, .border-cyan-500\/30, .border-cyan-400 { border-color: var(--neon-cyan) !important; }
 
 /* Green accent colors */
 .text-green-400, .text-emerald-400 { color: var(--neon-green) !important; }
-.bg-green-500\/20, .bg-emerald-500\/20 { background-color: rgba(57, 255, 20, 0.15) !important; }
-.border-green-500\/30 { border-color: rgba(57, 255, 20, 0.3) !important; }
+.bg-green-500\/20, .bg-emerald-500\/20 { background-color: rgba(52, 211, 153, 0.15) !important; }
+.border-green-500\/30 { border-color: rgba(52, 211, 153, 0.3) !important; }
 
 /* Pink/Purple accent colors → Neon pink */
 .text-purple-400, .text-violet-400, .text-pink-400 { color: var(--neon-pink) !important; }
-.bg-purple-500\/20, .bg-violet-500\/20 { background-color: rgba(255, 0, 255, 0.15) !important; }
+.bg-purple-500\/20, .bg-violet-500\/20 { background-color: rgba(251, 113, 133, 0.15) !important; }
 
 /* Gold/Yellow/Amber accent colors */
 .text-yellow-400, .text-amber-400, .text-orange-400 { color: var(--neon-gold) !important; }
-.bg-yellow-500\/20, .bg-amber-500\/20 { background-color: rgba(255, 215, 0, 0.15) !important; }
+.bg-yellow-500\/20, .bg-amber-500\/20 { background-color: rgba(251, 191, 36, 0.15) !important; }
 .bg-yellow-400 { background-color: var(--neon-gold) !important; color: var(--bg-dark) !important; }
 
 /* Red accent colors */
 .text-red-400 { color: var(--neon-red) !important; }
-.bg-red-500\/20, .bg-red-500\/10 { background-color: rgba(255, 49, 49, 0.15) !important; }
-.border-red-500\/20, .border-red-500\/50 { border-color: rgba(255, 49, 49, 0.3) !important; }
+.bg-red-500\/20, .bg-red-500\/10 { background-color: rgba(248, 113, 113, 0.15) !important; }
+.border-red-500\/20, .border-red-500\/50 { border-color: rgba(248, 113, 113, 0.3) !important; }
 
 /* Blue accent colors → Cyan (hacker theme doesn't use blue) */
 .text-blue-400 { color: var(--neon-cyan) !important; }
-.bg-blue-500\/20 { background-color: rgba(0, 255, 242, 0.15) !important; }
+.bg-blue-500\/20 { background-color: rgba(245, 158, 11, 0.15) !important; }
 
 /* Indigo colors (for Discord) */
 .bg-indigo-500\/20 { background-color: rgba(99, 102, 241, 0.2) !important; }
@@ -79,9 +79,9 @@
 .border-t-cyan-400, .border-t-cyan-500 { border-top-color: var(--neon-cyan) !important; }
 
 /* Status row backgrounds */
-.bg-red-500\/5 { background-color: rgba(255, 49, 49, 0.05) !important; }
+.bg-red-500\/5 { background-color: rgba(248, 113, 113, 0.05) !important; }
 .bg-orange-500\/5 { background-color: rgba(255, 165, 0, 0.05) !important; }
-.bg-green-500\/5 { background-color: rgba(57, 255, 20, 0.05) !important; }
+.bg-green-500\/5 { background-color: rgba(52, 211, 153, 0.05) !important; }
 .bg-slate-500\/5 { background-color: rgba(48, 54, 61, 0.1) !important; }
 
 /* ===== END TAILWIND OVERRIDES ===== */
@@ -111,28 +111,28 @@
 /* Glow effects for Data Explorer */
 .data-explorer-glow {
   box-shadow:
-    0 0 15px rgba(0, 255, 242, 0.4),
-    0 0 30px rgba(0, 255, 242, 0.2),
-    0 0 45px rgba(255, 0, 255, 0.1);
+    0 0 15px rgba(245, 158, 11, 0.4),
+    0 0 30px rgba(245, 158, 11, 0.2),
+    0 0 45px rgba(251, 113, 133, 0.1);
 }
 
 .data-explorer-glow:hover {
   box-shadow:
-    0 0 20px rgba(0, 255, 242, 0.6),
-    0 0 40px rgba(0, 255, 242, 0.4),
-    0 0 60px rgba(255, 0, 255, 0.2);
+    0 0 20px rgba(245, 158, 11, 0.6),
+    0 0 40px rgba(245, 158, 11, 0.4),
+    0 0 60px rgba(251, 113, 133, 0.2);
 }
 
 .data-explorer-glow-mobile {
   box-shadow:
-    0 0 10px rgba(0, 255, 242, 0.4),
-    0 0 20px rgba(0, 255, 242, 0.2);
+    0 0 10px rgba(245, 158, 11, 0.4),
+    0 0 20px rgba(245, 158, 11, 0.2);
 }
 
 .data-explorer-glow-mobile:hover {
   box-shadow:
-    0 0 15px rgba(0, 255, 242, 0.6),
-    0 0 30px rgba(0, 255, 242, 0.3);
+    0 0 15px rgba(245, 158, 11, 0.6),
+    0 0 30px rgba(245, 158, 11, 0.3);
 }
 
 /* Responsive table */

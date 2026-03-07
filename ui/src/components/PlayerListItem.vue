@@ -66,10 +66,10 @@ defineProps<Props>();
 }
 
 .player-rank-small.rank-first {
-  background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+  background: linear-gradient(135deg, #FBBF24 0%, #ffed4e 100%);
   color: #333;
-  border-color: #ffd700;
-  box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
+  border-color: #FBBF24;
+  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
 }
 
 .player-rank-small.rank-second {

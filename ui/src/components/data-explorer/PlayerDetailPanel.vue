@@ -682,8 +682,8 @@ watch(() => props.serverGuid, () => {
   padding-bottom: 0.5rem;
   font-family: 'JetBrains Mono', monospace;
   text-transform: uppercase;
-  text-shadow: 0 0 12px rgba(0, 255, 242, 0.35);
-  border-bottom: 1px solid rgba(0, 255, 242, 0.15);
+  text-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.15);
   transition: all 0.3s ease;
 }
 
@@ -722,9 +722,9 @@ watch(() => props.serverGuid, () => {
 }
 
 .explorer-stat:hover {
-  border-color: rgba(0, 255, 242, 0.5);
-  box-shadow: 0 0 25px rgba(0, 255, 242, 0.15);
-  background: rgba(0, 255, 242, 0.05);
+  border-color: rgba(245, 158, 11, 0.5);
+  box-shadow: 0 0 25px rgba(245, 158, 11, 0.15);
+  background: rgba(245, 158, 11, 0.05);
 }
 
 .explorer-stat-value {
@@ -736,13 +736,13 @@ watch(() => props.serverGuid, () => {
 
 .explorer-stat-value--accent {
   color: var(--neon-cyan);
-  text-shadow: 0 0 12px rgba(0, 255, 242, 0.6);
+  text-shadow: 0 0 12px rgba(245, 158, 11, 0.6);
   transition: all 0.4s ease;
 }
 
 .explorer-stat-value--green {
   color: var(--neon-green);
-  text-shadow: 0 0 12px rgba(57, 255, 20, 0.6);
+  text-shadow: 0 0 12px rgba(52, 211, 153, 0.6);
   transition: all 0.4s ease;
 }
 
@@ -754,7 +754,7 @@ watch(() => props.serverGuid, () => {
 
 .explorer-stat-value--gold {
   color: var(--neon-gold);
-  text-shadow: 0 0 12px rgba(255, 215, 0, 0.6);
+  text-shadow: 0 0 12px rgba(251, 191, 36, 0.6);
   transition: all 0.4s ease;
 }
 
@@ -777,8 +777,8 @@ watch(() => props.serverGuid, () => {
 }
 
 .explorer-card:hover {
-  border-color: rgba(0, 255, 242, 0.4);
-  box-shadow: 0 8px 24px rgba(0, 255, 242, 0.15);
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.15);
 }
 
 /* --- Table --- */
@@ -796,7 +796,7 @@ watch(() => props.serverGuid, () => {
   font-weight: 700;
   letter-spacing: 0.06em;
   font-family: 'JetBrains Mono', monospace;
-  border-bottom: 2px solid rgba(0, 255, 242, 0.2);
+  border-bottom: 2px solid rgba(245, 158, 11, 0.2);
   font-size: 0.7rem;
   text-transform: uppercase;
   white-space: nowrap;
@@ -815,7 +815,7 @@ watch(() => props.serverGuid, () => {
 
 .explorer-table td {
   padding: 0.6rem 0.5rem;
-  border-bottom: 1px solid rgba(0, 255, 242, 0.05);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.05);
   color: var(--text-primary);
 }
 
@@ -835,7 +835,7 @@ watch(() => props.serverGuid, () => {
 }
 
 .explorer-table tbody tr:hover td {
-  background: rgba(0, 255, 242, 0.12);
+  background: rgba(245, 158, 11, 0.12);
   color: var(--text-primary);
 }
 
@@ -873,7 +873,7 @@ watch(() => props.serverGuid, () => {
 .explorer-select:focus {
   outline: none;
   border-color: var(--neon-cyan);
-  box-shadow: 0 0 15px rgba(0, 255, 242, 0.2);
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
 }
 
 /* --- Time Pills --- */
@@ -898,14 +898,14 @@ watch(() => props.serverGuid, () => {
 
 .explorer-time-pill:hover:not(:disabled) {
   color: var(--text-primary);
-  border-color: rgba(0, 255, 242, 0.3);
+  border-color: rgba(245, 158, 11, 0.3);
 }
 
 .explorer-time-pill--active {
   background: var(--neon-cyan);
   color: var(--bg-dark);
   border-color: var(--neon-cyan);
-  box-shadow: 0 0 10px rgba(0, 255, 242, 0.4);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
 }
 
 .explorer-time-pill:disabled {
@@ -956,9 +956,9 @@ watch(() => props.serverGuid, () => {
 }
 
 .explorer-pagination-btn:hover:not(:disabled) {
-  background: rgba(0, 255, 242, 0.1);
+  background: rgba(245, 158, 11, 0.1);
   color: var(--neon-cyan);
-  border-color: rgba(0, 255, 242, 0.3);
+  border-color: rgba(245, 158, 11, 0.3);
 }
 
 .explorer-pagination-btn:disabled {
@@ -989,8 +989,8 @@ watch(() => props.serverGuid, () => {
 .explorer-btn--ghost:hover:not(:disabled) {
   color: var(--text-primary);
   border-color: var(--neon-cyan);
-  background: rgba(0, 255, 242, 0.1);
-  box-shadow: 0 0 15px rgba(0, 255, 242, 0.2);
+  background: rgba(245, 158, 11, 0.1);
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
 }
 
 .explorer-btn--sm {
@@ -1014,7 +1014,7 @@ watch(() => props.serverGuid, () => {
   opacity: 0.5;
   margin-bottom: 0.75rem;
   font-family: 'JetBrains Mono', monospace;
-  text-shadow: 0 0 20px rgba(0, 255, 242, 0.3);
+  text-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
 }
 
 .explorer-empty-title {
@@ -1053,7 +1053,7 @@ watch(() => props.serverGuid, () => {
 .explorer-rank-1 {
   color: var(--neon-gold);
   font-weight: 700;
-  text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
 }
 
 .explorer-rank-2 {
@@ -1110,7 +1110,7 @@ watch(() => props.serverGuid, () => {
 }
 
 .metric-tab:hover {
-  border-color: rgba(0, 255, 242, 0.4);
+  border-color: rgba(245, 158, 11, 0.4);
   color: var(--text-primary);
 }
 
@@ -1124,7 +1124,7 @@ watch(() => props.serverGuid, () => {
 .metric-tab--active[data-metric="score"] {
   background: var(--neon-cyan);
   border-color: var(--neon-cyan);
-  box-shadow: 0 0 20px rgba(0, 255, 242, 0.5), inset 0 0 20px rgba(0, 255, 242, 0.1);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.5), inset 0 0 20px rgba(245, 158, 11, 0.1);
 }
 
 .metric-tab--active[data-metric="kills"] {
@@ -1136,7 +1136,7 @@ watch(() => props.serverGuid, () => {
 .metric-tab--active[data-metric="wins"] {
   background: var(--neon-green);
   border-color: var(--neon-green);
-  box-shadow: 0 0 20px rgba(57, 255, 20, 0.5), inset 0 0 20px rgba(57, 255, 20, 0.1);
+  box-shadow: 0 0 20px rgba(52, 211, 153, 0.5), inset 0 0 20px rgba(52, 211, 153, 0.1);
 }
 
 /* --- Scope Toggle --- */
@@ -1181,14 +1181,14 @@ watch(() => props.serverGuid, () => {
 
 .scope-btn:hover {
   color: var(--text-primary);
-  border-color: rgba(0, 255, 242, 0.2);
+  border-color: rgba(245, 158, 11, 0.2);
 }
 
 .scope-btn--active {
   background: var(--bg-panel);
   border-color: var(--neon-cyan);
   color: var(--neon-cyan);
-  box-shadow: 0 0 10px rgba(0, 255, 242, 0.3);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
 }
 
 /* Metric Title with Color Theming */
@@ -1203,7 +1203,7 @@ watch(() => props.serverGuid, () => {
 
 .metric-title[data-metric="score"] {
   color: var(--neon-cyan);
-  text-shadow: 0 0 15px rgba(0, 255, 242, 0.4);
+  text-shadow: 0 0 15px rgba(245, 158, 11, 0.4);
 }
 
 .metric-title[data-metric="kills"] {
@@ -1213,7 +1213,7 @@ watch(() => props.serverGuid, () => {
 
 .metric-title[data-metric="wins"] {
   color: var(--neon-green);
-  text-shadow: 0 0 15px rgba(57, 255, 20, 0.4);
+  text-shadow: 0 0 15px rgba(52, 211, 153, 0.4);
 }
 
 /* Metric Description */
@@ -1232,7 +1232,7 @@ watch(() => props.serverGuid, () => {
   gap: 0.75rem;
   align-items: flex-start;
   padding-top: 0.75rem;
-  border-top: 1px solid rgba(0, 255, 242, 0.1);
+  border-top: 1px solid rgba(245, 158, 11, 0.1);
 }
 
 @media (min-width: 640px) {

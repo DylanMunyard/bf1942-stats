@@ -1,12 +1,12 @@
 /* ===== L33T HACKER THEME ===== */
 
-/* Base colors */
+/* Base colors - Material Design 3 */
 .dashboard-root {
-  --neon-cyan: #00fff2;
-  --neon-green: #39ff14;
-  --neon-pink: #ff00ff;
-  --neon-gold: #ffd700;
-  --neon-red: #ff3131;
+  --neon-cyan: #F59E0B;      /* sky-400 - replaces harsh #F59E0B */
+  --neon-green: #34D399;     /* emerald-400 - softer green */
+  --neon-pink: #FB7185;      /* rose-400 - softer pink */
+  --neon-gold: #FBBF24;      /* amber-400 - softer gold */
+  --neon-red: #F87171;       /* red-400 - softer red */
   --bg-dark: #0a0a0f;
   --bg-panel: #0d1117;
   --bg-card: #161b22;
@@ -91,7 +91,7 @@
   overflow: hidden;
   background: var(--bg-panel);
   box-shadow:
-    0 0 20px rgba(0, 255, 242, 0.1),
+    0 0 20px rgba(245, 158, 11, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
@@ -287,8 +287,8 @@
 }
 
 .terminal-panel:hover {
-  border-color: rgba(0, 255, 242, 0.3);
-  box-shadow: 0 0 30px rgba(0, 255, 242, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.1);
 }
 
 .panel-header {
@@ -414,27 +414,27 @@
 }
 
 .badge-cyan {
-  background: rgba(0, 255, 242, 0.15);
+  background: rgba(245, 158, 11, 0.15);
   color: var(--neon-cyan);
-  border: 1px solid rgba(0, 255, 242, 0.3);
+  border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
 .badge-green {
-  background: rgba(57, 255, 20, 0.15);
+  background: rgba(52, 211, 153, 0.15);
   color: var(--neon-green);
-  border: 1px solid rgba(57, 255, 20, 0.3);
+  border: 1px solid rgba(52, 211, 153, 0.3);
 }
 
 .badge-pink {
-  background: rgba(255, 0, 255, 0.15);
+  background: rgba(251, 113, 133, 0.15);
   color: var(--neon-pink);
-  border: 1px solid rgba(255, 0, 255, 0.3);
+  border: 1px solid rgba(251, 113, 133, 0.3);
 }
 
 .badge-gold {
-  background: rgba(255, 215, 0, 0.15);
+  background: rgba(251, 191, 36, 0.15);
   color: var(--neon-gold);
-  border: 1px solid rgba(255, 215, 0, 0.3);
+  border: 1px solid rgba(251, 191, 36, 0.3);
 }
 
 /* Panel body */

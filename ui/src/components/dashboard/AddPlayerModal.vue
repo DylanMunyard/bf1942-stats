@@ -141,9 +141,9 @@ const handleClose = () => emit('close');
 .modal-title {
   font-size: 1.125rem;
   font-weight: 700;
-  color: #00fff2;
+  color: #F59E0B;
   margin: 0;
-  text-shadow: 0 0 20px rgba(0, 255, 242, 0.3);
+  text-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
 }
 
 .modal-desc {
@@ -161,7 +161,7 @@ const handleClose = () => emit('close');
   display: block;
   font-size: 0.75rem;
   font-weight: 700;
-  color: #00fff2;
+  color: #F59E0B;
   margin-bottom: 0.5rem;
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -179,10 +179,10 @@ const handleClose = () => emit('close');
   align-items: center;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
-  background: rgba(255, 49, 49, 0.1);
-  border: 1px solid rgba(255, 49, 49, 0.3);
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.3);
   border-radius: 4px;
-  color: #ff3131;
+  color: #F87171;
   font-size: 0.8rem;
   margin-bottom: 1rem;
 }
@@ -193,8 +193,8 @@ const handleClose = () => emit('close');
 
 /* Player Preview */
 .player-preview {
-  background: rgba(57, 255, 20, 0.05);
-  border: 1px solid rgba(57, 255, 20, 0.2);
+  background: rgba(52, 211, 153, 0.05);
+  border: 1px solid rgba(52, 211, 153, 0.2);
   border-radius: 4px;
   padding: 1rem;
   margin-bottom: 1.25rem;
@@ -209,14 +209,14 @@ const handleClose = () => emit('close');
 }
 
 .preview-icon {
-  color: #39ff14;
+  color: #34D399;
   font-weight: 700;
 }
 
 .preview-name {
   font-size: 1rem;
   font-weight: 700;
-  color: #39ff14;
+  color: #34D399;
 }
 
 .status-badge {
@@ -229,9 +229,9 @@ const handleClose = () => emit('close');
 }
 
 .status-badge.online {
-  background: rgba(57, 255, 20, 0.2);
-  color: #39ff14;
-  border: 1px solid rgba(57, 255, 20, 0.4);
+  background: rgba(52, 211, 153, 0.2);
+  color: #34D399;
+  border: 1px solid rgba(52, 211, 153, 0.4);
 }
 
 .status-badge.offline {
@@ -267,10 +267,10 @@ const handleClose = () => emit('close');
 
 .server-info {
   font-size: 0.75rem;
-  color: #00fff2;
+  color: #F59E0B;
   font-style: italic;
   padding-top: 0.75rem;
-  border-top: 1px solid rgba(57, 255, 20, 0.2);
+  border-top: 1px solid rgba(52, 211, 153, 0.2);
 }
 
 /* Form Actions */
@@ -310,14 +310,14 @@ const handleClose = () => emit('close');
 }
 
 .btn-submit {
-  color: #00fff2;
-  border-color: rgba(0, 255, 242, 0.4);
+  color: #F59E0B;
+  border-color: rgba(245, 158, 11, 0.4);
 }
 
 .btn-submit:hover:not(:disabled) {
-  background: rgba(0, 255, 242, 0.15);
-  border-color: #00fff2;
-  box-shadow: 0 0 15px rgba(0, 255, 242, 0.2);
+  background: rgba(245, 158, 11, 0.15);
+  border-color: #F59E0B;
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
 }
 
 .btn-submit:disabled {
@@ -328,8 +328,8 @@ const handleClose = () => emit('close');
 .spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(0, 255, 242, 0.2);
-  border-top-color: #00fff2;
+  border: 2px solid rgba(245, 158, 11, 0.2);
+  border-top-color: #F59E0B;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }

@@ -8,7 +8,7 @@ const props = defineProps<{
 }>()
 
 const width = ref(800)
-const height = ref(600)
+const height = ref(700)
 const depth = ref(1)
 const maxNodes = ref(50)
 const minOverlap = ref(3)
@@ -346,10 +346,10 @@ const handleResize = () => {
   checkMobile()
   const container = svgElement.value?.parentElement
   if (container) {
-    // Fullscreen mode on desktop
+    // Fullscreen mode on desktop (account for container padding)
     if (isFullscreen.value && !isMobile.value) {
-      width.value = window.innerWidth
-      height.value = window.innerHeight
+      width.value = window.innerWidth - 40
+      height.value = window.innerHeight - 40
     }
     // On mobile, use full viewport dimensions
     else if (isMobile.value) {
@@ -357,7 +357,7 @@ const handleResize = () => {
       height.value = window.innerHeight - 48 // Account for controls bar
     } else {
       width.value = container.offsetWidth
-      height.value = Math.min(container.offsetWidth * 0.75, 600)
+      height.value = 700
     }
 
     if (svg) {
@@ -832,8 +832,8 @@ watch(() => props.playerName, () => {
 }
 
 .fullscreen-exit-btn:hover {
-  color: #00fff2;
-  text-shadow: 0 0 10px rgba(0, 255, 242, 0.5);
+  color: #F59E0B;
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
 }
 
 .fullscreen-exit-text {

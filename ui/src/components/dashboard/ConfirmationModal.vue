@@ -76,7 +76,7 @@ defineEmits<{
   width: 100%;
   overflow: hidden;
   box-shadow:
-    0 0 40px rgba(255, 49, 49, 0.1),
+    0 0 40px rgba(248, 113, 113, 0.1),
     0 25px 50px -12px rgba(0, 0, 0, 0.5);
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   animation: modal-in 0.2s ease-out;
@@ -133,9 +133,9 @@ defineEmits<{
 .warning-icon {
   font-size: 2rem;
   font-weight: 700;
-  color: #ff3131;
+  color: #F87171;
   margin-bottom: 1rem;
-  text-shadow: 0 0 20px rgba(255, 49, 49, 0.5);
+  text-shadow: 0 0 20px rgba(248, 113, 113, 0.5);
   animation: pulse 2s infinite;
 }
 
@@ -156,7 +156,7 @@ defineEmits<{
 }
 
 .prompt {
-  color: #ff3131;
+  color: #F87171;
   flex-shrink: 0;
 }
 
@@ -204,14 +204,14 @@ defineEmits<{
 }
 
 .btn-confirm {
-  color: #ff3131;
-  border-color: rgba(255, 49, 49, 0.4);
+  color: #F87171;
+  border-color: rgba(248, 113, 113, 0.4);
 }
 
 .btn-confirm:hover {
-  background: rgba(255, 49, 49, 0.15);
-  border-color: #ff3131;
-  box-shadow: 0 0 15px rgba(255, 49, 49, 0.2);
+  background: rgba(248, 113, 113, 0.15);
+  border-color: #F87171;
+  box-shadow: 0 0 15px rgba(248, 113, 113, 0.2);
 }
 
 /* Mobile */

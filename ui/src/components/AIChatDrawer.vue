@@ -602,8 +602,8 @@ async function sendMessage() {
 }
 
 .btn-close:hover {
-  color: #ff3131;
-  background: rgba(255, 49, 49, 0.1);
+  color: #F87171;
+  background: rgba(248, 113, 113, 0.1);
 }
 
 /* Header */
@@ -704,20 +704,20 @@ async function sendMessage() {
   background: rgba(0, 0, 0, 0.3);
   padding: 0.1rem 0.3rem;
   border-radius: 3px;
-  color: #00fff2;
+  color: #F59E0B;
 }
 
 .context-hint {
   margin-top: 1rem;
   padding: 0.5rem;
-  background: rgba(0, 255, 242, 0.05);
-  border: 1px solid rgba(0, 255, 242, 0.2);
+  background: rgba(245, 158, 11, 0.05);
+  border: 1px solid rgba(245, 158, 11, 0.2);
   border-radius: 4px;
   font-size: 0.75rem;
 }
 
 .context-hint strong {
-  color: #00fff2;
+  color: #F59E0B;
 }
 
 .message {
@@ -732,7 +732,7 @@ async function sendMessage() {
 }
 
 .message-role {
-  color: #00fff2;
+  color: #F59E0B;
   font-weight: 700;
   flex-shrink: 0;
 }
@@ -750,8 +750,8 @@ async function sendMessage() {
 .message.assistant .message-content {
   --color-text: #e6edf3;
   --color-text-muted: #8b949e;
-  --rule-primary: #00fff2;
-  --rule-secondary: #00fff2;
+  --rule-primary: #F59E0B;
+  --rule-secondary: #F59E0B;
 }
 
 /* Markdown rules styling (same as PublicTournamentRules.vue) */
@@ -958,7 +958,7 @@ async function sendMessage() {
   display: inline-block;
   width: 8px;
   height: 1em;
-  background: #00fff2;
+  background: #F59E0B;
   margin-left: 2px;
   animation: blink 1s step-end infinite;
 }
@@ -1002,9 +1002,9 @@ async function sendMessage() {
 }
 
 .feedback-btn--active {
-  color: #00fff2;
-  background: rgba(0, 255, 242, 0.1);
-  border-color: rgba(0, 255, 242, 0.3);
+  color: #F59E0B;
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
 }
 
 .feedback-btn--active.feedback-btn--negative {
@@ -1052,7 +1052,7 @@ async function sendMessage() {
 .searching-indicator {
   font-weight: normal;
   text-transform: none;
-  color: #00fff2;
+  color: #F59E0B;
 }
 
 .autocomplete-list {
@@ -1075,7 +1075,7 @@ async function sendMessage() {
 }
 
 .item-icon {
-  color: #00fff2;
+  color: #F59E0B;
   font-weight: 700;
   width: 1rem;
   text-align: center;
@@ -1118,8 +1118,8 @@ async function sendMessage() {
 }
 
 .input-wrapper:focus-within {
-  border-color: #00fff2;
-  box-shadow: 0 0 0 2px rgba(0, 255, 242, 0.1);
+  border-color: #F59E0B;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.1);
 }
 
 .input-row {
@@ -1130,7 +1130,7 @@ async function sendMessage() {
 }
 
 .input-prompt {
-  color: #00fff2;
+  color: #F59E0B;
   font-weight: 700;
   flex-shrink: 0;
   padding-top: 0.35rem;
@@ -1159,7 +1159,7 @@ async function sendMessage() {
   height: 32px;
   border-radius: 6px;
   border: none;
-  background: linear-gradient(135deg, #00fff2 0%, #60a5fa 100%);
+  background: linear-gradient(135deg, #F59E0B 0%, #60a5fa 100%);
   color: #0d1117;
   cursor: pointer;
   display: flex;
@@ -1171,7 +1171,7 @@ async function sendMessage() {
 
 .send-button:hover:not(:disabled) {
   transform: scale(1.05);
-  box-shadow: 0 0 12px rgba(0, 255, 242, 0.3);
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
 }
 
 .send-button:disabled {

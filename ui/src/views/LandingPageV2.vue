@@ -83,7 +83,7 @@
             <div class="relative flex items-center justify-center">
               <div class="w-20 h-20 border-4 border-neutral-700 rounded-full animate-spin" />
               <div class="absolute w-20 h-20 border-4 border-cyan-500 rounded-full border-t-transparent animate-spin" />
-              <div class="absolute w-8 h-8 bg-cyan-500 rounded-full animate-pulse" style="box-shadow: 0 0 15px rgba(0, 255, 242, 0.5);" />
+              <div class="absolute w-8 h-8 bg-cyan-500 rounded-full animate-pulse" style="box-shadow: 0 0 15px rgba(245, 158, 11, 0.5);" />
             </div>
             <div class="text-lg font-semibold text-white">
               Loading servers...

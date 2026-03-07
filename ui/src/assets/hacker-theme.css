@@ -1,12 +1,12 @@
 /* ===== HACKER THEME - Global CSS Variables & Base Styles ===== */
 
 :root {
-  /* Neon accents */
-  --neon-cyan: #00fff2;
-  --neon-green: #39ff14;
-  --neon-pink: #ff00ff;
-  --neon-gold: #ffd700;
-  --neon-red: #ff3131;
+  /* Material Design accents - readable and professional */
+  --neon-cyan: #F59E0B;      /* sky-400 - replaces harsh #F59E0B */
+  --neon-green: #34D399;     /* emerald-400 - softer green */
+  --neon-pink: #FB7185;      /* rose-400 - softer pink */
+  --neon-gold: #FBBF24;      /* amber-400 - softer gold */
+  --neon-red: #F87171;       /* red-400 - softer red */
 
   /* Backgrounds */
   --bg-dark: #0a0a0f;
@@ -24,8 +24,8 @@
   --hacker-border: var(--border-color);
   --hacker-border-focus: #484f58;
   --hacker-accent: var(--neon-cyan);
-  --hacker-accent-dim: rgba(0, 255, 242, 0.12);
-  --hacker-accent-glow: rgba(0, 255, 242, 0.25);
+  --hacker-accent-dim: rgba(245, 158, 11, 0.12);      /* sky-400 at 12% opacity */
+  --hacker-accent-glow: rgba(245, 158, 11, 0.25);    /* sky-400 at 25% opacity */
   --hacker-warn: var(--neon-gold);
   --hacker-danger: var(--neon-red);
   --hacker-success: var(--neon-green);
@@ -71,8 +71,8 @@
 }
 
 .hacker-card:hover {
-  border-color: rgba(0, 255, 242, 0.3);
-  box-shadow: 0 0 30px rgba(0, 255, 242, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.1);
 }
 
 .hacker-card-header {
@@ -118,7 +118,7 @@
 .hacker-btn--primary:hover:not(:disabled) {
   background: #00ffff;
   border-color: #00ffff;
-  box-shadow: 0 0 20px rgba(0, 255, 242, 0.5);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.5);
 }
 
 .hacker-btn--ghost {
@@ -130,8 +130,8 @@
 .hacker-btn--ghost:hover:not(:disabled) {
   color: var(--text-primary);
   border-color: var(--neon-cyan);
-  background: rgba(0, 255, 242, 0.1);
-  box-shadow: 0 0 15px rgba(0, 255, 242, 0.2);
+  background: rgba(245, 158, 11, 0.1);
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
 }
 
 .hacker-btn--danger {
@@ -141,8 +141,8 @@
 }
 
 .hacker-btn--danger:hover:not(:disabled) {
-  background: rgba(255, 49, 49, 0.15);
-  box-shadow: 0 0 15px rgba(255, 49, 49, 0.3);
+  background: rgba(248, 113, 113, 0.15);
+  box-shadow: 0 0 15px rgba(248, 113, 113, 0.3);
 }
 
 .hacker-btn--sm {
@@ -176,7 +176,7 @@
 .hacker-input:focus {
   outline: none;
   border-color: var(--neon-cyan);
-  box-shadow: 0 0 15px rgba(0, 255, 242, 0.2);
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
 }
 
 .hacker-textarea {
@@ -198,7 +198,7 @@
 .hacker-select:focus {
   outline: none;
   border-color: var(--neon-cyan);
-  box-shadow: 0 0 15px rgba(0, 255, 242, 0.2);
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
 }
 
 /* ===== Tables ===== */
@@ -240,7 +240,7 @@
 }
 
 .hacker-table tbody tr:hover td {
-  background: rgba(0, 255, 242, 0.08);
+  background: rgba(245, 158, 11, 0.08);
 }
 
 /* ===== Tags / Badges ===== */
@@ -258,26 +258,26 @@
 }
 
 .hacker-tag--accent {
-  background: rgba(0, 255, 242, 0.15);
-  border-color: rgba(0, 255, 242, 0.3);
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.3);
   color: var(--neon-cyan);
 }
 
 .hacker-tag--warn {
-  background: rgba(255, 215, 0, 0.15);
-  border-color: rgba(255, 215, 0, 0.3);
+  background: rgba(251, 191, 36, 0.15);
+  border-color: rgba(251, 191, 36, 0.3);
   color: var(--neon-gold);
 }
 
 .hacker-tag--success {
-  background: rgba(57, 255, 20, 0.15);
-  border-color: rgba(57, 255, 20, 0.3);
+  background: rgba(52, 211, 153, 0.15);
+  border-color: rgba(52, 211, 153, 0.3);
   color: var(--neon-green);
 }
 
 .hacker-tag--danger {
-  background: rgba(255, 49, 49, 0.15);
-  border-color: rgba(255, 49, 49, 0.3);
+  background: rgba(248, 113, 113, 0.15);
+  border-color: rgba(248, 113, 113, 0.3);
   color: var(--neon-red);
 }
 
@@ -348,19 +348,19 @@
 
 /* ===== Glow Effects ===== */
 .glow-cyan {
-  text-shadow: 0 0 10px rgba(0, 255, 242, 0.5);
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
 }
 
 .glow-green {
-  text-shadow: 0 0 10px rgba(57, 255, 20, 0.5);
+  text-shadow: 0 0 10px rgba(52, 211, 153, 0.5);
 }
 
 .glow-gold {
-  text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
 }
 
 .glow-pink {
-  text-shadow: 0 0 10px rgba(255, 0, 255, 0.5);
+  text-shadow: 0 0 10px rgba(251, 113, 133, 0.5);
 }
 
 /* ===== Section Headers ===== */
@@ -372,7 +372,7 @@
   margin: 0 0 0.75rem;
   font-family: 'JetBrains Mono', monospace;
   text-transform: uppercase;
-  text-shadow: 0 0 10px rgba(0, 255, 242, 0.3);
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
 }
 
 /* ===== Links ===== */
@@ -384,7 +384,7 @@
 
 .hacker-link:hover {
   color: #00ffff;
-  text-shadow: 0 0 10px rgba(0, 255, 242, 0.5);
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
 }
 
 /* ===== Stats Grid ===== */
@@ -410,8 +410,8 @@
 }
 
 .hacker-stat:hover {
-  border-color: rgba(0, 255, 242, 0.3);
-  box-shadow: 0 0 20px rgba(0, 255, 242, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.1);
 }
 
 .hacker-stat-value {
@@ -423,17 +423,17 @@
 
 .hacker-stat-value--accent {
   color: var(--neon-cyan);
-  text-shadow: 0 0 10px rgba(0, 255, 242, 0.5);
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
 }
 
 .hacker-stat-value--green {
   color: var(--neon-green);
-  text-shadow: 0 0 10px rgba(57, 255, 20, 0.5);
+  text-shadow: 0 0 10px rgba(52, 211, 153, 0.5);
 }
 
 .hacker-stat-value--gold {
   color: var(--neon-gold);
-  text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
 }
 
 .hacker-stat-label {
@@ -448,7 +448,7 @@
 .hacker-rank-1 {
   color: var(--neon-gold);
   font-weight: 700;
-  text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
 }
 
 .hacker-rank-2 {
@@ -493,7 +493,7 @@
 .hacker-tab--active {
   color: var(--neon-cyan);
   border-bottom-color: var(--neon-cyan);
-  text-shadow: 0 0 10px rgba(0, 255, 242, 0.3);
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
 }
 
 /* ===== Toggle Group ===== */
@@ -525,7 +525,7 @@
 .hacker-toggle-btn--active {
   background: var(--neon-cyan);
   color: var(--bg-dark);
-  box-shadow: 0 0 10px rgba(0, 255, 242, 0.4);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
 }
 
 /* ===== Empty State ===== */
@@ -544,7 +544,7 @@
   opacity: 0.5;
   margin-bottom: 0.75rem;
   font-family: 'JetBrains Mono', monospace;
-  text-shadow: 0 0 20px rgba(0, 255, 242, 0.3);
+  text-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
 }
 
 .hacker-empty-title {
@@ -597,16 +597,16 @@
 }
 
 .hacker-pagination-btn:hover:not(:disabled) {
-  background: rgba(0, 255, 242, 0.1);
+  background: rgba(245, 158, 11, 0.1);
   color: var(--neon-cyan);
-  border-color: rgba(0, 255, 242, 0.3);
+  border-color: rgba(245, 158, 11, 0.3);
 }
 
 .hacker-pagination-btn--active {
   background: var(--neon-cyan);
   color: var(--bg-dark);
   border-color: var(--neon-cyan);
-  box-shadow: 0 0 10px rgba(0, 255, 242, 0.4);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
 }
 
 .hacker-pagination-btn:disabled {
@@ -639,26 +639,26 @@
 }
 
 .hacker-notice-banner--info {
-  background: rgba(0, 255, 242, 0.1);
-  border-color: rgba(0, 255, 242, 0.3);
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
   color: var(--neon-cyan);
 }
 
 .hacker-notice-banner--warning {
-  background: rgba(255, 215, 0, 0.1);
-  border-color: rgba(255, 215, 0, 0.3);
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.3);
   color: var(--neon-gold);
 }
 
 .hacker-notice-banner--error {
-  background: rgba(255, 49, 49, 0.1);
-  border-color: rgba(255, 49, 49, 0.3);
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.3);
   color: var(--neon-red);
 }
 
 .hacker-notice-banner--success {
-  background: rgba(57, 255, 20, 0.1);
-  border-color: rgba(57, 255, 20, 0.3);
+  background: rgba(52, 211, 153, 0.1);
+  border-color: rgba(52, 211, 153, 0.3);
   color: var(--neon-green);
 }
 

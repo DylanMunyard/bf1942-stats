@@ -18,7 +18,7 @@
         <div class="hero-stats">
           <div class="stat-item">
             <span class="stat-label">K/D</span>
-            <span class="stat-value">{{ (topMap.kdRatio || 0).toFixed(2) }}</span>
+            <span class="stat-value">{{ calculateKD(topMap) }}</span>
           </div>
           <div class="stat-item">
             <span class="stat-label">Sessions</span>
@@ -84,6 +84,13 @@ const topMaps = computed(() => {
 const topMap = computed(() => {
   return topMaps.value[0] || null;
 });
+
+// Calculate K/D ratio
+function calculateKD(map: PlayerMapStatEntry | null): string {
+  if (!map) return '0.00';
+  const ratio = map.totalDeaths > 0 ? map.totalKills / map.totalDeaths : map.totalKills;
+  return ratio.toFixed(2);
+}
 
 // Calculate bar width as percentage of max play time
 function getBarWidth(map: PlayerMapStatEntry): number {

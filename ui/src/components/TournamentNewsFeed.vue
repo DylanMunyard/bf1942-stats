@@ -208,7 +208,7 @@ const hexToRgb = (hex: string): { r: number; g: number; b: number } | null => {
 
 const getAccentWithOpacity = (opacity: number): string => {
   const rgb = hexToRgb(props.accentColor);
-  if (!rgb) return `rgba(255, 215, 0, ${opacity})`;
+  if (!rgb) return `rgba(251, 191, 36, ${opacity})`;
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`;
 };
 

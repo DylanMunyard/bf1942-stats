@@ -143,7 +143,7 @@ const hasSessionStats = computed(() => {
 
 <style scoped>
 .hacker-card {
-  --card-accent: #ff00ff;
+  --card-accent: #FB7185;
   position: relative;
   background: #0d1117;
   border: 1px solid #30363d;
@@ -155,15 +155,15 @@ const hasSessionStats = computed(() => {
 
 .hacker-card:hover {
   border-color: var(--card-accent);
-  box-shadow: 0 0 20px rgba(255, 0, 255, 0.15);
+  box-shadow: 0 0 20px rgba(251, 113, 133, 0.15);
 }
 
 .hacker-card.is-online {
-  --card-accent: #39ff14;
+  --card-accent: #34D399;
 }
 
 .hacker-card.is-online:hover {
-  box-shadow: 0 0 20px rgba(57, 255, 20, 0.15);
+  box-shadow: 0 0 20px rgba(52, 211, 153, 0.15);
 }
 
 .online-bar {
@@ -172,8 +172,8 @@ const hasSessionStats = computed(() => {
   top: 0;
   bottom: 0;
   width: 3px;
-  background: #39ff14;
-  box-shadow: 0 0 10px #39ff14;
+  background: #34D399;
+  box-shadow: 0 0 10px #34D399;
 }
 
 .card-content {
@@ -204,16 +204,16 @@ const hasSessionStats = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, rgba(255, 0, 255, 0.2) 0%, rgba(255, 0, 255, 0.05) 100%);
-  border: 1px solid rgba(255, 0, 255, 0.4);
+  background: linear-gradient(135deg, rgba(251, 113, 133, 0.2) 0%, rgba(251, 113, 133, 0.05) 100%);
+  border: 1px solid rgba(251, 113, 133, 0.4);
   border-radius: 4px;
 }
 
 .avatar-text {
   font-size: 1rem;
   font-weight: 700;
-  color: #ff00ff;
-  text-shadow: 0 0 10px rgba(255, 0, 255, 0.5);
+  color: #FB7185;
+  text-shadow: 0 0 10px rgba(251, 113, 133, 0.5);
 }
 
 .online-indicator {
@@ -232,9 +232,9 @@ const hasSessionStats = computed(() => {
 .online-pulse {
   width: 8px;
   height: 8px;
-  background: #39ff14;
+  background: #34D399;
   border-radius: 50%;
-  box-shadow: 0 0 8px #39ff14;
+  box-shadow: 0 0 8px #34D399;
   animation: pulse 2s infinite;
 }
 
@@ -262,8 +262,8 @@ const hasSessionStats = computed(() => {
 }
 
 .player-name:hover {
-  color: #ff00ff;
-  text-shadow: 0 0 10px rgba(255, 0, 255, 0.5);
+  color: #FB7185;
+  text-shadow: 0 0 10px rgba(251, 113, 133, 0.5);
 }
 
 .player-status {
@@ -284,7 +284,7 @@ const hasSessionStats = computed(() => {
 }
 
 .status-online .status-icon {
-  color: #39ff14;
+  color: #34D399;
 }
 
 .status-text {
@@ -294,18 +294,18 @@ const hasSessionStats = computed(() => {
 }
 
 .status-online .status-text {
-  color: #39ff14;
+  color: #34D399;
 }
 
 .server-link {
-  color: #39ff14;
+  color: #34D399;
   text-decoration: none;
   transition: all 0.2s ease;
 }
 
 .server-link:hover {
-  color: #ff00ff;
-  text-shadow: 0 0 8px rgba(255, 0, 255, 0.5);
+  color: #FB7185;
+  text-shadow: 0 0 8px rgba(251, 113, 133, 0.5);
 }
 
 .map-name {
@@ -330,9 +330,9 @@ const hasSessionStats = computed(() => {
 }
 
 .stat-score {
-  background: rgba(255, 0, 255, 0.15);
-  color: #ff00ff;
-  border: 1px solid rgba(255, 0, 255, 0.3);
+  background: rgba(251, 113, 133, 0.15);
+  color: #FB7185;
+  border: 1px solid rgba(251, 113, 133, 0.3);
 }
 
 .stat-kd {
@@ -342,11 +342,11 @@ const hasSessionStats = computed(() => {
 }
 
 .stat-kd .kills {
-  color: #39ff14;
+  color: #34D399;
 }
 
 .stat-kd .deaths {
-  color: #ff3131;
+  color: #F87171;
 }
 
 /* Remove Button */
@@ -364,9 +364,9 @@ const hasSessionStats = computed(() => {
 }
 
 .btn-remove:hover {
-  border-color: #ff3131;
-  color: #ff3131;
-  background: rgba(255, 49, 49, 0.1);
+  border-color: #F87171;
+  color: #F87171;
+  background: rgba(248, 113, 113, 0.1);
 }
 
 .btn-icon {

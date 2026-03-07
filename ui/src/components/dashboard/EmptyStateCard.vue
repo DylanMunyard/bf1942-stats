@@ -63,8 +63,8 @@ defineEmits<{
 }
 
 .empty-state:hover {
-  border-color: rgba(0, 255, 242, 0.3);
-  background: linear-gradient(135deg, rgba(0, 255, 242, 0.02) 0%, rgba(13, 17, 23, 0.8) 100%);
+  border-color: rgba(245, 158, 11, 0.3);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.02) 0%, rgba(13, 17, 23, 0.8) 100%);
 }
 
 .empty-content {
@@ -82,7 +82,7 @@ defineEmits<{
   font-size: 2rem;
   font-weight: 700;
   color: #6e7681;
-  text-shadow: 0 0 20px rgba(0, 255, 242, 0.2);
+  text-shadow: 0 0 20px rgba(245, 158, 11, 0.2);
 }
 
 /* Terminal Output Style */
@@ -99,7 +99,7 @@ defineEmits<{
 }
 
 .prompt {
-  color: #39ff14;
+  color: #34D399;
   flex-shrink: 0;
 }
 
@@ -108,7 +108,7 @@ defineEmits<{
 }
 
 .result .response {
-  color: #00fff2;
+  color: #F59E0B;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
@@ -125,9 +125,9 @@ defineEmits<{
 .action-btn {
   padding: 0.625rem 1.25rem;
   background: transparent;
-  border: 1px solid rgba(0, 255, 242, 0.4);
+  border: 1px solid rgba(245, 158, 11, 0.4);
   border-radius: 4px;
-  color: #00fff2;
+  color: #F59E0B;
   cursor: pointer;
   font-family: inherit;
   font-size: 0.75rem;
@@ -138,9 +138,9 @@ defineEmits<{
 }
 
 .action-btn:hover {
-  background: rgba(0, 255, 242, 0.1);
-  border-color: #00fff2;
-  box-shadow: 0 0 20px rgba(0, 255, 242, 0.2);
+  background: rgba(245, 158, 11, 0.1);
+  border-color: #F59E0B;
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.2);
   transform: translateY(-1px);
 }
 
@@ -159,7 +159,7 @@ defineEmits<{
 }
 
 .empty-state:hover .corner {
-  color: rgba(0, 255, 242, 0.3);
+  color: rgba(245, 158, 11, 0.3);
 }
 
 .corner.tl { top: 0; left: 0; }

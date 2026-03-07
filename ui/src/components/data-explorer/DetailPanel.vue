@@ -31,9 +31,9 @@ defineProps<{
 }
 
 .detail-panel--open {
-  border-color: rgba(0, 255, 242, 0.2);
+  border-color: rgba(245, 158, 11, 0.2);
   box-shadow:
-    0 0 30px rgba(0, 255, 242, 0.08),
+    0 0 30px rgba(245, 158, 11, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 

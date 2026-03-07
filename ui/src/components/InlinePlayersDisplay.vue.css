@@ -163,7 +163,7 @@
 }
 
 .player-table-row.top-player {
-  background: linear-gradient(90deg, rgba(255, 215, 0, 0.1) 0%, rgba(255, 215, 0, 0.05) 100%);
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.1) 0%, rgba(251, 191, 36, 0.05) 100%);
 }
 
 .player-table-row.pinned-player-row {

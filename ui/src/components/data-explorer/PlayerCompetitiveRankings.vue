@@ -710,7 +710,7 @@ watch(() => props.playerName, () => {
   background: var(--neon-cyan);
   border-color: var(--neon-cyan);
   color: var(--bg-dark);
-  box-shadow: 0 0 20px rgba(0, 255, 242, 0.5);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.5);
 }
 
 .time-period-picker {
@@ -741,7 +741,7 @@ watch(() => props.playerName, () => {
 .time-period-picker select:focus {
   outline: none;
   border-color: var(--neon-cyan);
-  box-shadow: 0 0 10px rgba(0, 255, 242, 0.3);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
 }
 
 @media (max-width: 640px) {
@@ -787,21 +787,21 @@ watch(() => props.playerName, () => {
 }
 
 .badge-elite {
-  background: linear-gradient(135deg, var(--neon-gold) 0%, rgba(255, 215, 0, 0.2) 100%);
+  background: linear-gradient(135deg, var(--neon-gold) 0%, rgba(251, 191, 36, 0.2) 100%);
   color: var(--bg-dark);
-  box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.5);
 }
 
 .badge-master {
-  background: linear-gradient(135deg, var(--neon-cyan) 0%, rgba(0, 255, 242, 0.2) 100%);
+  background: linear-gradient(135deg, var(--neon-cyan) 0%, rgba(245, 158, 11, 0.2) 100%);
   color: var(--bg-dark);
-  box-shadow: 0 0 20px rgba(0, 255, 242, 0.5);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.5);
 }
 
 .badge-expert {
-  background: linear-gradient(135deg, var(--neon-pink) 0%, rgba(255, 0, 255, 0.2) 100%);
+  background: linear-gradient(135deg, var(--neon-pink) 0%, rgba(251, 113, 133, 0.2) 100%);
   color: var(--bg-dark);
-  box-shadow: 0 0 20px rgba(255, 0, 255, 0.5);
+  box-shadow: 0 0 20px rgba(251, 113, 133, 0.5);
 }
 
 .badge-veteran {
@@ -874,7 +874,7 @@ watch(() => props.playerName, () => {
 .explorer-tab--active {
   color: var(--neon-cyan);
   border-bottom-color: var(--neon-cyan);
-  text-shadow: 0 0 10px rgba(0, 255, 242, 0.5);
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
 }
 
 /* Ranking items */
@@ -891,9 +891,9 @@ watch(() => props.playerName, () => {
 }
 
 .ranking-item:hover {
-  border-color: rgba(0, 255, 242, 0.3);
+  border-color: rgba(245, 158, 11, 0.3);
   transform: translateX(4px);
-  box-shadow: 0 0 20px rgba(0, 255, 242, 0.1);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.1);
 }
 
 .ranking-position {
@@ -918,7 +918,7 @@ watch(() => props.playerName, () => {
 .rank-gold {
   color: var(--neon-gold);
   border-color: var(--neon-gold);
-  box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
+  box-shadow: 0 0 15px rgba(251, 191, 36, 0.3);
 }
 
 .rank-silver {
@@ -1006,19 +1006,19 @@ watch(() => props.playerName, () => {
 .percentile-elite {
   background: var(--neon-gold);
   color: var(--bg-dark);
-  box-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.4);
 }
 
 .percentile-master {
   background: var(--neon-cyan);
   color: var(--bg-dark);
-  box-shadow: 0 0 10px rgba(0, 255, 242, 0.4);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
 }
 
 .percentile-expert {
   background: var(--neon-pink);
   color: var(--bg-dark);
-  box-shadow: 0 0 10px rgba(255, 0, 255, 0.4);
+  box-shadow: 0 0 10px rgba(251, 113, 133, 0.4);
 }
 
 .percentile-veteran {
@@ -1066,7 +1066,7 @@ watch(() => props.playerName, () => {
 .explorer-select:focus {
   outline: none;
   border-color: var(--neon-cyan);
-  box-shadow: 0 0 15px rgba(0, 255, 242, 0.2);
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
 }
 
 /* Empty state */
@@ -1150,7 +1150,7 @@ watch(() => props.playerName, () => {
 .explorer-btn--ghost:hover {
   color: var(--text-primary);
   border-color: var(--neon-cyan);
-  background: rgba(0, 255, 242, 0.1);
+  background: rgba(245, 158, 11, 0.1);
 }
 
 .explorer-btn--sm {
@@ -1225,7 +1225,7 @@ watch(() => props.playerName, () => {
 .pagination-btn:hover:not(:disabled) {
   color: var(--text-primary);
   border-color: var(--neon-cyan);
-  background: rgba(0, 255, 242, 0.1);
+  background: rgba(245, 158, 11, 0.1);
 }
 
 .pagination-btn:disabled {
@@ -1237,7 +1237,7 @@ watch(() => props.playerName, () => {
   background: var(--neon-cyan);
   color: var(--bg-dark);
   border-color: var(--neon-cyan);
-  box-shadow: 0 0 10px rgba(0, 255, 242, 0.4);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
 }
 
 .pagination-btn--active:hover {

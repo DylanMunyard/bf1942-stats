@@ -47,14 +47,14 @@ defineEmits<{
   border-radius: 20px;
   border: 2px solid transparent;
   background: linear-gradient(#161b22, #161b22) padding-box,
-    linear-gradient(135deg, #00fff2, #60a5fa, #00fff2) border-box;
+    linear-gradient(135deg, #F59E0B, #60a5fa, #F59E0B) border-box;
   color: #0d1117;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow:
-    0 0 24px rgba(0, 255, 242, 0.35),
+    0 0 24px rgba(245, 158, 11, 0.35),
     0 0 48px rgba(96, 165, 250, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
   transition: transform 0.25s ease, box-shadow 0.25s ease;
@@ -65,7 +65,7 @@ defineEmits<{
 .ai-chat-fab:hover {
   transform: scale(1.06);
   box-shadow:
-    0 0 32px rgba(0, 255, 242, 0.5),
+    0 0 32px rgba(245, 158, 11, 0.5),
     0 0 56px rgba(96, 165, 250, 0.25),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
@@ -89,13 +89,13 @@ defineEmits<{
 @keyframes fab-glow {
   0%, 100% {
     box-shadow:
-      0 0 24px rgba(0, 255, 242, 0.35),
+      0 0 24px rgba(245, 158, 11, 0.35),
       0 0 48px rgba(96, 165, 250, 0.2),
       inset 0 1px 0 rgba(255, 255, 255, 0.08);
   }
   50% {
     box-shadow:
-      0 0 28px rgba(0, 255, 242, 0.45),
+      0 0 28px rgba(245, 158, 11, 0.45),
       0 0 56px rgba(96, 165, 250, 0.28),
       inset 0 1px 0 rgba(255, 255, 255, 0.1);
   }
@@ -127,7 +127,7 @@ defineEmits<{
   width: 100%;
   height: 100%;
   border-radius: 18px;
-  background: linear-gradient(135deg, rgba(0, 255, 242, 0.15), rgba(96, 165, 250, 0.15));
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(96, 165, 250, 0.15));
   animation: pulse 2.5s ease-in-out infinite;
   opacity: 0;
   z-index: 0;

@@ -90,14 +90,14 @@ const chartData = computed(() => {
     }
   });
 
-  // Generate colors - gold for #1 rank, gradient cyan for others
+  // Generate colors - gold for #1 rank, gradient sky-blue for others
   const colors = topMaps.value.map((map, index) => {
     if (map.rank === 1) {
-      return 'rgba(245, 158, 11, 0.8)'; // neon-gold
+      return 'rgba(251, 191, 36, 0.8)'; // Material Design amber-400
     }
-    // Gradient from bright to dim cyan based on position
+    // Gradient from bright to dim sky-blue based on position
     const opacity = 0.8 - (index * 0.04);
-    return `rgba(0, 217, 255, ${Math.max(opacity, 0.3)})`;
+    return `rgba(245, 158, 11, ${Math.max(opacity, 0.3)})`;
   });
 
   return {
@@ -125,7 +125,7 @@ const chartConfig = computed<ChartConfiguration<'bar'>>(() => ({
       },
       tooltip: {
         backgroundColor: 'rgba(0, 0, 0, 0.9)',
-        titleColor: '#00d9ff',
+        titleColor: '#F59E0B',
         bodyColor: '#ffffff',
         borderColor: '#30363d',
         borderWidth: 1,

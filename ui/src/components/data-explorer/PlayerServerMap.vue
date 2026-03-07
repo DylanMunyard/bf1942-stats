@@ -11,6 +11,7 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 const serverMapData = ref<CommunityServerMap | null>(null)
 const svgElement = ref<SVGSVGElement | null>(null)
+const isMaximized = ref(false)
 
 let simulation: d3.Simulation<any, undefined> | null = null
 let svg: d3.Selection<SVGSVGElement, unknown, null, undefined> | null = null
@@ -18,8 +19,8 @@ let currentGroup: any = null
 let zoomBehavior: any = null
 let keyboardHandler: ((e: KeyboardEvent) => void) | null = null
 
-const width = 900
-const height = 500
+const width = 600
+const height = 350
 
 const stats = computed(() => {
   if (!serverMapData.value) return null
@@ -296,6 +297,10 @@ onMounted(() => {
       e.preventDefault()
       resetView()
     }
+    if (e.key === 'Escape' && isMaximized.value) {
+      e.preventDefault()
+      isMaximized.value = false
+    }
   }
 
   window.addEventListener('keydown', keyboardHandler)
@@ -366,24 +371,35 @@ watch(() => props.playerName, () => {
     </div>
 
     <!-- Visualization -->
-    <div v-else class="explorer-card">
+    <div v-else :class="['explorer-card', isMaximized && 'fixed top-0 bottom-0 left-0 right-0 md:right-20 z-50 rounded-none m-0 max-w-none max-h-none']">
       <div class="explorer-card-header flex items-center justify-between">
         <h2 class="font-mono font-bold text-cyan-300">SERVER-PLAYER NETWORK</h2>
-        <button
-          @click="resetView"
-          class="px-3 py-1 text-sm bg-cyan-500/20 border border-cyan-500/50 rounded text-cyan-300 hover:bg-cyan-500/30 transition-colors"
-          title="Reset view (Ctrl+R)"
-        >
-          ⟲ Reset
-        </button>
+        <div class="flex gap-2">
+          <button
+            @click="resetView"
+            class="px-3 py-1 text-sm bg-cyan-500/20 border border-cyan-500/50 rounded text-cyan-300 hover:bg-cyan-500/30 transition-colors"
+            title="Reset view (Ctrl+R)"
+          >
+            ⟲ Reset
+          </button>
+          <button
+            @click="isMaximized = !isMaximized"
+            class="px-3 py-1 text-sm bg-cyan-500/20 border border-cyan-500/50 rounded text-cyan-300 hover:bg-cyan-500/30 transition-colors"
+            :title="isMaximized ? 'Collapse (Esc)' : 'Expand to fullscreen'"
+          >
+            {{ isMaximized ? '✕ Close' : '⛶ Expand' }}
+          </button>
+        </div>
       </div>
-      <div class="explorer-card-body p-0 overflow-hidden rounded-b">
-        <svg
-          ref="svgElement"
-          :width="width"
-          :height="height"
-          style="background: var(--portal-surface, #0f0f15); display: block; width: 100%; height: auto"
-        />
+      <div :class="['explorer-card-body p-0 overflow-hidden', isMaximized ? 'flex-1' : 'rounded-b']">
+        <div class="flex justify-center">
+          <svg
+            ref="svgElement"
+            :width="width"
+            :height="height"
+            style="background: var(--portal-surface, #0f0f15); display: block; max-width: 100%; height: auto"
+          />
+        </div>
       </div>
     </div>
 
@@ -451,6 +467,9 @@ watch(() => props.playerName, () => {
     </div>
 
   </div>
+
+  <!-- Backdrop for maximized state -->
+  <div v-if="isMaximized" class="fixed inset-0 bg-black/40 z-40" @click="isMaximized = false" />
 </template>
 
 <style scoped>
@@ -465,5 +484,23 @@ watch(() => props.playerName, () => {
 .explorer-card-header h2 {
   margin: 0;
   font-size: 0.875rem;
+}
+
+.explorer-card.fixed {
+  display: flex;
+  flex-direction: column;
+  background: var(--portal-surface, #0f0f15);
+  border: 1px solid var(--portal-border, #1a1a24);
+}
+
+.explorer-card-body.flex-1 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+svg {
+  max-width: 100%;
+  max-height: 100%;
 }
 </style>

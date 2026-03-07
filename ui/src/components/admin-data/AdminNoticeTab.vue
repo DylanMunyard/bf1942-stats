@@ -325,8 +325,8 @@ defineExpose({ load: loadNotice });
   padding: 0.5rem 0.75rem;
   font-size: 0.8rem;
   color: var(--neon-red);
-  background: rgba(255, 49, 49, 0.1);
-  border: 1px solid rgba(255, 49, 49, 0.3);
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.3);
   border-radius: 2px;
 }
 
@@ -335,8 +335,8 @@ defineExpose({ load: loadNotice });
   padding: 0.5rem 0.75rem;
   font-size: 0.8rem;
   color: var(--neon-green);
-  background: rgba(57, 255, 20, 0.1);
-  border: 1px solid rgba(57, 255, 20, 0.3);
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.3);
   border-radius: 2px;
 }
 
@@ -374,22 +374,22 @@ defineExpose({ load: loadNotice });
 }
 
 .portal-notice-type-badge--info {
-  background: rgba(0, 255, 242, 0.15);
+  background: rgba(245, 158, 11, 0.15);
   color: var(--neon-cyan);
 }
 
 .portal-notice-type-badge--warning {
-  background: rgba(255, 215, 0, 0.15);
+  background: rgba(251, 191, 36, 0.15);
   color: var(--neon-gold);
 }
 
 .portal-notice-type-badge--success {
-  background: rgba(57, 255, 20, 0.15);
+  background: rgba(52, 211, 153, 0.15);
   color: var(--neon-green);
 }
 
 .portal-notice-type-badge--error {
-  background: rgba(255, 49, 49, 0.15);
+  background: rgba(248, 113, 113, 0.15);
   color: var(--neon-red);
 }
 
@@ -400,22 +400,22 @@ defineExpose({ load: loadNotice });
 }
 
 .portal-notice-preview-content--info {
-  background: rgba(0, 255, 242, 0.08);
+  background: rgba(245, 158, 11, 0.08);
   color: var(--neon-cyan);
 }
 
 .portal-notice-preview-content--warning {
-  background: rgba(255, 215, 0, 0.08);
+  background: rgba(251, 191, 36, 0.08);
   color: var(--neon-gold);
 }
 
 .portal-notice-preview-content--success {
-  background: rgba(57, 255, 20, 0.08);
+  background: rgba(52, 211, 153, 0.08);
   color: var(--neon-green);
 }
 
 .portal-notice-preview-content--error {
-  background: rgba(255, 49, 49, 0.08);
+  background: rgba(248, 113, 113, 0.08);
   color: var(--neon-red);
 }
 
@@ -554,26 +554,26 @@ defineExpose({ load: loadNotice });
 }
 
 .portal-notice-form-preview--info {
-  background: rgba(0, 255, 242, 0.08);
-  border: 1px solid rgba(0, 255, 242, 0.3);
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
   color: var(--neon-cyan);
 }
 
 .portal-notice-form-preview--warning {
-  background: rgba(255, 215, 0, 0.08);
-  border: 1px solid rgba(255, 215, 0, 0.3);
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.3);
   color: var(--neon-gold);
 }
 
 .portal-notice-form-preview--success {
-  background: rgba(57, 255, 20, 0.08);
-  border: 1px solid rgba(57, 255, 20, 0.3);
+  background: rgba(52, 211, 153, 0.08);
+  border: 1px solid rgba(52, 211, 153, 0.3);
   color: var(--neon-green);
 }
 
 .portal-notice-form-preview--error {
-  background: rgba(255, 49, 49, 0.08);
-  border: 1px solid rgba(255, 49, 49, 0.3);
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.3);
   color: var(--neon-red);
 }
 
@@ -605,7 +605,7 @@ defineExpose({ load: loadNotice });
 }
 
 .portal-btn--danger:hover:not(:disabled) {
-  background: rgba(255, 49, 49, 0.15);
-  box-shadow: 0 0 15px rgba(255, 49, 49, 0.3);
+  background: rgba(248, 113, 113, 0.15);
+  box-shadow: 0 0 15px rgba(248, 113, 113, 0.3);
 }
 </style>
