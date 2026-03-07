@@ -169,7 +169,6 @@
   background: var(--portal-surface);
   border: 1px solid var(--portal-border);
   border-radius: 2px;
-  overflow: hidden;
 }
 .portal-form {
   padding: 1.25rem;
@@ -686,6 +685,9 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
 }
 .portal-cron-select {
   padding: 0.25rem 0.5rem;
