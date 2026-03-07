@@ -11,9 +11,14 @@
     <!-- Error State -->
     <div v-else-if="error" class="detail-error">
       <div class="detail-error-text">{{ error }}</div>
-      <button @click="loadData" class="detail-retry">
-        Try again
-      </button>
+      <div class="flex items-center justify-center gap-3">
+        <button @click="loadData" class="detail-retry">
+          Try again
+        </button>
+        <button @click="emit('close')" class="detail-retry">
+          Close
+        </button>
+      </div>
     </div>
 
     <!-- Content -->
@@ -282,9 +287,9 @@ const loadData = async () => {
   error.value = null;
 
   try {
-    // Load all map stats for this player
+    // Load all map stats for this player (use days=365 so older maps are included)
     const response = await fetch(
-      `/api/players/${encodeURIComponent(props.playerName)}/map-stats?game=${props.game || 'bf1942'}`
+      `/stats/players/${encodeURIComponent(props.playerName)}/map-stats?game=${props.game || 'bf1942'}&days=365`
     );
 
     if (!response.ok) {
@@ -292,13 +297,11 @@ const loadData = async () => {
     }
 
     const mapsList = await response.json();
-    console.log('All player maps data:', mapsList);
 
     // Find the specific map in the list
     const mapData = mapsList.find((m: any) => m.mapName.toLowerCase() === props.mapName.toLowerCase());
 
     if (mapData) {
-      // Convert the flat map data to the aggregatedStats format
       playerStats.value = {
         totalScore: mapData.totalScore,
         totalKills: mapData.totalKills,
@@ -306,12 +309,9 @@ const loadData = async () => {
         totalRounds: mapData.sessionsPlayed,
         playTimeMinutes: mapData.totalPlayTimeMinutes
       };
-      console.log('Map stats found:', playerStats.value);
-    } else {
-      throw new Error(`Map "${props.mapName}" not found in player stats`);
     }
 
-    // Load initial rankings
+    // Load rankings even if player stats weren't found
     await loadRankings();
   } catch (err: any) {
     console.error('Error loading player map data:', err);

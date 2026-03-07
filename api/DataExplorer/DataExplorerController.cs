@@ -263,9 +263,9 @@ public class DataExplorerController(
         pageSize = Math.Clamp(pageSize, 1, 50);
         page = Math.Max(1, page);
 
-        // Validate sortBy
-        var validSortFields = new[] { "score", "kills", "kdRatio", "killRate", "wins" };
-        if (!validSortFields.Contains(sortBy.ToLowerInvariant()))
+        // Validate sortBy (case-insensitive comparison)
+        var validSortFields = new[] { "score", "kills", "kdratio", "killrate", "wins" };
+        if (!validSortFields.Contains(sortBy, StringComparer.OrdinalIgnoreCase))
             sortBy = "score";
 
         logger.LogDebug(
