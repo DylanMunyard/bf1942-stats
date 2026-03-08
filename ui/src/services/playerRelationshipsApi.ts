@@ -190,3 +190,43 @@ export async function fetchPlayerServerMap(playerName: string): Promise<Communit
   );
   return response.data;
 }
+
+// Ping proximity / geolocation interfaces
+export interface ServerPlayerCloseness {
+  playerName: string;
+  avgPing: number;
+  sessionCount: number;
+  lastPlayed: string;
+}
+
+export interface NearbyPlayer {
+  playerName: string;
+  playerPing: number;
+  otherPing: number;
+  pingDiff: number;
+  sessionCount: number;
+}
+
+export async function fetchServerPlayerCloseness(
+  serverGuid: string,
+  maxPing = 200
+): Promise<ServerPlayerCloseness[]> {
+  const response = await axios.get<ServerPlayerCloseness[]>(
+    `${BASE}/servers/${encodeURIComponent(serverGuid)}/player-closeness`,
+    { params: { maxPing } }
+  );
+  return response.data;
+}
+
+export async function fetchNearbyPlayers(
+  serverGuid: string,
+  playerName: string,
+  pingTolerance = 30,
+  limit = 50
+): Promise<NearbyPlayer[]> {
+  const response = await axios.get<NearbyPlayer[]>(
+    `${BASE}/servers/${encodeURIComponent(serverGuid)}/nearby-players/${encodeURIComponent(playerName)}`,
+    { params: { pingTolerance, limit } }
+  );
+  return response.data;
+}

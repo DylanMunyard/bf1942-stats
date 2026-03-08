@@ -210,4 +210,47 @@ public class PlayerRelationshipsController(
             return StatusCode(500, "An error occurred while fetching server map");
         }
     }
+
+    /// <summary>
+    /// Get players ranked by closeness (ping) to a server. Lower ping = closer.
+    /// </summary>
+    [HttpGet("servers/{serverGuid}/player-closeness")]
+    public async Task<ActionResult<List<Models.ServerPlayerCloseness>>> GetServerPlayerCloseness(
+        string serverGuid,
+        [FromQuery] int maxPing = 200)
+    {
+        try
+        {
+            var closeness = await relationshipService.GetServerPlayerClosenessAsync(serverGuid, maxPing);
+            return Ok(closeness);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error getting player closeness for server {ServerGuid}", serverGuid);
+            return StatusCode(500, "An error occurred while fetching player closeness");
+        }
+    }
+
+    /// <summary>
+    /// Find players with similar ping to a given player on a specific server.
+    /// Players within the ping tolerance are likely from the same region.
+    /// </summary>
+    [HttpGet("servers/{serverGuid}/nearby-players/{playerName}")]
+    public async Task<ActionResult<List<Models.NearbyPlayer>>> GetNearbyPlayers(
+        string serverGuid,
+        string playerName,
+        [FromQuery] int pingTolerance = 30,
+        [FromQuery] int limit = 50)
+    {
+        try
+        {
+            var nearby = await relationshipService.GetNearbyPlayersAsync(playerName, serverGuid, pingTolerance, limit);
+            return Ok(nearby);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error getting nearby players for {PlayerName} on server {ServerGuid}", playerName, serverGuid);
+            return StatusCode(500, "An error occurred while fetching nearby players");
+        }
+    }
 }

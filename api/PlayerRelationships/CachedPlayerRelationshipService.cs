@@ -305,4 +305,46 @@ public class CachedPlayerRelationshipService(
 
         return result;
     }
+
+    public async Task<List<Models.ServerPlayerCloseness>> GetServerPlayerClosenessAsync(
+        string serverGuid,
+        int maxPing = 200,
+        CancellationToken cancellationToken = default)
+    {
+        var cacheKey = $"server:{serverGuid}:player-closeness:{maxPing}";
+        var cached = await cacheService.GetAsync<List<Models.ServerPlayerCloseness>>(cacheKey, cancellationToken);
+
+        if (cached != null)
+        {
+            logger.LogDebug("Cache hit for player closeness of server {ServerGuid}", serverGuid);
+            return cached;
+        }
+
+        var result = await innerService.GetServerPlayerClosenessAsync(serverGuid, maxPing, cancellationToken);
+        await cacheService.SetAsync(cacheKey, result, TimeSpan.FromHours(1), cancellationToken);
+
+        return result;
+    }
+
+    public async Task<List<Models.NearbyPlayer>> GetNearbyPlayersAsync(
+        string playerName,
+        string serverGuid,
+        int pingTolerance = 30,
+        int limit = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var cacheKey = $"server:{serverGuid}:nearby:{playerName}:{pingTolerance}:{limit}";
+        var cached = await cacheService.GetAsync<List<Models.NearbyPlayer>>(cacheKey, cancellationToken);
+
+        if (cached != null)
+        {
+            logger.LogDebug("Cache hit for nearby players of {PlayerName} on {ServerGuid}", playerName, serverGuid);
+            return cached;
+        }
+
+        var result = await innerService.GetNearbyPlayersAsync(playerName, serverGuid, pingTolerance, limit, cancellationToken);
+        await cacheService.SetAsync(cacheKey, result, TimeSpan.FromHours(1), cancellationToken);
+
+        return result;
+    }
 }

@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PlayerNetworkGraph from '@/components/PlayerNetworkGraph.vue'
+import PingProximityOrbit from '@/components/PingProximityOrbit.vue'
 import {
   fetchPlayerNetworkStats,
   fetchPlayerTeammates,
@@ -21,6 +22,22 @@ const networkStats = ref<PlayerNetworkStats | null>(null)
 const teammates = ref<PlayerRelationship[]>([])
 const recentConnectionsList = ref<PlayerRelationship[]>([])
 const potentialConnectionsList = ref<string[]>([])
+const topServerGuid = computed(() => {
+  if (teammates.value.length === 0) return null
+  // Find the most common server GUID across all teammate relationships
+  const counts = new Map<string, number>()
+  for (const t of teammates.value) {
+    for (const guid of t.serverGuids) {
+      counts.set(guid, (counts.get(guid) || 0) + 1)
+    }
+  }
+  let best = ''
+  let bestCount = 0
+  for (const [guid, count] of counts) {
+    if (count > bestCount) { best = guid; bestCount = count }
+  }
+  return best || null
+})
 
 const loadingStats = ref(false)
 const loadingTeammates = ref(false)
@@ -184,6 +201,13 @@ onMounted(() => {
                   <PlayerNetworkGraph :player-name="playerName" />
                 </div>
               </div>
+
+              <!-- Ping Proximity -->
+              <PingProximityOrbit
+                v-if="topServerGuid"
+                :server-guid="topServerGuid"
+                @player-click="(name: string) => router.push(`/players/${encodeURIComponent(name)}`)"
+              />
 
               <!-- Most Frequent Teammates -->
               <div class="explorer-card">

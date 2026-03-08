@@ -1250,4 +1250,80 @@ public class PlayerRelationshipService(
             .ThenByDescending(n => Math.Abs(n.NetMigration))
             .ToList();
     }
+
+    public async Task<List<Models.ServerPlayerCloseness>> GetServerPlayerClosenessAsync(
+        string serverGuid,
+        int maxPing = 200,
+        CancellationToken cancellationToken = default)
+    {
+        logger.LogDebug("Getting player closeness for server {ServerGuid} (maxPing={MaxPing})", serverGuid, maxPing);
+
+        return await neo4jService.ExecuteReadAsync(async tx =>
+        {
+            var query = @"
+                MATCH (p:Player)-[r:PLAYS_ON]->(s:Server {guid: $serverGuid})
+                WHERE r.avgPing IS NOT NULL AND r.avgPing <= $maxPing
+                RETURN p.name AS playerName,
+                       r.avgPing AS avgPing,
+                       r.sessionCount AS sessionCount,
+                       r.lastPlayed AS lastPlayed
+                ORDER BY r.avgPing ASC";
+
+            var cursor = await tx.RunAsync(query, new { serverGuid, maxPing });
+            var results = new List<Models.ServerPlayerCloseness>();
+
+            await foreach (var record in cursor)
+            {
+                results.Add(new Models.ServerPlayerCloseness(
+                    PlayerName: record["playerName"].As<string>(),
+                    AvgPing: record["avgPing"].As<double>(),
+                    SessionCount: record["sessionCount"].As<int>(),
+                    LastPlayed: ToDateTime(record["lastPlayed"])));
+            }
+
+            return results;
+        });
+    }
+
+    public async Task<List<Models.NearbyPlayer>> GetNearbyPlayersAsync(
+        string playerName,
+        string serverGuid,
+        int pingTolerance = 30,
+        int limit = 50,
+        CancellationToken cancellationToken = default)
+    {
+        logger.LogDebug("Getting nearby players for {PlayerName} on server {ServerGuid} (tolerance={Tolerance}ms)",
+            playerName, serverGuid, pingTolerance);
+
+        return await neo4jService.ExecuteReadAsync(async tx =>
+        {
+            var query = @"
+                MATCH (p:Player {name: $playerName})-[r1:PLAYS_ON]->(s:Server {guid: $serverGuid})<-[r2:PLAYS_ON]-(other:Player)
+                WHERE r1.avgPing IS NOT NULL
+                  AND r2.avgPing IS NOT NULL
+                  AND abs(r1.avgPing - r2.avgPing) <= $pingTolerance
+                RETURN other.name AS otherName,
+                       r1.avgPing AS playerPing,
+                       r2.avgPing AS otherPing,
+                       abs(r1.avgPing - r2.avgPing) AS pingDiff,
+                       r2.sessionCount AS sessionCount
+                ORDER BY pingDiff ASC
+                LIMIT $limit";
+
+            var cursor = await tx.RunAsync(query, new { playerName, serverGuid, pingTolerance, limit });
+            var results = new List<Models.NearbyPlayer>();
+
+            await foreach (var record in cursor)
+            {
+                results.Add(new Models.NearbyPlayer(
+                    PlayerName: record["otherName"].As<string>(),
+                    PlayerPing: record["playerPing"].As<double>(),
+                    OtherPing: record["otherPing"].As<double>(),
+                    PingDiff: record["pingDiff"].As<double>(),
+                    SessionCount: record["sessionCount"].As<int>()));
+            }
+
+            return results;
+        });
+    }
 }

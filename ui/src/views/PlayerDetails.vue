@@ -19,6 +19,7 @@ import MapPerformanceRace from '../components/data-explorer/MapPerformanceRace.v
 import PlayerActivityHeatmap from '../components/PlayerActivityHeatmap.vue';
 import PlayerMapPreference from '../components/PlayerMapPreference.vue';
 import PlayerServerMap from '../components/data-explorer/PlayerServerMap.vue';
+import PingProximityOrbit from '@/components/PingProximityOrbit.vue';
 import { formatRelativeTime } from '@/utils/timeUtils';
 import { calculateKDR } from '@/utils/statsUtils';
 import { useAIContext } from '@/composables/useAIContext';
@@ -556,6 +557,17 @@ const unifiedServerList = computed<UnifiedServer[]>(() => {
   return unified;
 });
 
+// Proximity server selection (defaults to most-played server)
+const selectedProximityServerGuid = ref('')
+watch(unifiedServerList, (list) => {
+  if (list.length > 0 && !selectedProximityServerGuid.value) {
+    selectedProximityServerGuid.value = list[0].serverGuid
+  }
+}, { immediate: true })
+const selectedProximityServer = computed(() =>
+  unifiedServerList.value.find(s => s.serverGuid === selectedProximityServerGuid.value)
+)
+
 // Helper: rank badge color based on position
 const getRankBadgeClass = (rank: number): string => {
   if (rank === 1) return 'text-neon-gold font-bold';
@@ -1007,6 +1019,30 @@ onUnmounted(() => {
                   <div class="explorer-spinner" />
                 </div>
               </div>
+            </div>
+
+            <!-- Ping Proximity -->
+            <div v-if="unifiedServerList.length > 0">
+              <div v-if="unifiedServerList.length > 1" class="mb-2">
+                <select
+                  v-model="selectedProximityServerGuid"
+                  class="proximity-server-select"
+                >
+                  <option
+                    v-for="server in unifiedServerList"
+                    :key="server.serverGuid"
+                    :value="server.serverGuid"
+                  >
+                    {{ server.serverName }}
+                  </option>
+                </select>
+              </div>
+              <PingProximityOrbit
+                :server-guid="selectedProximityServerGuid"
+                :server-name="selectedProximityServer?.serverName"
+                :player-name="playerName"
+                @player-click="(name: string) => router.push(`/players/${encodeURIComponent(name)}`)"
+              />
             </div>
 
           </div>

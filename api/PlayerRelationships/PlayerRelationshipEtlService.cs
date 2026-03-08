@@ -398,7 +398,7 @@ public class PlayerRelationshipEtlService(
             fromTimestamp,
             toTimestamp);
 
-        // Aggregate player activity per server
+        // Aggregate player activity per server, including average ping
         var playerServerData = await dbContext.PlayerSessions
             .Where(ps => ps.LastSeenTime >= fromTimestamp && ps.LastSeenTime <= toTimestamp)
             .Where(ps => !ps.IsDeleted)
@@ -408,7 +408,9 @@ public class PlayerRelationshipEtlService(
                 g.Key.PlayerName,
                 g.Key.ServerGuid,
                 SessionCount = g.Count(),
-                LastPlayed = g.Max(ps => ps.LastSeenTime)
+                LastPlayed = g.Max(ps => ps.LastSeenTime),
+                AvgPing = g.Where(ps => ps.AveragePing != null && ps.AveragePing > 0)
+                    .Average(ps => ps.AveragePing)
             })
             .ToListAsync(cancellationToken);
 
@@ -425,7 +427,8 @@ public class PlayerRelationshipEtlService(
                 PlayerName = ps.PlayerName?.Trim() ?? "",
                 ps.ServerGuid,
                 ps.SessionCount,
-                ps.LastPlayed
+                ps.LastPlayed,
+                ps.AvgPing
             })
             .Where(ps => !string.IsNullOrEmpty(ps.PlayerName))
             .ToList();
@@ -462,12 +465,18 @@ public class PlayerRelationshipEtlService(
                     
                     MERGE (p)-[r:PLAYS_ON]->(s)
                     ON CREATE SET r.sessionCount = rel.sessionCount,
-                                  r.lastPlayed = datetime(rel.lastPlayed)
+                                  r.lastPlayed = datetime(rel.lastPlayed),
+                                  r.avgPing = rel.avgPing
                     ON MATCH SET r.sessionCount = r.sessionCount + rel.sessionCount,
                                  r.lastPlayed = CASE
                                      WHEN datetime(rel.lastPlayed) > r.lastPlayed
                                      THEN datetime(rel.lastPlayed)
                                      ELSE r.lastPlayed
+                                 END,
+                                 r.avgPing = CASE
+                                     WHEN r.avgPing IS NULL THEN rel.avgPing
+                                     WHEN rel.avgPing IS NULL THEN r.avgPing
+                                     ELSE (r.avgPing + rel.avgPing) / 2.0
                                  END
                     
                     RETURN count(*) as processed";
@@ -479,7 +488,8 @@ public class PlayerRelationshipEtlService(
                     ["serverName"] = serverLookup.TryGetValue(ps.ServerGuid, out var server) ? server.Name : "Unknown",
                     ["game"] = serverLookup.TryGetValue(ps.ServerGuid, out var srv) ? srv.Game : "unknown",
                     ["sessionCount"] = ps.SessionCount,
-                    ["lastPlayed"] = ps.LastPlayed.ToString("o")
+                    ["lastPlayed"] = ps.LastPlayed.ToString("o"),
+                    ["avgPing"] = ps.AvgPing ?? (object)null!
                 }).ToList();
 
                 await tx.RunAsync(query, new { relationships = relationshipData });

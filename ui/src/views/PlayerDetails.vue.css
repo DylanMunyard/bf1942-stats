@@ -212,6 +212,27 @@ a.rankings-hero-accent:hover {
   background: linear-gradient(135deg, var(--bg-panel) 0%, rgba(168,85,247,0.06) 100%);
   border-color: rgba(168, 85, 247, 0.2);
 }
-.explorer-card--achievement .explorer-card-title { 
-  color: #a855f7; 
+.explorer-card--achievement .explorer-card-title {
+  color: #a855f7;
+}
+
+/* Proximity server selector */
+.proximity-server-select {
+  width: 100%;
+  padding: 0.375rem 0.5rem;
+  background: var(--bg-panel, #0d1117);
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 6px;
+  color: var(--text-primary, #e6edf3);
+  font-size: 0.75rem;
+  font-family: 'JetBrains Mono', monospace;
+  outline: none;
+  cursor: pointer;
+}
+.proximity-server-select:focus {
+  border-color: var(--neon-cyan, #22d3ee);
+}
+.proximity-server-select option {
+  background: var(--bg-panel, #0d1117);
+  color: var(--text-primary, #e6edf3);
 }

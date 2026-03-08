@@ -18,6 +18,7 @@ import HeroBackButton from '../components/HeroBackButton.vue';
 import ForecastModal from '../components/ForecastModal.vue';
 import discordIcon from '@/assets/discord.webp';
 import { useAIContext } from '@/composables/useAIContext';
+import PingProximityOrbit from '@/components/PingProximityOrbit.vue';
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler);
@@ -889,6 +890,14 @@ const closeForecastOverlay = () => {
                     </div>
                   </div>
                 </div>
+
+                <!-- Ping Proximity -->
+                <PingProximityOrbit
+                  v-if="serverDetails?.serverGuid"
+                  :server-guid="serverDetails.serverGuid"
+                  :server-name="serverName"
+                  @player-click="(name: string) => router.push(`/players/${encodeURIComponent(name)}`)"
+                />
 
               </div>
             </div>

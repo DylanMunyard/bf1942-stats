@@ -92,4 +92,16 @@ public interface IPlayerRelationshipService
     Task<CommunityServerMap> GetPlayerServerMapAsync(
         string playerName,
         CancellationToken cancellationToken = default);
+
+    Task<List<Models.ServerPlayerCloseness>> GetServerPlayerClosenessAsync(
+        string serverGuid,
+        int maxPing = 200,
+        CancellationToken cancellationToken = default);
+
+    Task<List<Models.NearbyPlayer>> GetNearbyPlayersAsync(
+        string playerName,
+        string serverGuid,
+        int pingTolerance = 30,
+        int limit = 50,
+        CancellationToken cancellationToken = default);
 }
