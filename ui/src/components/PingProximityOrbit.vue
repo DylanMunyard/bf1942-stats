@@ -498,8 +498,20 @@ onUnmounted(() => {
 
 watch(() => props.serverGuid, () => fetchData())
 watch(() => props.playerName, () => fetchData())
-watch(maxPing, () => { if (!isDeltaMode.value) fetchData() })
-watch(pingDelta, () => renderOrbit())
+
+let maxPingDebounce: ReturnType<typeof setTimeout> | null = null
+watch(maxPing, () => {
+  if (isDeltaMode.value) return
+  if (maxPingDebounce) clearTimeout(maxPingDebounce)
+  maxPingDebounce = setTimeout(() => fetchData(), 300)
+})
+
+let pingDeltaDebounce: ReturnType<typeof setTimeout> | null = null
+watch(pingDelta, () => {
+  if (pingDeltaDebounce) clearTimeout(pingDeltaDebounce)
+  pingDeltaDebounce = setTimeout(() => renderOrbit(), 150)
+})
+
 watch(searchQuery, () => renderOrbit())
 watch(showAll, () => renderOrbit())
 watch(activeBand, () => renderOrbit())

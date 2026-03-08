@@ -1005,17 +1005,13 @@ onUnmounted(() => {
             </div>
 
             <!-- Server Map (Player Network) -->
-            <div ref="serverNetworkRef" class="explorer-card">
-              <div class="explorer-card-header">
-                <h3 class="explorer-card-title">SERVER-PLAYER NETWORK</h3>
-                <p class="text-[10px] text-neutral-500 font-mono mt-1">YOUR CONNECTIONS ACROSS SERVERS</p>
-              </div>
-              <div class="explorer-card-body p-0">
-                <PlayerServerMap
-                  v-if="serverNetworkVisible"
-                  :player-name="playerName"
-                />
-                <div v-else class="h-64 flex items-center justify-center text-neutral-500">
+            <div ref="serverNetworkRef">
+              <PlayerServerMap
+                v-if="serverNetworkVisible"
+                :player-name="playerName"
+              />
+              <div v-else class="explorer-card">
+                <div class="explorer-card-body h-64 flex items-center justify-center text-neutral-500">
                   <div class="explorer-spinner" />
                 </div>
               </div>
